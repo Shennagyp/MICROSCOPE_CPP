@@ -13,6 +13,7 @@ struct CameraInfo {
     std::string id;
     std::string displayName;
     std::string modelName;
+    std::string modelCode = "Unknown";
     std::uint64_t modelFlags = 0;
     bool hasModelDescriptor = false;
     std::optional<std::uint32_t> maximumSpeedLevel;

@@ -17,6 +17,7 @@ class QtAmcamCamera final : public QObject, public camera::ICameraFeatureAccess 
     Q_OBJECT
 public:
     explicit QtAmcamCamera(QObject* parent = nullptr);
+    QtAmcamCamera(AmcamCameraProfileRegistry profiles, QObject* parent = nullptr);
     ~QtAmcamCamera() override;
 
     QtAmcamCamera(const QtAmcamCamera&) = delete;

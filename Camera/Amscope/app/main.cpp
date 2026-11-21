@@ -322,9 +322,12 @@ private:
                 lifecycleRequestPending_ = false;
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
                     statusBar()->showMessage(QString::fromStdString(error->message));
-                } else {
+                } else if (camera_.state() == amscope::CameraState::Streaming) {
                     statusBar()->showMessage("Acquisition started.");
                 }
+                // A native acquisition can fail immediately after Start returns.
+                // In that case the error/state notification owns the visible status;
+                // do not overwrite it with a stale "started" completion.
                 updateControls(camera_.state());
             });
 

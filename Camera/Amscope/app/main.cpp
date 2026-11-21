@@ -165,7 +165,9 @@ public:
         });
         connect(&camera_, &amscope::QtAmcamCamera::stateChanged,
                 this, [this](amscope::CameraState state) {
-            if (state != amscope::CameraState::Closed && cameraEnumerationPending_) {
+            // Any lifecycle notification supersedes an in-flight device
+            // discovery, including failed transitions that leave the camera Closed.
+            if (cameraEnumerationPending_) {
                 ++cameraEnumerationGeneration_;
                 cameraEnumerationPending_ = false;
             }

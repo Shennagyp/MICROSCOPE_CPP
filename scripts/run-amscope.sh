@@ -6,6 +6,50 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${REPO_ROOT}/build/amscope"
 BUILD_TYPE="${AMSCOPE_BUILD_TYPE:-Release}"
 
+# CMake.app includes the command-line executable inside its app bundle.
+# Prefer an explicitly supplied executable, then PATH, then standard app paths.
+CMAKE_COMMAND="${CMAKE_EXECUTABLE:-}"
+if [[ -n "${CMAKE_COMMAND}" ]]; then
+    if [[ ! -x "${CMAKE_COMMAND}" ]]; then
+        echo "CMAKE_EXECUTABLE is not executable: ${CMAKE_COMMAND}" >&2
+        exit 1
+    fi
+elif command -v cmake >/dev/null 2>&1; then
+    CMAKE_COMMAND="$(command -v cmake)"
+else
+    CMAKE_CANDIDATES=()
+    if [[ -n "${CMAKE_APP:-}" ]]; then
+        CMAKE_CANDIDATES+=("${CMAKE_APP%/}/Contents/bin/cmake")
+    fi
+    CMAKE_CANDIDATES+=(
+        "/Applications/CMake.app/Contents/bin/cmake"
+        "${HOME}/Applications/CMake.app/Contents/bin/cmake"
+    )
+
+    for candidate in "${CMAKE_CANDIDATES[@]}"; do
+        if [[ -x "${candidate}" ]]; then
+            CMAKE_COMMAND="${candidate}"
+            break
+        fi
+    done
+fi
+
+if [[ -z "${CMAKE_COMMAND}" ]]; then
+    cat >&2 <<'EOF'
+CMake command-line tools were not found.
+The CMake GUI application normally includes them at:
+  /Applications/CMake.app/Contents/bin/cmake
+
+You can either:
+  1. Set CMAKE_APP to the location of CMake.app, or
+  2. Set CMAKE_EXECUTABLE to the full path of its Contents/bin/cmake file.
+
+Example:
+  CMAKE_APP="/Applications/CMake.app" ./scripts/run-amscope.sh
+EOF
+    exit 1
+fi
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
     echo "The bundled Amcam native SDK target currently supports macOS only." >&2
     exit 1
@@ -49,8 +93,8 @@ else
     esac
 fi
 
-cmake "${CMAKE_ARGS[@]}"
-cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --parallel
+"${CMAKE_COMMAND}" "${CMAKE_ARGS[@]}"
+"${CMAKE_COMMAND}" --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --parallel
 
 # Pass any additional arguments through to the preview application.
 exec "${BUILD_DIR}/amscope_preview" "$@"

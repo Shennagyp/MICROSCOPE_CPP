@@ -125,10 +125,10 @@ bool QtAmcamCamera::start(CameraError* error) {
             [this](const CameraError& acquisitionError) {
                 // Marshal notifications to this QObject's affinity thread.
                 const CameraError copy = acquisitionError;
-                QMetaObject::invokeMethod(this, [this, copy]() {
+                dispatchToOwnerThread([this, copy]() {
                     emitError(copy);
                     emit stateChanged(camera_.state());
-                }, Qt::QueuedConnection);
+                });
             },
             &local);
     }
@@ -385,8 +385,7 @@ void QtAmcamCamera::runFeatureWorker() {
 void QtAmcamCamera::dispatchFeatureCallback(
     std::uint64_t contextGeneration,
     std::function<void()> callback) {
-    QMetaObject::invokeMethod(
-        this,
+    dispatchToOwnerThread(
         [this,
          contextGeneration,
          callback = std::move(callback)]() mutable {
@@ -394,14 +393,29 @@ void QtAmcamCamera::dispatchFeatureCallback(
                 featureContextGeneration_.load(std::memory_order_acquire)) {
                 return;
             }
+            callback();
+        });
+}
 
+void QtAmcamCamera::dispatchToOwnerThread(std::function<void()> callback) {
+    if (!callback) return;
+
+    // Synchronize posting with destructor shutdown. Once shutdown marks the
+    // executor as stopping, neither the feature worker nor the acquisition
+    // callback may enqueue another functor against this QObject.
+    std::lock_guard<std::mutex> queueLock(featureQueueMutex_);
+    if (stoppingFeatureWorker_) return;
+
+    QMetaObject::invokeMethod(
+        this,
+        [callback = std::move(callback)]() mutable {
             try {
                 callback();
             } catch (const std::exception& exception) {
-                qWarning() << "Camera feature completion callback threw:"
+                qWarning() << "Camera Qt completion callback threw:"
                            << exception.what();
             } catch (...) {
-                qWarning() << "Camera feature completion callback threw an unknown exception.";
+                qWarning() << "Camera Qt completion callback threw an unknown exception.";
             }
         },
         Qt::QueuedConnection);
@@ -425,9 +439,9 @@ void QtAmcamCamera::publishLatestFrame(FramePtr frame) {
     if (notify) {
         // Queue the signal emission onto the QObject's thread. A connected
         // renderer on another thread should use Qt::QueuedConnection too.
-        QMetaObject::invokeMethod(this, [this]() {
+        dispatchToOwnerThread([this]() {
             emit frameAvailable();
-        }, Qt::QueuedConnection);
+        });
     }
 }
 

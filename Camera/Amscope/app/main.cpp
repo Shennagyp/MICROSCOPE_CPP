@@ -195,6 +195,7 @@ private:
     struct FeatureControl {
         camera::CameraFeatureDescriptor descriptor;
         QWidget* editor = nullptr;
+        bool hasCurrentValue = false;
     };
 
     void refreshCameras() {
@@ -293,6 +294,7 @@ private:
         }
 
         const std::uint64_t generation = ++featureUiGeneration_;
+        pendingFeatureReads_ = 0;
         pendingFeatureWrite_ = false;
         setFeatureControlsEnabled(false);
         featureStatus_->setText("Reading feature descriptors…");
@@ -402,7 +404,7 @@ private:
         case camera::CameraFeatureKind::FloatingPoint: {
             if (descriptor.numericRange) {
                 auto* control = new QDoubleSpinBox(featureContent_);
-                control->setDecimals(6);
+                control->setDecimals(12);
                 control->setRange(
                     descriptor.numericRange->minimum,
                     descriptor.numericRange->maximum);
@@ -482,16 +484,19 @@ private:
                     if (found != featureControls_.end()) {
                         if (const auto* error =
                                 std::get_if<camera::CameraFeatureAccessError>(&result)) {
+                            found->second.hasCurrentValue = false;
                             found->second.editor->setToolTip(
                                 QString::fromStdString(error->message));
                         } else {
                             const auto& value =
                                 std::get<camera::CameraFeatureValue>(result);
-                            if (!setFeatureEditorValue(found->second, value)) {
+                            found->second.hasCurrentValue =
+                                setFeatureEditorValue(found->second, value);
+                            if (!found->second.hasCurrentValue) {
                                 found->second.editor->setToolTip(
                                     "The backend returned a value that does not match its descriptor.");
                             } else {
-                                found->second.editor->setToolTip({});
+                                found->second.editor->setToolTip(QString{});
                             }
                         }
                     }
@@ -534,7 +539,7 @@ private:
             auto* editor = qobject_cast<QLineEdit*>(control.editor);
             if (!typed || !editor) return false;
             const QSignalBlocker blocker(editor);
-            editor->setText(QString::number(*typed));
+            editor->setText(QString::number(static_cast<qlonglong>(*typed)));
             return true;
         }
         case camera::CameraFeatureKind::IntegerVector: {
@@ -542,7 +547,7 @@ private:
             auto* editor = qobject_cast<QLineEdit*>(control.editor);
             if (!typed || !editor) return false;
             QStringList parts;
-            for (const auto item : *typed) parts.push_back(QString::number(item));
+            for (const auto item : *typed) parts.push_back(QString::number(static_cast<qlonglong>(item)));
             const QSignalBlocker blocker(editor);
             editor->setText(parts.join(", "));
             return true;
@@ -627,7 +632,7 @@ private:
             if (!editor) return;
 
             std::vector<std::int64_t> values;
-            const QStringList parts = editor->text().split(',', Qt::SkipEmptyParts);
+            const QStringList parts = editor->text().split(',', Qt::KeepEmptyParts);
             bool valid = !parts.isEmpty();
             for (const auto& part : parts) {
                 bool ok = false;
@@ -733,8 +738,11 @@ private:
 
     void setFeatureControlsEnabled(bool enabled) {
         for (auto& entry : featureControls_) {
+            const auto& descriptor = entry.second.descriptor;
+            const bool valueIsKnown =
+                !descriptor.isReadable || entry.second.hasCurrentValue;
             entry.second.editor->setEnabled(
-                enabled && entry.second.descriptor.isWritable);
+                enabled && descriptor.isWritable && valueIsKnown);
         }
         refreshFeaturesButton_->setEnabled(
             camera_.state() == amscope::CameraState::Open ||
@@ -765,10 +773,10 @@ private:
 
         frameInfo_->setText(
             QString("%1 x %2 | frame %3 | %4 bytes")
-                .arg(frame->width)
-                .arg(frame->height)
-                .arg(frame->sequence)
-                .arg(frame->byteSize()));
+                .arg(static_cast<qulonglong>(frame->width))
+                .arg(static_cast<qulonglong>(frame->height))
+                .arg(static_cast<qulonglong>(frame->sequence))
+                .arg(static_cast<qulonglong>(frame->byteSize())));
     }
 
     void updateControls(amscope::CameraState state) {

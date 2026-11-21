@@ -54,8 +54,15 @@ integration and does not modify vendor sample code.
   the original Amcam SDK library remains libamcam.dylib.
 - The Qt Core adapter has a one-frame latest mailbox. It coalesces notifications
   and schedules Qt signals onto the QObject affinity thread.
-- The Qt Widgets preview app demonstrates camera enumeration, open/start/stop,
-  and rendering the latest immutable frame lease through QImage/QPixmap.
+- QtAmcamCamera executes feature descriptor/read/write requests on a bounded,
+  serialized worker and delivers completions on its Qt affinity thread. Session
+  generation changes invalidate stale completions across open/close/start/stop.
+- The Qt Widgets app builds its settings panel from common feature descriptors,
+  including typed Boolean, integer, vector, floating-point and enumeration
+  editors. Readable values are fetched before writable controls are enabled;
+  descriptors and values are refreshed after writes and lifecycle transitions.
+- The preview renders the latest immutable frame lease through QImage/QPixmap;
+  the QImage is detached before the lease is released.
 
 ### Model-specific feature policy
 
@@ -82,6 +89,16 @@ precedence. The exact model code is whitespace-trimmed for lookup. Duplicate
 profiles use the last entry. Profiles can only restrict capabilities already
 confirmed by SDK probes; they cannot make unsupported hardware features appear.
 A model without a configured profile uses its runtime-probed capabilities.
+
+## CTI / GenTL integration status
+
+This branch does not currently contain GenTL or GenApi C++ headers, linked
+libraries, imported CMake targets, Producer .cti files, or a CTI camera
+adapter. The common ICameraFeatureAccess contract is ready to be implemented
+by that backend, but CTI integration is not complete here. Connect the existing
+GenTL/GenApi runtime and its documented C++ interfaces when that dependency is
+made available to this build; do not add a replacement GenTL or GenApi
+implementation. The AmScope path remains on the native Amcam SDK.
 
 ## One-command build and run
 
@@ -118,8 +135,12 @@ To run only the SDK camera-enumeration smoke check after building:
 ```
 
 The preview UI lets you refresh the device list, open a selected camera, start
-or stop acquisition, and close the session. It uses QLabel/QImage for a simple
-CPU preview; it is not the final GPU renderer or a zero-copy presentation path.
+or stop acquisition, close the session, and inspect/edit the currently available
+camera features through descriptor-generated controls. Settings use the common
+typed feature contract rather than AmScope-specific widget setters. Potentially
+blocking feature requests run off the UI thread; stale completions are ignored.
+The image path uses QLabel/QImage for a simple CPU preview; it is not the final
+GPU renderer or a zero-copy presentation path.
 
 ## Direct CMake build
 

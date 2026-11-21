@@ -35,6 +35,8 @@ Do not create another:
 
 Original GenTL Producer `.cti` files and third-party binaries retain their names and identities.
 
+**Current branch dependency status:** the checked MICROSCOPE_CPP tree contains no GenTL/GenApi C++ headers, linked libraries, imported CMake targets, Producer .cti files or CTI adapter. Therefore the GenTL integration phase remains blocked on locating and linking the already-existing C++ runtime. This is an integration dependency, not an invitation to reimplement GenTL or GenApi.
+
 ### Shared features do not mean shared lifecycle
 
 All camera backends expose one application-level feature contract: descriptors, reads and writes.
@@ -73,6 +75,10 @@ C++17 already provides `std::variant`, `std::optional`, smart pointers and the r
 The first C++ feature-access interface is synchronous and serialized by the owning backend's SDK-call lock. This is an explicit driver-boundary choice, not a claim that Swift's async call syntax maps directly to blocking C++ calls.
 
 The application must not perform potentially blocking CTI/GenApi operations on the GUI thread. The Qt application layer is responsible for scheduling feature requests on an appropriate worker/executor and delivering results back through queued Qt delivery. It must also preserve selected-device identity and reject stale completions after camera selection or session changes. Asynchronous wrappers do not change the shared feature value/descriptor/error contract.
+
+The current AmScope Qt implementation uses one bounded FIFO feature worker (256 pending requests). Feature descriptor/read/write operations and camera lifecycle operations are serialized at the Qt facade boundary before reaching the driver's SDK-call lock. Session-generation changes on open, close, start and stop invalidate queued requests and completions from the previous feature context. Completions are posted to the QObject affinity thread, and callback posting is synchronized with executor shutdown. The application maintains a second UI-generation token for descriptor/value refreshes. It creates editors from descriptors and keeps readable/writable controls disabled until a current value has been fetched; a failed read does not turn a default widget value into an implied camera value. A successful write causes descriptors and values to be refreshed because writeability can depend on another feature (for example, manual versus automatic exposure).
+
+This AmScope worker is an application-layer implementation, not part of the backend-neutral ICameraFeatureAccess contract. A future CTI Qt adapter must use the same execution policy without introducing a second feature value model. Synchronous calls remain available to non-GUI consumers; callers must not invoke potentially blocking providers on the GUI thread.
 
 The Qt application-facing camera surface must not publish a second set of vendor-specific setting methods. Native SDK setters/readers remain backend implementation details; application settings flow through `ICameraFeatureAccess`. Non-setting operations remain separate: one-shot auto white balance is a command and camera-measured FPS is telemetry, not a setting named as configured FPS.
 
@@ -168,8 +174,8 @@ Do not rename original vendor SDK libraries such as `libamcam.dylib`, original P
 1. Common feature types and application feature-access contract.
 2. AmScope feature access using the existing native session and handle.
 3. Remaining AmScope features, capability evidence and model policies.
-4. Adapter to the existing GenTL/GenApi implementation.
-5. Descriptor-driven Qt controls.
+4. Adapter to the existing GenTL/GenApi implementation (blocked until the existing C++ dependency is present in this build).
+5. Descriptor-driven Qt controls (implemented for the AmScope preview application; reuse the common descriptors for CTI).
 6. Separate AmScope acquisition-lifecycle parity audit.
 7. Cross-backend verification and then hardware acceptance.
 
@@ -194,6 +200,8 @@ The common C++ feature contract is implemented by the native AmScope session and
 Descriptors are built from serialized, non-mutating SDK queries and model metadata. Precise fixed FPS requires the model's precise-frame-rate flag plus valid min/max/current option readbacks. Discrete speed requires a model-reported maximum speed and valid current speed readback. Resolution requires model-provided preview modes and a valid current index. Pixel format requires both a current-format query and a successful supported-format enumeration.
 
 Feature writes validate descriptor state, type, range, increment, enumeration or vector cardinality; they execute under the owning session's SDK-call lock and verify readback. Temperature/tint writes preserve the untouched component. UI-facing Qt feature methods delegate to the same native session and do not create another handle.
+
+The Qt Widgets preview builds the settings panel from these descriptors rather than defining a second AmScope settings API. It reads current values asynchronously, uses each descriptor's kind/range/vector length/enumeration symbols, disables controls until readable values are known, and refreshes dynamic descriptor state after writes. This UI is currently an AmScope application; it does not imply that the CTI adapter is already integrated.
 
 The C++ AmScope backend accepts an injectable `AmcamCameraProfileRegistry`. Profiles use exact SDK model codes, whitespace trimming, a feature allow-list and a deny-list; explicit deny entries take precedence, and the last duplicate profile wins. A missing profile imposes no additional restriction. The profile is applied after runtime/model evidence, so it can only narrow availability. The C++ enum currently covers the capability families mapped to the eleven implemented control descriptors; the wider Swift sensor, transport, trigger and accessory taxonomy remains outside this increment.
 

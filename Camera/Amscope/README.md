@@ -16,7 +16,8 @@ integration and does not modify vendor sample code.
   serialized; WaitImageV4 uses a 50 ms timeout to bound control/stop waiting.
 - Every successful Amcam_Stop marks a both-cache flush obligation
   (AMCAM_OPTION_FLUSH = 3). The driver flushes immediately and retries before
-  the next Start if the SDK rejects the first flush. Close remains terminal.
+  the next Start if the SDK rejects the first flush. Terminal Close joins the
+  worker and calls Amcam_Close directly; it does not depend on Stop/flush.
 - Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
   sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every

@@ -355,9 +355,11 @@ private:
                 lifecycleRequestPending_ = false;
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
                     statusBar()->showMessage(QString::fromStdString(error->message));
-                } else {
+                } else if (camera_.state() == amscope::CameraState::Open) {
                     statusBar()->showMessage("Acquisition stopped.");
                 }
+                // A Stop that races a native fatal transition may succeed at
+                // halting the SDK while the owning camera session remains Faulted.
                 updateControls(camera_.state());
             });
 

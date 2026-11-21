@@ -1,10 +1,12 @@
 #define AMCAM_HRESULT_ERRORCODE_NEEDED
 #include "amcam.h"
 #include "amscope/AmcamCamera.h"
+#include "AmcamEventQueue.h"
 #include "camera/CameraFeatureValidation.h"
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <cmath>
 #include <charconv>
 #include <cstdint>
@@ -22,7 +24,6 @@
 #include <vector>
 
 namespace {
-constexpr unsigned kWaitTimeoutMs = 50;
 constexpr std::size_t kPoolSize = 4;
 constexpr int kRgb24Bits = 24;
 constexpr int kPackedRows = -1;
@@ -389,11 +390,12 @@ struct AmcamCamera::Impl {
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> sdkStarted{false};
     std::atomic<bool> frameCacheFlushPending{false};
-    std::atomic<bool> disconnected{false};
-    std::atomic<bool> sdkError{false};
     std::atomic<std::uint32_t> activeSdkCallbacks{0};
     std::atomic<std::uint64_t> dropped{0};
 
+    detail::AmcamEventQueue eventQueue;
+    std::mutex callbackWaitMutex;
+    std::condition_variable callbackWaitCondition;
     std::mutex lifecycleMutex;
     std::mutex apiMutex;
     HAmcam handle = nullptr;
@@ -434,6 +436,13 @@ struct AmcamCamera::Impl {
             : true;
     }
 
+    void waitForSdkCallbacks() {
+        std::unique_lock<std::mutex> lock(callbackWaitMutex);
+        callbackWaitCondition.wait(lock, [this]() {
+            return activeSdkCallbacks.load(std::memory_order_acquire) == 0;
+        });
+    }
+
     static void __stdcall sdkEvent(unsigned event, void* context) {
         auto* self = static_cast<Impl*>(context);
         if (!self) return;
@@ -442,19 +451,43 @@ struct AmcamCamera::Impl {
         struct CallbackExit final {
             Impl* owner;
             ~CallbackExit() {
-                owner->activeSdkCallbacks.fetch_sub(1, std::memory_order_acq_rel);
+                {
+                    std::lock_guard<std::mutex> lock(owner->callbackWaitMutex);
+                    owner->activeSdkCallbacks.fetch_sub(1, std::memory_order_acq_rel);
+                }
+                owner->callbackWaitCondition.notify_all();
             }
         } callbackExit{self};
 
-        // SDK-owned callback thread: atomics only. Never Stop/Close here.
-        if (event == AMCAM_EVENT_DISCONNECTED)
-            self->disconnected.store(true, std::memory_order_release);
-        else if (event == AMCAM_EVENT_ERROR)
-            self->sdkError.store(true, std::memory_order_release);
+        // Match the Swift event handler's relevant event set. The callback does
+        // not call the SDK, pull a frame, invoke observers, or touch Qt.
+        switch (event) {
+        case AMCAM_EVENT_IMAGE:
+        case AMCAM_EVENT_DISCONNECTED:
+        case AMCAM_EVENT_ERROR:
+        case AMCAM_EVENT_NOFRAMETIMEOUT:
+        case AMCAM_EVENT_NOPACKETTIMEOUT:
+            try {
+                (void)self->eventQueue.push(event);
+            } catch (...) {
+                // Never let a C++ exception unwind through the vendor callback ABI.
+                self->eventQueue.stop();
+            }
+            break;
+        default:
+            break;
+        }
     }
 
     void reportFatal(CameraError error) noexcept {
-        if (stopRequested.load(std::memory_order_acquire)) return;
+        bool expected = false;
+        if (!stopRequested.compare_exchange_strong(
+                expected, true, std::memory_order_acq_rel))
+            return;
+
+        // Stop the worker's event wait before asking the SDK to terminate
+        // callback production. SDK callbacks can only enqueue and return.
+        eventQueue.stop();
 
         bool stoppedSuccessfully = false;
         {
@@ -472,12 +505,16 @@ struct AmcamCamera::Impl {
         }
 
         if (stoppedSuccessfully) {
+            // A successful Stop ends callback production. Wait for callbacks
+            // already in flight before allowing another session transition.
+            waitForSdkCallbacks();
+            eventQueue.clearPending();
+
             CameraError flushError;
             if (!flushStoppedFrameCaches(&flushError))
                 error.message += " " + flushError.message;
         }
 
-        if (stopRequested.load(std::memory_order_acquire)) return;
         state.store(CameraState::Faulted, std::memory_order_release);
         try {
             if (onError) onError(error);
@@ -491,7 +528,45 @@ struct AmcamCamera::Impl {
         bool fatal = false;
         CameraError error;
 
-        while (!stopRequested.load(std::memory_order_acquire)) {
+        for (;;) {
+            std::uint32_t event = 0;
+            const auto waitResult = eventQueue.waitNext(event);
+            if (waitResult == detail::AmcamEventQueue::WaitResult::Stopped)
+                break;
+            if (waitResult == detail::AmcamEventQueue::WaitResult::Overflow) {
+                fatal = true;
+                error = {-1, "Amcam event callback queue",
+                         "The camera generated more pending callback events than the bounded queue can retain."};
+                break;
+            }
+
+            if (event == AMCAM_EVENT_DISCONNECTED) {
+                fatal = true;
+                error = {static_cast<std::int32_t>(E_GEN_FAILURE),
+                         "AMCAM_EVENT_DISCONNECTED", "The camera reported a disconnect."};
+                break;
+            }
+            if (event == AMCAM_EVENT_ERROR) {
+                fatal = true;
+                error = {static_cast<std::int32_t>(E_FAIL),
+                         "AMCAM_EVENT_ERROR", "The camera SDK reported a generic device error."};
+                break;
+            }
+            if (event == AMCAM_EVENT_NOFRAMETIMEOUT) {
+                fatal = true;
+                error = {static_cast<std::int32_t>(E_TIMEOUT),
+                         "AMCAM_EVENT_NOFRAMETIMEOUT", "The camera reported a no-frame timeout."};
+                break;
+            }
+            if (event == AMCAM_EVENT_NOPACKETTIMEOUT) {
+                fatal = true;
+                error = {static_cast<std::int32_t>(E_TIMEOUT),
+                         "AMCAM_EVENT_NOPACKETTIMEOUT", "The camera reported a no-packet timeout."};
+                break;
+            }
+            if (event != AMCAM_EVENT_IMAGE)
+                continue;
+
             auto writable = activePool->tryAcquire();
             void* destination = writable
                 ? static_cast<void*>(writable->pixels.data())
@@ -503,36 +578,28 @@ struct AmcamCamera::Impl {
                 std::lock_guard<std::mutex> lock(apiMutex);
                 if (!handle) {
                     fatal = true;
-                    error = {-1, "Amcam_WaitImageV4", "Camera handle is no longer open."};
+                    error = {-1, "Amcam_PullImageV4", "Camera handle is no longer open."};
                 } else {
-                    hr = Amcam_WaitImageV4(handle, kWaitTimeoutMs, destination,
-                                           0, kRgb24Bits, kPackedRows, &info);
+                    hr = Amcam_PullImageV4(
+                        handle, destination, 0, kRgb24Bits, kPackedRows, &info);
                 }
             }
             if (fatal || stopRequested.load(std::memory_order_acquire)) break;
 
-            if (disconnected.load(std::memory_order_acquire)) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_GEN_FAILURE),
-                         "Amcam_WaitImageV4", "The camera reported a disconnect."};
-                break;
-            }
-            if (sdkError.load(std::memory_order_acquire)) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_FAIL),
-                         "Amcam_WaitImageV4", "The camera SDK reported a generic device error."};
-                break;
-            }
-            if (hr == E_TIMEOUT) continue;
+            // The vendor documents E_PENDING as "no image data is available
+            // yet". The callback can race the frame-ready transition; this
+            // event is consumed and acquisition waits for the next image event.
+            if (hr == E_PENDING)
+                continue;
             if (FAILED(hr)) {
                 fatal = true;
                 error = {static_cast<std::int32_t>(hr),
-                         "Amcam_WaitImageV4", hrMessage("Amcam_WaitImageV4", hr)};
+                         "Amcam_PullImageV4", hrMessage("Amcam_PullImageV4", hr)};
                 break;
             }
 
-            // Keep draining the SDK when all leases are retained. A slow
-            // consumer drops preview frames rather than blocking acquisition.
+            // Keep draining the SDK even when all frame leases are retained.
+            // Pull into the private discard buffer and account for the drop.
             if (!writable) {
                 dropped.fetch_add(1, std::memory_order_relaxed);
                 continue;
@@ -543,7 +610,7 @@ struct AmcamCamera::Impl {
             std::size_t required = 0;
             if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
                 fatal = true;
-                error = {-1, "Amcam_WaitImageV4",
+                error = {-1, "Amcam_PullImageV4",
                          "SDK frame dimensions exceed the allocated RGB24 buffer."};
                 break;
             }
@@ -583,6 +650,7 @@ struct AmcamCamera::Impl {
         const bool alreadyFaulted = before == CameraState::Faulted;
         if (!alreadyFaulted) state.store(CameraState::Stopping, std::memory_order_release);
         stopRequested.store(true, std::memory_order_release);
+        eventQueue.stop();
 
         if (worker.joinable()) worker.join();
 
@@ -596,6 +664,11 @@ struct AmcamCamera::Impl {
                     frameCacheFlushPending.store(true, std::memory_order_release);
                 }
             }
+        }
+
+        if (SUCCEEDED(hr)) {
+            waitForSdkCallbacks();
+            eventQueue.clearPending();
         }
 
         pool.reset();
@@ -682,11 +755,10 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
     impl_->maximumSpeedLevel = selected->maximumSpeedLevel;
     impl_->previewResolutions = selected->previewResolutions;
 
-    impl_->stopRequested.store(false, std::memory_order_release);
+    impl_->stopRequested.store(true, std::memory_order_release);
+    impl_->eventQueue.stop();
     impl_->sdkStarted.store(false, std::memory_order_release);
     impl_->frameCacheFlushPending.store(false, std::memory_order_release);
-    impl_->disconnected.store(false, std::memory_order_release);
-    impl_->sdkError.store(false, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
     impl_->state.store(CameraState::Open, std::memory_order_release);
     return true;
@@ -704,9 +776,10 @@ bool AmcamCamera::close(CameraError* error) {
 
     // Close is terminal. Do not make it depend on Stop or the recoverable
     // post-Stop cache flush: Amcam_Close ends SDK ownership of this handle.
-    // The WaitImage worker must finish before the handle can be destroyed.
+    // The callback-driven PullImage worker must finish before handle teardown.
     impl_->state.store(CameraState::Stopping, std::memory_order_release);
     impl_->stopRequested.store(true, std::memory_order_release);
+    impl_->eventQueue.stop();
     if (impl_->worker.joinable())
         impl_->worker.join();
 
@@ -716,10 +789,6 @@ bool AmcamCamera::close(CameraError* error) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
-        // Amcam_Close ends callback production. Wait for any callback that
-        // entered before Close returned before releasing the Impl context.
-        while (impl_->activeSdkCallbacks.load(std::memory_order_acquire) != 0)
-            std::this_thread::yield();
 
         impl_->sdkStarted.store(false, std::memory_order_release);
         impl_->frameCacheFlushPending.store(false, std::memory_order_release);
@@ -733,6 +802,10 @@ bool AmcamCamera::close(CameraError* error) {
         impl_->previewResolutions.clear();
     }
 
+    // Amcam_Close ends callback production. Wait for callbacks that entered
+    // before Close returned before releasing any callback/session state.
+    impl_->waitForSdkCallbacks();
+    impl_->eventQueue.clearPending();
     impl_->pool.reset();
     impl_->onFrame = {};
     impl_->onError = {};
@@ -756,9 +829,8 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
         return false;
 
     impl_->state.store(CameraState::Starting, std::memory_order_release);
+    impl_->eventQueue.reset();
     impl_->stopRequested.store(false, std::memory_order_release);
-    impl_->disconnected.store(false, std::memory_order_release);
-    impl_->sdkError.store(false, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
 
     int width = 0, height = 0;
@@ -802,6 +874,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
         std::lock_guard<std::mutex> api(impl_->apiMutex);
         hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_BYTEORDER, 0);
         if (FAILED(hr)) {
+            impl_->eventQueue.stop();
             impl_->pool.reset();
             impl_->onFrame = {};
             impl_->onError = {};
@@ -812,6 +885,9 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             impl_->handle, &Impl::sdkEvent, impl_.get());
     }
     if (FAILED(hr)) {
+        impl_->eventQueue.stop();
+        impl_->waitForSdkCallbacks();
+        impl_->eventQueue.clearPending();
         impl_->pool.reset();
         impl_->onFrame = {};
         impl_->onError = {};
@@ -827,6 +903,8 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             p->acquisitionLoop(activePool);
         });
     } catch (const std::exception& ex) {
+        impl_->stopRequested.store(true, std::memory_order_release);
+        impl_->eventQueue.stop();
         HRESULT stopHr = S_OK;
         {
             std::lock_guard<std::mutex> api(impl_->apiMutex);
@@ -837,6 +915,10 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                     impl_->frameCacheFlushPending.store(true, std::memory_order_release);
                 }
             }
+        }
+        if (SUCCEEDED(stopHr)) {
+            impl_->waitForSdkCallbacks();
+            impl_->eventQueue.clearPending();
         }
         impl_->pool.reset();
         impl_->onFrame = {};

@@ -57,6 +57,7 @@ set_target_properties(amscope_vendor PROPERTIES IMPORTED_LOCATION "${AMSCOPE_VEN
 add_library(amscope_driver SHARED
     src/AmcamCamera.cpp
     src/AmcamCameraProfiles.cpp
+    src/AmcamEventQueue.h
     include/amscope/AmcamCamera.h
     include/amscope/AmcamCameraProfiles.h
     include/amscope/CameraTypes.h)
@@ -95,6 +96,13 @@ if(BUILD_TESTING)
     target_compile_features(amscope_profile_tests PRIVATE cxx_std_17)
     target_include_directories(amscope_profile_tests PRIVATE include)
     add_test(NAME amscope_profile_tests COMMAND amscope_profile_tests)
+
+    add_executable(amscope_event_queue_tests
+        tests/AmcamEventQueueTests.cpp
+        src/AmcamEventQueue.h)
+    target_compile_features(amscope_event_queue_tests PRIVATE cxx_std_17)
+    target_include_directories(amscope_event_queue_tests PRIVATE src)
+    add_test(NAME amscope_event_queue_tests COMMAND amscope_event_queue_tests)
 endif()
 
 if(AMSCOPE_BUILD_QT_ADAPTER OR AMSCOPE_BUILD_PREVIEW_APP)

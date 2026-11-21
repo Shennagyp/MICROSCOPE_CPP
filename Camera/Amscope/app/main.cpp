@@ -1,4 +1,3 @@
-#include "amscope/AmcamCamera.h"
 #include "amscope/QtAmcamCamera.h"
 
 #include <QApplication>
@@ -22,7 +21,7 @@ namespace {
 
 int listCameras() {
     amscope::CameraError error;
-    const auto cameras = amscope::AmcamCamera::enumerate(&error);
+    const auto cameras = amscope::QtAmcamCamera::enumerate(&error);
     if (!error.message.empty()) {
         std::cerr << error.message << '\n';
         return 1;

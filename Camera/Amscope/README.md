@@ -10,14 +10,19 @@ integration and does not modify vendor sample code.
 - One AmcamCamera owns one HAmcam handle for the complete open session.
 - Enumeration copies SDK device data into CameraInfo; open uses the opaque
   device id returned by enumeration. Re-enumerate after a disconnect/replug.
-- Acquisition starts pull mode and calls Amcam_WaitImageV4 on a dedicated
-  C++ worker. The SDK event callback only records disconnect/error flags.
-- Stop and Close are never called from an SDK callback. Handle operations are
-  serialized; WaitImageV4 uses a 50 ms timeout to bound control/stop waiting.
+- Acquisition starts pull mode with the SDK event callback. The callback only
+  enqueues relevant event codes into a fixed-capacity (256) allocation-free
+  FIFO; one C++ worker handles events and calls Amcam_PullImageV4.
+- E_PENDING is a transient callback/frame-readiness race. Disconnect, generic
+  SDK error, no-frame timeout, no-packet timeout and event-queue overflow are
+  fatal acquisition conditions.
+- Stop and Close are never called from the vendor callback. Stop the event queue
+  and join the pull worker before SDK teardown; drain callbacks after successful
+  Stop/Close before releasing session-owned resources.
 - Every successful Amcam_Stop marks a both-cache flush obligation
   (AMCAM_OPTION_FLUSH = 3). The driver flushes immediately and retries before
-  the next Start if the SDK rejects the first flush. Terminal Close joins the
-  worker and calls Amcam_Close directly; it does not depend on Stop/flush.
+  the next Start if the SDK rejects the first flush. Terminal Close stops the event queue, joins the
+  the callback-driven PullImage worker, and calls Amcam_Close directly; it does not depend on Stop/flush.
 - Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
   sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every
@@ -45,9 +50,11 @@ integration and does not modify vendor sample code.
   remains a separate extension.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
-- Remaining acquisition parity work is the image retrieval/callback model:
-  C++ currently uses a WaitImageV4 worker while Swift uses queued events and
-  deferred PullImage. This path still requires vendor/hardware qualification.
+- Callback-to-pull execution now follows the Swift model and the vendor's
+  documented callback/PullImage pairing. CI validates compilation and queue
+  behavior on Intel and Apple Silicon. Real-camera qualification remains for
+  callback/Stop/Close timing, event rate, disconnect/timeouts, buffer layout,
+  and retained-frame behavior.
 - Shared feature-value validation is unit-tested through the common CMake target;
   macOS CI runs these tests before checking SDK and library artifacts.
 - Application-owned delivered libraries use camera_-prefixed artifact names;

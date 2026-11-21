@@ -174,10 +174,10 @@ Do not rename original vendor SDK libraries such as `libamcam.dylib`, original P
 1. Common feature types and application feature-access contract.
 2. AmScope feature access using the existing native session and handle.
 3. Remaining AmScope features, capability evidence and model policies.
-4. Adapter to the existing GenTL/GenApi implementation (blocked until the existing C++ dependency is present in this build).
-5. Descriptor-driven Qt controls (implemented for the AmScope preview application; reuse the common descriptors for CTI).
-6. Separate AmScope acquisition-lifecycle parity audit.
-7. Cross-backend verification and then hardware acceptance.
+4. Adapter to the existing GenTL/GenApi implementation (blocked until the existing C++ dependency is linked into this build).
+5. Descriptor-driven Qt controls (implemented for the AmScope preview; the CTI adapter should consume the same common contract).
+6. AmScope callback-to-pull acquisition and Stop/Close lifecycle parity (implemented; hardware qualification remains).
+7. Cross-backend verification once the existing CTI backend is integrated, followed by hardware acceptance.
 
 The first code increment may implement a subset. It must expose only features actually implemented and probed; the contract itself must be capable of expressing the full Swift feature model.
 
@@ -209,10 +209,18 @@ The C++ AmScope backend accepts an injectable `AmcamCameraProfileRegistry`. Prof
 
 The C++ driver now tracks the Swift session's post-Stop cache-clean obligation. Every successful `Amcam_Stop` sets `frameCacheFlushPending`; the implementation calls `Amcam_put_Option(handle, AMCAM_OPTION_FLUSH, 3)` while holding the same SDK-call mutex. The pending flag is cleared only after the SDK reports success. A failed flush is reported and retained, and the next `start()` retries it before entering the Starting state. A successful Stop followed by a failed flush therefore leaves the session stopped and retryable; it does not pretend streaming is active.
 
-The same obligation is recorded when the acquisition worker stops the SDK after a fatal error or when the application-owned worker cannot be created after pull mode has started. A terminal Close first requests worker exit and joins the `WaitImageV4` worker, then calls `Amcam_Close` directly under the SDK-call mutex. It does not call `Amcam_Stop` or require cache flush success. After `Amcam_Close` returns it clears the pending flag and releases session resources. This matches the Swift terminal-close rule: Close ends handle ownership even if a prior Stop was unsuccessful.
+The same obligation is recorded when the acquisition worker stops the SDK after a fatal event or when the application-owned worker cannot be created after pull mode has started. A terminal Close first stops the event queue and joins the callback-driven pull worker, then calls `Amcam_Close` directly under the SDK-call mutex. It does not call `Amcam_Stop` or require cache-flush success. After `Amcam_Close` returns, it waits for callbacks that entered before handle closure, clears queued events and the pending flush flag, and releases session resources. This matches the Swift terminal-close rule: Close ends handle ownership even if a prior Stop was unsuccessful.
 
-This implements the cache-flush state rule, not full Swift acquisition parity. The current C++ acquisition path still combines a non-null SDK event callback with a worker using `Amcam_WaitImageV4`; the Swift implementation uses a callback queue and deferred `PullImage`. That threading/retrieval difference remains to be audited against the vendor's `demowait` and callback samples before changing it.
+### Callback-to-pull acquisition model
+
+The previous hybrid implementation (non-null event callback plus `Amcam_WaitImageV4`) has been removed. The vendor header defines `AMCAM_EVENT_IMAGE` as a notification for which the application must call `Amcam_PullImageXXXX`; the bundled samples separately demonstrate the null-callback/`WaitImage` polling mode and callback/`PullImage` mode. This implementation now uses the latter, matching the Swift session:
+
+1. The vendor callback performs no SDK calls, image pulls, UI work, or observer invocation. It copies only relevant event codes into a fixed-capacity, allocation-free FIFO.
+2. One application-owned acquisition worker consumes events and calls `Amcam_PullImageV4` under the same SDK-call mutex used by feature access and lifecycle operations.
+3. `E_PENDING` is treated as a transient callback/frame-readiness race; it does not fault the stream. Disconnect, generic SDK error, no-frame timeout, no-packet timeout, and queue overflow terminate acquisition with an error.
+4. The bounded event queue has capacity 256. Overflow is explicit and faults acquisition instead of silently dropping events or allocating without a bound.
+5. Stop/Close stop the queue before joining the worker. Successful Stop ends SDK callback production, after which in-flight callbacks are drained before queue/session resources are released. Close remains terminal and does not depend on Stop/flush success.
+
+The C++ implementation now matches the Swift callback-to-deferred-pull execution model and the vendor's documented API pairing. This is source-level and CI-verified parity, not yet hardware acceptance: real-camera tests must still validate callback/Stop/Close timing, event rates against the queue bound, disconnect/no-frame/no-packet behavior, row layout, and stable frame delivery under retained frame leases.
 
 Auto white balance is a one-shot command requiring acquisition to be active. It remains a separate native operation; it is not incorrectly represented as a Boolean feature because the Swift feature-value contract has no command value kind.
-
-The Stop/Close ownership rules and post-Stop cache-flush obligation are now implemented. The remaining native acquisition mismatch is image retrieval and callback delivery: C++ currently combines a non-null SDK event callback with a worker calling `Amcam_WaitImageV4`, while Swift enqueues callback events and performs deferred `PullImage` on a serial queue, draining that queue before releasing callback context. The C++ retrieval strategy must be reconciled with the vendor's supported samples and qualified on hardware before it is changed or certified.

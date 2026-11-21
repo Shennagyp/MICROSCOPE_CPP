@@ -105,6 +105,7 @@ private:
     void runFeatureWorker();
     void dispatchFeatureCallback(std::uint64_t contextGeneration,
                                  std::function<void()> callback);
+    void dispatchToOwnerThread(std::function<void()> callback);
     void advanceFeatureContextGeneration() noexcept;
 
     void publishLatestFrame(FramePtr frame);

@@ -65,6 +65,9 @@ public:
     using LifecycleResult = CameraOperationResult<std::monostate>;
     using LifecycleCallback =
         std::function<void(CameraRequestId, LifecycleResult)>;
+    using CameraListResult = CameraOperationResult<std::vector<CameraInfo>>;
+    using CameraListCallback =
+        std::function<void(CameraRequestId, CameraListResult)>;
 
     explicit QtAmcamCamera(QObject* parent = nullptr);
     QtAmcamCamera(AmcamCameraProfileRegistry profiles, QObject* parent = nullptr);
@@ -83,6 +86,7 @@ public:
     // Accepted lifecycle requests execute in order and report their own result;
     // the application applies its own selection/request generation to ignore
     // obsolete UI completions.
+    CameraRequestId requestEnumerateCameras(CameraListCallback callback);
     CameraRequestId requestOpen(QString deviceId, LifecycleCallback callback);
     CameraRequestId requestClose(LifecycleCallback callback);
     CameraRequestId requestStart(LifecycleCallback callback);

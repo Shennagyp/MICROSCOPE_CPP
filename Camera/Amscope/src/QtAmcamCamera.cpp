@@ -74,6 +74,40 @@ std::vector<CameraInfo> QtAmcamCamera::enumerate(CameraError* error) {
     return AmcamCamera::enumerate(error);
 }
 
+QtAmcamCamera::CameraRequestId QtAmcamCamera::requestEnumerateCameras(
+    CameraListCallback callback) {
+    if (!callback) return 0;
+
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            CameraRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<CameraListResult> result;
+            try {
+                CameraError error;
+                auto cameras = AmcamCamera::enumerate(&error);
+                if (!error.message.empty())
+                    result.emplace(std::move(error));
+                else
+                    result.emplace(std::move(cameras));
+            } catch (const std::exception& exception) {
+                result.emplace(CameraError{0, "camera enumeration", exception.what()});
+            } catch (...) {
+                result.emplace(CameraError{0, "camera enumeration",
+                                           "Unknown exception during camera enumeration."});
+            }
+
+            dispatchFeatureCallback(
+                requestContext,
+                [callback = std::move(callback),
+                 requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        },
+        FeatureRequestSemantics::SessionBound);
+}
+
 bool QtAmcamCamera::open(const QString& deviceId, CameraError* error) {
     const QByteArray id = deviceId.toUtf8();
     CameraError local;

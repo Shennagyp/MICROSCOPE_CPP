@@ -149,6 +149,20 @@ int main(int argc, char** argv) {
     std::vector<int> lifecycleCompletionOrder;
     bool lifecycleResultsTyped = true;
     bool lifecycleCallbacksOnAffinityThread = true;
+    bool enumerationCompleted = false;
+    bool enumerationCallbackOnAffinityThread = true;
+
+    const auto enumerationRequest = camera.requestEnumerateCameras(
+        [&](amscope::QtAmcamCamera::CameraRequestId requestId,
+            amscope::QtAmcamCamera::CameraListResult result) {
+            enumerationCallbackOnAffinityThread =
+                QThread::currentThread() == camera.thread();
+            enumerationCompleted = requestId != 0 &&
+                (std::holds_alternative<std::vector<amscope::CameraInfo>>(result) ||
+                 std::holds_alternative<amscope::CameraError>(result));
+            if (enumerationCompleted && lifecycleCompletionOrder.size() == 3)
+                lifecycleLoop.quit();
+        });
 
     const auto startRequest = camera.requestStart(
         [&](amscope::QtAmcamCamera::CameraRequestId requestId,
@@ -161,7 +175,7 @@ int main(int argc, char** argv) {
                 requestId != 0 &&
                 std::holds_alternative<amscope::CameraError>(result);
             lifecycleCompletionOrder.push_back(1);
-            if (lifecycleCompletionOrder.size() == 3)
+            if (enumerationCompleted && lifecycleCompletionOrder.size() == 3)
                 lifecycleLoop.quit();
         });
     const auto stopRequest = camera.requestStop(
@@ -193,12 +207,13 @@ int main(int argc, char** argv) {
                 lifecycleLoop.quit();
         });
 
-    if (startRequest == 0 || stopRequest == 0 || closeRequest == 0) {
+    if (enumerationRequest == 0 || startRequest == 0 ||
+        stopRequest == 0 || closeRequest == 0) {
         std::cerr << "A valid asynchronous lifecycle request was rejected.\n";
         return EXIT_FAILURE;
     }
 
-    lifecycleTimeout.start(5000);
+    lifecycleTimeout.start(10000);
     lifecycleLoop.exec();
 
     if (lifecycleCompletionOrder != std::vector<int>{1, 2, 3}) {
@@ -207,6 +222,10 @@ int main(int argc, char** argv) {
     }
     if (!lifecycleResultsTyped || !lifecycleCallbacksOnAffinityThread) {
         std::cerr << "Lifecycle callbacks lost typed errors or Qt affinity.\n";
+        return EXIT_FAILURE;
+    }
+    if (!enumerationCompleted || !enumerationCallbackOnAffinityThread) {
+        std::cerr << "Camera enumeration did not complete on the Qt affinity thread.\n";
         return EXIT_FAILURE;
     }
 

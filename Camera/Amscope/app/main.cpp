@@ -165,6 +165,10 @@ public:
         });
         connect(&camera_, &amscope::QtAmcamCamera::stateChanged,
                 this, [this](amscope::CameraState state) {
+            if (state != amscope::CameraState::Closed && cameraEnumerationPending_) {
+                ++cameraEnumerationGeneration_;
+                cameraEnumerationPending_ = false;
+            }
             if (state != amscope::CameraState::Streaming)
                 resetPreviewFrameRate();
             updateControls(state);
@@ -193,6 +197,7 @@ public:
     ~PreviewWindow() override {
         ++featureUiGeneration_;
         ++lifecycleUiGeneration_;
+        ++cameraEnumerationGeneration_;
         // QtAmcamCamera shuts down its request worker, joins it, then closes
         // the native session. Do not race a synchronous Close from this UI.
     }
@@ -205,33 +210,59 @@ private:
     };
 
     void refreshCameras() {
-        if (camera_.state() != amscope::CameraState::Closed) {
+        if (camera_.state() != amscope::CameraState::Closed ||
+            lifecycleRequestPending_ || cameraEnumerationPending_) {
             return;
         }
 
-        amscope::CameraError error;
-        cameras_ = amscope::QtAmcamCamera::enumerate(&error);
-        cameraSelector_->clear();
+        const std::uint64_t generation = ++cameraEnumerationGeneration_;
+        cameraEnumerationPending_ = true;
+        cameraSelector_->setEnabled(false);
+        refreshCamerasButton_->setEnabled(false);
+        statusBar()->showMessage("Refreshing cameras…");
 
-        if (!error.message.empty()) {
-            statusBar()->showMessage(QString::fromStdString(error.message));
-            return;
-        }
+        const auto requestId = camera_.requestEnumerateCameras(
+            [this, generation](
+                amscope::QtAmcamCamera::CameraRequestId,
+                amscope::QtAmcamCamera::CameraListResult result) {
+                if (generation != cameraEnumerationGeneration_) return;
+                cameraEnumerationPending_ = false;
+                cameraSelector_->clear();
 
-        for (const auto& camera : cameras_) {
-            const std::string label = !camera.displayName.empty()
-                                          ? camera.displayName
-                                          : camera.modelName;
-            cameraSelector_->addItem(
-                QString::fromStdString(label),
-                QString::fromStdString(camera.id));
-        }
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    cameras_.clear();
+                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    updateControls(camera_.state());
+                    return;
+                }
 
-        if (cameras_.empty()) {
-            statusBar()->showMessage("No AmScope camera detected.");
+                cameras_ =
+                    std::get<std::vector<amscope::CameraInfo>>(std::move(result));
+                for (const auto& camera : cameras_) {
+                    const std::string label = !camera.displayName.empty()
+                                                  ? camera.displayName
+                                                  : camera.modelName;
+                    cameraSelector_->addItem(
+                        QString::fromStdString(label),
+                        QString::fromStdString(camera.id));
+                }
+
+                if (cameras_.empty()) {
+                    statusBar()->showMessage("No AmScope camera detected.");
+                } else {
+                    statusBar()->showMessage(
+                        QString("%1 camera(s) detected.")
+                            .arg(static_cast<qulonglong>(cameras_.size())));
+                }
+                updateControls(camera_.state());
+            });
+
+        if (requestId == 0) {
+            cameraEnumerationPending_ = false;
+            statusBar()->showMessage("Camera enumeration could not be queued.");
+            updateControls(camera_.state());
         } else {
-            statusBar()->showMessage(
-                QString("%1 camera(s) detected.").arg(cameras_.size()));
+            updateControls(camera_.state());
         }
     }
 
@@ -889,7 +920,8 @@ private:
         const bool open = state == amscope::CameraState::Open;
         const bool streaming = state == amscope::CameraState::Streaming;
 
-        const bool idle = !lifecycleRequestPending_;
+        const bool idle =
+            !lifecycleRequestPending_ && !cameraEnumerationPending_;
         cameraSelector_->setEnabled(closed && idle);
         refreshCamerasButton_->setEnabled(closed && idle);
         openButton_->setEnabled(closed && idle && cameraSelector_->count() > 0);
@@ -907,6 +939,8 @@ private:
     std::uint64_t featureUiGeneration_ = 0;
     std::uint64_t lifecycleUiGeneration_ = 0;
     bool lifecycleRequestPending_ = false;
+    std::uint64_t cameraEnumerationGeneration_ = 0;
+    bool cameraEnumerationPending_ = false;
     std::size_t pendingFeatureReads_ = 0;
     bool pendingFeatureWrite_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;

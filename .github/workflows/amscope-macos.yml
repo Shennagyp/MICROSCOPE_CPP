@@ -1,0 +1,61 @@
+name: Amcam macOS build
+
+on:
+  push:
+    branches:
+      - amscope-native-driver
+    paths:
+      - "Camera/Amscope/**"
+      - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
+      - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
+      - ".github/workflows/amscope-macos.yml"
+  pull_request:
+    paths:
+      - "Camera/Amscope/**"
+      - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
+      - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
+      - ".github/workflows/amscope-macos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS arm64 and x86_64
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode toolchain
+        run: |
+          xcode-select -p
+          clang++ --version
+          cmake --version
+
+      - name: Install Qt 6
+        run: |
+          brew install qt@6
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
+
+      - name: Configure native driver and Qt adapter
+        run: |
+          cmake -S Camera/Amscope -B build/amscope \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DAMSCOPE_VENDOR_MAC_ARCH=x64+arm64 \
+            -DAMSCOPE_BUILD_QT_ADAPTER=ON
+
+      - name: Compile
+        run: cmake --build build/amscope --config Release --parallel
+
+      - name: Verify linked SDK and Qt artifacts
+        run: |
+          test -f build/amscope/libamscope_driver.dylib
+          test -f build/amscope/libamscope_qt.dylib
+          test -f build/amscope/libamcam.dylib
+          file build/amscope/libamscope_driver.dylib
+          file build/amscope/libamscope_qt.dylib
+          file build/amscope/libamcam.dylib
+          otool -L build/amscope/libamscope_driver.dylib

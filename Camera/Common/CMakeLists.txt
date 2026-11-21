@@ -6,3 +6,10 @@ target_include_directories(camera_common
     INTERFACE
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
         "$<INSTALL_INTERFACE:include>")
+
+if(BUILD_TESTING)
+    add_executable(camera_common_feature_tests
+        tests/CameraFeatureValidationTests.cpp)
+    target_link_libraries(camera_common_feature_tests PRIVATE Camera::Common)
+    add_test(NAME camera_common_feature_tests COMMAND camera_common_feature_tests)
+endif()

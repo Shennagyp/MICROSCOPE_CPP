@@ -67,10 +67,10 @@ jobs:
       - name: Verify SDK and driver architectures
         run: |
           test -f build/amscope/libamscope_driver.dylib
-          test -f build/amscope/libamscope_qt.dylib
+          test -f build/amscope/libamscope_qt.a
           test -f build/amscope/libamcam.dylib
           lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamscope_driver.dylib
-          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamscope_qt.dylib
+          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamscope_qt.a
           lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamcam.dylib
           otool -L build/amscope/libamscope_driver.dylib
-          otool -L build/amscope/libamscope_qt.dylib
+          file build/amscope/libamscope_qt.a

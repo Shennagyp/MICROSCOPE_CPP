@@ -32,6 +32,20 @@ camera::CameraFeatureAccessError featureWorkerException(
     return featureWorkerException(feature, exception.what());
 }
 
+camera::CameraFeatureAccessError executionModeFeatureError(
+    const std::string& feature,
+    const char* operation) {
+    return {
+        camera::CameraFeatureAccessError::Code::BackendFailure,
+        feature,
+        std::string("QtAmcamCamera instance is committed to queued execution; ") +
+            "cannot call synchronous " + operation + ".",
+        0,
+        std::nullopt,
+        std::nullopt
+    };
+}
+
 } // namespace
 
 QtAmcamCamera::QtAmcamCamera(QObject* parent)
@@ -109,6 +123,8 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestEnumerateCameras(
 }
 
 bool QtAmcamCamera::open(const QString& deviceId, CameraError* error) {
+    if (!requireSynchronousExecutionMode("open", error))
+        return false;
     const QByteArray id = deviceId.toUtf8();
     CameraError local;
     bool ok = false;
@@ -139,6 +155,8 @@ bool QtAmcamCamera::open(const QString& deviceId, CameraError* error) {
 }
 
 bool QtAmcamCamera::close(CameraError* error) {
+    if (!requireSynchronousExecutionMode("close", error))
+        return false;
     CameraError local;
     bool ok = false;
     {
@@ -162,6 +180,8 @@ bool QtAmcamCamera::close(CameraError* error) {
 }
 
 bool QtAmcamCamera::start(CameraError* error) {
+    if (!requireSynchronousExecutionMode("start", error))
+        return false;
     CameraError local;
     bool ok = false;
     {
@@ -219,6 +239,8 @@ bool QtAmcamCamera::start(CameraError* error) {
 }
 
 bool QtAmcamCamera::stop(CameraError* error) {
+    if (!requireSynchronousExecutionMode("stop", error))
+        return false;
     CameraError local;
     bool ok = false;
     {
@@ -439,6 +461,8 @@ FramePtr QtAmcamCamera::takeLatestFrame() {
 }
 
 bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
+    if (!requireSynchronousExecutionMode("autoWhiteBalance", error))
+        return false;
     CameraError local;
     bool ok = false;
     {
@@ -456,6 +480,8 @@ bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
 bool QtAmcamCamera::readFrameRate(
     FrameRateStatistics& stats,
     CameraError* error) {
+    if (!requireSynchronousExecutionMode("readFrameRate", error))
+        return false;
     CameraError local;
     bool ok = false;
     {
@@ -680,6 +706,44 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
         FeatureRequestSemantics::StateMutation);
 }
 
+bool QtAmcamCamera::selectExecutionMode(ExecutionMode mode) noexcept {
+    ExecutionMode current = executionMode_.load(std::memory_order_acquire);
+    for (;;) {
+        if (current == mode)
+            return true;
+        if (current != ExecutionMode::Undecided)
+            return false;
+        if (executionMode_.compare_exchange_weak(
+                current, mode,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return true;
+        }
+    }
+}
+
+bool QtAmcamCamera::requireSynchronousExecutionMode(
+    const char* operation,
+    CameraError* error) {
+    if (selectExecutionMode(ExecutionMode::Synchronous))
+        return true;
+
+    CameraError modeError{
+        0,
+        operation,
+        "This QtAmcamCamera instance is committed to queued request execution."
+    };
+    if (error) *error = modeError;
+    emitError(modeError);
+    return false;
+}
+
+camera::CameraFeatureAccessError QtAmcamCamera::synchronousModeFeatureError(
+    const std::string& feature,
+    const char* operation) const {
+    return executionModeFeatureError(feature, operation);
+}
+
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
     FeatureRequestTask task,
     FeatureRequestSemantics semantics,
@@ -690,6 +754,10 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
     if (stoppingFeatureWorker_ ||
         (!reservedControlRequest &&
          featureQueue_.size() >= kMaximumPendingFeatureRequests)) {
+        return 0;
+    }
+    if (!reservedControlRequest &&
+        !selectExecutionMode(ExecutionMode::Queued)) {
         return 0;
     }
 
@@ -933,11 +1001,19 @@ void QtAmcamCamera::emitError(const CameraError& error) {
 }
 
 QtAmcamCamera::FeatureDescriptorsResult QtAmcamCamera::featureDescriptors() {
+    if (!selectExecutionMode(ExecutionMode::Synchronous)) {
+        return synchronousModeFeatureError("*", "featureDescriptors");
+    }
+
     std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
     return camera_.featureDescriptors();
 }
 
 QtAmcamCamera::FeatureReadResult QtAmcamCamera::readFeature(std::string_view name) {
+    if (!selectExecutionMode(ExecutionMode::Synchronous)) {
+        return synchronousModeFeatureError(std::string(name), "readFeature");
+    }
+
     std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
     return camera_.readFeature(name);
 }
@@ -945,6 +1021,10 @@ QtAmcamCamera::FeatureReadResult QtAmcamCamera::readFeature(std::string_view nam
 QtAmcamCamera::FeatureWriteResult QtAmcamCamera::writeFeature(
     std::string_view name,
     const camera::CameraFeatureValue& value) {
+    if (!selectExecutionMode(ExecutionMode::Synchronous)) {
+        return synchronousModeFeatureError(std::string(name), "writeFeature");
+    }
+
     std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
     advanceFeatureStateGeneration();
     return camera_.writeFeature(name, value);

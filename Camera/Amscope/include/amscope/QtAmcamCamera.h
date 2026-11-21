@@ -132,6 +132,12 @@ signals:
     void errorOccurred(const QString& message, qint32 vendorCode);
 
 private:
+    enum class ExecutionMode : std::uint8_t {
+        Undecided,
+        Synchronous,
+        Queued
+    };
+
     enum class FeatureRequestSemantics : std::uint8_t {
         SessionBound,
         FeatureSnapshot,
@@ -158,6 +164,11 @@ private:
         FeatureRequestTask task,
         FeatureRequestSemantics semantics = FeatureRequestSemantics::SessionBound,
         bool reservedControlRequest = false);
+    [[nodiscard]] bool selectExecutionMode(ExecutionMode mode) noexcept;
+    bool requireSynchronousExecutionMode(const char* operation, CameraError* error);
+    [[nodiscard]] camera::CameraFeatureAccessError synchronousModeFeatureError(
+        const std::string& feature,
+        const char* operation) const;
     void runFeatureWorker();
     void dispatchFeatureCallback(const FeatureRequestContext& context,
                                  std::function<void()> callback);
@@ -189,6 +200,7 @@ private:
     // AmcamCamera also protects its SDK handle internally; this mutex adds an
     // atomic lifecycle-vs-queued-request ordering boundary.
     std::mutex cameraOperationMutex_;
+    std::atomic<ExecutionMode> executionMode_{ExecutionMode::Undecided};
     // Scheduled generation advances when a lifecycle request is accepted;
     // active generation advances only when that request reaches the worker head.
     std::atomic<std::uint64_t> scheduledSessionGeneration_{0};

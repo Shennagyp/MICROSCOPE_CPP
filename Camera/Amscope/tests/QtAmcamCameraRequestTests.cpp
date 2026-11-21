@@ -243,6 +243,29 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    // A queued camera instance must reject the synchronous contract.
+    const auto syncAfterQueue = camera.featureDescriptors();
+    const auto* queuedModeError =
+        std::get_if<camera::CameraFeatureAccessError>(&syncAfterQueue);
+    if (!queuedModeError ||
+        queuedModeError->message.find("committed to queued execution") == std::string::npos) {
+        std::cerr << "Queued execution did not reject the synchronous feature API.\n";
+        return EXIT_FAILURE;
+    }
+
+    // A synchronous operation commits a separate instance to sync mode and
+    // prevents later queued operations from entering its execution stream.
+    amscope::QtAmcamCamera synchronousCamera;
+    amscope::CameraError synchronousError;
+    (void)synchronousCamera.start(&synchronousError);
+    const auto rejectedQueuedRequest = synchronousCamera.requestFeatureDescriptors(
+        [](amscope::QtAmcamCamera::FeatureRequestId,
+           amscope::QtAmcamCamera::FeatureDescriptorsResult) {});
+    if (rejectedQueuedRequest != 0) {
+        std::cerr << "Synchronous execution did not reject the queued request API.\n";
+        return EXIT_FAILURE;
+    }
+
     std::cout << "All Qt camera request tests passed.\n";
     return EXIT_SUCCESS;
 }

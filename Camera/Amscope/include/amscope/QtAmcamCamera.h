@@ -27,10 +27,10 @@ namespace amscope {
 // The synchronous ICameraFeatureAccess methods are available for non-UI
 // callers. GUI code should use the request* methods below: feature operations
 // execute serially on a dedicated worker and their callbacks are delivered on
-// this object's Qt affinity thread. A request is discarded if open/close/start/
-// stop changes the feature-context generation before its result is delivered.
-// The application should still keep its own selected-device generation, as in
-// the Swift application model, to reject stale UI work before changing selection.
+// this object's Qt affinity thread. A lifecycle transition, a queued state-changing
+// write, or a command may supersede prior requests; superseded callbacks are
+// intentionally omitted. The application should also keep its own selected-device
+// generation, as in the Swift model, to reject stale UI work across selection changes.
 class QtAmcamCamera final : public QObject, public camera::ICameraFeatureAccess {
     Q_OBJECT
 public:

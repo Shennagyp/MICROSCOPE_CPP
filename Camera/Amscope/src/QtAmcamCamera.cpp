@@ -379,6 +379,9 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
         utf8Name.constData(),
         static_cast<std::size_t>(utf8Name.size()));
 
+    // A queued write supersedes earlier reads/descriptors. Holding the
+    // facade operation lock orders it against lifecycle work.
+    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
     return enqueueFeatureRequest(
         [this,
          featureName = std::move(featureName),
@@ -410,7 +413,8 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));
                 });
-        });
+        },
+        true);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(

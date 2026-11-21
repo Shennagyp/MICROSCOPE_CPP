@@ -23,9 +23,16 @@ integration and does not modify vendor sample code.
   image dimensions and sizes the pool for the selected configuration.
 - Exposure auto/manual, exposure time/gain, Temp/Tint white balance, one-shot
   auto white balance, and SDK frame-rate statistics are implemented.
-- The common application feature contract currently exposes ExposureAuto,
-  ExposureTime, and AmcamAnalogGainPercent with runtime descriptors and
-  typed reads/writes. Additional Swift feature parity is incremental.
+- The common application feature contract exposes the eleven Swift AmScope
+  control features through runtime descriptors and typed reads/writes:
+  ExposureAuto, ExposureTime, AmcamAnalogGainPercent,
+  AmcamColorMatrixEnabled, AmcamPixelFormat, AmcamWhiteBalanceTemperature,
+  AmcamWhiteBalanceTint, AmcamWhiteBalanceRGBGain, AmcamFixedFrameRate,
+  AmcamFrameSpeedLevel, and AmcamResolutionIndex.
+- The AmScope descriptors use model metadata and non-mutating SDK probes.
+  One-shot auto white balance remains a command, not a Boolean feature.
+- An injectable per-model allow/deny profile registry and the acquisition
+  lifecycle parity work are not complete yet.
 - Application-owned delivered libraries use camera_-prefixed artifact names;
   the original Amcam SDK library remains libamcam.dylib.
 - The Qt Core adapter has a one-frame latest mailbox. It coalesces notifications

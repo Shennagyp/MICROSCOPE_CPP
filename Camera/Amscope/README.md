@@ -21,7 +21,9 @@ integration and does not modify vendor sample code.
   The Qt frame-delivery gate is reactivated for that same acquisition after a
   recoverable Stop failure; a successful Stop/Close leaves the old gate invalid.
   Fatal acquisition callbacks atomically invalidate their gate and advance the
-  session generation before the Qt error notification is delivered.
+  session generation before the Qt error notification is delivered. If a
+  concurrent Stop/Close already advanced that same session, a fault notification
+  is retained only while the native state remains Faulted.
   Successful Stop shuts down the event worker, drains callbacks, then releases
   session resources. Terminal Close remains independent of Stop success.
 - Every successful Amcam_Stop marks a both-cache flush obligation

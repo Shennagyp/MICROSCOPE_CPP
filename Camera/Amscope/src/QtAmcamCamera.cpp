@@ -818,20 +818,35 @@ void QtAmcamCamera::handleAcquisitionFailure(
     const CameraError& error) {
     if (!frameGate) return;
 
-    const std::uint64_t activeGeneration =
-        sessionGeneration_.load(std::memory_order_acquire);
-    if (!frameGate->invalidateIfCurrent(activeGeneration))
+    const std::uint64_t acquisitionGeneration = frameGate->generation();
+    if (acquisitionGeneration == 0 ||
+        !frameGate->invalidateIfCurrent(acquisitionGeneration)) {
         return;
+    }
 
-    // The native driver has already published Faulted. Invalidate queued
-    // snapshots and frames before the asynchronous Qt notification is posted.
-    const std::uint64_t invalidatedGeneration =
-        scheduledSessionGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
-    advanceSessionGenerationTo(invalidatedGeneration);
+    std::uint64_t notificationGeneration =
+        sessionGeneration_.load(std::memory_order_acquire);
+    if (notificationGeneration == acquisitionGeneration) {
+        // The fatal callback won the transition before any lifecycle operation.
+        notificationGeneration =
+            scheduledSessionGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
+        advanceSessionGenerationTo(notificationGeneration);
+    } else if (notificationGeneration > acquisitionGeneration) {
+        // A user Stop/Close may have entered after the native driver published
+        // Faulted but before this callback ran. It already advanced the session;
+        // preserve the fault notification if that same session is still Faulted.
+        if (camera_.state() != CameraState::Faulted)
+            return;
+    } else {
+        return;
+    }
+
+    // Invalidate queued snapshots and any frame already waiting in the mailbox
+    // before the asynchronous Qt error/state notification is posted.
     clearFrameMailbox();
 
     FeatureRequestContext context;
-    context.sessionGeneration = invalidatedGeneration;
+    context.sessionGeneration = notificationGeneration;
     context.featureStateGeneration =
         featureStateGeneration_.load(std::memory_order_acquire);
     context.semantics = FeatureRequestSemantics::SessionBound;

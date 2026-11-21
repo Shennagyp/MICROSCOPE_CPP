@@ -8,8 +8,6 @@ on:
       - "Camera/Amscope/**"
       - "Camera/Common/**"
       - "docs/architecture/**"
-      - "Camera/Common/**"
-      - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
       - ".github/workflows/amscope-macos.yml"

@@ -207,4 +207,4 @@ This implements the cache-flush state rule, not full Swift acquisition parity. T
 
 Auto white balance is a one-shot command requiring acquisition to be active. It remains a separate native operation; it is not incorrectly represented as a Boolean feature because the Swift feature-value contract has no command value kind.
 
-The native acquisition retrieval strategy remains on `Amcam_WaitImageV4`. Its difference from the Swift callback/PullImage queue and callback-drain behavior remains a separate required audit. The post-Stop cache-flush obligation is now implemented and retryable as documented above.
+The Stop/Close ownership rules and post-Stop cache-flush obligation are now implemented. The remaining native acquisition mismatch is image retrieval and callback delivery: C++ currently combines a non-null SDK event callback with a worker calling `Amcam_WaitImageV4`, while Swift enqueues callback events and performs deferred `PullImage` on a serial queue, draining that queue before releasing callback context. The C++ retrieval strategy must be reconciled with the vendor's supported samples and qualified on hardware before it is changed or certified.

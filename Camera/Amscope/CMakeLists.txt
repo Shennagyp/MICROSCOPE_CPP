@@ -9,6 +9,8 @@ endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+include(CTest)
+
 add_subdirectory(
     "${CMAKE_CURRENT_LIST_DIR}/../Common"
     "${CMAKE_CURRENT_BINARY_DIR}/camera_common")

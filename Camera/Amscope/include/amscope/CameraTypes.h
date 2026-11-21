@@ -39,7 +39,14 @@ struct Frame {
     [[nodiscard]] std::size_t byteSize() const noexcept { return pixels.size(); }
 };
 using FramePtr = std::shared_ptr<const Frame>;
+enum class AmcamAutoExposureMode : std::int32_t {
+    Off = 0,
+    Continuous = 1,
+    Once = 2
+};
+
 struct ExposureSettings {
+    AmcamAutoExposureMode autoMode = AmcamAutoExposureMode::Off;
     bool automatic = false;
     std::uint32_t timeMicroseconds = 0;
     std::uint32_t minimumTimeMicroseconds = 0;

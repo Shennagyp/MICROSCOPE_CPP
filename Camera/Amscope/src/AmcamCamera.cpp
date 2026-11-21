@@ -715,15 +715,25 @@ struct AmcamCamera::Impl {
 
         const bool wasStreaming = before == CameraState::Streaming;
         const bool alreadyFaulted = before == CameraState::Faulted;
-        if (!alreadyFaulted)
-            state.store(CameraState::Stopping, std::memory_order_release);
+
+        // User Stop and an acquisition fault compete for one transition token.
+        // Only the winner may change the transition state or clear stopRequested.
+        bool expected = false;
+        const bool ownsStopTransition =
+            stopRequested.compare_exchange_strong(
+                expected, true, std::memory_order_acq_rel);
+        if (ownsStopTransition) {
+            if (!alreadyFaulted)
+                state.store(CameraState::Stopping, std::memory_order_release);
+        } else {
+            // A fatal acquisition event already owns this transition. Preserve
+            // its fault state rather than overwriting it with Stopping/Streaming.
+            state.store(CameraState::Faulted, std::memory_order_release);
+        }
 
         // Do not stop the callback queue or join its worker until the SDK has
-        // confirmed Stop. During this transition the worker suppresses PullImage,
-        // while the vendor callback continues enqueueing events. This mirrors
-        // Swift stopIfNeeded(): on SDK failure, restore the prior streaming state
-        // and keep callback context and image buffers alive.
-        stopRequested.store(true, std::memory_order_release);
+        // confirmed Stop. During a user-owned transition the worker suppresses
+        // PullImage while callbacks continue enqueueing events.
 
         HRESULT hr = S_OK;
         {
@@ -738,11 +748,11 @@ struct AmcamCamera::Impl {
         }
 
         if (FAILED(hr)) {
-            const bool acquisitionAlreadyFaulted =
-                state.load(std::memory_order_acquire) == CameraState::Faulted;
-            if (wasStreaming && !acquisitionAlreadyFaulted) {
-                stopRequested.store(false, std::memory_order_release);
+            if (ownsStopTransition && wasStreaming) {
+                // Restore the state before releasing the transition token. A
+                // fatal report cannot claim ownership until stopRequested clears.
                 state.store(CameraState::Streaming, std::memory_order_release);
+                stopRequested.store(false, std::memory_order_release);
             } else {
                 state.store(CameraState::Faulted, std::memory_order_release);
             }
@@ -760,6 +770,7 @@ struct AmcamCamera::Impl {
         onFrame = {};
         onError = {};
         const bool endedFaulted =
+            !ownsStopTransition ||
             alreadyFaulted ||
             state.load(std::memory_order_acquire) == CameraState::Faulted;
         state.store(endedFaulted ? CameraState::Faulted : CameraState::Open,

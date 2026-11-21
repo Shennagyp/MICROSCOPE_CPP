@@ -195,6 +195,14 @@ Feature writes validate descriptor state, type, range, increment, enumeration or
 
 The C++ AmScope backend accepts an injectable `AmcamCameraProfileRegistry`. Profiles use exact SDK model codes, whitespace trimming, a feature allow-list and a deny-list; explicit deny entries take precedence, and the last duplicate profile wins. A missing profile imposes no additional restriction. The profile is applied after runtime/model evidence, so it can only narrow availability. The C++ enum currently covers the capability families mapped to the eleven implemented control descriptors; the wider Swift sensor, transport, trigger and accessory taxonomy remains outside this increment.
 
+### Post-Stop cache invariant
+
+The C++ driver now tracks the Swift session's post-Stop cache-clean obligation. Every successful `Amcam_Stop` sets `frameCacheFlushPending`; the implementation calls `Amcam_put_Option(handle, AMCAM_OPTION_FLUSH, 3)` while holding the same SDK-call mutex. The pending flag is cleared only after the SDK reports success. A failed flush is reported and retained, and the next `start()` retries it before entering the Starting state. A successful Stop followed by a failed flush therefore leaves the session stopped and retryable; it does not pretend streaming is active.
+
+The same obligation is recorded when the acquisition worker stops the SDK after a fatal error or when the application-owned worker cannot be created after pull mode has started. A terminal Close clears the pending flag after `Amcam_Close` because that handle will not be started again.
+
+This implements the cache-flush state rule, not full Swift acquisition parity. The current C++ acquisition path still combines a non-null SDK event callback with a worker using `Amcam_WaitImageV4`; the Swift implementation uses a callback queue and deferred `PullImage`. That threading/retrieval difference remains to be audited against the vendor's `demowait` and callback samples before changing it.
+
 Auto white balance is a one-shot command requiring acquisition to be active. It remains a separate native operation; it is not incorrectly represented as a Boolean feature because the Swift feature-value contract has no command value kind.
 
-The current native acquisition code is intentionally unchanged. Its difference from the Swift callback/PullImage lifecycle, including callback draining, context/buffer retention and the post-Stop cache-flush obligation, remains a separate required audit.
+The native acquisition retrieval strategy remains on `Amcam_WaitImageV4`. Its difference from the Swift callback/PullImage queue and callback-drain behavior remains a separate required audit. The post-Stop cache-flush obligation is now implemented and retryable as documented above.

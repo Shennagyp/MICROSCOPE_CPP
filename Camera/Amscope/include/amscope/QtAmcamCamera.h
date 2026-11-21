@@ -27,8 +27,8 @@ namespace amscope {
 // by calling takeLatestFrame() on the consumer thread.
 //
 // The synchronous ICameraFeatureAccess and lifecycle methods are available
-// for direct non-GUI consumers. A caller should use either the synchronous
-// surface or queued requests for one instance, not interleave both concurrently.
+// for direct non-GUI consumers. The first accepted operation commits this
+// instance to synchronous or queued execution; the opposite surface is rejected.
 // GUI code should use the request* methods below: operations execute serially
 // on one dedicated worker, and completions are delivered on this object's Qt
 // affinity thread. Lifecycle transitions invalidate work from the previous

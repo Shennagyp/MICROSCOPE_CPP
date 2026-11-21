@@ -13,7 +13,7 @@ namespace amscope {
 // Qt Core bridge for Widgets, Qt Quick, or a dedicated render-thread object.
 // frameAvailable is a coalesced notification; retrieve the current immutable
 // frame lease by calling takeLatestFrame() on the consumer thread.
-class QtAmcamCamera final : public QObject {
+class QtAmcamCamera final : public QObject, public camera::ICameraFeatureAccess {
     Q_OBJECT
 public:
     explicit QtAmcamCamera(QObject* parent = nullptr);
@@ -41,6 +41,13 @@ public:
     bool readWhiteBalance(WhiteBalanceSettings& settings, CameraError* error = nullptr);
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& stats, CameraError* error = nullptr);
+
+    camera::CameraFeatureResult<std::vector<camera::CameraFeatureDescriptor>>
+    featureDescriptors() override;
+    camera::CameraFeatureResult<camera::CameraFeatureValue>
+    readFeature(std::string_view name) override;
+    camera::CameraFeatureResult<std::monostate>
+    writeFeature(std::string_view name, const camera::CameraFeatureValue& value) override;
 
 signals:
     void frameAvailable();

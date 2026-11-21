@@ -149,20 +149,6 @@ int main(int argc, char** argv) {
     std::vector<int> lifecycleCompletionOrder;
     bool lifecycleResultsTyped = true;
     bool lifecycleCallbacksOnAffinityThread = true;
-    bool enumerationCompleted = false;
-    bool enumerationCallbackOnAffinityThread = true;
-
-    const auto enumerationRequest = camera.requestEnumerateCameras(
-        [&](amscope::QtAmcamCamera::CameraRequestId requestId,
-            amscope::QtAmcamCamera::CameraListResult result) {
-            enumerationCallbackOnAffinityThread =
-                QThread::currentThread() == camera.thread();
-            enumerationCompleted = requestId != 0 &&
-                (std::holds_alternative<std::vector<amscope::CameraInfo>>(result) ||
-                 std::holds_alternative<amscope::CameraError>(result));
-            if (enumerationCompleted && lifecycleCompletionOrder.size() == 3)
-                lifecycleLoop.quit();
-        });
 
     const auto startRequest = camera.requestStart(
         [&](amscope::QtAmcamCamera::CameraRequestId requestId,
@@ -175,7 +161,7 @@ int main(int argc, char** argv) {
                 requestId != 0 &&
                 std::holds_alternative<amscope::CameraError>(result);
             lifecycleCompletionOrder.push_back(1);
-            if (enumerationCompleted && lifecycleCompletionOrder.size() == 3)
+            if (lifecycleCompletionOrder.size() == 3)
                 lifecycleLoop.quit();
         });
     const auto stopRequest = camera.requestStop(
@@ -207,8 +193,7 @@ int main(int argc, char** argv) {
                 lifecycleLoop.quit();
         });
 
-    if (enumerationRequest == 0 || startRequest == 0 ||
-        stopRequest == 0 || closeRequest == 0) {
+    if (startRequest == 0 || stopRequest == 0 || closeRequest == 0) {
         std::cerr << "A valid asynchronous lifecycle request was rejected.\n";
         return EXIT_FAILURE;
     }
@@ -224,6 +209,35 @@ int main(int argc, char** argv) {
         std::cerr << "Lifecycle callbacks lost typed errors or Qt affinity.\n";
         return EXIT_FAILURE;
     }
+    // Run discovery after the lifecycle sequence in a stable Closed session.
+    // A later lifecycle transition is supposed to invalidate an older discovery
+    // result, so the test deliberately does not enqueue both at once.
+    QEventLoop enumerationLoop;
+    QTimer enumerationTimeout;
+    enumerationTimeout.setSingleShot(true);
+    QObject::connect(&enumerationTimeout, &QTimer::timeout,
+                     &enumerationLoop, &QEventLoop::quit);
+
+    bool enumerationCompleted = false;
+    bool enumerationCallbackOnAffinityThread = true;
+    const auto enumerationRequest = camera.requestEnumerateCameras(
+        [&](amscope::QtAmcamCamera::CameraRequestId requestId,
+            amscope::QtAmcamCamera::CameraListResult result) {
+            enumerationCallbackOnAffinityThread =
+                QThread::currentThread() == camera.thread();
+            enumerationCompleted = requestId != 0 &&
+                (std::holds_alternative<std::vector<amscope::CameraInfo>>(result) ||
+                 std::holds_alternative<amscope::CameraError>(result));
+            enumerationLoop.quit();
+        });
+    if (enumerationRequest == 0) {
+        std::cerr << "Camera enumeration request could not be queued.\n";
+        return EXIT_FAILURE;
+    }
+
+    enumerationTimeout.start(10000);
+    enumerationLoop.exec();
+
     if (!enumerationCompleted || !enumerationCallbackOnAffinityThread) {
         std::cerr << "Camera enumeration did not complete on the Qt affinity thread.\n";
         return EXIT_FAILURE;

@@ -21,7 +21,9 @@ integration and does not modify vendor sample code.
   The Qt frame-delivery gate is reactivated for that same acquisition after a
   recoverable Stop failure; a successful Stop/Close leaves the old gate invalid.
   Fatal acquisition callbacks atomically invalidate their gate and advance the
-  session generation before the Qt error notification is delivered. If a
+  session generation before the Qt error notification is delivered. Frame-gate
+  validation and mailbox publication share the mailbox lock, preventing a frame
+  that raced the fault transition from appearing after mailbox clearing. If a
   concurrent Stop/Close already advanced that same session, a fault notification
   is retained only while the native state remains Faulted.
   Successful Stop shuts down the event worker, drains callbacks, then releases

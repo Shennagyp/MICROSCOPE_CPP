@@ -173,7 +173,9 @@ private:
         const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate,
         const CameraError& error);
 
-    void publishLatestFrame(FramePtr frame);
+    void publishLatestFrame(
+        FramePtr frame,
+        const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate);
     void clearFrameMailbox();
     void emitError(const CameraError& error);
 

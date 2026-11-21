@@ -173,10 +173,7 @@ bool QtAmcamCamera::start(CameraError* error) {
                 sessionGeneration_.load(std::memory_order_acquire));
             ok = camera_.start(
                 [this, frameGate](FramePtr frame) {
-                    if (frameGate->accepts(
-                            sessionGeneration_.load(std::memory_order_acquire))) {
-                        publishLatestFrame(std::move(frame));
-                    }
+                    publishLatestFrame(std::move(frame), frameGate);
                 },
                 [this, frameGate](const CameraError& acquisitionError) {
                     handleAcquisitionFailure(frameGate, acquisitionError);
@@ -346,10 +343,7 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStart(
                         requestContext.sessionGeneration);
                 const bool started = camera_.start(
                     [this, frameGate](FramePtr frame) {
-                        if (frameGate->accepts(
-                                sessionGeneration_.load(std::memory_order_acquire))) {
-                            publishLatestFrame(std::move(frame));
-                        }
+                        publishLatestFrame(std::move(frame), frameGate);
                     },
                 [this, frameGate](const CameraError& acquisitionError) {
                     handleAcquisitionFailure(frameGate, acquisitionError);
@@ -898,10 +892,22 @@ void QtAmcamCamera::dispatchToOwnerThread(std::function<void()> callback) {
         Qt::QueuedConnection);
 }
 
-void QtAmcamCamera::publishLatestFrame(FramePtr frame) {
+void QtAmcamCamera::publishLatestFrame(
+    FramePtr frame,
+    const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate) {
     bool notify = false;
     {
+        // Serialize the gate check with fatal/Stop/Close mailbox invalidation.
+        // If this callback passes the check first, the transition clears the
+        // just-published frame after invalidating the gate. If invalidation
+        // wins first, this callback cannot publish an old-session frame.
         std::lock_guard<std::mutex> lock(mailboxMutex_);
+        if (!frameGate ||
+            !frameGate->accepts(
+                sessionGeneration_.load(std::memory_order_acquire))) {
+            return;
+        }
+
         latestFrame_ = std::move(frame);
         if (!notificationPending_) {
             notificationPending_ = true;

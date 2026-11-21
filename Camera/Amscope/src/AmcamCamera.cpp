@@ -111,9 +111,11 @@ struct AmcamCamera::Impl {
 
         {
             std::lock_guard<std::mutex> lock(apiMutex);
-            if (handle && sdkStarted.exchange(false, std::memory_order_acq_rel)) {
+            if (handle && sdkStarted.load(std::memory_order_acquire)) {
                 const HRESULT hr = Amcam_Stop(handle);
-                if (FAILED(hr))
+                if (SUCCEEDED(hr))
+                    sdkStarted.store(false, std::memory_order_release);
+                else
                     error.message += " " + hrMessage("Amcam_Stop", hr);
             }
         }
@@ -224,8 +226,11 @@ struct AmcamCamera::Impl {
         HRESULT hr = S_OK;
         {
             std::lock_guard<std::mutex> lock(apiMutex);
-            if (handle && sdkStarted.exchange(false, std::memory_order_acq_rel))
+            if (handle && sdkStarted.load(std::memory_order_acquire)) {
                 hr = Amcam_Stop(handle);
+                if (SUCCEEDED(hr))
+                    sdkStarted.store(false, std::memory_order_release);
+            }
         }
 
         pool.reset();
@@ -410,8 +415,11 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
         HRESULT stopHr = S_OK;
         {
             std::lock_guard<std::mutex> api(impl_->apiMutex);
-            if (impl_->handle && impl_->sdkStarted.exchange(false, std::memory_order_acq_rel))
+            if (impl_->handle && impl_->sdkStarted.load(std::memory_order_acquire)) {
                 stopHr = Amcam_Stop(impl_->handle);
+                if (SUCCEEDED(stopHr))
+                    impl_->sdkStarted.store(false, std::memory_order_release);
+            }
         }
         impl_->pool.reset();
         impl_->onFrame = {};

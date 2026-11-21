@@ -70,7 +70,9 @@ integration and does not modify vendor sample code.
   editors. Readable values are fetched before writable controls are enabled;
   descriptors and values are refreshed after writes and lifecycle transitions.
 - The preview renders the latest immutable frame lease through QImage/QPixmap;
-  the QImage is detached before the lease is released.
+  the QImage is detached before the lease is released. A host-monotonic
+  30-interval moving-average estimate is shown as preview FPS; it is distinct
+  from configured fixed FPS and SDK-reported frame-rate telemetry.
 
 ### Model-specific feature policy
 

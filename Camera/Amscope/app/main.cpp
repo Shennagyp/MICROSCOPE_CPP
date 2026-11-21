@@ -1,4 +1,5 @@
 #include "amscope/QtAmcamCamera.h"
+#include "camera/FrameRateEstimator.h"
 
 #include <QByteArray>
 #include <QApplication>
@@ -21,9 +22,11 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -162,6 +165,8 @@ public:
         });
         connect(&camera_, &amscope::QtAmcamCamera::stateChanged,
                 this, [this](amscope::CameraState state) {
+            if (state != amscope::CameraState::Streaming)
+                resetPreviewFrameRate();
             updateControls(state);
             if (state == amscope::CameraState::Open ||
                 state == amscope::CameraState::Streaming) {
@@ -248,6 +253,7 @@ private:
     }
 
     void startCamera() {
+        resetPreviewFrameRate();
         amscope::CameraError error;
         if (!camera_.start(&error)) {
             statusBar()->showMessage(QString::fromStdString(error.message));
@@ -771,12 +777,26 @@ private:
             Qt::KeepAspectRatio,
             Qt::FastTransformation));
 
-        frameInfo_->setText(
-            QString("%1 x %2 | frame %3 | %4 bytes")
-                .arg(static_cast<qulonglong>(frame->width))
-                .arg(static_cast<qulonglong>(frame->height))
-                .arg(static_cast<qulonglong>(frame->sequence))
-                .arg(static_cast<qulonglong>(frame->byteSize())));
+        const double monotonicSeconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (const auto estimate = previewFrameRateEstimator_.record(monotonicSeconds))
+            previewFramesPerSecond_ = *estimate;
+
+        QString frameInfo = QString("%1 x %2 | frame %3 | %4 bytes")
+            .arg(static_cast<qulonglong>(frame->width))
+            .arg(static_cast<qulonglong>(frame->height))
+            .arg(static_cast<qulonglong>(frame->sequence))
+            .arg(static_cast<qulonglong>(frame->byteSize()));
+        if (previewFramesPerSecond_) {
+            frameInfo += QString(" | preview %1 FPS")
+                .arg(*previewFramesPerSecond_, 0, 'f', 1);
+        }
+        frameInfo_->setText(frameInfo);
+    }
+
+    void resetPreviewFrameRate() {
+        previewFrameRateEstimator_.reset();
+        previewFramesPerSecond_.reset();
     }
 
     void updateControls(amscope::CameraState state) {
@@ -794,6 +814,8 @@ private:
 
     amscope::QtAmcamCamera camera_;
     std::vector<amscope::CameraInfo> cameras_;
+    camera::FrameRateEstimator previewFrameRateEstimator_;
+    std::optional<double> previewFramesPerSecond_;
 
     std::uint64_t featureUiGeneration_ = 0;
     std::size_t pendingFeatureReads_ = 0;

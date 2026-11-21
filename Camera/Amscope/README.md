@@ -33,6 +33,8 @@ integration and does not modify vendor sample code.
   One-shot auto white balance remains a command, not a Boolean feature.
 - An injectable per-model allow/deny profile registry and the acquisition
   lifecycle parity work are not complete yet.
+- Shared feature-value validation is unit-tested through the common CMake target;
+  macOS CI runs these tests before checking SDK and library artifacts.
 - Application-owned delivered libraries use camera_-prefixed artifact names;
   the original Amcam SDK library remains libamcam.dylib.
 - The Qt Core adapter has a one-frame latest mailbox. It coalesces notifications

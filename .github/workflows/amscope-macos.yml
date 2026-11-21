@@ -21,6 +21,10 @@ on:
       - ".github/workflows/amscope-macos.yml"
   workflow_dispatch:
 
+concurrency:
+  group: amscope-macos-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

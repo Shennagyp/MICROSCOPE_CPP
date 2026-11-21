@@ -34,15 +34,7 @@ public:
     [[nodiscard]] CameraState state() const noexcept;
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
 
-    // Resolution changes are allowed only while open and acquisition is stopped.
-    bool setResolution(std::uint32_t resolutionIndex, CameraError* error = nullptr);
-    bool setAutoExposure(bool enabled, CameraError* error = nullptr);
-    bool setAutoExposureMode(AmcamAutoExposureMode mode, CameraError* error = nullptr);
-    bool setExposureTime(std::uint32_t microseconds, CameraError* error = nullptr);
-    bool setExposureGain(std::uint16_t gainPercent, CameraError* error = nullptr);
-    bool readExposure(ExposureSettings& settings, CameraError* error = nullptr);
-    bool setWhiteBalance(int temperature, int tint, CameraError* error = nullptr);
-    bool readWhiteBalance(WhiteBalanceSettings& settings, CameraError* error = nullptr);
+    // Non-feature camera command and telemetry surfaces.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& statistics, CameraError* error = nullptr);
 
@@ -54,6 +46,17 @@ public:
     writeFeature(std::string_view name, const camera::CameraFeatureValue& value) override;
 
 private:
+    // Backend-only compatibility primitives. Application settings must use
+    // ICameraFeatureAccess so feature validation and model policy cannot be bypassed.
+    bool setResolution(std::uint32_t resolutionIndex, CameraError* error = nullptr);
+    bool setAutoExposure(bool enabled, CameraError* error = nullptr);
+    bool setAutoExposureMode(AmcamAutoExposureMode mode, CameraError* error = nullptr);
+    bool setExposureTime(std::uint32_t microseconds, CameraError* error = nullptr);
+    bool setExposureGain(std::uint16_t gainPercent, CameraError* error = nullptr);
+    bool readExposure(ExposureSettings& settings, CameraError* error = nullptr);
+    bool setWhiteBalance(int temperature, int tint, CameraError* error = nullptr);
+    bool readWhiteBalance(WhiteBalanceSettings& settings, CameraError* error = nullptr);
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

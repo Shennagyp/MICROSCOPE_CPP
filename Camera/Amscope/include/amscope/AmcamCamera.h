@@ -17,7 +17,8 @@ public:
     using FrameCallback = std::function<void(FramePtr)>;
     using ErrorCallback = std::function<void(const CameraError&)>;
 
-    explicit AmcamCamera(AmcamCameraProfileRegistry profiles = {});
+    explicit AmcamCamera(
+        AmcamCameraProfileRegistry profiles = AmcamCameraProfileRegistry{});
     ~AmcamCamera();
     AmcamCamera(const AmcamCamera&) = delete;
     AmcamCamera& operator=(const AmcamCamera&) = delete;

@@ -206,10 +206,9 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
 
-    // The command can change white-balance readbacks. Invalidate feature
-    // requests queued before it, but let requests submitted after it execute
-    // against the post-command camera state.
-    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+    // The command can change white-balance readbacks. The queue lock orders
+    // generation advancement with insertion without blocking the GUI caller.
+    // Requests submitted afterwards execute behind this command.
     return enqueueFeatureRequest(
         [this, callback = std::move(callback)](
             FeatureRequestId requestId,
@@ -379,9 +378,9 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
         utf8Name.constData(),
         static_cast<std::size_t>(utf8Name.size()));
 
-    // A queued write supersedes earlier reads/descriptors. Holding the
-    // facade operation lock orders it against lifecycle work.
-    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+    // A queued write supersedes earlier reads/descriptors. The queue lock
+    // publishes its new context with insertion, without waiting for an in-flight
+    // SDK call on the submitting (potentially GUI) thread.
     return enqueueFeatureRequest(
         [this,
          featureName = std::move(featureName),

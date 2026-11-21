@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   build:
-    name: ${ matrix.name }}
+    name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +35,7 @@ jobs:
             runner: macos-15-intel
             architecture: x86_64
             vendor_architecture: x64+x86
-    runs-on: ${ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,8 +57,8 @@ jobs:
         run: |
           cmake -S Camera/Amscope -B build/amscope \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES="${ matrix.architecture }}" \
-            -DAMSCOPE_VENDOR_MAC_ARCH="${ matrix.vendor_architecture }}" \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
+            -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
             -DAMSCOPE_BUILD_QT_ADAPTER=ON
 
       - name: Compile
@@ -69,8 +69,8 @@ jobs:
           test -f build/amscope/libamscope_driver.dylib
           test -f build/amscope/libamscope_qt.dylib
           test -f build/amscope/libamcam.dylib
-          lipo -verify_arch "${ matrix.architecture }}" build/amscope/libamscope_driver.dylib
-          lipo -verify_arch "${ matrix.architecture }}" build/amscope/libamscope_qt.dylib
-          lipo -verify_arch "${ matrix.architecture }}" build/amscope/libamcam.dylib
+          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamscope_driver.dylib
+          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamscope_qt.dylib
+          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamcam.dylib
           otool -L build/amscope/libamscope_driver.dylib
           otool -L build/amscope/libamscope_qt.dylib

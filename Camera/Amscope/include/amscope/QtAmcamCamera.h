@@ -33,13 +33,7 @@ public:
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] FramePtr takeLatestFrame();
 
-    bool setResolution(std::uint32_t index, CameraError* error = nullptr);
-    bool setAutoExposure(bool enabled, CameraError* error = nullptr);
-    bool setExposureTime(std::uint32_t microseconds, CameraError* error = nullptr);
-    bool setExposureGain(std::uint16_t gainPercent, CameraError* error = nullptr);
-    bool readExposure(ExposureSettings& settings, CameraError* error = nullptr);
-    bool setWhiteBalance(int temperature, int tint, CameraError* error = nullptr);
-    bool readWhiteBalance(WhiteBalanceSettings& settings, CameraError* error = nullptr);
+    // Commands and device telemetry are separate from feature settings.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& stats, CameraError* error = nullptr);
 

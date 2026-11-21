@@ -99,48 +99,7 @@ FramePtr QtAmcamCamera::takeLatestFrame() {
     return frame;
 }
 
-bool QtAmcamCamera::setResolution(std::uint32_t index, CameraError* error) {
-    CameraError local;
-    const bool ok = camera_.setResolution(index, &local);
-    if (!ok) { if (error) *error = local; emitError(local); }
-    return ok;
-}
-bool QtAmcamCamera::setAutoExposure(bool enabled, CameraError* error) {
-    CameraError local;
-    const bool ok = camera_.setAutoExposure(enabled, &local);
-    if (!ok) { if (error) *error = local; emitError(local); }
-    return ok;
-}
-bool QtAmcamCamera::setExposureTime(std::uint32_t time, CameraError* error) {
-    CameraError local;
-    const bool ok = camera_.setExposureTime(time, &local);
-    if (!ok) { if (error) *error = local; emitError(local); }
-    return ok;
-}
-bool QtAmcamCamera::setExposureGain(std::uint16_t gain, CameraError* error) {
-    CameraError local;
-    const bool ok = camera_.setExposureGain(gain, &local);
-    if (!ok) { if (error) *error = local; emitError(local); }
-    return ok;
-}
-bool QtAmcamCamera::readExposure(ExposureSettings& settings, CameraError* error) {
-    CameraError local;
-    const bool ok = camera_.readExposure(settings, &local);
-    if (!ok) { if (error) *error = local; emitError(local); }
-    return ok;
-}
-bool QtAmcamCamera::setWhiteBalance(int temperature, int tint, CameraError* error) {
-    CameraError local;
-    const bool ok = camera_.setWhiteBalance(temperature, tint, &local);
-    if (!ok) { if (error) *error = local; emitError(local); }
-    return ok;
-}
-bool QtAmcamCamera::readWhiteBalance(WhiteBalanceSettings& settings, CameraError* error) {
-    CameraError local;
-    const bool ok = camera_.readWhiteBalance(settings, &local);
-    if (!ok) { if (error) *error = local; emitError(local); }
-    return ok;
-}
+
 bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
     CameraError local;
     const bool ok = camera_.autoWhiteBalance(&local);

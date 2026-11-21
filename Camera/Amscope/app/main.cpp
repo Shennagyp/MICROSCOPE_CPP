@@ -324,6 +324,9 @@ private:
                     statusBar()->showMessage(QString::fromStdString(error->message));
                 } else if (camera_.state() == amscope::CameraState::Streaming) {
                     statusBar()->showMessage("Acquisition started.");
+                } else if (camera_.state() == amscope::CameraState::Faulted) {
+                    statusBar()->showMessage(
+                        "Camera acquisition faulted; close and reopen the camera.");
                 }
                 // A native acquisition can fail immediately after Start returns.
                 // In that case the error/state notification owns the visible status;
@@ -357,6 +360,9 @@ private:
                     statusBar()->showMessage(QString::fromStdString(error->message));
                 } else if (camera_.state() == amscope::CameraState::Open) {
                     statusBar()->showMessage("Acquisition stopped.");
+                } else if (camera_.state() == amscope::CameraState::Faulted) {
+                    statusBar()->showMessage(
+                        "Camera session is faulted; close and reopen the camera.");
                 }
                 // A Stop that races a native fatal transition may succeed at
                 // halting the SDK while the owning camera session remains Faulted.

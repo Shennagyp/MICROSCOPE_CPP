@@ -170,9 +170,11 @@ renderer and must be implemented against the selected Qt rendering API.
 5. Stop before changing resolution or closing the session.
 6. Re-enumerate after disconnect/replug because a camera id can change.
 
-Do not call start, stop, or close from the acquisition callback. Queue lifecycle
-changes to the owning application/control thread. Destroy QtAmcamCamera on
-its owning Qt thread; its destructor stops and closes the session.
+Frame and error callbacks execute on the native acquisition worker. Do not call
+start, stop, close, or destroy AmcamCamera synchronously from either callback.
+Queue lifecycle changes and native camera destruction to the owning application/
+control thread. Destroy QtAmcamCamera on its owning Qt thread; its destructor
+stops and closes the session.
 
 ## Not included yet
 

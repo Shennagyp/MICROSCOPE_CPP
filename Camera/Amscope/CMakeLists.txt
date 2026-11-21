@@ -48,6 +48,21 @@ endif()
 add_library(amscope_vendor SHARED IMPORTED GLOBAL)
 set_target_properties(amscope_vendor PROPERTIES IMPORTED_LOCATION "${AMSCOPE_VENDOR_LIBRARY}")
 
+option(AMSCOPE_BUILD_SDK_WAIT_PROBE "Build the direct vendor-SDK polling baseline" ON)
+if(AMSCOPE_BUILD_SDK_WAIT_PROBE)
+    add_executable(amscope_sdk_wait_probe app/vendor_wait_probe.cpp)
+    target_compile_features(amscope_sdk_wait_probe PRIVATE cxx_std_17)
+    target_include_directories(amscope_sdk_wait_probe PRIVATE "${AMSCOPE_VENDOR_INCLUDE_DIR}")
+    target_link_libraries(amscope_sdk_wait_probe PRIVATE amscope_vendor)
+    set_target_properties(amscope_sdk_wait_probe PROPERTIES
+        BUILD_RPATH "@loader_path")
+    add_custom_command(TARGET amscope_sdk_wait_probe POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${AMSCOPE_VENDOR_LIBRARY}"
+            "$<TARGET_FILE_DIR:amscope_sdk_wait_probe>/libamcam.dylib"
+        VERBATIM)
+endif()
+
 add_library(amscope_driver SHARED
     src/AmcamCamera.cpp
     include/amscope/AmcamCamera.h

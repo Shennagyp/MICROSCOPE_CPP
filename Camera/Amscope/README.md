@@ -20,12 +20,13 @@ integration and does not modify vendor sample code.
   while Streaming restores the previous stream and retains callback/frame state.
   The Qt frame-delivery gate is reactivated for that same acquisition after a
   recoverable Stop failure; a successful Stop/Close leaves the old gate invalid.
-  Fatal acquisition callbacks atomically invalidate their gate and advance the
-  session generation before the Qt error notification is delivered. Frame-gate
-  validation and mailbox publication share the mailbox lock, preventing a frame
-  that raced the fault transition from appearing after mailbox clearing. If a
-  concurrent Stop/Close already advanced that same session, a fault notification
-  is retained only while the native state remains Faulted.
+  Fatal acquisition callbacks immediately invalidate their frame gate and
+  clear the latest-frame mailbox; the gate check and mailbox publication share
+  the mailbox lock, so an old frame cannot appear after that clear. The fatal
+  session transition is then enqueued into the same FIFO as Stop/Close and feature
+  requests. Earlier accepted lifecycle operations run first and may supersede
+  the fault notification; later requests bind to the post-fault generation. The
+  fatal event has a reserved control slot beyond the normal 256-request limit.
   Successful Stop shuts down the event worker, drains callbacks, then releases
   session resources. Terminal Close remains independent of Stop success.
 - Every successful Amcam_Stop marks a both-cache flush obligation

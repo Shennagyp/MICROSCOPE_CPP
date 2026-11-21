@@ -156,7 +156,8 @@ private:
 
     CameraRequestId enqueueFeatureRequest(
         FeatureRequestTask task,
-        FeatureRequestSemantics semantics = FeatureRequestSemantics::SessionBound);
+        FeatureRequestSemantics semantics = FeatureRequestSemantics::SessionBound,
+        bool reservedControlRequest = false);
     void runFeatureWorker();
     void dispatchFeatureCallback(const FeatureRequestContext& context,
                                  std::function<void()> callback);

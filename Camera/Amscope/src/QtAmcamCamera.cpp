@@ -682,12 +682,14 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
     FeatureRequestTask task,
-    FeatureRequestSemantics semantics) {
+    FeatureRequestSemantics semantics,
+    bool reservedControlRequest) {
     if (!task) return 0;
 
     std::lock_guard<std::mutex> queueLock(featureQueueMutex_);
     if (stoppingFeatureWorker_ ||
-        featureQueue_.size() >= kMaximumPendingFeatureRequests) {
+        (!reservedControlRequest &&
+         featureQueue_.size() >= kMaximumPendingFeatureRequests)) {
         return 0;
     }
 
@@ -818,40 +820,35 @@ void QtAmcamCamera::handleAcquisitionFailure(
         return;
     }
 
-    std::uint64_t notificationGeneration =
-        sessionGeneration_.load(std::memory_order_acquire);
-    if (notificationGeneration == acquisitionGeneration) {
-        // The fatal callback won the transition before any lifecycle operation.
-        notificationGeneration =
-            scheduledSessionGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
-        advanceSessionGenerationTo(notificationGeneration);
-    } else if (notificationGeneration > acquisitionGeneration) {
-        // A user Stop/Close may have entered after the native driver published
-        // Faulted but before this callback ran. It already advanced the session;
-        // preserve the fault notification if that same session is still Faulted.
-        if (camera_.state() != CameraState::Faulted)
-            return;
-    } else {
-        return;
-    }
-
-    // Invalidate queued snapshots and any frame already waiting in the mailbox
-    // before the asynchronous Qt error/state notification is posted.
+    // Stop frame publication immediately. The gate check and mailbox write are
+    // serialized by mailboxMutex_, so no old frame can appear after this clear.
     clearFrameMailbox();
 
-    FeatureRequestContext context;
-    context.sessionGeneration = notificationGeneration;
-    context.featureStateGeneration =
-        featureStateGeneration_.load(std::memory_order_acquire);
-    context.semantics = FeatureRequestSemantics::SessionBound;
-
     const CameraError copy = error;
-    dispatchFeatureCallback(context, [this, copy]() {
-        emitError(copy);
-        emit stateChanged(camera_.state());
-    });
-}
+    (void)enqueueFeatureRequest(
+        [this, acquisitionGeneration, copy](
+            FeatureRequestId,
+            const FeatureRequestContext& context) {
+            // Fatal failure joins the same FIFO as Stop/Close and feature I/O.
+            // Operations accepted before this event run first and may supersede
+            // it; requests accepted after it inherit the post-fault generation.
+            const bool stillOwnsAcquisition =
+                sessionGeneration_.load(std::memory_order_acquire) ==
+                    acquisitionGeneration &&
+                camera_.state() == CameraState::Faulted;
 
+            advanceSessionGenerationTo(context.sessionGeneration);
+            if (!stillOwnsAcquisition)
+                return;
+
+            dispatchFeatureCallback(context, [this, copy]() {
+                emitError(copy);
+                emit stateChanged(camera_.state());
+            });
+        },
+        FeatureRequestSemantics::LifecycleMutation,
+        true);
+}
 void QtAmcamCamera::dispatchLifecycleCallback(
     CameraRequestId requestId,
     LifecycleCallback callback,

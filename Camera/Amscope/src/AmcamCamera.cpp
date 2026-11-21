@@ -10,6 +10,7 @@
 #include <exception>
 #include <limits>
 #include <iterator>
+#include <system_error>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -238,8 +239,9 @@ buildAmcamFeatureDescriptors(
 
     unsigned currentResolution = 0;
     const HRESULT resolutionHr = Amcam_get_eSize(handle, &currentResolution);
-    const bool resolutionProbe = hasModelDescriptor && !previewResolutions.empty() &&
-        SUCCEEDED(resolutionHr) && currentResolution < previewResolutions.size();
+    const bool resolutionAvailable = hasModelDescriptor && !previewResolutions.empty();
+    const bool resolutionReadable = SUCCEEDED(resolutionHr) &&
+        currentResolution < previewResolutions.size();
 
     const bool stopped = state == amscope::CameraState::Open;
     std::vector<CameraFeatureDescriptor> descriptors;
@@ -325,7 +327,7 @@ buildAmcamFeatureDescriptors(
     }
     descriptors.push_back({
         "AmcamResolutionIndex", "Resolution", CameraFeatureKind::Enumeration,
-        std::nullopt, resolutionProbe, resolutionProbe, resolutionProbe && stopped,
+        std::nullopt, resolutionAvailable, resolutionReadable, resolutionAvailable && stopped,
         std::nullopt, std::nullopt, std::move(resolutionSymbols)
     });
     return descriptors;

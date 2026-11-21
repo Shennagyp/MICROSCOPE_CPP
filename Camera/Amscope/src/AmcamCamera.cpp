@@ -50,7 +50,7 @@ bool rgb24Size(std::uint32_t w, std::uint32_t h, std::size_t& bytes) {
 }
 std::string boundedString(const char* value, std::size_t capacity) {
     if (!value) return {};
-    return std::string(value, std::find(value, value + capacity, '\\0'));
+    return std::string(value, std::find(value, value + capacity, '\0'));
 }
 } // namespace
 

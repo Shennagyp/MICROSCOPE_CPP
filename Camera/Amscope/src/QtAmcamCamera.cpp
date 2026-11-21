@@ -178,4 +178,22 @@ void QtAmcamCamera::emitError(const CameraError& error) {
     emit errorOccurred(QString::fromStdString(error.message),
                        static_cast<qint32>(error.vendorCode));
 }
+
+camera::CameraFeatureResult<std::vector<camera::CameraFeatureDescriptor>>
+QtAmcamCamera::featureDescriptors() {
+    return camera_.featureDescriptors();
+}
+
+camera::CameraFeatureResult<camera::CameraFeatureValue>
+QtAmcamCamera::readFeature(std::string_view name) {
+    return camera_.readFeature(name);
+}
+
+camera::CameraFeatureResult<std::monostate>
+QtAmcamCamera::writeFeature(
+    std::string_view name,
+    const camera::CameraFeatureValue& value) {
+    return camera_.writeFeature(name, value);
+}
+
 } // namespace amscope

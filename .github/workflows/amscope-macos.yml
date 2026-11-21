@@ -82,5 +82,8 @@ jobs:
       - name: Confirm preview executable
         run: test -x build/amscope/amscope_preview
 
-      - name: Run SDK enumeration smoke check
-        run: build/amscope/amscope_preview --list-cameras
+      - name: Validate one-command launcher syntax
+        run: bash -n scripts/run-amscope.sh
+
+      - name: Build and run one-command launcher smoke check
+        run: scripts/run-amscope.sh --list-cameras

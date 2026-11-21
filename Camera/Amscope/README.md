@@ -25,21 +25,60 @@ integration and does not modify vendor sample code.
   auto white balance, and SDK frame-rate statistics are implemented.
 - The Qt Core adapter has a one-frame latest mailbox. It coalesces notifications
   and schedules Qt signals onto the QObject affinity thread.
+- The Qt Widgets preview app demonstrates camera enumeration, open/start/stop,
+  and rendering the latest immutable frame lease through QImage/QPixmap.
 
-## Build on macOS
+## One-command build and run
 
-```sh
-cmake -S Camera/Amscope -B build/amscope
-cmake --build build/amscope
-```
-
-The default build includes the Qt 6 Core adapter and requires Qt 6. To build
-only the non-Qt driver:
+Requirements: macOS, Xcode command-line tools, CMake 3.21+, and Qt 6 with
+Core and Widgets. Install Qt 6 with Homebrew when it is not already present:
 
 ```sh
-cmake -S Camera/Amscope -B build/amscope -DAMSCOPE_BUILD_QT_ADAPTER=OFF
-cmake --build build/amscope
+brew install qt@6
 ```
+
+From the repository root, compile the driver, Qt adapter, and preview app, then
+launch the preview window with:
+
+```sh
+./scripts/run-amscope.sh
+```
+
+The script detects the current Mac architecture, selects the matching bundled
+Amcam dylib, discovers Homebrew Qt 6 (or uses CMAKE_PREFIX_PATH when supplied),
+configures CMake, builds, and launches Camera/Amscope/app/main.cpp's preview
+application.
+
+To run only the SDK camera-enumeration smoke check after building:
+
+```sh
+./scripts/run-amscope.sh --list-cameras
+```
+
+The preview UI lets you refresh the device list, open a selected camera, start
+or stop acquisition, and close the session. It uses QLabel/QImage for a simple
+CPU preview; it is not the final GPU renderer or a zero-copy presentation path.
+
+## Direct CMake build
+
+The default build includes both the Qt 6 Core adapter and Qt Widgets preview:
+
+```sh
+cmake -S Camera/Amscope -B build/amscope \
+  -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
+cmake --build build/amscope --config Release --parallel
+```
+
+To build only the non-Qt native driver:
+
+```sh
+cmake -S Camera/Amscope -B build/amscope \
+  -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
+  -DAMSCOPE_BUILD_PREVIEW_APP=OFF
+cmake --build build/amscope --parallel
+```
+
+## macOS SDK selection
 
 The SDK contains two macOS libraries:
 
@@ -62,9 +101,9 @@ The mailbox is preview-oriented and freshness-first; it is not an ordered
 recording/processing queue. A later recording path needs its own bounded queue
 and explicit backpressure/drop policy.
 
-The bridge does not create a GPU context, convert to QImage, or claim zero-copy
-GPU upload. Those responsibilities belong to the application renderer and
-must be implemented against the selected Qt rendering API.
+The bridge does not create a GPU context, convert frames to QImage, or claim
+zero-copy GPU upload. Those responsibilities belong to the application
+renderer and must be implemented against the selected Qt rendering API.
 
 ## Lifecycle
 

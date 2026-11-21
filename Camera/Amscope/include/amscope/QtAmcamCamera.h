@@ -27,10 +27,11 @@ namespace amscope {
 // The synchronous ICameraFeatureAccess methods are available for non-UI
 // callers. GUI code should use the request* methods below: feature operations
 // execute serially on a dedicated worker and their callbacks are delivered on
-// this object's Qt affinity thread. A lifecycle transition, a queued state-changing
-// write, or a command may supersede prior requests; superseded callbacks are
-// intentionally omitted. The application should also keep its own selected-device
-// generation, as in the Swift model, to reject stale UI work across selection changes.
+// this object's Qt affinity thread. Lifecycle transitions invalidate work from
+// the previous camera session. State-changing writes/commands invalidate earlier
+// descriptor/read snapshots, but accepted mutations still execute in FIFO order
+// and report their own results. The application should also keep its own selected-
+// device generation, as in the Swift model, to reject stale UI work across selection changes.
 class QtAmcamCamera final : public QObject, public camera::ICameraFeatureAccess {
     Q_OBJECT
 public:
@@ -84,8 +85,10 @@ public:
 
     // Asynchronous feature access for GUI/application code. A zero request ID
     // means the request was rejected (empty callback or executor shutting down).
-    // Completed callbacks run on this QObject's affinity thread. Callbacks from
-    // a superseded feature context are intentionally discarded.
+    // Callbacks run on this QObject's affinity thread. Lifecycle changes cancel
+    // requests from old sessions; feature-state changes cancel only older reads
+    // and descriptor snapshots. Accepted writes/commands remain FIFO and report
+    // their result unless a lifecycle transition invalidates their session.
     FeatureRequestId requestFeatureDescriptors(FeatureDescriptorsCallback callback);
     FeatureRequestId requestReadFeature(QString name, FeatureReadCallback callback);
     FeatureRequestId requestWriteFeature(
@@ -107,23 +110,38 @@ signals:
     void errorOccurred(const QString& message, qint32 vendorCode);
 
 private:
+    enum class FeatureRequestSemantics : std::uint8_t {
+        SessionBound,
+        FeatureSnapshot,
+        StateMutation
+    };
+
+    struct FeatureRequestContext {
+        std::uint64_t sessionGeneration = 0;
+        std::uint64_t featureStateGeneration = 0;
+        FeatureRequestSemantics semantics = FeatureRequestSemantics::SessionBound;
+    };
+
     using FeatureRequestTask =
-        std::function<void(FeatureRequestId, std::uint64_t)>;
+        std::function<void(FeatureRequestId, const FeatureRequestContext&)>;
 
     struct PendingFeatureRequest {
         FeatureRequestId id = 0;
-        std::uint64_t contextGeneration = 0;
+        FeatureRequestContext context;
         FeatureRequestTask task;
     };
 
     FeatureRequestId enqueueFeatureRequest(
         FeatureRequestTask task,
-        bool invalidatePriorRequests = false);
+        FeatureRequestSemantics semantics = FeatureRequestSemantics::SessionBound);
     void runFeatureWorker();
-    void dispatchFeatureCallback(std::uint64_t contextGeneration,
+    void dispatchFeatureCallback(const FeatureRequestContext& context,
                                  std::function<void()> callback);
     void dispatchToOwnerThread(std::function<void()> callback);
-    void advanceFeatureContextGeneration() noexcept;
+    [[nodiscard]] bool isRequestContextCurrent(
+        const FeatureRequestContext& context) const noexcept;
+    void advanceSessionGeneration() noexcept;
+    void advanceFeatureStateGeneration() noexcept;
 
     void publishLatestFrame(FramePtr frame);
     void clearFrameMailbox();
@@ -137,7 +155,8 @@ private:
     // AmcamCamera also protects its SDK handle internally; this mutex adds an
     // atomic lifecycle-vs-queued-request ordering boundary.
     std::mutex cameraOperationMutex_;
-    std::atomic<std::uint64_t> featureContextGeneration_{0};
+    std::atomic<std::uint64_t> sessionGeneration_{0};
+    std::atomic<std::uint64_t> featureStateGeneration_{0};
 
     std::mutex featureQueueMutex_;
     std::condition_variable featureQueueCondition_;

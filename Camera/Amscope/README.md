@@ -64,7 +64,9 @@ integration and does not modify vendor sample code.
   and schedules Qt signals onto the QObject affinity thread.
 - QtAmcamCamera executes feature descriptor/read/write requests on a bounded,
   serialized worker and delivers completions on its Qt affinity thread. Session
-  generation changes invalidate stale completions across open/close/start/stop.
+  generations invalidate old-session work; a separate feature-state generation
+  invalidates stale descriptor/read snapshots without cancelling accepted FIFO
+  writes or commands.
 - The Qt Widgets app builds its settings panel from common feature descriptors,
   including typed Boolean, integer, vector, floating-point and enumeration
   editors. Readable values are fetched before writable controls are enabled;

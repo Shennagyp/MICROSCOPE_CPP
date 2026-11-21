@@ -62,7 +62,7 @@ QtAmcamCamera::~QtAmcamCamera() {
 
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-        advanceFeatureContextGeneration();
+        advanceSessionGeneration();
         CameraError ignored;
         camera_.close(&ignored);
     }
@@ -79,7 +79,7 @@ bool QtAmcamCamera::open(const QString& deviceId, CameraError* error) {
     bool ok = false;
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-        advanceFeatureContextGeneration();
+        advanceSessionGeneration();
         ok = camera_.open(
             std::string(id.constData(), static_cast<std::size_t>(id.size())),
             &local);
@@ -100,7 +100,7 @@ bool QtAmcamCamera::close(CameraError* error) {
     bool ok = false;
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-        advanceFeatureContextGeneration();
+        advanceSessionGeneration();
         ok = camera_.close(&local);
     }
     clearFrameMailbox();
@@ -117,7 +117,7 @@ bool QtAmcamCamera::start(CameraError* error) {
     bool ok = false;
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-        advanceFeatureContextGeneration();
+        advanceSessionGeneration();
         ok = camera_.start(
             [this](FramePtr frame) {
                 publishLatestFrame(std::move(frame));
@@ -146,7 +146,7 @@ bool QtAmcamCamera::stop(CameraError* error) {
     bool ok = false;
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-        advanceFeatureContextGeneration();
+        advanceSessionGeneration();
         ok = camera_.stop(&local);
     }
     clearFrameMailbox();
@@ -176,7 +176,7 @@ bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
     bool ok = false;
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-        advanceFeatureContextGeneration();
+        advanceFeatureStateGeneration();
         ok = camera_.autoWhiteBalance(&local);
     }
     if (!ok) {
@@ -212,12 +212,11 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     return enqueueFeatureRequest(
         [this, callback = std::move(callback)](
             FeatureRequestId requestId,
-            std::uint64_t contextGeneration) mutable {
+            const FeatureRequestContext& requestContext) mutable {
             std::optional<AutoWhiteBalanceResult> result;
             {
                 std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
-                if (contextGeneration !=
-                    featureContextGeneration_.load(std::memory_order_acquire)) {
+                if (!isRequestContextCurrent(requestContext)) {
                     return;
                 }
 
@@ -237,14 +236,14 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
             }
 
             dispatchFeatureCallback(
-                contextGeneration,
+                requestContext,
                 [callback = std::move(callback),
                  requestId,
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));
                 });
         },
-        true);
+        FeatureRequestSemantics::StateMutation);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFrameRate(
@@ -254,12 +253,11 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFrameRate(
     return enqueueFeatureRequest(
         [this, callback = std::move(callback)](
             FeatureRequestId requestId,
-            std::uint64_t contextGeneration) mutable {
+            const FeatureRequestContext& requestContext) mutable {
             std::optional<FrameRateResult> result;
             {
                 std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
-                if (contextGeneration !=
-                    featureContextGeneration_.load(std::memory_order_acquire)) {
+                if (!isRequestContextCurrent(requestContext)) {
                     return;
                 }
 
@@ -280,7 +278,7 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFrameRate(
             }
 
             dispatchFeatureCallback(
-                contextGeneration,
+                requestContext,
                 [callback = std::move(callback),
                  requestId,
                  result = std::move(*result)]() mutable {
@@ -296,12 +294,11 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     return enqueueFeatureRequest(
         [this, callback = std::move(callback)](
             FeatureRequestId requestId,
-            std::uint64_t contextGeneration) mutable {
+            const FeatureRequestContext& requestContext) mutable {
             std::optional<FeatureDescriptorsResult> result;
             {
                 std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-                if (contextGeneration !=
-                    featureContextGeneration_.load(std::memory_order_acquire)) {
+                if (!isRequestContextCurrent(requestContext)) {
                     return;
                 }
                 try {
@@ -315,13 +312,14 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
             }
 
             dispatchFeatureCallback(
-                contextGeneration,
+                requestContext,
                 [callback = std::move(callback),
                  requestId,
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));
                 });
-        });
+        },
+        FeatureRequestSemantics::FeatureSnapshot);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestReadFeature(
@@ -339,12 +337,11 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestReadFeature(
          featureName = std::move(featureName),
          callback = std::move(callback)](
             FeatureRequestId requestId,
-            std::uint64_t contextGeneration) mutable {
+            const FeatureRequestContext& requestContext) mutable {
             std::optional<FeatureReadResult> result;
             {
                 std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-                if (contextGeneration !=
-                    featureContextGeneration_.load(std::memory_order_acquire)) {
+                if (!isRequestContextCurrent(requestContext)) {
                     return;
                 }
                 try {
@@ -358,13 +355,14 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestReadFeature(
             }
 
             dispatchFeatureCallback(
-                contextGeneration,
+                requestContext,
                 [callback = std::move(callback),
                  requestId,
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));
                 });
-        });
+        },
+        FeatureRequestSemantics::FeatureSnapshot);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
@@ -387,12 +385,11 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
          value = std::move(value),
          callback = std::move(callback)](
             FeatureRequestId requestId,
-            std::uint64_t contextGeneration) mutable {
+            const FeatureRequestContext& requestContext) mutable {
             std::optional<FeatureWriteResult> result;
             {
                 std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-                if (contextGeneration !=
-                    featureContextGeneration_.load(std::memory_order_acquire)) {
+                if (!isRequestContextCurrent(requestContext)) {
                     return;
                 }
                 try {
@@ -406,19 +403,19 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
             }
 
             dispatchFeatureCallback(
-                contextGeneration,
+                requestContext,
                 [callback = std::move(callback),
                  requestId,
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));
                 });
         },
-        true);
+        FeatureRequestSemantics::StateMutation);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
     FeatureRequestTask task,
-    bool invalidatePriorRequests) {
+    FeatureRequestSemantics semantics) {
     if (!task) return 0;
 
     std::lock_guard<std::mutex> queueLock(featureQueueMutex_);
@@ -432,19 +429,27 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
         requestId = nextFeatureRequestId_++;
     }
 
-    // Allocate/insert before advancing the generation so a rejected request
-    // cannot invalidate earlier work. The queue lock prevents the worker from
-    // observing this placeholder before its generation is assigned.
+    // Insert before advancing the state generation. The worker cannot pop the
+    // placeholder while this queue lock is held, and a rejected request never
+    // invalidates existing snapshots.
     featureQueue_.push_back({
         requestId,
-        0,
+        {},
         std::move(task)
     });
 
-    const std::uint64_t contextGeneration = invalidatePriorRequests
-        ? featureContextGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1
-        : featureContextGeneration_.load(std::memory_order_acquire);
-    featureQueue_.back().contextGeneration = contextGeneration;
+    FeatureRequestContext context;
+    context.sessionGeneration =
+        sessionGeneration_.load(std::memory_order_acquire);
+    context.semantics = semantics;
+    if (semantics == FeatureRequestSemantics::StateMutation) {
+        context.featureStateGeneration =
+            featureStateGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    } else {
+        context.featureStateGeneration =
+            featureStateGeneration_.load(std::memory_order_acquire);
+    }
+    featureQueue_.back().context = context;
 
     featureQueueCondition_.notify_one();
     return requestId;
@@ -467,13 +472,11 @@ void QtAmcamCamera::runFeatureWorker() {
             featureQueue_.pop_front();
         }
 
-        if (request.contextGeneration !=
-            featureContextGeneration_.load(std::memory_order_acquire)) {
+        if (!isRequestContextCurrent(request.context))
             continue;
-        }
 
         try {
-            request.task(request.id, request.contextGeneration);
+            request.task(request.id, request.context);
         } catch (const std::exception& exception) {
             qWarning() << "Unhandled camera feature worker exception:"
                        << exception.what();
@@ -484,18 +487,38 @@ void QtAmcamCamera::runFeatureWorker() {
 }
 
 void QtAmcamCamera::dispatchFeatureCallback(
-    std::uint64_t contextGeneration,
+    const FeatureRequestContext& context,
     std::function<void()> callback) {
     dispatchToOwnerThread(
-        [this,
-         contextGeneration,
-         callback = std::move(callback)]() mutable {
-            if (contextGeneration !=
-                featureContextGeneration_.load(std::memory_order_acquire)) {
+        [this, context, callback = std::move(callback)]() mutable {
+            if (!isRequestContextCurrent(context))
                 return;
-            }
             callback();
         });
+}
+
+bool QtAmcamCamera::isRequestContextCurrent(
+    const FeatureRequestContext& context) const noexcept {
+    if (context.sessionGeneration !=
+        sessionGeneration_.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    if (context.semantics == FeatureRequestSemantics::FeatureSnapshot &&
+        context.featureStateGeneration !=
+            featureStateGeneration_.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    return true;
+}
+
+void QtAmcamCamera::advanceSessionGeneration() noexcept {
+    sessionGeneration_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void QtAmcamCamera::advanceFeatureStateGeneration() noexcept {
+    featureStateGeneration_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void QtAmcamCamera::dispatchToOwnerThread(std::function<void()> callback) {
@@ -571,7 +594,7 @@ QtAmcamCamera::FeatureWriteResult QtAmcamCamera::writeFeature(
     std::string_view name,
     const camera::CameraFeatureValue& value) {
     std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-    advanceFeatureContextGeneration();
+    advanceFeatureStateGeneration();
     return camera_.writeFeature(name, value);
 }
 

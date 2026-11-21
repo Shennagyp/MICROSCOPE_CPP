@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <variant>
+#include <vector>
 
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
@@ -19,6 +20,9 @@ int main(int argc, char** argv) {
     bool staleDescriptorsDelivered = false;
     bool autoWhiteBalanceCompleted = false;
     bool frameRateCompleted = false;
+    bool firstWriteCompleted = false;
+    bool secondWriteCompleted = false;
+    std::vector<int> writeCompletionOrder;
     bool callbacksOnAffinityThread = true;
     bool resultsAreTypedErrors = true;
 
@@ -43,7 +47,46 @@ int main(int argc, char** argv) {
                 requestId != 0 &&
                 std::holds_alternative<amscope::CameraError>(result);
             autoWhiteBalanceCompleted = true;
-            if (autoWhiteBalanceCompleted && frameRateCompleted)
+            if (autoWhiteBalanceCompleted && frameRateCompleted &&
+                firstWriteCompleted && secondWriteCompleted)
+                loop.quit();
+        });
+
+    const auto firstWriteRequest = camera.requestWriteFeature(
+        "ExposureTime",
+        camera::CameraFeatureValue{std::int64_t{12000}},
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::FeatureWriteResult result) {
+            callbacksOnAffinityThread =
+                callbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            resultsAreTypedErrors =
+                resultsAreTypedErrors &&
+                requestId != 0 &&
+                std::holds_alternative<camera::CameraFeatureAccessError>(result);
+            writeCompletionOrder.push_back(1);
+            firstWriteCompleted = true;
+            if (autoWhiteBalanceCompleted && frameRateCompleted &&
+                firstWriteCompleted && secondWriteCompleted)
+                loop.quit();
+        });
+
+    const auto secondWriteRequest = camera.requestWriteFeature(
+        "AmcamWhiteBalanceTint",
+        camera::CameraFeatureValue{std::int64_t{120}},
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::FeatureWriteResult result) {
+            callbacksOnAffinityThread =
+                callbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            resultsAreTypedErrors =
+                resultsAreTypedErrors &&
+                requestId != 0 &&
+                std::holds_alternative<camera::CameraFeatureAccessError>(result);
+            writeCompletionOrder.push_back(2);
+            secondWriteCompleted = true;
+            if (autoWhiteBalanceCompleted && frameRateCompleted &&
+                firstWriteCompleted && secondWriteCompleted)
                 loop.quit();
         });
 
@@ -62,7 +105,9 @@ int main(int argc, char** argv) {
                 loop.quit();
         });
 
-    if (staleRequest == 0 || whiteBalanceRequest == 0 || frameRateRequest == 0) {
+    if (staleRequest == 0 || whiteBalanceRequest == 0 ||
+        firstWriteRequest == 0 || secondWriteRequest == 0 ||
+        frameRateRequest == 0) {
         std::cerr << "A valid asynchronous camera request was rejected.\n";
         return EXIT_FAILURE;
     }
@@ -70,8 +115,9 @@ int main(int argc, char** argv) {
     timeout.start(5000);
     loop.exec();
 
-    if (!autoWhiteBalanceCompleted || !frameRateCompleted) {
-        std::cerr << "Asynchronous command/telemetry completion timed out.\n";
+    if (!autoWhiteBalanceCompleted || !frameRateCompleted ||
+        !firstWriteCompleted || !secondWriteCompleted) {
+        std::cerr << "Asynchronous command/telemetry/write completion timed out.\n";
         return EXIT_FAILURE;
     }
     if (staleDescriptorsDelivered) {
@@ -83,7 +129,11 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     if (!resultsAreTypedErrors) {
-        std::cerr << "A closed-camera request did not return a typed CameraError.\n";
+        std::cerr << "A closed-camera request did not return its typed error.\n";
+        return EXIT_FAILURE;
+    }
+    if (writeCompletionOrder != std::vector<int>{1, 2}) {
+        std::cerr << "Accepted feature writes did not complete in FIFO order.\n";
         return EXIT_FAILURE;
     }
 

@@ -83,8 +83,8 @@ integration and does not modify vendor sample code.
   Lifecycle requests remain FIFO; session generations invalidate old-session
   feature work, while a separate feature-state generation invalidates stale
   descriptor/read snapshots without cancelling accepted FIFO writes or commands.
-  The first accepted camera operation commits a QtAmcamCamera instance to
-  synchronous or queued execution. Calls through the opposite API surface are
+  The first accepted camera operation commits a QtAmcamCamera instance for its
+  lifetime to synchronous or queued execution. Calls through the opposite API surface are
   rejected, so the two execution models cannot interleave on one camera.
 - The Qt Widgets app builds its settings panel from common feature descriptors,
   including typed Boolean, integer, vector, floating-point and enumeration

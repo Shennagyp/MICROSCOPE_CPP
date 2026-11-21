@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,8 @@ struct CameraInfo {
     std::string displayName;
     std::string modelName;
     std::uint64_t modelFlags = 0;
+    bool hasModelDescriptor = false;
+    std::optional<std::uint32_t> maximumSpeedLevel;
     std::vector<Resolution> previewResolutions;
 };
 struct CameraError {

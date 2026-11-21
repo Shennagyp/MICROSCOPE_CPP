@@ -625,16 +625,18 @@ bool AmcamCamera::close(CameraError* error) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
+        // Model metadata is read by featureDescriptors() under apiMutex.
+        // Clear it under the same lock to keep close concurrent-safe.
+        impl_->modelName.clear();
+        impl_->modelFlags = 0;
+        impl_->hasModelDescriptor = false;
+        impl_->maximumSpeedLevel.reset();
+        impl_->previewResolutions.clear();
     }
     impl_->pool.reset();
     impl_->onFrame = {};
     impl_->onError = {};
     impl_->sdkStarted.store(false, std::memory_order_release);
-    impl_->modelName.clear();
-    impl_->modelFlags = 0;
-    impl_->hasModelDescriptor = false;
-    impl_->maximumSpeedLevel.reset();
-    impl_->previewResolutions.clear();
     impl_->state.store(CameraState::Closed, std::memory_order_release);
     return stopped;
 }

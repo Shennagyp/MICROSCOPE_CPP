@@ -27,7 +27,9 @@ integration and does not modify vendor sample code.
   image dimensions and sizes the pool for the selected configuration.
 - Exposure auto/manual, exposure time/gain, Temp/Tint white balance, one-shot
   auto white balance, and SDK frame-rate statistics are implemented.
-- The common application feature contract exposes the eleven Swift AmScope
+- The Qt application boundary exposes camera settings only through
+  ICameraFeatureAccess; vendor-specific setters/readers are private backend
+  primitives. The common feature contract exposes the eleven Swift AmScope
   control features through runtime descriptors and typed reads/writes:
   ExposureAuto, ExposureTime, AmcamAnalogGainPercent,
   AmcamColorMatrixEnabled, AmcamPixelFormat, AmcamWhiteBalanceTemperature,
@@ -41,7 +43,8 @@ integration and does not modify vendor sample code.
   The current registry covers the capability families used by the eleven
   implemented feature descriptors; the wider sensor/trigger/accessory taxonomy
   remains a separate extension.
-- Auto white-balance-once remains a separate native command.
+- Auto white-balance-once remains a separate native command; device-measured
+  frame rate remains telemetry, not a configurable FPS feature.
 - The acquisition lifecycle parity work remains outstanding.
 - Shared feature-value validation is unit-tested through the common CMake target;
   macOS CI runs these tests before checking SDK and library artifacts.

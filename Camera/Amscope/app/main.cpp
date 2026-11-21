@@ -1,10 +1,12 @@
 #include "amscope/QtAmcamCamera.h"
 
+#include <QByteArray>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QImage>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -14,6 +16,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QStringList>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>

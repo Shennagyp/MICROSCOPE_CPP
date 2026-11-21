@@ -202,6 +202,94 @@ bool QtAmcamCamera::readFrameRate(
     return ok;
 }
 
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
+    AutoWhiteBalanceCallback callback) {
+    if (!callback) return 0;
+
+    // The command can change white-balance readbacks. Invalidate feature
+    // requests queued before it, but let requests submitted after it execute
+    // against the post-command camera state.
+    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            std::uint64_t contextGeneration) mutable {
+            std::optional<AutoWhiteBalanceResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (contextGeneration !=
+                    featureContextGeneration_.load(std::memory_order_acquire)) {
+                    return;
+                }
+
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.autoWhiteBalance(&local);
+                } catch (const std::exception& exception) {
+                    local = {0, "Amcam_AwbOnce", exception.what()};
+                } catch (...) {
+                    local = {0, "Amcam_AwbOnce",
+                             "Unknown exception while executing auto white balance."};
+                }
+
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+
+            dispatchFeatureCallback(
+                contextGeneration,
+                [callback = std::move(callback),
+                 requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        },
+        true);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFrameRate(
+    FrameRateCallback callback) {
+    if (!callback) return 0;
+
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            std::uint64_t contextGeneration) mutable {
+            std::optional<FrameRateResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (contextGeneration !=
+                    featureContextGeneration_.load(std::memory_order_acquire)) {
+                    return;
+                }
+
+                FrameRateStatistics statistics;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readFrameRate(statistics, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "Amcam_get_FrameRate", exception.what()};
+                } catch (...) {
+                    local = {0, "Amcam_get_FrameRate",
+                             "Unknown exception while reading frame-rate telemetry."};
+                }
+
+                if (ok) result.emplace(std::move(statistics));
+                else result.emplace(std::move(local));
+            }
+
+            dispatchFeatureCallback(
+                contextGeneration,
+                [callback = std::move(callback),
+                 requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        });
+}
+
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     FeatureDescriptorsCallback callback) {
     if (!callback) return 0;
@@ -326,7 +414,8 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestWriteFeature(
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
-    FeatureRequestTask task) {
+    FeatureRequestTask task,
+    bool invalidatePriorRequests) {
     if (!task) return 0;
 
     std::lock_guard<std::mutex> queueLock(featureQueueMutex_);
@@ -340,11 +429,24 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
         requestId = nextFeatureRequestId_++;
     }
 
+    auto contextGeneration =
+        featureContextGeneration_.load(std::memory_order_acquire);
+    if (invalidatePriorRequests)
+        ++contextGeneration;
+
+    // Push before publishing the generation. If allocation fails, the old
+    // context remains current and the caller can retry without invalidating
+    // otherwise valid completions.
     featureQueue_.push_back({
         requestId,
-        featureContextGeneration_.load(std::memory_order_acquire),
+        contextGeneration,
         std::move(task)
     });
+    if (invalidatePriorRequests) {
+        featureContextGeneration_.store(
+            contextGeneration, std::memory_order_release);
+    }
+
     featureQueueCondition_.notify_one();
     return requestId;
 }

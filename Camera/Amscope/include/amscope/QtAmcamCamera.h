@@ -13,6 +13,7 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include <variant>
 
 Q_DECLARE_METATYPE(amscope::CameraState)
 Q_DECLARE_METATYPE(amscope::FramePtr)
@@ -46,6 +47,17 @@ public:
     using FeatureWriteCallback =
         std::function<void(FeatureRequestId, FeatureWriteResult)>;
 
+    // Commands and telemetry are not camera settings. They share the serialized
+    // request worker but retain their own result semantics and public methods.
+    template <typename T>
+    using CameraOperationResult = std::variant<T, CameraError>;
+    using AutoWhiteBalanceResult = CameraOperationResult<std::monostate>;
+    using FrameRateResult = CameraOperationResult<FrameRateStatistics>;
+    using AutoWhiteBalanceCallback =
+        std::function<void(FeatureRequestId, AutoWhiteBalanceResult)>;
+    using FrameRateCallback =
+        std::function<void(FeatureRequestId, FrameRateResult)>;
+
     explicit QtAmcamCamera(QObject* parent = nullptr);
     QtAmcamCamera(AmcamCameraProfileRegistry profiles, QObject* parent = nullptr);
     ~QtAmcamCamera() override;
@@ -63,9 +75,12 @@ public:
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] FramePtr takeLatestFrame();
 
-    // Commands and device telemetry are separate from feature settings.
+    // Synchronous command/telemetry entry points are for non-GUI consumers.
+    // GUI callers should use the asynchronous request methods below.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& stats, CameraError* error = nullptr);
+    FeatureRequestId requestAutoWhiteBalance(AutoWhiteBalanceCallback callback);
+    FeatureRequestId requestFrameRate(FrameRateCallback callback);
 
     // Asynchronous feature access for GUI/application code. A zero request ID
     // means the request was rejected (empty callback or executor shutting down).
@@ -101,7 +116,9 @@ private:
         FeatureRequestTask task;
     };
 
-    FeatureRequestId enqueueFeatureRequest(FeatureRequestTask task);
+    FeatureRequestId enqueueFeatureRequest(
+        FeatureRequestTask task,
+        bool invalidatePriorRequests = false);
     void runFeatureWorker();
     void dispatchFeatureCallback(std::uint64_t contextGeneration,
                                  std::function<void()> callback);

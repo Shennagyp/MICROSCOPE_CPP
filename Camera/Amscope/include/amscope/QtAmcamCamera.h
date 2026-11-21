@@ -29,9 +29,10 @@ namespace amscope {
 // The synchronous ICameraFeatureAccess and lifecycle methods are available
 // for direct non-GUI consumers. A caller should use either the synchronous
 // surface or queued requests for one instance, not interleave both concurrently.
-// GUI code should use the request* methods below: operations execute serially on
-// this object's Qt affinity thread. Lifecycle transitions invalidate work from
-// the previous camera session. State-changing writes/commands invalidate earlier
+// GUI code should use the request* methods below: operations execute serially
+// on one dedicated worker, and completions are delivered on this object's Qt
+// affinity thread. Lifecycle transitions invalidate work from the previous
+// camera session. State-changing writes/commands invalidate earlier
 // descriptor/read snapshots, but accepted mutations still execute in FIFO order
 // and report their own results. The application should also keep its own selected-
 // device generation, as in the Swift model, to reject stale UI work across selection changes.

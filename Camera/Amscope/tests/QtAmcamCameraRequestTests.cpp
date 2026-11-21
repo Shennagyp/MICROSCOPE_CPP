@@ -101,7 +101,8 @@ int main(int argc, char** argv) {
                 requestId != 0 &&
                 std::holds_alternative<amscope::CameraError>(result);
             frameRateCompleted = true;
-            if (autoWhiteBalanceCompleted && frameRateCompleted)
+            if (autoWhiteBalanceCompleted && frameRateCompleted &&
+                firstWriteCompleted && secondWriteCompleted)
                 loop.quit();
         });
 

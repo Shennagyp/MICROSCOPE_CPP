@@ -545,10 +545,6 @@ void QtAmcamCamera::dispatchToOwnerThread(std::function<void()> callback) {
         Qt::QueuedConnection);
 }
 
-void QtAmcamCamera::advanceFeatureContextGeneration() noexcept {
-    featureContextGeneration_.fetch_add(1, std::memory_order_acq_rel);
-}
-
 void QtAmcamCamera::publishLatestFrame(FramePtr frame) {
     bool notify = false;
     {

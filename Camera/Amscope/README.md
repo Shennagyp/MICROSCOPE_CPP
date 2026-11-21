@@ -30,8 +30,15 @@ integration and does not modify vendor sample code.
 
 ## One-command build and run
 
-Requirements: macOS, Xcode command-line tools, CMake 3.21+, and Qt 6 with
-Core and Widgets. Install Qt 6 with Homebrew when it is not already present:
+Requirements: macOS, Xcode command-line tools, CMake 3.21+ (either the
+CMake GUI application or its command-line distribution), and Qt 6 with Core
+and Widgets. The launcher detects the command-line executable inside the
+standard `/Applications/CMake.app` or `~/Applications/CMake.app` bundle,
+so a separate terminal installation of CMake is not required. For a custom
+app location, set `CMAKE_APP` to the CMake.app bundle path, or set
+`CMAKE_EXECUTABLE` to its full `Contents/bin/cmake` executable path.
+
+Install Qt 6 with Homebrew when it is not already present:
 
 ```sh
 brew install qt@6

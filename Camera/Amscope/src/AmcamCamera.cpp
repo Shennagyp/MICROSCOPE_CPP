@@ -585,7 +585,10 @@ std::vector<CameraInfo> AmcamCamera::enumerate(CameraError* error) {
         info.displayName = boundedString(device.displayname, sizeof(device.displayname));
         if (device.model) {
             info.hasModelDescriptor = true;
-            if (device.model->name) info.modelName = device.model->name;
+            if (device.model->name) {
+                info.modelName = device.model->name;
+                info.modelCode = info.modelName;
+            }
             info.modelFlags = device.model->flag;
             info.maximumSpeedLevel = device.model->maxspeed;
             const unsigned n = std::min<unsigned>(device.model->preview, 16U);
@@ -625,7 +628,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
                     "Amcam_Open failed. Re-enumerate devices and check that the camera is not in use.");
 
     impl_->modelName = selected->modelName;
-    impl_->modelCode = selected->modelName.empty() ? "Unknown" : selected->modelName;
+    impl_->modelCode = selected->modelCode;
     impl_->modelFlags = selected->modelFlags;
     impl_->hasModelDescriptor = selected->hasModelDescriptor;
     impl_->maximumSpeedLevel = selected->maximumSpeedLevel;

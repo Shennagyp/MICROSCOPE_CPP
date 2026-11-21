@@ -11,6 +11,9 @@
 namespace amscope {
 class AmcamCamera final : public camera::ICameraFeatureAccess {
 public:
+    // Both callbacks execute on the acquisition worker. They must not call
+    // start/stop/close or destroy this AmcamCamera synchronously. Queue camera
+    // lifecycle and destruction to the owning application/control thread.
     using FrameCallback = std::function<void(FramePtr)>;
     using ErrorCallback = std::function<void(const CameraError&)>;
 

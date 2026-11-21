@@ -1028,6 +1028,10 @@ bool AmcamCamera::readWhiteBalance(WhiteBalanceSettings& settings, CameraError* 
 bool AmcamCamera::autoWhiteBalance(CameraError* error) {
     if (error) *error = {};
     std::lock_guard<std::mutex> api(impl_->apiMutex);
+    if (!impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::WhiteBalance))
+        return fail(error, "autoWhiteBalance", -1,
+                    "Auto white balance is disabled by the selected model profile.");
     if (!impl_->handle ||
         impl_->state.load(std::memory_order_acquire) != CameraState::Streaming)
         return fail(error, "autoWhiteBalance", -1,

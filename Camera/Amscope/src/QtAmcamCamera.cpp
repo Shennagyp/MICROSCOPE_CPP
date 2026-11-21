@@ -171,9 +171,6 @@ bool QtAmcamCamera::start(CameraError* error) {
         try {
             frameGate = std::make_shared<detail::AcquisitionFrameGate>(
                 sessionGeneration_.load(std::memory_order_acquire));
-            FeatureRequestContext errorContext;
-            errorContext.sessionGeneration = frameGate->generation();
-
             ok = camera_.start(
                 [this, frameGate](FramePtr frame) {
                     if (frameGate->accepts(
@@ -181,14 +178,8 @@ bool QtAmcamCamera::start(CameraError* error) {
                         publishLatestFrame(std::move(frame));
                     }
                 },
-                [this, frameGate, errorContext](const CameraError& acquisitionError) mutable {
-                    const CameraError copy = acquisitionError;
-                    auto currentContext = errorContext;
-                    currentContext.sessionGeneration = frameGate->generation();
-                    dispatchFeatureCallback(currentContext, [this, copy]() {
-                        emitError(copy);
-                        emit stateChanged(camera_.state());
-                    });
+                [this, frameGate](const CameraError& acquisitionError) {
+                    handleAcquisitionFailure(frameGate, acquisitionError);
                 },
                 &local);
             if (ok) {
@@ -353,8 +344,6 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStart(
                 std::shared_ptr<detail::AcquisitionFrameGate> frameGate =
                     std::make_shared<detail::AcquisitionFrameGate>(
                         requestContext.sessionGeneration);
-                FeatureRequestContext errorContext = requestContext;
-
                 const bool started = camera_.start(
                     [this, frameGate](FramePtr frame) {
                         if (frameGate->accepts(
@@ -362,15 +351,9 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStart(
                             publishLatestFrame(std::move(frame));
                         }
                     },
-                    [this, frameGate, errorContext](const CameraError& acquisitionError) mutable {
-                        const CameraError copy = acquisitionError;
-                        auto currentContext = errorContext;
-                        currentContext.sessionGeneration = frameGate->generation();
-                        dispatchFeatureCallback(currentContext, [this, copy]() {
-                            emitError(copy);
-                            emit stateChanged(camera_.state());
-                        });
-                    },
+                [this, frameGate](const CameraError& acquisitionError) {
+                    handleAcquisitionFailure(frameGate, acquisitionError);
+                },
                     &error);
                 if (started) {
                     acquisitionFrameGate_ = std::move(frameGate);
@@ -828,6 +811,36 @@ void QtAmcamCamera::advanceSessionGenerationTo(std::uint64_t generation) noexcep
 
 void QtAmcamCamera::advanceFeatureStateGeneration() noexcept {
     featureStateGeneration_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void QtAmcamCamera::handleAcquisitionFailure(
+    const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate,
+    const CameraError& error) {
+    if (!frameGate) return;
+
+    const std::uint64_t activeGeneration =
+        sessionGeneration_.load(std::memory_order_acquire);
+    if (!frameGate->invalidateIfCurrent(activeGeneration))
+        return;
+
+    // The native driver has already published Faulted. Invalidate queued
+    // snapshots and frames before the asynchronous Qt notification is posted.
+    const std::uint64_t invalidatedGeneration =
+        scheduledSessionGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    advanceSessionGenerationTo(invalidatedGeneration);
+    clearFrameMailbox();
+
+    FeatureRequestContext context;
+    context.sessionGeneration = invalidatedGeneration;
+    context.featureStateGeneration =
+        featureStateGeneration_.load(std::memory_order_acquire);
+    context.semantics = FeatureRequestSemantics::SessionBound;
+
+    const CameraError copy = error;
+    dispatchFeatureCallback(context, [this, copy]() {
+        emitError(copy);
+        emit stateChanged(camera_.state());
+    });
 }
 
 void QtAmcamCamera::dispatchLifecycleCallback(

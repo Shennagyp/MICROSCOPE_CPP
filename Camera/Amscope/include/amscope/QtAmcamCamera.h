@@ -168,6 +168,9 @@ private:
     void advanceSessionGeneration() noexcept;
     void advanceSessionGenerationTo(std::uint64_t generation) noexcept;
     void advanceFeatureStateGeneration() noexcept;
+    void handleAcquisitionFailure(
+        const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate,
+        const CameraError& error);
 
     void publishLatestFrame(FramePtr frame);
     void clearFrameMailbox();

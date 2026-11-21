@@ -20,6 +20,8 @@ integration and does not modify vendor sample code.
   while Streaming restores the previous stream and retains callback/frame state.
   The Qt frame-delivery gate is reactivated for that same acquisition after a
   recoverable Stop failure; a successful Stop/Close leaves the old gate invalid.
+  Fatal acquisition callbacks atomically invalidate their gate and advance the
+  session generation before the Qt error notification is delivered.
   Successful Stop shuts down the event worker, drains callbacks, then releases
   session resources. Terminal Close remains independent of Stop success.
 - Every successful Amcam_Stop marks a both-cache flush obligation

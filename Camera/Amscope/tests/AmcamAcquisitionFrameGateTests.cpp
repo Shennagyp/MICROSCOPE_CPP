@@ -30,6 +30,15 @@ int main() {
     require(!gate.accepts(10),
             "reactivation never re-enables callbacks against the old session");
 
+    require(gate.invalidateIfCurrent(11),
+            "a fatal callback invalidates its current acquisition generation");
+    require(!gate.accepts(11),
+            "fatal acquisition failure suppresses subsequent frames");
+    require(!gate.invalidateIfCurrent(11),
+            "a duplicate fatal callback cannot invalidate the gate twice");
+    require(!gate.invalidateIfCurrent(12),
+            "a stale fatal callback cannot invalidate a different generation");
+
     // A later successful Stop or Close advances the session and does not
     // reactivate the gate. It remains stale until a new acquisition gets a new gate.
     require(!gate.accepts(12),

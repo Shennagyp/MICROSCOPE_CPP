@@ -53,24 +53,31 @@ jobs:
           brew install qt@6
           echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
 
-      - name: Configure native driver and Qt adapter
+      - name: Configure driver, Qt adapter, and preview app
         run: |
           cmake -S Camera/Amscope -B build/amscope \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
             -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
-            -DAMSCOPE_BUILD_QT_ADAPTER=ON
+            -DAMSCOPE_BUILD_QT_ADAPTER=ON \
+            -DAMSCOPE_BUILD_PREVIEW_APP=ON
 
       - name: Compile
         run: cmake --build build/amscope --config Release --parallel
 
-      - name: Verify SDK and driver architectures
+      - name: Verify SDK, libraries, and application architectures
         run: |
           test -f build/amscope/libamscope_driver.dylib
           test -f build/amscope/libamscope_qt.a
           test -f build/amscope/libamcam.dylib
+          test -x build/amscope/amscope_preview
           lipo build/amscope/libamscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/libamscope_qt.a -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope/amscope_preview -verify_arch "${{ matrix.architecture }}"
+          otool -L build/amscope/amscope_preview
           otool -L build/amscope/libamscope_driver.dylib
           file build/amscope/libamscope_qt.a
+
+      - name: Run SDK enumeration smoke check
+        run: build/amscope/amscope_preview --list-cameras

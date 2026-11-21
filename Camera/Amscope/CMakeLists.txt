@@ -76,8 +76,13 @@ add_custom_command(TARGET amscope_driver POST_BUILD
     VERBATIM)
 
 option(AMSCOPE_BUILD_QT_ADAPTER "Build the Qt 6 Core adapter" ON)
-if(AMSCOPE_BUILD_QT_ADAPTER)
+option(AMSCOPE_BUILD_PREVIEW_APP "Build the Qt Widgets preview application" ON)
+
+if(AMSCOPE_BUILD_QT_ADAPTER OR AMSCOPE_BUILD_PREVIEW_APP)
     find_package(Qt6 6.2 REQUIRED COMPONENTS Core)
+endif()
+
+if(AMSCOPE_BUILD_QT_ADAPTER)
     add_library(amscope_qt
         src/QtAmcamCamera.cpp
         include/amscope/QtAmcamCamera.h)
@@ -91,13 +96,33 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
     target_link_libraries(amscope_qt PUBLIC Amscope::Driver Qt6::Core)
 endif()
 
+if(AMSCOPE_BUILD_PREVIEW_APP)
+    if(NOT AMSCOPE_BUILD_QT_ADAPTER)
+        message(FATAL_ERROR "AMSCOPE_BUILD_PREVIEW_APP requires AMSCOPE_BUILD_QT_ADAPTER=ON")
+    endif()
+
+    find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
+
+    add_executable(amscope_preview app/main.cpp)
+    target_compile_features(amscope_preview PRIVATE cxx_std_17)
+    target_link_libraries(amscope_preview PRIVATE Amscope::Qt Qt6::Widgets)
+    set_target_properties(amscope_preview PROPERTIES
+        BUILD_RPATH "@loader_path")
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS amscope_driver LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(FILES "${AMSCOPE_VENDOR_LIBRARY}"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}" RENAME "libamcam.dylib")
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
 if(AMSCOPE_BUILD_QT_ADAPTER)
     install(TARGETS amscope_qt
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+endif()
+
+if(AMSCOPE_BUILD_PREVIEW_APP)
+    install(TARGETS amscope_preview
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 endif()

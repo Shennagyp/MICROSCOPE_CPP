@@ -456,6 +456,7 @@ struct AmcamCamera::Impl {
     void reportFatal(CameraError error) noexcept {
         if (stopRequested.load(std::memory_order_acquire)) return;
 
+        bool stoppedSuccessfully = false;
         {
             std::lock_guard<std::mutex> lock(apiMutex);
             if (handle && sdkStarted.load(std::memory_order_acquire)) {
@@ -463,10 +464,17 @@ struct AmcamCamera::Impl {
                 if (SUCCEEDED(hr)) {
                     sdkStarted.store(false, std::memory_order_release);
                     frameCacheFlushPending.store(true, std::memory_order_release);
+                    stoppedSuccessfully = true;
                 } else {
                     error.message += " " + hrMessage("Amcam_Stop", hr);
                 }
             }
+        }
+
+        if (stoppedSuccessfully) {
+            CameraError flushError;
+            if (!flushStoppedFrameCaches(&flushError))
+                error.message += " " + flushError.message;
         }
 
         if (stopRequested.load(std::memory_order_acquire)) return;

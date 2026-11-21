@@ -324,9 +324,11 @@ private:
             });
 
         if (requestId == 0) {
+            // Do not re-enable controls from the previous descriptor snapshot.
+            // The caller can retry after the executor queue drains.
             featureStatus_->setText(
-                "Feature request was rejected; the request queue may be full or closing.");
-            setFeatureControlsEnabled(true);
+                "Feature request was rejected; retry after the request queue drains.");
+            setFeatureControlsEnabled(false);
         }
     }
 
@@ -335,6 +337,7 @@ private:
             featureForm_->removeRow(0);
         }
         featureControls_.clear();
+        pendingFeatureReads_ = 0;
     }
 
     void rebuildFeatureControls(
@@ -355,7 +358,10 @@ private:
                 FeatureControl{descriptor, editor});
         }
 
-        setFeatureControlsEnabled(true);
+        // Readable features are populated asynchronously before editing is
+        // enabled. This prevents an empty editor from being mistaken for a
+        // current camera value.
+        setFeatureControlsEnabled(false);
     }
 
     QWidget* createFeatureEditor(
@@ -449,6 +455,18 @@ private:
     }
 
     void refreshFeatureValues(std::uint64_t generation) {
+        pendingFeatureReads_ = 0;
+        for (const auto& entry : featureControls_) {
+            if (entry.second.descriptor.isReadable) {
+                ++pendingFeatureReads_;
+            }
+        }
+
+        if (pendingFeatureReads_ == 0) {
+            setFeatureControlsEnabled(true);
+            return;
+        }
+
         for (const auto& entry : featureControls_) {
             const std::string featureName = entry.first;
             if (!entry.second.descriptor.isReadable) continue;
@@ -461,26 +479,39 @@ private:
                     if (generation != featureUiGeneration_) return;
 
                     const auto found = featureControls_.find(featureName);
-                    if (found == featureControls_.end()) return;
-
-                    if (const auto* error =
-                            std::get_if<camera::CameraFeatureAccessError>(&result)) {
-                        found->second.editor->setToolTip(
-                            QString::fromStdString(error->message));
-                        return;
+                    if (found != featureControls_.end()) {
+                        if (const auto* error =
+                                std::get_if<camera::CameraFeatureAccessError>(&result)) {
+                            found->second.editor->setToolTip(
+                                QString::fromStdString(error->message));
+                        } else {
+                            const auto& value =
+                                std::get<camera::CameraFeatureValue>(result);
+                            if (!setFeatureEditorValue(found->second, value)) {
+                                found->second.editor->setToolTip(
+                                    "The backend returned a value that does not match its descriptor.");
+                            } else {
+                                found->second.editor->setToolTip({});
+                            }
+                        }
                     }
 
-                    const auto& value =
-                        std::get<camera::CameraFeatureValue>(result);
-                    if (!setFeatureEditorValue(found->second, value)) {
-                        found->second.editor->setToolTip(
-                            "The backend returned a value that does not match its descriptor.");
+                    if (pendingFeatureReads_ > 0) {
+                        --pendingFeatureReads_;
+                    }
+                    if (pendingFeatureReads_ == 0) {
+                        setFeatureControlsEnabled(true);
                     }
                 });
 
             if (requestId == 0) {
+                // Invalidate already queued read completions. A later refresh
+                // will obtain a consistent descriptor/value snapshot.
+                ++featureUiGeneration_;
+                pendingFeatureReads_ = 0;
+                setFeatureControlsEnabled(false);
                 featureStatus_->setText(
-                    "One or more feature reads could not be queued.");
+                    "Feature reads could not be queued; refresh the feature list to retry.");
                 break;
             }
         }
@@ -757,6 +788,7 @@ private:
     std::vector<amscope::CameraInfo> cameras_;
 
     std::uint64_t featureUiGeneration_ = 0;
+    std::size_t pendingFeatureReads_ = 0;
     bool pendingFeatureWrite_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
 

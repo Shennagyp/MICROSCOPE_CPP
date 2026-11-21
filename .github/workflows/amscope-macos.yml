@@ -6,6 +6,8 @@ on:
       - amscope-native-driver
     paths:
       - "Camera/Amscope/**"
+      - "Camera/Common/**"
+      - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
       - ".github/workflows/amscope-macos.yml"
@@ -67,8 +69,8 @@ jobs:
 
       - name: Verify SDK, libraries, and application architectures
         run: |
-          test -f build/amscope/libamscope_driver.dylib
-          test -f build/amscope/libamscope_qt.a
+          test -f build/amscope/libcamera_amscope_driver.dylib
+          test -f build/amscope/libcamera_amscope_qt.a
           test -f build/amscope/libamcam.dylib
           test -x build/amscope/amscope_preview
           lipo build/amscope/libamscope_driver.dylib -verify_arch "${{ matrix.architecture }}"

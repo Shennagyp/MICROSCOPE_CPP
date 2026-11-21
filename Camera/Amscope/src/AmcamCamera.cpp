@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -184,12 +185,16 @@ struct AmcamCamera::Impl {
             const auto w = info.v3.width;
             const auto h = info.v3.height;
             std::size_t required = 0;
-            if (!rgb24Size(w, h, required) || required > writable->pixels.size()) {
+            if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
                 fatal = true;
                 error = {-1, "Amcam_WaitImageV4",
                          "SDK frame dimensions exceed the allocated RGB24 buffer."};
                 break;
             }
+
+            // Keep the logical byte count equal to this frame's dimensions,
+            // while retaining vector capacity for later frames of this size.
+            writable->pixels.resize(required);
 
             writable->width = w;
             writable->height = h;

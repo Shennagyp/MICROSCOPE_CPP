@@ -74,6 +74,8 @@ The first C++ feature-access interface is synchronous and serialized by the owni
 
 The application must not perform potentially blocking CTI/GenApi operations on the GUI thread. The Qt application layer is responsible for scheduling feature requests on an appropriate worker/executor and delivering results back through queued Qt delivery. It must also preserve selected-device identity and reject stale completions after camera selection or session changes. Asynchronous wrappers do not change the shared feature value/descriptor/error contract.
 
+The Qt application-facing camera surface must not publish a second set of vendor-specific setting methods. Native SDK setters/readers remain backend implementation details; application settings flow through `ICameraFeatureAccess`. Non-setting operations remain separate: one-shot auto white balance is a command and camera-measured FPS is telemetry, not a setting named as configured FPS.
+
 
 ## 4. Ownership and runtime translation
 

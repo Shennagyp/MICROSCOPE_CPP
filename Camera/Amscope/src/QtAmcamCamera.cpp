@@ -432,23 +432,19 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
         requestId = nextFeatureRequestId_++;
     }
 
-    auto contextGeneration =
-        featureContextGeneration_.load(std::memory_order_acquire);
-    if (invalidatePriorRequests)
-        ++contextGeneration;
-
-    // Push before publishing the generation. If allocation fails, the old
-    // context remains current and the caller can retry without invalidating
-    // otherwise valid completions.
+    // Allocate/insert before advancing the generation so a rejected request
+    // cannot invalidate earlier work. The queue lock prevents the worker from
+    // observing this placeholder before its generation is assigned.
     featureQueue_.push_back({
         requestId,
-        contextGeneration,
+        0,
         std::move(task)
     });
-    if (invalidatePriorRequests) {
-        featureContextGeneration_.store(
-            contextGeneration, std::memory_order_release);
-    }
+
+    const std::uint64_t contextGeneration = invalidatePriorRequests
+        ? featureContextGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1
+        : featureContextGeneration_.load(std::memory_order_acquire);
+    featureQueue_.back().contextGeneration = contextGeneration;
 
     featureQueueCondition_.notify_one();
     return requestId;

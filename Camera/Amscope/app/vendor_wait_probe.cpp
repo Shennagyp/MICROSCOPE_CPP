@@ -45,6 +45,48 @@ bool allocateRgb24Buffer(int width, int height, std::vector<std::uint8_t>& buffe
     return true;
 }
 
+
+struct OptionSample {
+    bool available = false;
+    int value = 0;
+    std::uint32_t result = 0;
+};
+
+OptionSample sampleOption(HAmcam camera, unsigned option) {
+    int value = 0;
+    const HRESULT hr = Amcam_get_Option(camera, option, &value);
+    return {SUCCEEDED(hr), value, static_cast<std::uint32_t>(hr)};
+}
+
+void printOptionValue(std::ostream& output, const OptionSample& sample) {
+    if (sample.available) {
+        output << sample.value;
+    } else {
+        output << "unavailable(0x" << std::hex << std::uppercase
+               << sample.result << std::dec << ")";
+    }
+}
+
+void appendGauge(std::ostream& output, const char* name,
+                 const OptionSample& sample) {
+    output << " " << name << "=";
+    printOptionValue(output, sample);
+}
+
+void appendCounter(std::ostream& output, const char* name,
+                   const OptionSample& sample, OptionSample& previous) {
+    appendGauge(output, name, sample);
+    if (sample.available && previous.available) {
+        output << " " << name << "_delta=";
+        if (sample.value >= previous.value) {
+            output << (sample.value - previous.value);
+        } else {
+            output << "reset";
+        }
+    }
+    if (sample.available) previous = sample;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -150,6 +192,18 @@ int main(int argc, char** argv) {
               << "Sampling for " << durationSeconds << " seconds.\n"
               << std::flush;
 
+    // Read-only SDK diagnostics; these do not modify acquisition settings.
+    OptionSample previousPackets = sampleOption(camera, AMCAM_OPTION_PACKET_NUMBER);
+    OptionSample previousSdkDrops = sampleOption(camera, AMCAM_OPTION_NUMBER_DROP_FRAME);
+    const OptionSample noFrameTimeout = sampleOption(camera, AMCAM_OPTION_NOFRAME_TIMEOUT);
+    const OptionSample noPacketTimeout = sampleOption(camera, AMCAM_OPTION_NOPACKET_TIMEOUT);
+
+    std::cout << "SDK timeout settings (0=disabled): no_frame_ms=";
+    printOptionValue(std::cout, noFrameTimeout);
+    std::cout << " no_packet_ms=";
+    printOptionValue(std::cout, noPacketTimeout);
+    std::cout << "\n";
+
     const auto startedAt = std::chrono::steady_clock::now();
     auto nextReport = startedAt + std::chrono::seconds(1);
     std::uint64_t totalFrames = 0;
@@ -192,8 +246,19 @@ int main(int argc, char** argv) {
                       << " delta=" << intervalFrames
                       << " timeouts=" << totalTimeouts
                       << " timeout_delta=" << intervalTimeouts
-                      << " seq=" << firstSequence << "->" << lastSequence
-                      << "\n" << std::flush;
+                      << " seq=" << firstSequence << "->" << lastSequence;
+
+            appendCounter(std::cout, "packets",
+                          sampleOption(camera, AMCAM_OPTION_PACKET_NUMBER),
+                          previousPackets);
+            appendCounter(std::cout, "sdk_dropped",
+                          sampleOption(camera, AMCAM_OPTION_NUMBER_DROP_FRAME),
+                          previousSdkDrops);
+            appendGauge(std::cout, "front_q",
+                        sampleOption(camera, AMCAM_OPTION_FRONTEND_DEQUE_CURRENT));
+            appendGauge(std::cout, "back_q",
+                        sampleOption(camera, AMCAM_OPTION_BACKEND_DEQUE_CURRENT));
+            std::cout << "\n" << std::flush;
             intervalFrames = 0;
             intervalTimeouts = 0;
             nextReport += std::chrono::seconds(1);

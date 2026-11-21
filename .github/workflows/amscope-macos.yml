@@ -8,12 +8,16 @@ on:
       - "Camera/Amscope/**"
       - "Camera/Common/**"
       - "docs/architecture/**"
+      - "Camera/Common/**"
+      - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
       - ".github/workflows/amscope-macos.yml"
   pull_request:
     paths:
       - "Camera/Amscope/**"
+      - "Camera/Common/**"
+      - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
       - ".github/workflows/amscope-macos.yml"
@@ -73,13 +77,13 @@ jobs:
           test -f build/amscope/libcamera_amscope_qt.a
           test -f build/amscope/libamcam.dylib
           test -x build/amscope/amscope_preview
-          lipo build/amscope/libamscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
-          lipo build/amscope/libamscope_qt.a -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope/libcamera_amscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope/libcamera_amscope_qt.a -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/amscope_preview -verify_arch "${{ matrix.architecture }}"
           otool -L build/amscope/amscope_preview
-          otool -L build/amscope/libamscope_driver.dylib
-          file build/amscope/libamscope_qt.a
+          otool -L build/amscope/libcamera_amscope_driver.dylib
+          file build/amscope/libcamera_amscope_qt.a
 
       - name: Confirm preview executable
         run: test -x build/amscope/amscope_preview

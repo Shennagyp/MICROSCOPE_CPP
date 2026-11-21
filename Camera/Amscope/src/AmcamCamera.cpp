@@ -681,18 +681,27 @@ bool AmcamCamera::close(CameraError* error) {
                     "close() cannot run on the acquisition callback thread; queue it to the owner thread.");
 
     std::lock_guard<std::mutex> lifecycle(impl_->lifecycleMutex);
-    if (impl_->state.load(std::memory_order_acquire) == CameraState::Closed) return true;
+    if (impl_->state.load(std::memory_order_acquire) == CameraState::Closed)
+        return true;
 
-    const bool stopped = impl_->stopLocked(error);
+    // Close is terminal. Do not make it depend on Stop or the recoverable
+    // post-Stop cache flush: Amcam_Close ends SDK ownership of this handle.
+    // The WaitImage worker must finish before the handle can be destroyed.
+    impl_->state.store(CameraState::Stopping, std::memory_order_release);
+    impl_->stopRequested.store(true, std::memory_order_release);
+    if (impl_->worker.joinable())
+        impl_->worker.join();
+
     {
         std::lock_guard<std::mutex> api(impl_->apiMutex);
         if (impl_->handle) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
+        impl_->sdkStarted.store(false, std::memory_order_release);
         impl_->frameCacheFlushPending.store(false, std::memory_order_release);
-        // Model metadata is read by featureDescriptors() under apiMutex.
-        // Clear it under the same lock to keep close concurrent-safe.
+
+        // Model metadata is read by feature access under apiMutex.
         impl_->modelName.clear();
         impl_->modelCode = "Unknown";
         impl_->modelFlags = 0;
@@ -700,12 +709,12 @@ bool AmcamCamera::close(CameraError* error) {
         impl_->maximumSpeedLevel.reset();
         impl_->previewResolutions.clear();
     }
+
     impl_->pool.reset();
     impl_->onFrame = {};
     impl_->onError = {};
-    impl_->sdkStarted.store(false, std::memory_order_release);
     impl_->state.store(CameraState::Closed, std::memory_order_release);
-    return stopped;
+    return true;
 }
 
 bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,

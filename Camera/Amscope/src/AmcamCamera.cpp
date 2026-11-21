@@ -485,6 +485,10 @@ struct AmcamCamera::Impl {
                 expected, true, std::memory_order_acq_rel))
             return false;
 
+        // The acquisition error now owns the transition. Publish Faulted
+        // immediately so a concurrent user Stop cannot restore Streaming.
+        state.store(CameraState::Faulted, std::memory_order_release);
+
         // Stop the worker's event wait before asking the SDK to terminate
         // callback production. SDK callbacks can only enqueue and return.
         eventQueue.stop();
@@ -734,7 +738,9 @@ struct AmcamCamera::Impl {
         }
 
         if (FAILED(hr)) {
-            if (wasStreaming) {
+            const bool acquisitionAlreadyFaulted =
+                state.load(std::memory_order_acquire) == CameraState::Faulted;
+            if (wasStreaming && !acquisitionAlreadyFaulted) {
                 stopRequested.store(false, std::memory_order_release);
                 state.store(CameraState::Streaming, std::memory_order_release);
             } else {

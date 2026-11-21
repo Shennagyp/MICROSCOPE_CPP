@@ -45,7 +45,9 @@ integration and does not modify vendor sample code.
   remains a separate extension.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
-- The acquisition lifecycle parity work remains outstanding.
+- Remaining acquisition parity work is the image retrieval/callback model:
+  C++ currently uses a WaitImageV4 worker while Swift uses queued events and
+  deferred PullImage. This path still requires vendor/hardware qualification.
 - Shared feature-value validation is unit-tested through the common CMake target;
   macOS CI runs these tests before checking SDK and library artifacts.
 - Application-owned delivered libraries use camera_-prefixed artifact names;

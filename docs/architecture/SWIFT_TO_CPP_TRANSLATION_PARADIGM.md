@@ -205,6 +205,22 @@ The Qt Widgets preview builds the settings panel from these descriptors rather t
 
 The C++ AmScope backend accepts an injectable `AmcamCameraProfileRegistry`. Profiles use exact SDK model codes, whitespace trimming, a feature allow-list and a deny-list; explicit deny entries take precedence, and the last duplicate profile wins. A missing profile imposes no additional restriction. The profile is applied after runtime/model evidence, so it can only narrow availability. The C++ enum currently covers the capability families mapped to the eleven implemented control descriptors; the wider Swift sensor, transport, trigger and accessory taxonomy remains outside this increment.
 
+### Native auto-exposure mode semantics
+
+The Swift enum and Amcam SDK define the same numeric mapping: Off = 0,
+Continuous = 1, Once = 2. The C++ feature layer writes these native values
+directly and checks the immediate `Amcam_get_AutoExpoEnable` readback.
+`Once` is therefore the SDK's one-shot mode, not an alias for Continuous and
+not a timer-driven application emulation.
+
+The SDK also defines `AMCAM_EVENT_AUTOEXPO_CONV` and
+`AMCAM_EVENT_AUTOEXPO_CONVFAIL`. The current Swift session handler does not
+act on either event; the C++ callback filter likewise excludes them. A
+successful write of `ExposureAuto=Once` means the SDK accepted and returned
+mode 2. It does not mean the application has observed convergence. Adding
+convergence reporting later would be a separate parity change requiring an
+explicit behavior change in the Swift authority as well.
+
 ### Post-Stop cache invariant
 
 The C++ driver now tracks the Swift session's post-Stop cache-clean obligation. Every successful `Amcam_Stop` sets `frameCacheFlushPending`; the implementation calls `Amcam_put_Option(handle, AMCAM_OPTION_FLUSH, 3)` while holding the same SDK-call mutex. The pending flag is cleared only after the SDK reports success. A failed flush is reported and retained, and the next `start()` retries it before entering the Starting state. A successful Stop followed by a failed flush therefore leaves the session stopped and retryable; it does not pretend streaming is active.

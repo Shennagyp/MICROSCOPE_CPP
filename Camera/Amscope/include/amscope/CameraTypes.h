@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace amscope {
@@ -43,11 +44,38 @@ struct Frame {
     [[nodiscard]] std::size_t byteSize() const noexcept { return pixels.size(); }
 };
 using FramePtr = std::shared_ptr<const Frame>;
+// Values intentionally match Amcam_get/put_AutoExpoEnable and Swift's
+// AmcamAutoExposureMode raw values. Once is the vendor's native one-shot mode.
 enum class AmcamAutoExposureMode : std::int32_t {
     Off = 0,
     Continuous = 1,
     Once = 2
 };
+
+[[nodiscard]] constexpr bool isAutomaticExposureMode(
+    AmcamAutoExposureMode mode) noexcept {
+    return mode != AmcamAutoExposureMode::Off;
+}
+
+[[nodiscard]] constexpr std::string_view amcamAutoExposureModeSymbol(
+    AmcamAutoExposureMode mode) noexcept {
+    switch (mode) {
+    case AmcamAutoExposureMode::Off: return "Off";
+    case AmcamAutoExposureMode::Once: return "Once";
+    case AmcamAutoExposureMode::Continuous: return "Continuous";
+    }
+    return {};
+}
+
+[[nodiscard]] constexpr bool parseAmcamAutoExposureMode(
+    std::string_view symbol,
+    AmcamAutoExposureMode& mode) noexcept {
+    if (symbol == "Off") mode = AmcamAutoExposureMode::Off;
+    else if (symbol == "Once") mode = AmcamAutoExposureMode::Once;
+    else if (symbol == "Continuous") mode = AmcamAutoExposureMode::Continuous;
+    else return false;
+    return true;
+}
 
 struct ExposureSettings {
     AmcamAutoExposureMode autoMode = AmcamAutoExposureMode::Off;

@@ -89,6 +89,12 @@ option(AMSCOPE_BUILD_QT_ADAPTER "Build the Qt 6 Core adapter" ON)
 option(AMSCOPE_BUILD_PREVIEW_APP "Build the Qt Widgets preview application" ON)
 
 if(BUILD_TESTING)
+    add_executable(amscope_camera_types_tests
+        tests/AmcamCameraTypesTests.cpp)
+    target_compile_features(amscope_camera_types_tests PRIVATE cxx_std_17)
+    target_include_directories(amscope_camera_types_tests PRIVATE include)
+    add_test(NAME amscope_camera_types_tests COMMAND amscope_camera_types_tests)
+
     add_executable(amscope_profile_tests
         tests/AmcamCameraProfileTests.cpp
         src/AmcamCameraProfiles.cpp

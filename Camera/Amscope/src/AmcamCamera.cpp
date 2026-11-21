@@ -71,24 +71,6 @@ camera::CameraFeatureAccessError featureError(
     return {code, std::move(feature), std::move(message), nativeCode, expected, actual};
 }
 
-std::string exposureModeSymbol(amscope::AmcamAutoExposureMode mode) {
-    switch (mode) {
-    case amscope::AmcamAutoExposureMode::Off: return "Off";
-    case amscope::AmcamAutoExposureMode::Once: return "Once";
-    case amscope::AmcamAutoExposureMode::Continuous: return "Continuous";
-    }
-    return {};
-}
-
-bool parseExposureMode(const std::string& symbol, amscope::AmcamAutoExposureMode& mode) {
-    if (symbol == "Off") mode = amscope::AmcamAutoExposureMode::Off;
-    else if (symbol == "Once") mode = amscope::AmcamAutoExposureMode::Once;
-    else if (symbol == "Continuous") mode = amscope::AmcamAutoExposureMode::Continuous;
-    else return false;
-    return true;
-}
-
-
 std::string resolutionFeatureSymbol(
     std::size_t index,
     const amscope::Resolution& resolution) {
@@ -1169,7 +1151,7 @@ bool AmcamCamera::readExposure(ExposureSettings& settings, CameraError* error) {
         return fail(error, "Amcam_get_AutoExpoEnable", -1,
                     "The camera returned an unknown auto-exposure mode.");
     settings.autoMode = static_cast<AmcamAutoExposureMode>(automatic);
-    settings.automatic = settings.autoMode != AmcamAutoExposureMode::Off;
+    settings.automatic = isAutomaticExposureMode(settings.autoMode);
     settings.timeMicroseconds = time;
     settings.minimumTimeMicroseconds = minTime;
     settings.maximumTimeMicroseconds = maxTime;
@@ -1288,7 +1270,8 @@ AmcamCamera::readFeature(std::string_view name) {
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "The camera returned an unknown auto-exposure mode.");
         return CameraFeatureValue{FeatureEnumeration{
-            exposureModeSymbol(static_cast<AmcamAutoExposureMode>(mode))}};
+            std::string(amcamAutoExposureModeSymbol(
+                static_cast<AmcamAutoExposureMode>(mode)))}};
     }
     if (name == "ExposureTime") {
         unsigned value = 0;
@@ -1397,7 +1380,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
     if (name == "ExposureAuto") {
         const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
         AmcamAutoExposureMode mode = AmcamAutoExposureMode::Off;
-        if (!parseExposureMode(symbol, mode))
+        if (!parseAmcamAutoExposureMode(symbol, mode))
             return featureError(CameraFeatureAccessError::Code::InvalidValue,
                                 std::string(name), "ExposureAuto accepts Off, Once or Continuous.");
         const auto raw = static_cast<int>(mode);

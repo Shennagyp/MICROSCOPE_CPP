@@ -32,7 +32,9 @@ integration and does not modify vendor sample code.
 - Resolution can be changed while open and stopped. Start reads the final
   image dimensions and sizes the pool for the selected configuration.
 - Exposure auto/manual, exposure time/gain, Temp/Tint white balance, one-shot
-  auto white balance, and SDK frame-rate statistics are implemented.
+  auto white balance, and SDK frame-rate statistics are implemented. ExposureAuto
+  maps Off/Continuous/Once to native SDK values 0/1/2; Once is not emulated as
+  Continuous. The mode setter verifies immediate SDK readback.
 - The Qt application boundary exposes camera settings only through
   ICameraFeatureAccess; vendor-specific setters/readers are private backend
   primitives. The common feature contract exposes the eleven Swift AmScope
@@ -52,10 +54,13 @@ integration and does not modify vendor sample code.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
 - Callback-to-pull execution now follows the Swift model and the vendor's
-  documented callback/PullImage pairing. CI validates compilation and queue
-  behavior on Intel and Apple Silicon. Real-camera qualification remains for
-  callback/Stop/Close timing, event rate, disconnect/timeouts, buffer layout,
-  and retained-frame behavior.
+  documented callback/PullImage pairing. Auto-exposure convergence notifications
+  (AUTOEXPO_CONV / AUTOEXPO_CONVFAIL) are not surfaced as completion events:
+  Swift's session handler ignores them too. A successful Once write means the
+  SDK accepted and read back mode 2, not that convergence has been confirmed.
+- CI validates compilation and queue behavior on Intel and Apple Silicon.
+  Real-camera qualification remains for callback/Stop/Close timing, event rate,
+  disconnect/timeouts, buffer layout, and retained-frame behavior.
 - Shared feature-value validation is unit-tested through the common CMake target;
   macOS CI runs these tests before checking SDK and library artifacts.
 - Application-owned delivered libraries use camera_-prefixed artifact names;

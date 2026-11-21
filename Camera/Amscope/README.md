@@ -62,7 +62,7 @@ profile.deniedFeatures = {
 };
 
 amscope::QtAmcamCamera camera(
-    amscope::AmcamCameraProfileRegistry{profile});
+    amscope::AmcamCameraProfileRegistry({profile}));
 ```
 
 A configured profile is an allow-list, and explicit deny entries take

@@ -31,8 +31,11 @@ integration and does not modify vendor sample code.
   AmcamFrameSpeedLevel, and AmcamResolutionIndex.
 - The AmScope descriptors use model metadata and non-mutating SDK probes.
   One-shot auto white balance remains a command, not a Boolean feature.
-- An injectable per-model allow/deny profile registry and the acquisition
-  lifecycle parity work are not complete yet.
+- An injectable exact-model allow/deny registry narrows the probed feature
+  capabilities; a missing profile leaves SDK-probed capabilities unchanged.
+  Profiles are available through AmcamCamera and QtAmcamCamera constructors.
+- Auto white-balance-once remains a separate native command.
+- The acquisition lifecycle parity work remains outstanding.
 - Shared feature-value validation is unit-tested through the common CMake target;
   macOS CI runs these tests before checking SDK and library artifacts.
 - Application-owned delivered libraries use camera_-prefixed artifact names;
@@ -41,6 +44,32 @@ integration and does not modify vendor sample code.
   and schedules Qt signals onto the QObject affinity thread.
 - The Qt Widgets preview app demonstrates camera enumeration, open/start/stop,
   and rendering the latest immutable frame lease through QImage/QPixmap.
+
+### Model-specific feature policy
+
+The application can inject exact model profiles when creating the camera:
+
+```cpp
+amscope::AmcamCameraModelProfile profile;
+profile.modelCode = "Exact SDK model name";
+profile.allowedFeatures = {
+    amscope::AmcamCameraFeature::ExposureAuto,
+    amscope::AmcamCameraFeature::ExposureManual,
+    amscope::AmcamCameraFeature::AnalogGain
+};
+profile.deniedFeatures = {
+    amscope::AmcamCameraFeature::AnalogGain
+};
+
+amscope::QtAmcamCamera camera(
+    amscope::AmcamCameraProfileRegistry{profile});
+```
+
+A configured profile is an allow-list, and explicit deny entries take
+precedence. The exact model code is whitespace-trimmed for lookup. Duplicate
+profiles use the last entry. Profiles can only restrict capabilities already
+confirmed by SDK probes; they cannot make unsupported hardware features appear.
+A model without a configured profile uses its runtime-probed capabilities.
 
 ## One-command build and run
 

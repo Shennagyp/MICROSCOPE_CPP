@@ -79,5 +79,8 @@ jobs:
           otool -L build/amscope/libamscope_driver.dylib
           file build/amscope/libamscope_qt.a
 
+      - name: Confirm preview executable
+        run: test -x build/amscope/amscope_preview
+
       - name: Run SDK enumeration smoke check
         run: build/amscope/amscope_preview --list-cameras

@@ -157,14 +157,31 @@ bool QtAmcamCamera::start(CameraError* error) {
                     });
                 },
                 &local);
-            if (ok) acquisitionFrameGate_ = std::move(frameGate);
-            else acquisitionFrameGate_.reset();
+            if (ok) {
+                acquisitionFrameGate_ = std::move(frameGate);
+            } else if (camera_.state() == CameraState::Streaming &&
+                       acquisitionFrameGate_) {
+                acquisitionFrameGate_->activateFor(
+                    sessionGeneration_.load(std::memory_order_acquire));
+            } else {
+                acquisitionFrameGate_.reset();
+            }
         } catch (const std::exception& exception) {
-            acquisitionFrameGate_.reset();
+            if (camera_.state() == CameraState::Streaming && acquisitionFrameGate_) {
+                acquisitionFrameGate_->activateFor(
+                    sessionGeneration_.load(std::memory_order_acquire));
+            } else {
+                acquisitionFrameGate_.reset();
+            }
             local = {0, "camera start", exception.what()};
             ok = false;
         } catch (...) {
-            acquisitionFrameGate_.reset();
+            if (camera_.state() == CameraState::Streaming && acquisitionFrameGate_) {
+                acquisitionFrameGate_->activateFor(
+                    sessionGeneration_.load(std::memory_order_acquire));
+            } else {
+                acquisitionFrameGate_.reset();
+            }
             local = {0, "camera start",
                      "Unknown exception while preparing acquisition frame delivery."};
             ok = false;
@@ -324,14 +341,30 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStart(
                 if (started) {
                     acquisitionFrameGate_ = std::move(frameGate);
                 } else {
-                    acquisitionFrameGate_.reset();
+                    if (camera_.state() == CameraState::Streaming &&
+                        acquisitionFrameGate_) {
+                        acquisitionFrameGate_->activateFor(
+                            sessionGeneration_.load(std::memory_order_acquire));
+                    } else {
+                        acquisitionFrameGate_.reset();
+                    }
                     result = std::move(error);
                 }
             } catch (const std::exception& exception) {
-                acquisitionFrameGate_.reset();
+                if (camera_.state() == CameraState::Streaming && acquisitionFrameGate_) {
+                    acquisitionFrameGate_->activateFor(
+                        sessionGeneration_.load(std::memory_order_acquire));
+                } else {
+                    acquisitionFrameGate_.reset();
+                }
                 result = CameraError{0, "camera start", exception.what()};
             } catch (...) {
-                acquisitionFrameGate_.reset();
+                if (camera_.state() == CameraState::Streaming && acquisitionFrameGate_) {
+                    acquisitionFrameGate_->activateFor(
+                        sessionGeneration_.load(std::memory_order_acquire));
+                } else {
+                    acquisitionFrameGate_.reset();
+                }
                 result = CameraError{0, "camera start",
                                      "Unknown exception while preparing acquisition frame delivery."};
             }

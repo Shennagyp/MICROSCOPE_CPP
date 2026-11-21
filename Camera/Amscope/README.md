@@ -51,6 +51,39 @@ CMake selects based on the requested/native architecture. Override with
 The selected dylib is copied beside libamscope_driver.dylib and the driver
 uses @loader_path for runtime resolution.
 
+## Isolate the native acquisition lifecycle (without Qt)
+
+A standalone probe is available to determine whether frame acquisition stops
+inside the native Amcam driver or only in the Qt handoff/rendering path. It
+does not link Qt and does not create a GUI.
+
+Run from the repository root:
+
+```sh
+bash scripts/run-amscope-native-probe.sh --seconds 60
+```
+
+When exactly one camera is connected, the probe selects it automatically. If
+more than one camera is connected, pass the enumerated opaque id:
+
+```sh
+bash scripts/run-amscope-native-probe.sh --device-id "CAMERA_ID" --seconds 60
+```
+
+The probe prints one-second frame counts, sequence values, dropped frames,
+native camera state, last-frame age, and any acquisition error.
+
+Interpretation:
+
+- If this probe also stops or enters Faulted, Qt is excluded: investigate the
+  native acquisition/lifecycle path or the vendor SDK/device interaction.
+- If this probe remains Streaming with continuous frame counts while the Qt
+  preview stops, the fault is above the native driver: isolate the Qt bridge
+  from the Widgets presentation path next.
+
+Do not run the probe and the preview simultaneously; only one process should
+own the camera.
+
 ## Qt frame handoff
 
 Connect frameAvailable() to a slot on the intended consumer/render thread with

@@ -159,6 +159,10 @@ Amcam dylib, discovers Homebrew Qt 6 (or uses CMAKE_PREFIX_PATH when supplied),
 configures CMake, builds, and launches Camera/Amscope/app/main.cpp's preview
 application.
 
+The fast launcher disables test executable builds by default so the first preview
+launch does not spend time compiling tests. Set `AMSCOPE_BUILD_TESTING=ON` to
+include the test executables in a local build; CI explicitly keeps testing enabled.
+
 To run only the SDK camera-enumeration smoke check after building:
 
 ```sh

@@ -5,7 +5,13 @@
 #include <utility>
 
 namespace amscope {
-QtAmcamCamera::QtAmcamCamera(QObject* parent) : QObject(parent) {
+QtAmcamCamera::QtAmcamCamera(QObject* parent)
+    : QtAmcamCamera(AmcamCameraProfileRegistry{}, parent) {}
+
+QtAmcamCamera::QtAmcamCamera(
+    AmcamCameraProfileRegistry profiles,
+    QObject* parent)
+    : QObject(parent), camera_(std::move(profiles)) {
     qRegisterMetaType<amscope::CameraState>("amscope::CameraState");
     qRegisterMetaType<amscope::FramePtr>("amscope::FramePtr");
 }

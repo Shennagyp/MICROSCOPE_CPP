@@ -73,6 +73,8 @@ integration and does not modify vendor sample code.
   Lifecycle requests remain FIFO; session generations invalidate old-session
   feature work, while a separate feature-state generation invalidates stale
   descriptor/read snapshots without cancelling accepted FIFO writes or commands.
+  Synchronous methods are an alternative for direct non-GUI consumers and must
+  not be interleaved concurrently with the queued request surface on one instance.
 - The Qt Widgets app builds its settings panel from common feature descriptors,
   including typed Boolean, integer, vector, floating-point and enumeration
   editors. Readable values are fetched before writable controls are enabled;

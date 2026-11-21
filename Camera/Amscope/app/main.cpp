@@ -262,6 +262,7 @@ private:
                     preview_->setText("Camera opened. Press Start to begin acquisition.");
                     statusBar()->showMessage("Camera session opened.");
                 }
+                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 
@@ -292,12 +293,14 @@ private:
                 } else {
                     statusBar()->showMessage("Acquisition started.");
                 }
+                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 
         if (requestId == 0) {
             lifecycleRequestPending_ = false;
             statusBar()->showMessage("The acquisition start request could not be queued.");
+            setFeatureControlsEnabled(true);
             updateControls(camera_.state());
         }
     }
@@ -321,12 +324,14 @@ private:
                 } else {
                     statusBar()->showMessage("Acquisition stopped.");
                 }
+                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 
         if (requestId == 0) {
             lifecycleRequestPending_ = false;
             statusBar()->showMessage("The acquisition stop request could not be queued.");
+            setFeatureControlsEnabled(true);
             updateControls(camera_.state());
         }
     }
@@ -360,12 +365,14 @@ private:
                     featureStatus_->setText(
                         "Open a camera to inspect its available features.");
                 }
+                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 
         if (requestId == 0) {
             lifecycleRequestPending_ = false;
             statusBar()->showMessage("The camera close request could not be queued.");
+            setFeatureControlsEnabled(true);
             updateControls(camera_.state());
         }
     }
@@ -823,16 +830,18 @@ private:
     }
 
     void setFeatureControlsEnabled(bool enabled) {
+        const bool canEnable = enabled && !lifecycleRequestPending_;
         for (auto& entry : featureControls_) {
             const auto& descriptor = entry.second.descriptor;
             const bool valueIsKnown =
                 !descriptor.isReadable || entry.second.hasCurrentValue;
             entry.second.editor->setEnabled(
-                enabled && descriptor.isWritable && valueIsKnown);
+                canEnable && descriptor.isWritable && valueIsKnown);
         }
         refreshFeaturesButton_->setEnabled(
-            camera_.state() == amscope::CameraState::Open ||
-            camera_.state() == amscope::CameraState::Streaming);
+            canEnable &&
+            (camera_.state() == amscope::CameraState::Open ||
+             camera_.state() == amscope::CameraState::Streaming));
     }
 
     void presentLatestFrame() {

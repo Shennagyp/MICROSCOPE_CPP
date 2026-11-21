@@ -24,9 +24,10 @@ namespace amscope {
 // Frame notification is coalesced; retrieve the current immutable frame lease
 // by calling takeLatestFrame() on the consumer thread.
 //
-// The synchronous ICameraFeatureAccess methods are available for non-UI
-// callers. GUI code should use the request* methods below: feature operations
-// execute serially on a dedicated worker and their callbacks are delivered on
+// The synchronous ICameraFeatureAccess and lifecycle methods are available
+// for direct non-GUI consumers. A caller should use either the synchronous
+// surface or queued requests for one instance, not interleave both concurrently.
+// GUI code should use the request* methods below: operations execute serially on
 // this object's Qt affinity thread. Lifecycle transitions invalidate work from
 // the previous camera session. State-changing writes/commands invalidate earlier
 // descriptor/read snapshots, but accepted mutations still execute in FIFO order
@@ -109,8 +110,9 @@ public:
         camera::CameraFeatureValue value,
         FeatureWriteCallback callback);
 
-    // Synchronous backend-neutral contract. These methods must not be called
-    // from a GUI thread for potentially blocking feature providers.
+    // Synchronous backend-neutral methods are for a direct, non-GUI consumer.
+    // Use either this synchronous surface or the queued request surface for one
+    // instance; do not interleave them concurrently.
     FeatureDescriptorsResult featureDescriptors() override;
     FeatureReadResult readFeature(std::string_view name) override;
     FeatureWriteResult writeFeature(

@@ -84,6 +84,34 @@ Interpretation:
 Do not run the probe and the preview simultaneously; only one process should
 own the camera.
 
+## Isolate our driver from the vendor SDK
+
+The vendor-only baseline bypasses `AmcamCamera`, the Qt adapter, and the
+preview application. It reproduces the bundled vendor `demowait` sample:
+a null event callback, `Amcam_WaitImageV3`, and the vendor-default row pitch.
+
+Run from the repository root:
+
+```sh
+bash scripts/run-amscope-vendor-wait-probe.sh --seconds 60
+```
+
+For multiple connected cameras, pass the current enumerated id:
+
+```sh
+bash scripts/run-amscope-vendor-wait-probe.sh --device-id "CAMERA_ID" --seconds 60
+```
+
+Run only one camera-owning process at a time.
+
+Interpret the comparison with `run-amscope-native-probe.sh`:
+
+- If the vendor-only probe also stalls, the problem is below our driver:
+  vendor SDK, camera firmware/hardware, USB/transport, or camera configuration.
+- If the vendor-only probe remains stable while the native-only driver probe
+  stalls, the failure belongs to our native `AmcamCamera` acquisition setup.
+  Qt remains excluded in either case.
+
 ## Qt frame handoff
 
 Connect frameAvailable() to a slot on the intended consumer/render thread with

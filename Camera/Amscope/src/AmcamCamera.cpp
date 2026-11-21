@@ -391,6 +391,7 @@ struct AmcamCamera::Impl {
     std::atomic<bool> frameCacheFlushPending{false};
     std::atomic<bool> disconnected{false};
     std::atomic<bool> sdkError{false};
+    std::atomic<std::uint32_t> activeSdkCallbacks{0};
     std::atomic<std::uint64_t> dropped{0};
 
     std::mutex lifecycleMutex;
@@ -436,6 +437,15 @@ struct AmcamCamera::Impl {
     static void __stdcall sdkEvent(unsigned event, void* context) {
         auto* self = static_cast<Impl*>(context);
         if (!self) return;
+
+        self->activeSdkCallbacks.fetch_add(1, std::memory_order_acq_rel);
+        struct CallbackExit final {
+            Impl* owner;
+            ~CallbackExit() {
+                owner->activeSdkCallbacks.fetch_sub(1, std::memory_order_acq_rel);
+            }
+        } callbackExit{self};
+
         // SDK-owned callback thread: atomics only. Never Stop/Close here.
         if (event == AMCAM_EVENT_DISCONNECTED)
             self->disconnected.store(true, std::memory_order_release);
@@ -698,6 +708,11 @@ bool AmcamCamera::close(CameraError* error) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
+        // Amcam_Close ends callback production. Wait for any callback that
+        // entered before Close returned before releasing the Impl context.
+        while (impl_->activeSdkCallbacks.load(std::memory_order_acquire) != 0)
+            std::this_thread::yield();
+
         impl_->sdkStarted.store(false, std::memory_order_release);
         impl_->frameCacheFlushPending.store(false, std::memory_order_release);
 

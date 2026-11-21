@@ -69,8 +69,8 @@ jobs:
           test -f build/amscope/libamscope_driver.dylib
           test -f build/amscope/libamscope_qt.a
           test -f build/amscope/libamcam.dylib
-          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamscope_driver.dylib
-          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamscope_qt.a
-          lipo -verify_arch "${{ matrix.architecture }}" build/amscope/libamcam.dylib
+          lipo build/amscope/libamscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope/libamscope_qt.a -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
           otool -L build/amscope/libamscope_driver.dylib
           file build/amscope/libamscope_qt.a

@@ -171,13 +171,28 @@ Do not rename original vendor SDK libraries such as `libamcam.dylib`, original P
 
 The first code increment may implement a subset. It must expose only features actually implemented and probed; the contract itself must be capable of expressing the full Swift feature model.
 
-## 10. First increment
+## 10. Current AmScope feature-access increment
 
-This increment establishes the common C++ feature contract and implements three AmScope features:
-- `ExposureAuto`: Off, Once, Continuous;
-- `ExposureTime`: integer microseconds, writable only in manual mode;
-- `AmcamAnalogGainPercent`: integer percentage.
+The common C++ feature contract is implemented by the native AmScope session and delegated by the Qt adapter. The current descriptor set contains the Swift AmScope feature names:
 
-Descriptors are derived from non-mutating SDK reads/range queries. Writes validate and verify readback. Features not implemented in C++ are not advertised yet.
+- `ExposureAuto`: Off, Once, Continuous.
+- `ExposureTime`: integer microseconds; writable only in manual exposure mode.
+- `AmcamAnalogGainPercent`: percentage, not dB.
+- `AmcamColorMatrixEnabled`: Boolean.
+- `AmcamPixelFormat`: enumerated Amcam SDK pixel-format codes.
+- `AmcamWhiteBalanceTemperature`: integer Kelvin.
+- `AmcamWhiteBalanceTint`: integer tint.
+- `AmcamWhiteBalanceRGBGain`: three-element integer vector.
+- `AmcamFixedFrameRate`: configured fixed FPS in 0.1 FPS increments.
+- `AmcamFrameSpeedLevel`: discrete model speed level, not FPS.
+- `AmcamResolutionIndex`: `index:widthxheight` enumeration, writable only while stopped.
 
-The current native acquisition code is intentionally unchanged in this increment. Its difference from the Swift callback/PullImage lifecycle, including the post-Stop cache-flush obligation, remains a separate required audit.
+Descriptors are built from serialized, non-mutating SDK queries and model metadata. Precise fixed FPS requires the model's precise-frame-rate flag plus valid min/max/current option readbacks. Discrete speed requires a model-reported maximum speed and valid current speed readback. Resolution requires model-provided preview modes and a valid current index. Pixel format requires both a current-format query and a successful supported-format enumeration.
+
+Feature writes validate descriptor state, type, range, increment, enumeration or vector cardinality; they execute under the owning session's SDK-call lock and verify readback. Temperature/tint writes preserve the untouched component. UI-facing Qt feature methods delegate to the same native session and do not create another handle.
+
+The current C++ increment does not yet expose a configurable model-profile allow/deny registry. The Swift default registry is empty, but explicit profile injection remains a parity item before model-specific exceptions are considered complete.
+
+Auto white balance is a one-shot command requiring acquisition to be active. It remains a separate native operation; it is not incorrectly represented as a Boolean feature because the Swift feature-value contract has no command value kind.
+
+The current native acquisition code is intentionally unchanged. Its difference from the Swift callback/PullImage lifecycle, including callback draining, context/buffer retention and the post-Stop cache-flush obligation, remains a separate required audit.

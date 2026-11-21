@@ -1,5 +1,6 @@
 #pragma once
 #include "amscope/CameraTypes.h"
+#include "amscope/AmcamCameraProfiles.h"
 #include "camera/CameraFeatureAccess.h"
 #include <cstdint>
 #include <functional>
@@ -13,7 +14,7 @@ public:
     using FrameCallback = std::function<void(FramePtr)>;
     using ErrorCallback = std::function<void(const CameraError&)>;
 
-    AmcamCamera();
+    explicit AmcamCamera(AmcamCameraProfileRegistry profiles = {});
     ~AmcamCamera();
     AmcamCamera(const AmcamCamera&) = delete;
     AmcamCamera& operator=(const AmcamCamera&) = delete;

@@ -64,10 +64,14 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
             -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
             -DAMSCOPE_BUILD_QT_ADAPTER=ON \
-            -DAMSCOPE_BUILD_PREVIEW_APP=ON
+            -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+            -DBUILD_TESTING=ON
 
       - name: Compile
         run: cmake --build build/amscope --config Release --parallel
+
+      - name: Run common camera contract tests
+        run: ctest --test-dir build/amscope --output-on-failure
 
       - name: Verify SDK, libraries, and application architectures
         run: |

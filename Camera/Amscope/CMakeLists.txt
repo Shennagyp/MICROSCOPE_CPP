@@ -8,6 +8,10 @@ if(NOT APPLE)
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+add_subdirectory(
+    "${CMAKE_CURRENT_LIST_DIR}/../Common"
+    "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
 set(AMSCOPE_VENDOR_SDK_ROOT
     "${CMAKE_CURRENT_LIST_DIR}/../VendorSDK/AmscopeVendorSDK"
     CACHE PATH "Path to the bundled Amscope vendor SDK")
@@ -61,11 +65,12 @@ target_include_directories(amscope_driver
         "$<INSTALL_INTERFACE:include>"
     PRIVATE
         "${AMSCOPE_VENDOR_INCLUDE_DIR}")
-target_link_libraries(amscope_driver PRIVATE amscope_vendor)
+target_link_libraries(amscope_driver PUBLIC Camera::Common PRIVATE amscope_vendor)
 
 set_target_properties(amscope_driver PROPERTIES
     VERSION "${PROJECT_VERSION}"
     SOVERSION "0"
+    OUTPUT_NAME "camera_amscope_driver"
     BUILD_RPATH "@loader_path"
     INSTALL_RPATH "@loader_path")
 
@@ -87,7 +92,9 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
         src/QtAmcamCamera.cpp
         include/amscope/QtAmcamCamera.h)
     add_library(Amscope::Qt ALIAS amscope_qt)
-    set_target_properties(amscope_qt PROPERTIES AUTOMOC ON)
+    set_target_properties(amscope_qt PROPERTIES
+        AUTOMOC ON
+        OUTPUT_NAME "camera_amscope_qt")
     target_compile_features(amscope_qt PUBLIC cxx_std_17)
     target_include_directories(amscope_qt
         PUBLIC
@@ -115,6 +122,8 @@ install(TARGETS amscope_driver LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(FILES "${AMSCOPE_VENDOR_LIBRARY}"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}" RENAME "libamcam.dylib")
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../Common/include/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 if(AMSCOPE_BUILD_QT_ADAPTER)
     install(TARGETS amscope_qt

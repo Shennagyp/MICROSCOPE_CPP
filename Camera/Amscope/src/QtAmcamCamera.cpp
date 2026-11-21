@@ -158,6 +158,144 @@ bool QtAmcamCamera::stop(CameraError* error) {
     return ok;
 }
 
+QtAmcamCamera::CameraRequestId QtAmcamCamera::requestOpen(
+    QString deviceId,
+    LifecycleCallback callback) {
+    if (!callback) return 0;
+    const QByteArray utf8Id = deviceId.toUtf8();
+    std::string id(utf8Id.constData(), static_cast<std::size_t>(utf8Id.size()));
+
+    return enqueueFeatureRequest(
+        [this, id = std::move(id), callback = std::move(callback)](
+            CameraRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            LifecycleResult result{std::monostate{}};
+            CameraError error;
+            try {
+                {
+                    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+                    advanceSessionGenerationTo(requestContext.sessionGeneration);
+                    if (!camera_.open(id, &error))
+                        result = std::move(error);
+                }
+                if (std::holds_alternative<std::monostate>(result))
+                    clearFrameMailbox();
+            } catch (const std::exception& exception) {
+                result = CameraError{0, "camera open", exception.what()};
+            } catch (...) {
+                result = CameraError{0, "camera open",
+                                     "Unknown exception while opening the camera."};
+            }
+            dispatchLifecycleCallback(
+                requestId, std::move(callback), std::move(result));
+        },
+        FeatureRequestSemantics::LifecycleMutation);
+}
+
+QtAmcamCamera::CameraRequestId QtAmcamCamera::requestClose(
+    LifecycleCallback callback) {
+    if (!callback) return 0;
+
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            CameraRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            LifecycleResult result{std::monostate{}};
+            CameraError error;
+            try {
+                {
+                    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+                    advanceSessionGenerationTo(requestContext.sessionGeneration);
+                    if (!camera_.close(&error))
+                        result = std::move(error);
+                }
+                clearFrameMailbox();
+            } catch (const std::exception& exception) {
+                result = CameraError{0, "camera close", exception.what()};
+            } catch (...) {
+                result = CameraError{0, "camera close",
+                                     "Unknown exception while closing the camera."};
+            }
+            dispatchLifecycleCallback(
+                requestId, std::move(callback), std::move(result));
+        },
+        FeatureRequestSemantics::LifecycleMutation);
+}
+
+QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStart(
+    LifecycleCallback callback) {
+    if (!callback) return 0;
+
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            CameraRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            LifecycleResult result{std::monostate{}};
+            CameraError error;
+            try {
+                {
+                    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+                    advanceSessionGenerationTo(requestContext.sessionGeneration);
+                    if (!camera_.start(
+                            [this, requestContext](FramePtr frame) {
+                                if (sessionGeneration_.load(std::memory_order_acquire) ==
+                                    requestContext.sessionGeneration) {
+                                    publishLatestFrame(std::move(frame));
+                                }
+                            },
+                            [this, requestContext](const CameraError& acquisitionError) {
+                                const CameraError copy = acquisitionError;
+                                dispatchFeatureCallback(requestContext, [this, copy]() {
+                                    emitError(copy);
+                                    emit stateChanged(camera_.state());
+                                });
+                            },
+                            &error)) {
+                        result = std::move(error);
+                    }
+                }
+            } catch (const std::exception& exception) {
+                result = CameraError{0, "camera start", exception.what()};
+            } catch (...) {
+                result = CameraError{0, "camera start",
+                                     "Unknown exception while starting acquisition."};
+            }
+            dispatchLifecycleCallback(
+                requestId, std::move(callback), std::move(result));
+        },
+        FeatureRequestSemantics::LifecycleMutation);
+}
+
+QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStop(
+    LifecycleCallback callback) {
+    if (!callback) return 0;
+
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            CameraRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            LifecycleResult result{std::monostate{}};
+            CameraError error;
+            try {
+                {
+                    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+                    advanceSessionGenerationTo(requestContext.sessionGeneration);
+                    if (!camera_.stop(&error))
+                        result = std::move(error);
+                }
+                clearFrameMailbox();
+            } catch (const std::exception& exception) {
+                result = CameraError{0, "camera stop", exception.what()};
+            } catch (...) {
+                result = CameraError{0, "camera stop",
+                                     "Unknown exception while stopping acquisition."};
+            }
+            dispatchLifecycleCallback(
+                requestId, std::move(callback), std::move(result));
+        },
+        FeatureRequestSemantics::LifecycleMutation);
+}
+
 CameraState QtAmcamCamera::state() const noexcept { return camera_.state(); }
 
 std::uint64_t QtAmcamCamera::droppedFrames() const noexcept {
@@ -439,9 +577,14 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
     });
 
     FeatureRequestContext context;
-    context.sessionGeneration =
-        sessionGeneration_.load(std::memory_order_acquire);
     context.semantics = semantics;
+    if (semantics == FeatureRequestSemantics::LifecycleMutation) {
+        context.sessionGeneration =
+            scheduledSessionGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    } else {
+        context.sessionGeneration =
+            scheduledSessionGeneration_.load(std::memory_order_acquire);
+    }
     if (semantics == FeatureRequestSemantics::StateMutation) {
         context.featureStateGeneration =
             featureStateGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
@@ -472,8 +615,10 @@ void QtAmcamCamera::runFeatureWorker() {
             featureQueue_.pop_front();
         }
 
-        if (!isRequestContextCurrent(request.context))
+        if (request.context.semantics != FeatureRequestSemantics::LifecycleMutation &&
+            !isRequestContextCurrent(request.context)) {
             continue;
+        }
 
         try {
             request.task(request.id, request.context);
@@ -514,11 +659,39 @@ bool QtAmcamCamera::isRequestContextCurrent(
 }
 
 void QtAmcamCamera::advanceSessionGeneration() noexcept {
-    sessionGeneration_.fetch_add(1, std::memory_order_acq_rel);
+    const std::uint64_t generation =
+        scheduledSessionGeneration_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    advanceSessionGenerationTo(generation);
+}
+
+void QtAmcamCamera::advanceSessionGenerationTo(std::uint64_t generation) noexcept {
+    std::uint64_t current = sessionGeneration_.load(std::memory_order_acquire);
+    while (current < generation &&
+           !sessionGeneration_.compare_exchange_weak(
+               current, generation,
+               std::memory_order_acq_rel,
+               std::memory_order_acquire)) {
+    }
 }
 
 void QtAmcamCamera::advanceFeatureStateGeneration() noexcept {
     featureStateGeneration_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void QtAmcamCamera::dispatchLifecycleCallback(
+    CameraRequestId requestId,
+    LifecycleCallback callback,
+    LifecycleResult result) {
+    dispatchToOwnerThread(
+        [this,
+         requestId,
+         callback = std::move(callback),
+         result = std::move(result)]() mutable {
+            if (const auto* error = std::get_if<CameraError>(&result))
+                emitError(*error);
+            emit stateChanged(camera_.state());
+            callback(requestId, std::move(result));
+        });
 }
 
 void QtAmcamCamera::dispatchToOwnerThread(std::function<void()> callback) {

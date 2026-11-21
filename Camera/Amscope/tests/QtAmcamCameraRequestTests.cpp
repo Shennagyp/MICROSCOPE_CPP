@@ -138,6 +138,78 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    // Lifecycle requests share the same FIFO. Start on a closed camera
+    // reports an error; later Stop and Close remain accepted and execute in order.
+    QEventLoop lifecycleLoop;
+    QTimer lifecycleTimeout;
+    lifecycleTimeout.setSingleShot(true);
+    QObject::connect(&lifecycleTimeout, &QTimer::timeout,
+                     &lifecycleLoop, &QEventLoop::quit);
+
+    std::vector<int> lifecycleCompletionOrder;
+    bool lifecycleResultsTyped = true;
+    bool lifecycleCallbacksOnAffinityThread = true;
+
+    const auto startRequest = camera.requestStart(
+        [&](amscope::QtAmcamCamera::CameraRequestId requestId,
+            amscope::QtAmcamCamera::LifecycleResult result) {
+            lifecycleCallbacksOnAffinityThread =
+                lifecycleCallbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            lifecycleResultsTyped =
+                lifecycleResultsTyped &&
+                requestId != 0 &&
+                std::holds_alternative<amscope::CameraError>(result);
+            lifecycleCompletionOrder.push_back(1);
+            if (lifecycleCompletionOrder.size() == 3)
+                lifecycleLoop.quit();
+        });
+    const auto stopRequest = camera.requestStop(
+        [&](amscope::QtAmcamCamera::CameraRequestId requestId,
+            amscope::QtAmcamCamera::LifecycleResult result) {
+            lifecycleCallbacksOnAffinityThread =
+                lifecycleCallbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            lifecycleResultsTyped =
+                lifecycleResultsTyped &&
+                requestId != 0 &&
+                std::holds_alternative<std::monostate>(result);
+            lifecycleCompletionOrder.push_back(2);
+            if (lifecycleCompletionOrder.size() == 3)
+                lifecycleLoop.quit();
+        });
+    const auto closeRequest = camera.requestClose(
+        [&](amscope::QtAmcamCamera::CameraRequestId requestId,
+            amscope::QtAmcamCamera::LifecycleResult result) {
+            lifecycleCallbacksOnAffinityThread =
+                lifecycleCallbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            lifecycleResultsTyped =
+                lifecycleResultsTyped &&
+                requestId != 0 &&
+                std::holds_alternative<std::monostate>(result);
+            lifecycleCompletionOrder.push_back(3);
+            if (lifecycleCompletionOrder.size() == 3)
+                lifecycleLoop.quit();
+        });
+
+    if (startRequest == 0 || stopRequest == 0 || closeRequest == 0) {
+        std::cerr << "A valid asynchronous lifecycle request was rejected.\n";
+        return EXIT_FAILURE;
+    }
+
+    lifecycleTimeout.start(5000);
+    lifecycleLoop.exec();
+
+    if (lifecycleCompletionOrder != std::vector<int>{1, 2, 3}) {
+        std::cerr << "Lifecycle operations did not execute/report in FIFO order.\n";
+        return EXIT_FAILURE;
+    }
+    if (!lifecycleResultsTyped || !lifecycleCallbacksOnAffinityThread) {
+        std::cerr << "Lifecycle callbacks lost typed errors or Qt affinity.\n";
+        return EXIT_FAILURE;
+    }
+
     std::cout << "All Qt camera request tests passed.\n";
     return EXIT_SUCCESS;
 }

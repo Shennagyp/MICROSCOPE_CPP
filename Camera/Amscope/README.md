@@ -67,11 +67,12 @@ integration and does not modify vendor sample code.
   the original Amcam SDK library remains libamcam.dylib.
 - The Qt Core adapter has a one-frame latest mailbox. It coalesces notifications
   and schedules Qt signals onto the QObject affinity thread.
-- QtAmcamCamera executes feature descriptor/read/write requests on a bounded,
-  serialized worker and delivers completions on its Qt affinity thread. Session
-  generations invalidate old-session work; a separate feature-state generation
-  invalidates stale descriptor/read snapshots without cancelling accepted FIFO
-  writes or commands.
+- QtAmcamCamera executes lifecycle and feature descriptor/read/write requests
+  on one bounded, serialized worker and delivers completions on its Qt affinity
+  thread. GUI Open/Start/Stop/Close use this queue instead of blocking the UI.
+  Lifecycle requests remain FIFO; session generations invalidate old-session
+  feature work, while a separate feature-state generation invalidates stale
+  descriptor/read snapshots without cancelling accepted FIFO writes or commands.
 - The Qt Widgets app builds its settings panel from common feature descriptors,
   including typed Boolean, integer, vector, floating-point and enumeration
   editors. Readable values are fetched before writable controls are enabled;

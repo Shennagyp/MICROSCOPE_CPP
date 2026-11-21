@@ -35,7 +35,8 @@ namespace amscope {
 class QtAmcamCamera final : public QObject, public camera::ICameraFeatureAccess {
     Q_OBJECT
 public:
-    using FeatureRequestId = std::uint64_t;
+    using CameraRequestId = std::uint64_t;
+    using FeatureRequestId = CameraRequestId;
     using FeatureDescriptors = std::vector<camera::CameraFeatureDescriptor>;
     using FeatureDescriptorsResult = camera::CameraFeatureResult<FeatureDescriptors>;
     using FeatureReadResult = camera::CameraFeatureResult<camera::CameraFeatureValue>;
@@ -58,6 +59,9 @@ public:
         std::function<void(FeatureRequestId, AutoWhiteBalanceResult)>;
     using FrameRateCallback =
         std::function<void(FeatureRequestId, FrameRateResult)>;
+    using LifecycleResult = CameraOperationResult<std::monostate>;
+    using LifecycleCallback =
+        std::function<void(CameraRequestId, LifecycleResult)>;
 
     explicit QtAmcamCamera(QObject* parent = nullptr);
     QtAmcamCamera(AmcamCameraProfileRegistry profiles, QObject* parent = nullptr);
@@ -71,6 +75,15 @@ public:
     bool close(CameraError* error = nullptr);
     bool start(CameraError* error = nullptr);
     bool stop(CameraError* error = nullptr);
+
+    // GUI lifecycle operations share the same bounded FIFO as feature I/O.
+    // Accepted lifecycle requests execute in order and report their own result;
+    // the application applies its own selection/request generation to ignore
+    // obsolete UI completions.
+    CameraRequestId requestOpen(QString deviceId, LifecycleCallback callback);
+    CameraRequestId requestClose(LifecycleCallback callback);
+    CameraRequestId requestStart(LifecycleCallback callback);
+    CameraRequestId requestStop(LifecycleCallback callback);
 
     [[nodiscard]] CameraState state() const noexcept;
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
@@ -113,7 +126,8 @@ private:
     enum class FeatureRequestSemantics : std::uint8_t {
         SessionBound,
         FeatureSnapshot,
-        StateMutation
+        StateMutation,
+        LifecycleMutation
     };
 
     struct FeatureRequestContext {
@@ -131,16 +145,20 @@ private:
         FeatureRequestTask task;
     };
 
-    FeatureRequestId enqueueFeatureRequest(
+    CameraRequestId enqueueFeatureRequest(
         FeatureRequestTask task,
         FeatureRequestSemantics semantics = FeatureRequestSemantics::SessionBound);
     void runFeatureWorker();
     void dispatchFeatureCallback(const FeatureRequestContext& context,
                                  std::function<void()> callback);
+    void dispatchLifecycleCallback(CameraRequestId requestId,
+                                   LifecycleCallback callback,
+                                   LifecycleResult result);
     void dispatchToOwnerThread(std::function<void()> callback);
     [[nodiscard]] bool isRequestContextCurrent(
         const FeatureRequestContext& context) const noexcept;
     void advanceSessionGeneration() noexcept;
+    void advanceSessionGenerationTo(std::uint64_t generation) noexcept;
     void advanceFeatureStateGeneration() noexcept;
 
     void publishLatestFrame(FramePtr frame);
@@ -155,6 +173,9 @@ private:
     // AmcamCamera also protects its SDK handle internally; this mutex adds an
     // atomic lifecycle-vs-queued-request ordering boundary.
     std::mutex cameraOperationMutex_;
+    // Scheduled generation advances when a lifecycle request is accepted;
+    // active generation advances only when that request reaches the worker head.
+    std::atomic<std::uint64_t> scheduledSessionGeneration_{0};
     std::atomic<std::uint64_t> sessionGeneration_{0};
     std::atomic<std::uint64_t> featureStateGeneration_{0};
 

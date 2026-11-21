@@ -92,14 +92,14 @@ public:
         cameraSelector_ = new QComboBox(central);
         cameraSelector_->setMinimumWidth(320);
 
-        auto* refreshButton = new QPushButton("Refresh cameras", central);
+        refreshCamerasButton_ = new QPushButton("Refresh cameras", central);
         openButton_ = new QPushButton("Open", central);
         startButton_ = new QPushButton("Start", central);
         stopButton_ = new QPushButton("Stop", central);
         closeButton_ = new QPushButton("Close", central);
 
         toolbar->addWidget(cameraSelector_, 1);
-        toolbar->addWidget(refreshButton);
+        toolbar->addWidget(refreshCamerasButton_);
         toolbar->addWidget(openButton_);
         toolbar->addWidget(startButton_);
         toolbar->addWidget(stopButton_);
@@ -140,7 +140,7 @@ public:
         root->addWidget(frameInfo_);
         setCentralWidget(central);
 
-        connect(refreshButton, &QPushButton::clicked, this, [this]() {
+        connect(refreshCamerasButton_, &QPushButton::clicked, this, [this]() {
             refreshCameras();
         });
         connect(openButton_, &QPushButton::clicked, this, [this]() {
@@ -192,8 +192,9 @@ public:
 
     ~PreviewWindow() override {
         ++featureUiGeneration_;
-        amscope::CameraError ignored;
-        camera_.close(&ignored);
+        ++lifecycleUiGeneration_;
+        // QtAmcamCamera shuts down its request worker, joins it, then closes
+        // the native session. Do not race a synchronous Close from this UI.
     }
 
 private:
@@ -235,59 +236,138 @@ private:
     }
 
     void openCamera() {
+        if (lifecycleRequestPending_) return;
         const QString id = cameraSelector_->currentData().toString();
         if (id.isEmpty()) {
             statusBar()->showMessage("Select a camera first.");
             return;
         }
 
-        amscope::CameraError error;
-        if (!camera_.open(id, &error)) {
-            statusBar()->showMessage(QString::fromStdString(error.message));
-            return;
-        }
-
-        preview_->setText("Camera opened. Press Start to begin acquisition.");
-        statusBar()->showMessage("Camera session opened.");
+        const std::uint64_t generation = ++lifecycleUiGeneration_;
+        lifecycleRequestPending_ = true;
+        setFeatureControlsEnabled(false);
+        featureStatus_->setText("Opening camera…");
+        statusBar()->showMessage("Opening camera…");
         updateControls(camera_.state());
+
+        const auto requestId = camera_.requestOpen(
+            id,
+            [this, generation](amscope::QtAmcamCamera::CameraRequestId,
+                               amscope::QtAmcamCamera::LifecycleResult result) {
+                if (generation != lifecycleUiGeneration_) return;
+                lifecycleRequestPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    statusBar()->showMessage(QString::fromStdString(error->message));
+                } else {
+                    preview_->setText("Camera opened. Press Start to begin acquisition.");
+                    statusBar()->showMessage("Camera session opened.");
+                }
+                updateControls(camera_.state());
+            });
+
+        if (requestId == 0) {
+            lifecycleRequestPending_ = false;
+            statusBar()->showMessage("The camera open request could not be queued.");
+            updateControls(camera_.state());
+        }
     }
 
     void startCamera() {
+        if (lifecycleRequestPending_) return;
         resetPreviewFrameRate();
-        amscope::CameraError error;
-        if (!camera_.start(&error)) {
-            statusBar()->showMessage(QString::fromStdString(error.message));
-            return;
-        }
-        statusBar()->showMessage("Acquisition started.");
+        const std::uint64_t generation = ++lifecycleUiGeneration_;
+        lifecycleRequestPending_ = true;
+        setFeatureControlsEnabled(false);
+        featureStatus_->setText("Starting acquisition…");
+        statusBar()->showMessage("Starting acquisition…");
         updateControls(camera_.state());
+
+        const auto requestId = camera_.requestStart(
+            [this, generation](amscope::QtAmcamCamera::CameraRequestId,
+                               amscope::QtAmcamCamera::LifecycleResult result) {
+                if (generation != lifecycleUiGeneration_) return;
+                lifecycleRequestPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    statusBar()->showMessage(QString::fromStdString(error->message));
+                } else {
+                    statusBar()->showMessage("Acquisition started.");
+                }
+                updateControls(camera_.state());
+            });
+
+        if (requestId == 0) {
+            lifecycleRequestPending_ = false;
+            statusBar()->showMessage("The acquisition start request could not be queued.");
+            updateControls(camera_.state());
+        }
     }
 
     void stopCamera() {
-        amscope::CameraError error;
-        if (!camera_.stop(&error)) {
-            statusBar()->showMessage(QString::fromStdString(error.message));
-        } else {
-            statusBar()->showMessage("Acquisition stopped.");
-        }
+        if (lifecycleRequestPending_) return;
+        const std::uint64_t generation = ++lifecycleUiGeneration_;
+        lifecycleRequestPending_ = true;
+        setFeatureControlsEnabled(false);
+        featureStatus_->setText("Stopping acquisition…");
+        statusBar()->showMessage("Stopping acquisition…");
         updateControls(camera_.state());
+
+        const auto requestId = camera_.requestStop(
+            [this, generation](amscope::QtAmcamCamera::CameraRequestId,
+                               amscope::QtAmcamCamera::LifecycleResult result) {
+                if (generation != lifecycleUiGeneration_) return;
+                lifecycleRequestPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    statusBar()->showMessage(QString::fromStdString(error->message));
+                } else {
+                    statusBar()->showMessage("Acquisition stopped.");
+                }
+                updateControls(camera_.state());
+            });
+
+        if (requestId == 0) {
+            lifecycleRequestPending_ = false;
+            statusBar()->showMessage("The acquisition stop request could not be queued.");
+            updateControls(camera_.state());
+        }
     }
 
     void closeCamera() {
+        if (lifecycleRequestPending_) return;
         ++featureUiGeneration_;
         pendingFeatureWrite_ = false;
-
-        amscope::CameraError error;
-        if (!camera_.close(&error)) {
-            statusBar()->showMessage(QString::fromStdString(error.message));
-        } else {
-            preview_->setText("Select a camera and press Open, then Start.");
-            frameInfo_->setText("No frames received");
-            statusBar()->showMessage("Camera session closed.");
-        }
+        const std::uint64_t generation = ++lifecycleUiGeneration_;
+        lifecycleRequestPending_ = true;
+        setFeatureControlsEnabled(false);
         clearFeatureControls();
-        featureStatus_->setText("Open a camera to inspect its available features.");
+        featureStatus_->setText("Closing camera session…");
+        preview_->setText("Closing camera session…");
+        statusBar()->showMessage("Closing camera session…");
         updateControls(camera_.state());
+
+        const auto requestId = camera_.requestClose(
+            [this, generation](amscope::QtAmcamCamera::CameraRequestId,
+                               amscope::QtAmcamCamera::LifecycleResult result) {
+                if (generation != lifecycleUiGeneration_) return;
+                lifecycleRequestPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    featureStatus_->setText(
+                        "Camera feature controls are unavailable in the current state.");
+                } else {
+                    preview_->setText("Select a camera and press Open, then Start.");
+                    frameInfo_->setText("No frames received");
+                    statusBar()->showMessage("Camera session closed.");
+                    featureStatus_->setText(
+                        "Open a camera to inspect its available features.");
+                }
+                updateControls(camera_.state());
+            });
+
+        if (requestId == 0) {
+            lifecycleRequestPending_ = false;
+            statusBar()->showMessage("The camera close request could not be queued.");
+            updateControls(camera_.state());
+        }
     }
 
     void refreshFeatureDescriptors() {
@@ -804,12 +884,14 @@ private:
         const bool open = state == amscope::CameraState::Open;
         const bool streaming = state == amscope::CameraState::Streaming;
 
-        cameraSelector_->setEnabled(closed);
-        openButton_->setEnabled(closed && cameraSelector_->count() > 0);
-        startButton_->setEnabled(open);
-        stopButton_->setEnabled(streaming);
-        closeButton_->setEnabled(!closed);
-        refreshFeaturesButton_->setEnabled(open || streaming);
+        const bool idle = !lifecycleRequestPending_;
+        cameraSelector_->setEnabled(closed && idle);
+        refreshCamerasButton_->setEnabled(closed && idle);
+        openButton_->setEnabled(closed && idle && cameraSelector_->count() > 0);
+        startButton_->setEnabled(open && idle);
+        stopButton_->setEnabled(streaming && idle);
+        closeButton_->setEnabled(!closed && idle);
+        refreshFeaturesButton_->setEnabled((open || streaming) && idle);
     }
 
     amscope::QtAmcamCamera camera_;
@@ -818,11 +900,14 @@ private:
     std::optional<double> previewFramesPerSecond_;
 
     std::uint64_t featureUiGeneration_ = 0;
+    std::uint64_t lifecycleUiGeneration_ = 0;
+    bool lifecycleRequestPending_ = false;
     std::size_t pendingFeatureReads_ = 0;
     bool pendingFeatureWrite_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
 
     QComboBox* cameraSelector_ = nullptr;
+    QPushButton* refreshCamerasButton_ = nullptr;
     QPushButton* openButton_ = nullptr;
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;

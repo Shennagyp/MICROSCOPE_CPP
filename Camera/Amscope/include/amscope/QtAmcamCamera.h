@@ -104,8 +104,9 @@ public:
     FeatureRequestId requestAutoWhiteBalance(AutoWhiteBalanceCallback callback);
     FeatureRequestId requestFrameRate(FrameRateCallback callback);
 
-    // Asynchronous feature access for GUI/application code. A zero request ID
-    // means the request was rejected (empty callback or executor shutting down).
+    // Asynchronous camera operations for GUI/application code. A zero request
+    // ID means rejection (empty callback, full queue, shutdown, or this instance
+    // already committed to synchronous execution).
     // Callbacks run on this QObject's affinity thread. Lifecycle changes cancel
     // requests from old sessions; feature-state changes cancel only older reads
     // and descriptor snapshots. Accepted writes/commands remain FIFO and report

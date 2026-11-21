@@ -756,24 +756,26 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::enqueueFeatureRequest(
          featureQueue_.size() >= kMaximumPendingFeatureRequests)) {
         return 0;
     }
-    if (!reservedControlRequest &&
-        !selectExecutionMode(ExecutionMode::Queued)) {
-        return 0;
-    }
 
     FeatureRequestId requestId = nextFeatureRequestId_++;
     if (requestId == 0) {
         requestId = nextFeatureRequestId_++;
     }
 
-    // Insert before advancing the state generation. The worker cannot pop the
-    // placeholder while this queue lock is held, and a rejected request never
-    // invalidates existing snapshots.
+    // Insert a placeholder while holding the queue lock so the worker cannot
+    // observe it until its execution mode and generation are committed.
+    // A failed allocation or mode conflict therefore does not latch the instance.
     featureQueue_.push_back({
         requestId,
         {},
         std::move(task)
     });
+
+    if (!reservedControlRequest &&
+        !selectExecutionMode(ExecutionMode::Queued)) {
+        featureQueue_.pop_back();
+        return 0;
+    }
 
     FeatureRequestContext context;
     context.semantics = semantics;

@@ -1,6 +1,7 @@
 #define AMCAM_HRESULT_ERRORCODE_NEEDED
 #include "amcam.h"
 #include "amscope/AmcamCamera.h"
+#include "camera/CameraFeatureValidation.h"
 
 #include <algorithm>
 #include <atomic>
@@ -67,18 +68,6 @@ camera::CameraFeatureAccessError featureError(
     std::optional<camera::CameraFeatureKind> expected = std::nullopt,
     std::optional<camera::CameraFeatureKind> actual = std::nullopt) {
     return {code, std::move(feature), std::move(message), nativeCode, expected, actual};
-}
-
-camera::CameraFeatureKind featureKind(const camera::CameraFeatureValue& value) {
-    return std::visit([](const auto& item) {
-        using T = std::decay_t<decltype(item)>;
-        if constexpr (std::is_same_v<T, bool>) return camera::CameraFeatureKind::Boolean;
-        else if constexpr (std::is_same_v<T, std::int64_t>) return camera::CameraFeatureKind::Integer;
-        else if constexpr (std::is_same_v<T, std::vector<std::int64_t>>) return camera::CameraFeatureKind::IntegerVector;
-        else if constexpr (std::is_same_v<T, double>) return camera::CameraFeatureKind::FloatingPoint;
-        else if constexpr (std::is_same_v<T, camera::FeatureEnumeration>) return camera::CameraFeatureKind::Enumeration;
-        else return camera::CameraFeatureKind::String;
-    }, value);
 }
 
 std::string exposureModeSymbol(amscope::AmcamAutoExposureMode mode) {
@@ -1101,48 +1090,9 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
                             std::string(name), "Camera feature is not writable in the current state.");
 
-    const CameraFeatureKind actualKind = featureKind(value);
-    if (actualKind != descriptor->kind)
-        return featureError(CameraFeatureAccessError::Code::ValueTypeMismatch,
-                            std::string(name), "Camera feature value has the wrong type.",
-                            0, descriptor->kind, actualKind);
-
-    if (descriptor->elementCount) {
-        const auto* values = std::get_if<std::vector<std::int64_t>>(&value);
-        if (!values || values->size() != *descriptor->elementCount)
-            return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "Vector length does not match the feature descriptor.");
-    }
-    if (descriptor->kind == CameraFeatureKind::Enumeration) {
-        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
-        if (std::find(descriptor->enumerationValues.begin(),
-                      descriptor->enumerationValues.end(), symbol) == descriptor->enumerationValues.end())
-            return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "Enumeration symbol is not supported by this camera.");
-    }
-    if (descriptor->numericRange) {
-        double number = 0.0;
-        if (const auto* integer = std::get_if<std::int64_t>(&value))
-            number = static_cast<double>(*integer);
-        else if (const auto* floating = std::get_if<double>(&value))
-            number = *floating;
-        else
-            return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "A numeric value is required.");
-        const auto& range = *descriptor->numericRange;
-        if (!std::isfinite(number) || number < range.minimum || number > range.maximum)
-            return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "Value is outside the current feature range.");
-        if (range.increment) {
-            if (!std::isfinite(*range.increment) || *range.increment <= 0.0)
-                return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                    std::string(name), "The camera reported an invalid feature increment.");
-            const double steps = (number - range.minimum) / *range.increment;
-            if (std::abs(steps - std::round(steps)) > 1e-7)
-                return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                    std::string(name), "Value does not satisfy the feature increment.");
-        }
-    }
+    auto validation = camera::validateFeatureWrite(*descriptor, value);
+    if (const auto* error = std::get_if<CameraFeatureAccessError>(&validation))
+        return *error;
 
     if (name == "ExposureAuto") {
         const auto& symbol = std::get<FeatureEnumeration>(value).symbol;

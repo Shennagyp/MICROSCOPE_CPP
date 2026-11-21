@@ -1,5 +1,6 @@
 #include "amscope/AmcamCamera.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>

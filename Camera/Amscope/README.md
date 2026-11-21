@@ -104,6 +104,21 @@ bash scripts/run-amscope-vendor-wait-probe.sh --device-id "CAMERA_ID" --seconds 
 
 Run only one camera-owning process at a time.
 
+The direct vendor probe also records read-only SDK telemetry once per second:
+received packet count and delta, SDK-dropped frame count and delta, and the
+current frontend/backend queue depths. It reports the configured no-frame and
+no-packet timeout thresholds (zero means disabled). These measurements do not
+change camera settings or the vendor `demowait` acquisition path.
+
+Interpret the telemetry at the point frames stop:
+
+- If packet count stops increasing with frame count, investigate the camera,
+  USB cable/port, power, and transport path.
+- If packets continue increasing but frames stop, transport is still delivering
+  data; investigate SDK frame assembly, internal queues, and camera settings.
+- If SDK-dropped frames or queue depths grow, preserve those values when
+  reporting the failure; they identify a different boundary from USB packet loss.
+
 Interpret the comparison with `run-amscope-native-probe.sh`:
 
 - If the vendor-only probe also stalls, the problem is below our driver:

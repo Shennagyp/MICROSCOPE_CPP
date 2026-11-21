@@ -68,6 +68,13 @@ C++17 already provides `std::variant`, `std::optional`, smart pointers and the r
 
 `std::string_view` is non-owning. It is suitable for synchronous lookup only; queued work must copy data into owned storage first.
 
+### Synchronous driver boundary and Qt scheduling
+
+The first C++ feature-access interface is synchronous and serialized by the owning backend's SDK-call lock. This is an explicit driver-boundary choice, not a claim that Swift's async call syntax maps directly to blocking C++ calls.
+
+The application must not perform potentially blocking CTI/GenApi operations on the GUI thread. The Qt application layer is responsible for scheduling feature requests on an appropriate worker/executor and delivering results back through queued Qt delivery. It must also preserve selected-device identity and reject stale completions after camera selection or session changes. Asynchronous wrappers do not change the shared feature value/descriptor/error contract.
+
+
 ## 4. Ownership and runtime translation
 
 ### Native camera session

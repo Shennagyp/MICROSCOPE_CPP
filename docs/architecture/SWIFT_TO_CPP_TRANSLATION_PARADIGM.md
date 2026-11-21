@@ -119,6 +119,8 @@ Descriptors reflect current capability and state. They are not permanent static 
 
 The UI refreshes descriptors after relevant writes and lifecycle transitions. The backend revalidates at execution time; a stale descriptor cannot authorize an operation.
 
+Common application-value checks live in `Camera/Common/include/camera/CameraFeatureValidation.h`. This shared validator checks availability, writability, value kind, scalar range/increment, enum membership and vector cardinality. Backends then perform backend-specific state checks, execute the write on the owned session and verify native readback. Do not duplicate or weaken the shared validation rules in a backend adapter.
+
 ### Write protocol
 
 A write resolves the current descriptor, checks availability/writability/type, validates range/increment/vector length/enum symbol, serializes the SDK call on the existing handle, performs the write, reads back and verifies the result, then returns a typed outcome.

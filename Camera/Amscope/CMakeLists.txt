@@ -125,6 +125,14 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
     target_link_libraries(amscope_qt PUBLIC Amscope::Driver Qt6::Core)
 endif()
 
+if(BUILD_TESTING AND AMSCOPE_BUILD_QT_ADAPTER)
+    add_executable(amscope_qt_request_tests
+        tests/QtAmcamCameraRequestTests.cpp)
+    target_compile_features(amscope_qt_request_tests PRIVATE cxx_std_17)
+    target_link_libraries(amscope_qt_request_tests PRIVATE Amscope::Qt Qt6::Core)
+    add_test(NAME amscope_qt_request_tests COMMAND amscope_qt_request_tests)
+endif()
+
 if(AMSCOPE_BUILD_PREVIEW_APP)
     if(NOT AMSCOPE_BUILD_QT_ADAPTER)
         message(FATAL_ERROR "AMSCOPE_BUILD_PREVIEW_APP requires AMSCOPE_BUILD_QT_ADAPTER=ON")

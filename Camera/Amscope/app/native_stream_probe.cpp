@@ -151,6 +151,7 @@ int main(int argc, char** argv) {
 
     std::uint64_t previousCount = 0;
     bool faulted = false;
+    bool stalled = false;
     while (std::chrono::steady_clock::now() - runStarted <
            std::chrono::seconds(durationSeconds)) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -173,6 +174,20 @@ int main(int argc, char** argv) {
         if (camera.state() == amscope::CameraState::Faulted ||
             acquisitionFailed.load(std::memory_order_acquire)) {
             faulted = true;
+            break;
+        }
+
+        const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const std::uint64_t lastNs =
+            lastFrameTimeNs.load(std::memory_order_relaxed);
+        const auto frameAgeNs = lastNs == 0
+            ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::steady_clock::now() - runStarted).count()
+            : nowNs - static_cast<std::int64_t>(lastNs);
+        if (frameAgeNs >= 5000000000LL) {
+            stalled = true;
+            std::cerr << "NATIVE FRAME STALL: no frame has arrived for 5 seconds.\n";
             break;
         }
     }
@@ -214,7 +229,7 @@ int main(int argc, char** argv) {
                   << " [code=" << closeError.vendorCode << "]\n";
     }
 
-    if (faulted || totalFrames == 0 || elapsed < durationSeconds * 1000LL)
+    if (faulted || stalled || totalFrames == 0 || elapsed < durationSeconds * 1000LL)
         return 4;
 
     return 0;

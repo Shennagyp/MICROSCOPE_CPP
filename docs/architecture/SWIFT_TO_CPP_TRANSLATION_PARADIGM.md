@@ -191,7 +191,7 @@ Descriptors are built from serialized, non-mutating SDK queries and model metada
 
 Feature writes validate descriptor state, type, range, increment, enumeration or vector cardinality; they execute under the owning session's SDK-call lock and verify readback. Temperature/tint writes preserve the untouched component. UI-facing Qt feature methods delegate to the same native session and do not create another handle.
 
-The current C++ increment does not yet expose a configurable model-profile allow/deny registry. The Swift default registry is empty, but explicit profile injection remains a parity item before model-specific exceptions are considered complete.
+The current C++ increment derives the feature set from model flags and runtime probes but does not yet expose the Swift registry's configurable per-model allow/deny profiles. The default Swift registry is empty; explicit profile injection remains a parity item before model-specific exceptions are considered complete.
 
 Auto white balance is a one-shot command requiring acquisition to be active. It remains a separate native operation; it is not incorrectly represented as a Boolean feature because the Swift feature-value contract has no command value kind.
 

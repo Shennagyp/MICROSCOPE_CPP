@@ -388,6 +388,7 @@ struct AmcamCamera::Impl {
     std::atomic<CameraState> state{CameraState::Closed};
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> sdkStarted{false};
+    std::atomic<bool> frameCacheFlushPending{false};
     std::atomic<bool> disconnected{false};
     std::atomic<bool> sdkError{false};
     std::atomic<std::uint64_t> dropped{0};
@@ -409,6 +410,29 @@ struct AmcamCamera::Impl {
 
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
 
+    // A successful Amcam_Stop requires both the camera-DDR and SDK-DLL
+    // frame caches to be flushed before pull mode is started again.
+    // Keep the obligation pending if the SDK rejects the flush.
+    bool flushStoppedFrameCaches(CameraError* error) {
+        if (!frameCacheFlushPending.load(std::memory_order_acquire))
+            return true;
+
+        HRESULT hr = E_FAIL;
+        {
+            std::lock_guard<std::mutex> lock(apiMutex);
+            if (!handle) {
+                return fail(error, "Amcam_OPTION_FLUSH", -1,
+                            "Cannot flush stopped-frame caches without an open camera handle.");
+            }
+            hr = Amcam_put_Option(handle, AMCAM_OPTION_FLUSH, 3);
+            if (SUCCEEDED(hr))
+                frameCacheFlushPending.store(false, std::memory_order_release);
+        }
+        return FAILED(hr)
+            ? failHr(error, "Amcam_put_Option(AMCAM_OPTION_FLUSH, 3)", hr)
+            : true;
+    }
+
     static void __stdcall sdkEvent(unsigned event, void* context) {
         auto* self = static_cast<Impl*>(context);
         if (!self) return;
@@ -426,10 +450,12 @@ struct AmcamCamera::Impl {
             std::lock_guard<std::mutex> lock(apiMutex);
             if (handle && sdkStarted.load(std::memory_order_acquire)) {
                 const HRESULT hr = Amcam_Stop(handle);
-                if (SUCCEEDED(hr))
+                if (SUCCEEDED(hr)) {
                     sdkStarted.store(false, std::memory_order_release);
-                else
+                    frameCacheFlushPending.store(true, std::memory_order_release);
+                } else {
                     error.message += " " + hrMessage("Amcam_Stop", hr);
+                }
             }
         }
 
@@ -532,7 +558,9 @@ struct AmcamCamera::Impl {
 
     bool stopLocked(CameraError* error) {
         const CameraState before = state.load(std::memory_order_acquire);
-        if (before == CameraState::Closed || before == CameraState::Open) return true;
+        if (before == CameraState::Closed) return true;
+        if (before == CameraState::Open)
+            return flushStoppedFrameCaches(error);
 
         const bool alreadyFaulted = before == CameraState::Faulted;
         if (!alreadyFaulted) state.store(CameraState::Stopping, std::memory_order_release);
@@ -545,8 +573,10 @@ struct AmcamCamera::Impl {
             std::lock_guard<std::mutex> lock(apiMutex);
             if (handle && sdkStarted.load(std::memory_order_acquire)) {
                 hr = Amcam_Stop(handle);
-                if (SUCCEEDED(hr))
+                if (SUCCEEDED(hr)) {
                     sdkStarted.store(false, std::memory_order_release);
+                    frameCacheFlushPending.store(true, std::memory_order_release);
+                }
             }
         }
 
@@ -559,7 +589,7 @@ struct AmcamCamera::Impl {
         }
         state.store(alreadyFaulted ? CameraState::Faulted : CameraState::Open,
                     std::memory_order_release);
-        return true;
+        return flushStoppedFrameCaches(error);
     }
 };
 
@@ -636,6 +666,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
 
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->sdkStarted.store(false, std::memory_order_release);
+    impl_->frameCacheFlushPending.store(false, std::memory_order_release);
     impl_->disconnected.store(false, std::memory_order_release);
     impl_->sdkError.store(false, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
@@ -659,6 +690,7 @@ bool AmcamCamera::close(CameraError* error) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
+        impl_->frameCacheFlushPending.store(false, std::memory_order_release);
         // Model metadata is read by featureDescriptors() under apiMutex.
         // Clear it under the same lock to keep close concurrent-safe.
         impl_->modelName.clear();
@@ -686,6 +718,10 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     std::lock_guard<std::mutex> lifecycle(impl_->lifecycleMutex);
     if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
         return fail(error, "start", -1, "The camera must be open and stopped.");
+
+    // Retry a previous post-Stop flush before starting pull mode again.
+    if (!impl_->flushStoppedFrameCaches(error))
+        return false;
 
     impl_->state.store(CameraState::Starting, std::memory_order_release);
     impl_->stopRequested.store(false, std::memory_order_release);
@@ -764,8 +800,10 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             std::lock_guard<std::mutex> api(impl_->apiMutex);
             if (impl_->handle && impl_->sdkStarted.load(std::memory_order_acquire)) {
                 stopHr = Amcam_Stop(impl_->handle);
-                if (SUCCEEDED(stopHr))
+                if (SUCCEEDED(stopHr)) {
                     impl_->sdkStarted.store(false, std::memory_order_release);
+                    impl_->frameCacheFlushPending.store(true, std::memory_order_release);
+                }
             }
         }
         impl_->pool.reset();
@@ -774,7 +812,13 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
         impl_->state.store(FAILED(stopHr) ? CameraState::Faulted : CameraState::Open,
                            std::memory_order_release);
         std::string message = std::string("Could not create acquisition worker: ") + ex.what();
-        if (FAILED(stopHr)) message += " " + hrMessage("Amcam_Stop", stopHr);
+        if (FAILED(stopHr)) {
+            message += " " + hrMessage("Amcam_Stop", stopHr);
+        } else {
+            CameraError flushError;
+            if (!impl_->flushStoppedFrameCaches(&flushError))
+                message += " " + flushError.message;
+        }
         return fail(error, "start", -1, std::move(message));
     }
     return true;

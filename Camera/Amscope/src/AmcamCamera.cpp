@@ -136,7 +136,9 @@ buildAmcamFeatureDescriptors(
     std::uint64_t modelFlags,
     bool hasModelDescriptor,
     const std::optional<std::uint32_t>& maximumSpeedLevel,
-    const std::vector<amscope::Resolution>& previewResolutions) {
+    const std::vector<amscope::Resolution>& previewResolutions,
+    const amscope::AmcamCameraProfileRegistry& profileRegistry,
+    const std::string& modelCode) {
     using camera::CameraFeatureDescriptor;
     using camera::CameraFeatureKind;
     using camera::CameraFeatureNumericRange;
@@ -233,18 +235,33 @@ buildAmcamFeatureDescriptors(
         currentResolution < previewResolutions.size();
 
     const bool stopped = state == amscope::CameraState::Open;
+    const auto allowed = [&profileRegistry, &modelCode](amscope::AmcamCameraFeature feature) {
+        return profileRegistry.allows(modelCode, feature);
+    };
+    const bool exposureAutoAllowed = allowed(amscope::AmcamCameraFeature::ExposureAuto);
+    const bool exposureManualAllowed = allowed(amscope::AmcamCameraFeature::ExposureManual);
+    const bool gainAllowed = allowed(amscope::AmcamCameraFeature::AnalogGain);
+    const bool whiteBalanceAllowed = allowed(amscope::AmcamCameraFeature::WhiteBalance);
+    const bool colorCorrectionAllowed = allowed(amscope::AmcamCameraFeature::ColorCorrection);
+    const bool pixelFormatAllowed = allowed(amscope::AmcamCameraFeature::PixelFormatSelection);
+    const bool fixedFrameRateAllowed = allowed(amscope::AmcamCameraFeature::PreciseFrameRate);
+    const bool speedLevelAllowed = allowed(amscope::AmcamCameraFeature::DiscreteFrameSpeed);
+    const bool resolutionAllowed = allowed(amscope::AmcamCameraFeature::Resolution);
+
     std::vector<CameraFeatureDescriptor> descriptors;
     descriptors.reserve(11);
 
     descriptors.push_back({
         "ExposureAuto", "Automatic Exposure", CameraFeatureKind::Enumeration,
-        std::nullopt, autoValid, autoValid, autoValid, std::nullopt, std::nullopt,
+        std::nullopt, autoValid && exposureAutoAllowed, autoValid,
+        autoValid && exposureAutoAllowed, std::nullopt, std::nullopt,
         {"Off", "Once", "Continuous"}
     });
     descriptors.push_back({
         "ExposureTime", "Exposure Time", CameraFeatureKind::Integer,
-        std::string("us"), exposureProbe, exposureProbe,
-        exposureProbe && autoMode == static_cast<int>(amscope::AmcamAutoExposureMode::Off),
+        std::string("us"), exposureProbe && exposureManualAllowed, exposureProbe,
+        exposureProbe && exposureManualAllowed &&
+            autoMode == static_cast<int>(amscope::AmcamAutoExposureMode::Off),
         exposureProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
                   static_cast<double>(minExposure), static_cast<double>(maxExposure), std::nullopt})
@@ -253,7 +270,7 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         "AmcamAnalogGainPercent", "Analog Gain", CameraFeatureKind::Integer,
-        std::string("%"), gainProbe, gainProbe, gainProbe,
+        std::string("%"), gainProbe && gainAllowed, gainProbe, gainProbe && gainAllowed,
         gainProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
                   static_cast<double>(minGain), static_cast<double>(maxGain), std::nullopt})
@@ -262,35 +279,41 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         "AmcamColorMatrixEnabled", "Color Matrix", CameraFeatureKind::Boolean,
-        std::nullopt, colorMatrixProbe, colorMatrixProbe, colorMatrixProbe,
+        std::nullopt, colorMatrixProbe && colorCorrectionAllowed,
+        colorMatrixProbe, colorMatrixProbe && colorCorrectionAllowed,
         std::nullopt, std::nullopt, {}
     });
     descriptors.push_back({
         "AmcamPixelFormat", "Pixel Format", CameraFeatureKind::Enumeration,
-        std::nullopt, pixelFormatProbe, SUCCEEDED(currentPixelFormatHr),
-        pixelFormatProbe && stopped, std::nullopt, std::nullopt,
+        std::nullopt, pixelFormatProbe && pixelFormatAllowed,
+        SUCCEEDED(currentPixelFormatHr),
+        pixelFormatProbe && pixelFormatAllowed && stopped, std::nullopt, std::nullopt,
         std::move(supportedPixelFormats)
     });
     descriptors.push_back({
         "AmcamWhiteBalanceTemperature", "White Balance Temperature", CameraFeatureKind::Integer,
-        std::string("K"), tempTintProbe, tempTintProbe, tempTintProbe,
+        std::string("K"), tempTintProbe && whiteBalanceAllowed,
+        tempTintProbe, tempTintProbe && whiteBalanceAllowed,
         CameraFeatureNumericRange{2000.0, 15000.0, std::nullopt},
         std::nullopt, {}
     });
     descriptors.push_back({
         "AmcamWhiteBalanceTint", "White Balance Tint", CameraFeatureKind::Integer,
-        std::nullopt, tempTintProbe, tempTintProbe, tempTintProbe,
+        std::nullopt, tempTintProbe && whiteBalanceAllowed,
+        tempTintProbe, tempTintProbe && whiteBalanceAllowed,
         CameraFeatureNumericRange{200.0, 2500.0, std::nullopt},
         std::nullopt, {}
     });
     descriptors.push_back({
         "AmcamWhiteBalanceRGBGain", "White Balance RGB Gain", CameraFeatureKind::IntegerVector,
-        std::string("SDK units"), rgbGainProbe, rgbGainProbe, rgbGainProbe,
+        std::string("SDK units"), rgbGainProbe && whiteBalanceAllowed,
+        rgbGainProbe && whiteBalanceAllowed, rgbGainProbe && whiteBalanceAllowed,
         std::nullopt, std::size_t{3}, {}
     });
     descriptors.push_back({
         "AmcamFixedFrameRate", "Fixed Frame Rate", CameraFeatureKind::FloatingPoint,
-        std::string("fps"), fixedFrameRateProbe, fixedFrameRateProbe, fixedFrameRateProbe,
+        std::string("fps"), fixedFrameRateProbe && fixedFrameRateAllowed,
+        fixedFrameRateProbe, fixedFrameRateProbe && fixedFrameRateAllowed,
         fixedFrameRateProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
                   static_cast<double>(minimumFPS) / 10.0,
@@ -300,8 +323,8 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         "AmcamFrameSpeedLevel", "Frame Speed Level", CameraFeatureKind::Integer,
-        std::string("level"), speedProbe, SUCCEEDED(speedHr),
-        speedProbe,
+        std::string("level"), speedProbe && speedLevelAllowed, SUCCEEDED(speedHr),
+        speedProbe && speedLevelAllowed,
         speedProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
                   0.0, static_cast<double>(*maximumSpeedLevel), std::nullopt})
@@ -316,7 +339,8 @@ buildAmcamFeatureDescriptors(
     }
     descriptors.push_back({
         "AmcamResolutionIndex", "Resolution", CameraFeatureKind::Enumeration,
-        std::nullopt, resolutionAvailable, resolutionReadable, resolutionAvailable && stopped,
+        std::nullopt, resolutionAvailable && resolutionAllowed,
+        resolutionReadable, resolutionAvailable && resolutionAllowed && stopped,
         std::nullopt, std::nullopt, std::move(resolutionSymbols)
     });
     return descriptors;
@@ -335,6 +359,9 @@ camera::CameraFeatureAccessError featureBackendError(
 
 namespace amscope {
 struct AmcamCamera::Impl {
+    explicit Impl(AmcamCameraProfileRegistry profiles)
+        : profileRegistry(std::move(profiles)) {}
+
     struct FramePool {
         FramePool(std::uint32_t w, std::uint32_t h, std::size_t bytes)
             : discard(bytes) {
@@ -368,7 +395,9 @@ struct AmcamCamera::Impl {
     std::mutex lifecycleMutex;
     std::mutex apiMutex;
     HAmcam handle = nullptr;
+    AmcamCameraProfileRegistry profileRegistry;
     std::string modelName;
+    std::string modelCode = "Unknown";
     std::uint64_t modelFlags = 0;
     bool hasModelDescriptor = false;
     std::optional<std::uint32_t> maximumSpeedLevel;
@@ -534,7 +563,8 @@ struct AmcamCamera::Impl {
     }
 };
 
-AmcamCamera::AmcamCamera() : impl_(std::make_unique<Impl>()) {}
+AmcamCamera::AmcamCamera(AmcamCameraProfileRegistry profiles)
+    : impl_(std::make_unique<Impl>(std::move(profiles))) {}
 AmcamCamera::~AmcamCamera() {
     if (impl_ && !impl_->onWorkerThread()) {
         CameraError ignored;
@@ -595,6 +625,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
                     "Amcam_Open failed. Re-enumerate devices and check that the camera is not in use.");
 
     impl_->modelName = selected->modelName;
+    impl_->modelCode = selected->modelName.empty() ? "Unknown" : selected->modelName;
     impl_->modelFlags = selected->modelFlags;
     impl_->hasModelDescriptor = selected->hasModelDescriptor;
     impl_->maximumSpeedLevel = selected->maximumSpeedLevel;
@@ -628,6 +659,7 @@ bool AmcamCamera::close(CameraError* error) {
         // Model metadata is read by featureDescriptors() under apiMutex.
         // Clear it under the same lock to keep close concurrent-safe.
         impl_->modelName.clear();
+        impl_->modelCode = "Unknown";
         impl_->modelFlags = 0;
         impl_->hasModelDescriptor = false;
         impl_->maximumSpeedLevel.reset();
@@ -950,7 +982,9 @@ AmcamCamera::featureDescriptors() {
         impl_->modelFlags,
         impl_->hasModelDescriptor,
         impl_->maximumSpeedLevel,
-        impl_->previewResolutions);
+        impl_->previewResolutions,
+        impl_->profileRegistry,
+        impl_->modelCode);
 }
 
 camera::CameraFeatureResult<camera::CameraFeatureValue>
@@ -966,7 +1000,9 @@ AmcamCamera::readFeature(std::string_view name) {
         impl_->modelFlags,
         impl_->hasModelDescriptor,
         impl_->maximumSpeedLevel,
-        impl_->previewResolutions);
+        impl_->previewResolutions,
+        impl_->profileRegistry,
+        impl_->modelCode);
     if (const auto* error = std::get_if<CameraFeatureAccessError>(&described))
         return *error;
 
@@ -1074,7 +1110,9 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         impl_->modelFlags,
         impl_->hasModelDescriptor,
         impl_->maximumSpeedLevel,
-        impl_->previewResolutions);
+        impl_->previewResolutions,
+        impl_->profileRegistry,
+        impl_->modelCode);
     if (const auto* error = std::get_if<CameraFeatureAccessError>(&described))
         return *error;
 

@@ -262,7 +262,6 @@ private:
                     preview_->setText("Camera opened. Press Start to begin acquisition.");
                     statusBar()->showMessage("Camera session opened.");
                 }
-                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 
@@ -293,7 +292,6 @@ private:
                 } else {
                     statusBar()->showMessage("Acquisition started.");
                 }
-                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 
@@ -324,7 +322,6 @@ private:
                 } else {
                     statusBar()->showMessage("Acquisition stopped.");
                 }
-                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 
@@ -365,7 +362,6 @@ private:
                     featureStatus_->setText(
                         "Open a camera to inspect its available features.");
                 }
-                setFeatureControlsEnabled(true);
                 updateControls(camera_.state());
             });
 

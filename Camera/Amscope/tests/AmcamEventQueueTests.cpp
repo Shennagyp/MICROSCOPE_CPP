@@ -1,9 +1,11 @@
 #include "AmcamEventQueue.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <iostream>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -64,6 +66,36 @@ int main() {
     require(waitResult.load(std::memory_order_acquire) ==
                 AmcamEventQueue::WaitResult::Stopped,
             "stop wakes a consumer blocked in waitNext");
+
+    queue.reset();
+    constexpr std::size_t producerCount = 4;
+    constexpr std::size_t eventsPerProducer = 32;
+    std::vector<std::thread> producers;
+    producers.reserve(producerCount);
+    for (std::size_t producer = 0; producer < producerCount; ++producer) {
+        producers.emplace_back([&, producer]() {
+            for (std::size_t i = 0; i < eventsPerProducer; ++i) {
+                const auto value = static_cast<std::uint32_t>(
+                    producer * eventsPerProducer + i);
+                if (queue.push(value) != AmcamEventQueue::PushResult::Queued)
+                    std::abort();
+            }
+        });
+    }
+    for (auto& producer : producers) producer.join();
+
+    std::vector<std::uint32_t> received;
+    received.reserve(producerCount * eventsPerProducer);
+    for (std::size_t i = 0; i < producerCount * eventsPerProducer; ++i) {
+        require(queue.waitNext(event) == AmcamEventQueue::WaitResult::Event,
+                "concurrent producer event remains readable");
+        received.push_back(event);
+    }
+    std::sort(received.begin(), received.end());
+    for (std::size_t i = 0; i < received.size(); ++i) {
+        require(received[i] == i,
+                "concurrent producers do not lose or duplicate queued events");
+    }
 
     std::cout << "All Amcam event-queue tests passed.\n";
     return EXIT_SUCCESS;

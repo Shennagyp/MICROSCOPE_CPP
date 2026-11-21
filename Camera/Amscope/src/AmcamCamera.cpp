@@ -531,8 +531,14 @@ struct AmcamCamera::Impl {
         for (;;) {
             std::uint32_t event = 0;
             const auto waitResult = eventQueue.waitNext(event);
-            if (waitResult == detail::AmcamEventQueue::WaitResult::Stopped)
+            if (waitResult == detail::AmcamEventQueue::WaitResult::Stopped) {
+                if (!stopRequested.load(std::memory_order_acquire)) {
+                    fatal = true;
+                    error = {-1, "Amcam event callback queue",
+                             "The acquisition event queue stopped unexpectedly while the camera was streaming."};
+                }
                 break;
+            }
             if (waitResult == detail::AmcamEventQueue::WaitResult::Overflow) {
                 fatal = true;
                 error = {-1, "Amcam event callback queue",

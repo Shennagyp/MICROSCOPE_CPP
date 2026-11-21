@@ -4,12 +4,14 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <type_traits>
 #include <string>
 #include <thread>
 #include <utility>
@@ -53,6 +55,46 @@ std::string boundedString(const char* value, std::size_t capacity) {
     if (!value) return {};
     return std::string(value, std::find(value, value + capacity, '\0'));
 }
+
+camera::CameraFeatureAccessError featureError(
+    camera::CameraFeatureAccessError::Code code,
+    std::string feature,
+    std::string message,
+    std::int32_t nativeCode = 0,
+    std::optional<camera::CameraFeatureKind> expected = std::nullopt,
+    std::optional<camera::CameraFeatureKind> actual = std::nullopt) {
+    return {code, std::move(feature), std::move(message), nativeCode, expected, actual};
+}
+
+camera::CameraFeatureKind featureKind(const camera::CameraFeatureValue& value) {
+    return std::visit([](const auto& item) {
+        using T = std::decay_t<decltype(item)>;
+        if constexpr (std::is_same_v<T, bool>) return camera::CameraFeatureKind::Boolean;
+        else if constexpr (std::is_same_v<T, std::int64_t>) return camera::CameraFeatureKind::Integer;
+        else if constexpr (std::is_same_v<T, std::vector<std::int64_t>>) return camera::CameraFeatureKind::IntegerVector;
+        else if constexpr (std::is_same_v<T, double>) return camera::CameraFeatureKind::FloatingPoint;
+        else if constexpr (std::is_same_v<T, camera::FeatureEnumeration>) return camera::CameraFeatureKind::Enumeration;
+        else return camera::CameraFeatureKind::String;
+    }, value);
+}
+
+std::string exposureModeSymbol(amscope::AmcamAutoExposureMode mode) {
+    switch (mode) {
+    case amscope::AmcamAutoExposureMode::Off: return "Off";
+    case amscope::AmcamAutoExposureMode::Once: return "Once";
+    case amscope::AmcamAutoExposureMode::Continuous: return "Continuous";
+    }
+    return {};
+}
+
+bool parseExposureMode(const std::string& symbol, amscope::AmcamAutoExposureMode& mode) {
+    if (symbol == "Off") mode = amscope::AmcamAutoExposureMode::Off;
+    else if (symbol == "Once") mode = amscope::AmcamAutoExposureMode::Once;
+    else if (symbol == "Continuous") mode = amscope::AmcamAutoExposureMode::Continuous;
+    else return false;
+    return true;
+}
+
 } // namespace
 
 namespace amscope {
@@ -465,13 +507,31 @@ bool AmcamCamera::setResolution(std::uint32_t index, CameraError* error) {
 }
 
 bool AmcamCamera::setAutoExposure(bool enabled, CameraError* error) {
+    return setAutoExposureMode(
+        enabled ? AmcamAutoExposureMode::Continuous : AmcamAutoExposureMode::Off,
+        error);
+}
+
+bool AmcamCamera::setAutoExposureMode(AmcamAutoExposureMode mode, CameraError* error) {
     if (error) *error = {};
+    const auto rawMode = static_cast<std::int32_t>(mode);
+    if (rawMode < 0 || rawMode > 2)
+        return fail(error, "setAutoExposureMode", -1, "Invalid Amcam auto-exposure mode.");
+
     std::lock_guard<std::mutex> api(impl_->apiMutex);
     const auto s = impl_->state.load(std::memory_order_acquire);
     if (!impl_->handle || (s != CameraState::Open && s != CameraState::Streaming))
-        return fail(error, "setAutoExposure", -1, "The camera must be open.");
-    const HRESULT hr = Amcam_put_AutoExpoEnable(impl_->handle, enabled ? 1 : 0);
-    return FAILED(hr) ? failHr(error, "Amcam_put_AutoExpoEnable", hr) : true;
+        return fail(error, "setAutoExposureMode", -1, "The camera must be open.");
+
+    HRESULT hr = Amcam_put_AutoExpoEnable(impl_->handle, rawMode);
+    if (FAILED(hr)) return failHr(error, "Amcam_put_AutoExpoEnable", hr);
+    int readback = -1;
+    hr = Amcam_get_AutoExpoEnable(impl_->handle, &readback);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_AutoExpoEnable", hr);
+    if (readback != rawMode)
+        return fail(error, "setAutoExposureMode", -1,
+                    "Auto-exposure readback did not match the requested mode.");
+    return true;
 }
 
 bool AmcamCamera::setExposureTime(std::uint32_t time, CameraError* error) {
@@ -480,8 +540,30 @@ bool AmcamCamera::setExposureTime(std::uint32_t time, CameraError* error) {
     const auto s = impl_->state.load(std::memory_order_acquire);
     if (!impl_->handle || (s != CameraState::Open && s != CameraState::Streaming))
         return fail(error, "setExposureTime", -1, "The camera must be open.");
-    const HRESULT hr = Amcam_put_ExpoTime(impl_->handle, time);
-    return FAILED(hr) ? failHr(error, "Amcam_put_ExpoTime", hr) : true;
+
+    int autoMode = -1;
+    HRESULT hr = Amcam_get_AutoExpoEnable(impl_->handle, &autoMode);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_AutoExpoEnable", hr);
+    if (autoMode != static_cast<int>(AmcamAutoExposureMode::Off))
+        return fail(error, "setExposureTime", -1,
+                    "Exposure time is writable only when automatic exposure is Off.");
+
+    unsigned minimum = 0, maximum = 0, defaultValue = 0;
+    hr = Amcam_get_ExpTimeRange(impl_->handle, &minimum, &maximum, &defaultValue);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_ExpTimeRange", hr);
+    if (minimum == 0 || maximum < minimum || time < minimum || time > maximum)
+        return fail(error, "setExposureTime", -1,
+                    "Requested exposure time is outside the current camera range.");
+
+    hr = Amcam_put_ExpoTime(impl_->handle, time);
+    if (FAILED(hr)) return failHr(error, "Amcam_put_ExpoTime", hr);
+    unsigned readback = 0;
+    hr = Amcam_get_ExpoTime(impl_->handle, &readback);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_ExpoTime", hr);
+    if (readback != time)
+        return fail(error, "setExposureTime", -1,
+                    "Exposure-time readback did not match the requested value.");
+    return true;
 }
 
 bool AmcamCamera::setExposureGain(std::uint16_t gain, CameraError* error) {
@@ -490,8 +572,23 @@ bool AmcamCamera::setExposureGain(std::uint16_t gain, CameraError* error) {
     const auto s = impl_->state.load(std::memory_order_acquire);
     if (!impl_->handle || (s != CameraState::Open && s != CameraState::Streaming))
         return fail(error, "setExposureGain", -1, "The camera must be open.");
-    const HRESULT hr = Amcam_put_ExpoAGain(impl_->handle, gain);
-    return FAILED(hr) ? failHr(error, "Amcam_put_ExpoAGain", hr) : true;
+
+    unsigned short minimum = 0, maximum = 0, defaultValue = 0;
+    HRESULT hr = Amcam_get_ExpoAGainRange(impl_->handle, &minimum, &maximum, &defaultValue);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_ExpoAGainRange", hr);
+    if (maximum < minimum || gain < minimum || gain > maximum)
+        return fail(error, "setExposureGain", -1,
+                    "Requested analog gain is outside the current camera range.");
+
+    hr = Amcam_put_ExpoAGain(impl_->handle, gain);
+    if (FAILED(hr)) return failHr(error, "Amcam_put_ExpoAGain", hr);
+    unsigned short readback = 0;
+    hr = Amcam_get_ExpoAGain(impl_->handle, &readback);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_ExpoAGain", hr);
+    if (readback != gain)
+        return fail(error, "setExposureGain", -1,
+                    "Analog-gain readback did not match the requested value.");
+    return true;
 }
 
 bool AmcamCamera::readExposure(ExposureSettings& settings, CameraError* error) {
@@ -515,7 +612,11 @@ bool AmcamCamera::readExposure(ExposureSettings& settings, CameraError* error) {
     hr = Amcam_get_ExpoAGainRange(impl_->handle, &minGain, &maxGain, &defaultGain);
     if (FAILED(hr)) return failHr(error, "Amcam_get_ExpoAGainRange", hr);
 
-    settings.automatic = automatic != 0;
+    if (automatic < 0 || automatic > 2)
+        return fail(error, "Amcam_get_AutoExpoEnable", -1,
+                    "The camera returned an unknown auto-exposure mode.");
+    settings.autoMode = static_cast<AmcamAutoExposureMode>(automatic);
+    settings.automatic = settings.autoMode != AmcamAutoExposureMode::Off;
     settings.timeMicroseconds = time;
     settings.minimumTimeMicroseconds = minTime;
     settings.maximumTimeMicroseconds = maxTime;
@@ -573,4 +674,231 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
     stats.totalFrames = total;
     return true;
 }
+
+camera::CameraFeatureResult<std::vector<camera::CameraFeatureDescriptor>>
+AmcamCamera::featureDescriptors() {
+    using camera::CameraFeatureDescriptor;
+    using camera::CameraFeatureKind;
+    using camera::CameraFeatureNumericRange;
+    using camera::CameraFeatureAccessError;
+
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    if (!impl_->handle) {
+        return featureError(CameraFeatureAccessError::Code::BackendFailure, {},
+                            "The Amcam camera session is not open.");
+    }
+
+    int autoMode = -1;
+    const HRESULT autoHr = Amcam_get_AutoExpoEnable(impl_->handle, &autoMode);
+    const bool autoValid = SUCCEEDED(autoHr) && autoMode >= 0 && autoMode <= 2;
+
+    unsigned exposure = 0, minExposure = 0, maxExposure = 0, defaultExposure = 0;
+    const HRESULT exposureHr = Amcam_get_ExpoTime(impl_->handle, &exposure);
+    const HRESULT exposureRangeHr = Amcam_get_ExpTimeRange(
+        impl_->handle, &minExposure, &maxExposure, &defaultExposure);
+    const bool exposureReadable = SUCCEEDED(exposureHr);
+    const bool exposureRangeValid = exposureReadable && SUCCEEDED(exposureRangeHr) &&
+        minExposure > 0 && maxExposure >= minExposure &&
+        exposure >= minExposure && exposure <= maxExposure;
+
+    unsigned short gain = 0, minGain = 0, maxGain = 0, defaultGain = 0;
+    const HRESULT gainHr = Amcam_get_ExpoAGain(impl_->handle, &gain);
+    const HRESULT gainRangeHr = Amcam_get_ExpoAGainRange(
+        impl_->handle, &minGain, &maxGain, &defaultGain);
+    const bool gainReadable = SUCCEEDED(gainHr);
+    const bool gainRangeValid = gainReadable && SUCCEEDED(gainRangeHr) &&
+        maxGain >= minGain && gain >= minGain && gain <= maxGain;
+
+    std::vector<CameraFeatureDescriptor> descriptors;
+    descriptors.push_back({
+        "ExposureAuto", "Automatic Exposure", CameraFeatureKind::Enumeration,
+        std::nullopt, autoValid, autoValid, autoValid, std::nullopt, std::nullopt,
+        {"Off", "Once", "Continuous"}
+    });
+    descriptors.push_back({
+        "ExposureTime", "Exposure Time", CameraFeatureKind::Integer,
+        std::string("us"), exposureRangeValid, exposureReadable,
+        exposureRangeValid && autoValid &&
+            autoMode == static_cast<int>(AmcamAutoExposureMode::Off),
+        exposureRangeValid
+            ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
+                  static_cast<double>(minExposure), static_cast<double>(maxExposure), std::nullopt})
+            : std::nullopt,
+        std::nullopt, {}
+    });
+    descriptors.push_back({
+        "AmcamAnalogGainPercent", "Analog Gain", CameraFeatureKind::Integer,
+        std::string("%"), gainRangeValid, gainReadable, gainRangeValid,
+        gainRangeValid
+            ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
+                  static_cast<double>(minGain), static_cast<double>(maxGain), std::nullopt})
+            : std::nullopt,
+        std::nullopt, {}
+    });
+    return descriptors;
+}
+
+camera::CameraFeatureResult<camera::CameraFeatureValue>
+AmcamCamera::readFeature(std::string_view name) {
+    using camera::CameraFeatureAccessError;
+    using camera::CameraFeatureValue;
+    using camera::FeatureEnumeration;
+
+    auto described = featureDescriptors();
+    if (const auto* error = std::get_if<CameraFeatureAccessError>(&described))
+        return *error;
+
+    const auto& descriptors = std::get<std::vector<camera::CameraFeatureDescriptor>>(described);
+    const auto descriptor = std::find_if(descriptors.begin(), descriptors.end(),
+        [name](const auto& item) { return item.name == name; });
+    if (descriptor == descriptors.end()) {
+        return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
+                            std::string(name), "Camera feature was not found.");
+    }
+    if (!descriptor->isAvailable) {
+        return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
+                            std::string(name), "Camera feature is not available on this device.");
+    }
+    if (!descriptor->isReadable) {
+        return featureError(CameraFeatureAccessError::Code::FeatureNotReadable,
+                            std::string(name), "Camera feature is not readable in the current state.");
+    }
+
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    if (!impl_->handle) {
+        return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                            std::string(name), "The Amcam camera session was closed.");
+    }
+
+    if (name == "ExposureAuto") {
+        int mode = -1;
+        const HRESULT hr = Amcam_get_AutoExpoEnable(impl_->handle, &mode);
+        if (FAILED(hr)) return featureError(CameraFeatureAccessError::Code::BackendFailure,
+            std::string(name), hrMessage("Amcam_get_AutoExpoEnable", hr), static_cast<std::int32_t>(hr));
+        if (mode < 0 || mode > 2) return featureError(CameraFeatureAccessError::Code::BackendFailure,
+            std::string(name), "The camera returned an unknown auto-exposure mode.");
+        return CameraFeatureValue{FeatureEnumeration{
+            exposureModeSymbol(static_cast<amscope::AmcamAutoExposureMode>(mode))}};
+    }
+    if (name == "ExposureTime") {
+        unsigned value = 0;
+        const HRESULT hr = Amcam_get_ExpoTime(impl_->handle, &value);
+        if (FAILED(hr)) return featureError(CameraFeatureAccessError::Code::BackendFailure,
+            std::string(name), hrMessage("Amcam_get_ExpoTime", hr), static_cast<std::int32_t>(hr));
+        return CameraFeatureValue{static_cast<std::int64_t>(value)};
+    }
+    if (name == "AmcamAnalogGainPercent") {
+        unsigned short value = 0;
+        const HRESULT hr = Amcam_get_ExpoAGain(impl_->handle, &value);
+        if (FAILED(hr)) return featureError(CameraFeatureAccessError::Code::BackendFailure,
+            std::string(name), hrMessage("Amcam_get_ExpoAGain", hr), static_cast<std::int32_t>(hr));
+        return CameraFeatureValue{static_cast<std::int64_t>(value)};
+    }
+    return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
+                        std::string(name), "Camera feature was not found.");
+}
+
+camera::CameraFeatureResult<std::monostate>
+AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValue& value) {
+    using camera::CameraFeatureAccessError;
+    using camera::CameraFeatureKind;
+    using camera::FeatureEnumeration;
+
+    auto described = featureDescriptors();
+    if (const auto* error = std::get_if<CameraFeatureAccessError>(&described))
+        return *error;
+
+    const auto& descriptors = std::get<std::vector<camera::CameraFeatureDescriptor>>(described);
+    const auto descriptor = std::find_if(descriptors.begin(), descriptors.end(),
+        [name](const auto& item) { return item.name == name; });
+    if (descriptor == descriptors.end()) {
+        return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
+                            std::string(name), "Camera feature was not found.");
+    }
+    if (!descriptor->isAvailable) {
+        return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
+                            std::string(name), "Camera feature is not available on this device.");
+    }
+    if (!descriptor->isWritable) {
+        return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                            std::string(name), "Camera feature is not writable in the current state.");
+    }
+
+    const CameraFeatureKind actualKind = featureKind(value);
+    if (actualKind != descriptor->kind) {
+        return featureError(CameraFeatureAccessError::Code::ValueTypeMismatch,
+                            std::string(name), "Camera feature value has the wrong type.",
+                            0, descriptor->kind, actualKind);
+    }
+
+    if (descriptor->kind == CameraFeatureKind::Enumeration) {
+        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        if (std::find(descriptor->enumerationValues.begin(),
+                      descriptor->enumerationValues.end(), symbol) == descriptor->enumerationValues.end()) {
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "Enumeration symbol is not supported by this camera.");
+        }
+    }
+    if (descriptor->numericRange) {
+        double number = 0.0;
+        if (const auto* integer = std::get_if<std::int64_t>(&value)) number = static_cast<double>(*integer);
+        else if (const auto* floating = std::get_if<double>(&value)) number = *floating;
+        else return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                 std::string(name), "A numeric value is required.");
+        const auto& range = *descriptor->numericRange;
+        if (!std::isfinite(number) || number < range.minimum || number > range.maximum) {
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "Value is outside the current feature range.");
+        }
+        if (range.increment) {
+            const double steps = (number - range.minimum) / *range.increment;
+            if (std::abs(steps - std::round(steps)) > 1e-7) {
+                return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                    std::string(name), "Value does not satisfy the feature increment.");
+            }
+        }
+    }
+
+    CameraError nativeError;
+    if (name == "ExposureAuto") {
+        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        AmcamAutoExposureMode mode = AmcamAutoExposureMode::Off;
+        if (!parseExposureMode(symbol, mode)) {
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "ExposureAuto accepts Off, Once or Continuous.");
+        }
+        if (!setAutoExposureMode(mode, &nativeError)) {
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), nativeError.message, nativeError.vendorCode);
+        }
+        return std::monostate{};
+    }
+    if (name == "ExposureTime") {
+        const auto requested = std::get<std::int64_t>(value);
+        if (requested < 0 || requested > std::numeric_limits<std::uint32_t>::max()) {
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "ExposureTime must fit the SDK's unsigned 32-bit microsecond value.");
+        }
+        if (!setExposureTime(static_cast<std::uint32_t>(requested), &nativeError)) {
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), nativeError.message, nativeError.vendorCode);
+        }
+        return std::monostate{};
+    }
+    if (name == "AmcamAnalogGainPercent") {
+        const auto requested = std::get<std::int64_t>(value);
+        if (requested < 0 || requested > std::numeric_limits<std::uint16_t>::max()) {
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "Amcam analog gain must fit the SDK's unsigned 16-bit value.");
+        }
+        if (!setExposureGain(static_cast<std::uint16_t>(requested), &nativeError)) {
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), nativeError.message, nativeError.vendorCode);
+        }
+        return std::monostate{};
+    }
+    return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
+                        std::string(name), "Camera feature was not found.");
+}
+
 } // namespace amscope

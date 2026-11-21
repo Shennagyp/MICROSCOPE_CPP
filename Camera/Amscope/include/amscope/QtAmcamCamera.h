@@ -1,9 +1,18 @@
 #pragma once
+
 #include "amscope/AmcamCamera.h"
+
 #include <QMetaType>
 #include <QObject>
 #include <QString>
+
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <functional>
 #include <mutex>
+#include <thread>
 
 Q_DECLARE_METATYPE(amscope::CameraState)
 Q_DECLARE_METATYPE(amscope::FramePtr)
@@ -11,11 +20,32 @@ Q_DECLARE_METATYPE(amscope::FramePtr)
 namespace amscope {
 
 // Qt Core bridge for Widgets, Qt Quick, or a dedicated render-thread object.
-// frameAvailable is a coalesced notification; retrieve the current immutable
-// frame lease by calling takeLatestFrame() on the consumer thread.
+// Frame notification is coalesced; retrieve the current immutable frame lease
+// by calling takeLatestFrame() on the consumer thread.
+//
+// The synchronous ICameraFeatureAccess methods are available for non-UI
+// callers. GUI code should use the request* methods below: feature operations
+// execute serially on a dedicated worker and their callbacks are delivered on
+// this object's Qt affinity thread. A request is discarded if open/close/start/
+// stop changes the feature-context generation before its result is delivered.
+// The application should still keep its own selected-device generation, as in
+// the Swift application model, to reject stale UI work before changing selection.
 class QtAmcamCamera final : public QObject, public camera::ICameraFeatureAccess {
     Q_OBJECT
 public:
+    using FeatureRequestId = std::uint64_t;
+    using FeatureDescriptors = std::vector<camera::CameraFeatureDescriptor>;
+    using FeatureDescriptorsResult = camera::CameraFeatureResult<FeatureDescriptors>;
+    using FeatureReadResult = camera::CameraFeatureResult<camera::CameraFeatureValue>;
+    using FeatureWriteResult = camera::CameraFeatureResult<std::monostate>;
+
+    using FeatureDescriptorsCallback =
+        std::function<void(FeatureRequestId, FeatureDescriptorsResult)>;
+    using FeatureReadCallback =
+        std::function<void(FeatureRequestId, FeatureReadResult)>;
+    using FeatureWriteCallback =
+        std::function<void(FeatureRequestId, FeatureWriteResult)>;
+
     explicit QtAmcamCamera(QObject* parent = nullptr);
     QtAmcamCamera(AmcamCameraProfileRegistry profiles, QObject* parent = nullptr);
     ~QtAmcamCamera() override;
@@ -37,12 +67,24 @@ public:
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& stats, CameraError* error = nullptr);
 
-    camera::CameraFeatureResult<std::vector<camera::CameraFeatureDescriptor>>
-    featureDescriptors() override;
-    camera::CameraFeatureResult<camera::CameraFeatureValue>
-    readFeature(std::string_view name) override;
-    camera::CameraFeatureResult<std::monostate>
-    writeFeature(std::string_view name, const camera::CameraFeatureValue& value) override;
+    // Asynchronous feature access for GUI/application code. A zero request ID
+    // means the request was rejected (empty callback or executor shutting down).
+    // Completed callbacks run on this QObject's affinity thread. Callbacks from
+    // a superseded feature context are intentionally discarded.
+    FeatureRequestId requestFeatureDescriptors(FeatureDescriptorsCallback callback);
+    FeatureRequestId requestReadFeature(QString name, FeatureReadCallback callback);
+    FeatureRequestId requestWriteFeature(
+        QString name,
+        camera::CameraFeatureValue value,
+        FeatureWriteCallback callback);
+
+    // Synchronous backend-neutral contract. These methods must not be called
+    // from a GUI thread for potentially blocking feature providers.
+    FeatureDescriptorsResult featureDescriptors() override;
+    FeatureReadResult readFeature(std::string_view name) override;
+    FeatureWriteResult writeFeature(
+        std::string_view name,
+        const camera::CameraFeatureValue& value) override;
 
 signals:
     void frameAvailable();
@@ -50,11 +92,42 @@ signals:
     void errorOccurred(const QString& message, qint32 vendorCode);
 
 private:
+    using FeatureRequestTask =
+        std::function<void(FeatureRequestId, std::uint64_t)>;
+
+    struct PendingFeatureRequest {
+        FeatureRequestId id = 0;
+        std::uint64_t contextGeneration = 0;
+        FeatureRequestTask task;
+    };
+
+    FeatureRequestId enqueueFeatureRequest(FeatureRequestTask task);
+    void runFeatureWorker();
+    void dispatchFeatureCallback(std::uint64_t contextGeneration,
+                                 std::function<void()> callback);
+    void advanceFeatureContextGeneration() noexcept;
+
     void publishLatestFrame(FramePtr frame);
     void clearFrameMailbox();
     void emitError(const CameraError& error);
 
+    static constexpr std::size_t kMaximumPendingFeatureRequests = 256;
+
     AmcamCamera camera_;
+
+    // All calls into camera_ are serialized at this facade boundary. The
+    // AmcamCamera also protects its SDK handle internally; this mutex adds an
+    // atomic lifecycle-vs-queued-request ordering boundary.
+    std::mutex cameraOperationMutex_;
+    std::atomic<std::uint64_t> featureContextGeneration_{0};
+
+    std::mutex featureQueueMutex_;
+    std::condition_variable featureQueueCondition_;
+    std::deque<PendingFeatureRequest> featureQueue_;
+    std::thread featureWorker_;
+    FeatureRequestId nextFeatureRequestId_ = 1;
+    bool stoppingFeatureWorker_ = false;
+
     std::mutex mailboxMutex_;
     FramePtr latestFrame_;
     bool notificationPending_ = false;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "amscope/AmcamCamera.h"
+#include "amscope/detail/AcquisitionFrameGate.h"
 
 #include <QMetaType>
 #include <QObject>
@@ -11,6 +12,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <variant>
@@ -170,6 +172,7 @@ private:
     static constexpr std::size_t kMaximumPendingFeatureRequests = 256;
 
     AmcamCamera camera_;
+    std::shared_ptr<detail::AcquisitionFrameGate> acquisitionFrameGate_;
 
     // All calls into camera_ are serialized at this facade boundary. The
     // AmcamCamera also protects its SDK handle internally; this mutex adds an

@@ -17,8 +17,10 @@ integration and does not modify vendor sample code.
   SDK error, no-frame timeout, no-packet timeout and event-queue overflow are
   fatal acquisition conditions.
 - Stop and Close are never called from the vendor callback. A failed user Stop
-  while Streaming restores the previous stream and retains callback/frame state;
-  successful Stop shuts down the event worker, drains callbacks, then releases
+  while Streaming restores the previous stream and retains callback/frame state.
+  The Qt frame-delivery gate is reactivated for that same acquisition after a
+  recoverable Stop failure; a successful Stop/Close leaves the old gate invalid.
+  Successful Stop shuts down the event worker, drains callbacks, then releases
   session resources. Terminal Close remains independent of Stop success.
 - Every successful Amcam_Stop marks a both-cache flush obligation
   (AMCAM_OPTION_FLUSH = 3). The driver flushes immediately and retries before

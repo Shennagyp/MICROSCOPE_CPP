@@ -63,6 +63,7 @@ QtAmcamCamera::~QtAmcamCamera() {
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
         advanceSessionGeneration();
+        acquisitionFrameGate_.reset();
         CameraError ignored;
         camera_.close(&ignored);
     }
@@ -83,6 +84,14 @@ bool QtAmcamCamera::open(const QString& deviceId, CameraError* error) {
         ok = camera_.open(
             std::string(id.constData(), static_cast<std::size_t>(id.size())),
             &local);
+        if (ok) {
+            acquisitionFrameGate_.reset();
+        } else if (camera_.state() == CameraState::Streaming && acquisitionFrameGate_) {
+            acquisitionFrameGate_->activateFor(
+                sessionGeneration_.load(std::memory_order_acquire));
+        } else {
+            acquisitionFrameGate_.reset();
+        }
     }
 
     if (!ok) {
@@ -102,6 +111,12 @@ bool QtAmcamCamera::close(CameraError* error) {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
         advanceSessionGeneration();
         ok = camera_.close(&local);
+        if (!ok && camera_.state() == CameraState::Streaming && acquisitionFrameGate_) {
+            acquisitionFrameGate_->activateFor(
+                sessionGeneration_.load(std::memory_order_acquire));
+        } else {
+            acquisitionFrameGate_.reset();
+        }
     }
     clearFrameMailbox();
     if (!ok) {
@@ -118,19 +133,42 @@ bool QtAmcamCamera::start(CameraError* error) {
     {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
         advanceSessionGeneration();
-        ok = camera_.start(
-            [this](FramePtr frame) {
-                publishLatestFrame(std::move(frame));
-            },
-            [this](const CameraError& acquisitionError) {
-                // Marshal notifications to this QObject's affinity thread.
-                const CameraError copy = acquisitionError;
-                dispatchToOwnerThread([this, copy]() {
-                    emitError(copy);
-                    emit stateChanged(camera_.state());
-                });
-            },
-            &local);
+        std::shared_ptr<detail::AcquisitionFrameGate> frameGate;
+        try {
+            frameGate = std::make_shared<detail::AcquisitionFrameGate>(
+                sessionGeneration_.load(std::memory_order_acquire));
+            FeatureRequestContext errorContext;
+            errorContext.sessionGeneration = frameGate->generation();
+
+            ok = camera_.start(
+                [this, frameGate](FramePtr frame) {
+                    if (frameGate->accepts(
+                            sessionGeneration_.load(std::memory_order_acquire))) {
+                        publishLatestFrame(std::move(frame));
+                    }
+                },
+                [this, frameGate, errorContext](const CameraError& acquisitionError) mutable {
+                    const CameraError copy = acquisitionError;
+                    auto currentContext = errorContext;
+                    currentContext.sessionGeneration = frameGate->generation();
+                    dispatchFeatureCallback(currentContext, [this, copy]() {
+                        emitError(copy);
+                        emit stateChanged(camera_.state());
+                    });
+                },
+                &local);
+            if (ok) acquisitionFrameGate_ = std::move(frameGate);
+            else acquisitionFrameGate_.reset();
+        } catch (const std::exception& exception) {
+            acquisitionFrameGate_.reset();
+            local = {0, "camera start", exception.what()};
+            ok = false;
+        } catch (...) {
+            acquisitionFrameGate_.reset();
+            local = {0, "camera start",
+                     "Unknown exception while preparing acquisition frame delivery."};
+            ok = false;
+        }
     }
 
     if (!ok) {
@@ -148,6 +186,12 @@ bool QtAmcamCamera::stop(CameraError* error) {
         std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
         advanceSessionGeneration();
         ok = camera_.stop(&local);
+        if (!ok && camera_.state() == CameraState::Streaming && acquisitionFrameGate_) {
+            acquisitionFrameGate_->activateFor(
+                sessionGeneration_.load(std::memory_order_acquire));
+        } else {
+            acquisitionFrameGate_.reset();
+        }
     }
     clearFrameMailbox();
     if (!ok) {
@@ -175,8 +219,18 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestOpen(
                 {
                     std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
                     advanceSessionGenerationTo(requestContext.sessionGeneration);
-                    if (!camera_.open(id, &error))
+                    if (!camera_.open(id, &error)) {
                         result = std::move(error);
+                        if (camera_.state() == CameraState::Streaming &&
+                            acquisitionFrameGate_) {
+                            acquisitionFrameGate_->activateFor(
+                                sessionGeneration_.load(std::memory_order_acquire));
+                        } else {
+                            acquisitionFrameGate_.reset();
+                        }
+                    } else {
+                        acquisitionFrameGate_.reset();
+                    }
                 }
                 if (std::holds_alternative<std::monostate>(result))
                     clearFrameMailbox();
@@ -206,8 +260,18 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestClose(
                 {
                     std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
                     advanceSessionGenerationTo(requestContext.sessionGeneration);
-                    if (!camera_.close(&error))
+                    if (!camera_.close(&error)) {
                         result = std::move(error);
+                        if (camera_.state() == CameraState::Streaming &&
+                            acquisitionFrameGate_) {
+                            acquisitionFrameGate_->activateFor(
+                                sessionGeneration_.load(std::memory_order_acquire));
+                        } else {
+                            acquisitionFrameGate_.reset();
+                        }
+                    } else {
+                        acquisitionFrameGate_.reset();
+                    }
                 }
                 clearFrameMailbox();
             } catch (const std::exception& exception) {
@@ -233,32 +297,43 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStart(
             LifecycleResult result{std::monostate{}};
             CameraError error;
             try {
-                {
-                    std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
-                    advanceSessionGenerationTo(requestContext.sessionGeneration);
-                    if (!camera_.start(
-                            [this, requestContext](FramePtr frame) {
-                                if (sessionGeneration_.load(std::memory_order_acquire) ==
-                                    requestContext.sessionGeneration) {
-                                    publishLatestFrame(std::move(frame));
-                                }
-                            },
-                            [this, requestContext](const CameraError& acquisitionError) {
-                                const CameraError copy = acquisitionError;
-                                dispatchFeatureCallback(requestContext, [this, copy]() {
-                                    emitError(copy);
-                                    emit stateChanged(camera_.state());
-                                });
-                            },
-                            &error)) {
-                        result = std::move(error);
-                    }
+                std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+                advanceSessionGenerationTo(requestContext.sessionGeneration);
+                std::shared_ptr<detail::AcquisitionFrameGate> frameGate =
+                    std::make_shared<detail::AcquisitionFrameGate>(
+                        requestContext.sessionGeneration);
+                FeatureRequestContext errorContext = requestContext;
+
+                const bool started = camera_.start(
+                    [this, frameGate](FramePtr frame) {
+                        if (frameGate->accepts(
+                                sessionGeneration_.load(std::memory_order_acquire))) {
+                            publishLatestFrame(std::move(frame));
+                        }
+                    },
+                    [this, frameGate, errorContext](const CameraError& acquisitionError) mutable {
+                        const CameraError copy = acquisitionError;
+                        auto currentContext = errorContext;
+                        currentContext.sessionGeneration = frameGate->generation();
+                        dispatchFeatureCallback(currentContext, [this, copy]() {
+                            emitError(copy);
+                            emit stateChanged(camera_.state());
+                        });
+                    },
+                    &error);
+                if (started) {
+                    acquisitionFrameGate_ = std::move(frameGate);
+                } else {
+                    acquisitionFrameGate_.reset();
+                    result = std::move(error);
                 }
             } catch (const std::exception& exception) {
+                acquisitionFrameGate_.reset();
                 result = CameraError{0, "camera start", exception.what()};
             } catch (...) {
+                acquisitionFrameGate_.reset();
                 result = CameraError{0, "camera start",
-                                     "Unknown exception while starting acquisition."};
+                                     "Unknown exception while preparing acquisition frame delivery."};
             }
             dispatchLifecycleCallback(
                 requestId, std::move(callback), std::move(result));
@@ -280,8 +355,18 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStop(
                 {
                     std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
                     advanceSessionGenerationTo(requestContext.sessionGeneration);
-                    if (!camera_.stop(&error))
+                    if (!camera_.stop(&error)) {
                         result = std::move(error);
+                        if (camera_.state() == CameraState::Streaming &&
+                            acquisitionFrameGate_) {
+                            acquisitionFrameGate_->activateFor(
+                                sessionGeneration_.load(std::memory_order_acquire));
+                        } else {
+                            acquisitionFrameGate_.reset();
+                        }
+                    } else {
+                        acquisitionFrameGate_.reset();
+                    }
                 }
                 clearFrameMailbox();
             } catch (const std::exception& exception) {

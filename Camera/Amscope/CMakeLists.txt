@@ -95,6 +95,13 @@ if(BUILD_TESTING)
     target_include_directories(amscope_camera_types_tests PRIVATE include)
     add_test(NAME amscope_camera_types_tests COMMAND amscope_camera_types_tests)
 
+    add_executable(amscope_acquisition_frame_gate_tests
+        tests/AmcamAcquisitionFrameGateTests.cpp)
+    target_compile_features(amscope_acquisition_frame_gate_tests PRIVATE cxx_std_17)
+    target_include_directories(amscope_acquisition_frame_gate_tests PRIVATE include)
+    add_test(NAME amscope_acquisition_frame_gate_tests
+        COMMAND amscope_acquisition_frame_gate_tests)
+
     add_executable(amscope_profile_tests
         tests/AmcamCameraProfileTests.cpp
         src/AmcamCameraProfiles.cpp

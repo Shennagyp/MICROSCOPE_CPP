@@ -683,9 +683,11 @@ AmcamCamera::featureDescriptors() {
     using camera::CameraFeatureAccessError;
 
     std::lock_guard<std::mutex> api(impl_->apiMutex);
-    if (!impl_->handle) {
+    const auto currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming)) {
         return featureError(CameraFeatureAccessError::Code::BackendFailure, {},
-                            "The Amcam camera session is not open.");
+                            "The Amcam camera session is not in an operational state.");
     }
 
     int autoMode = -1;
@@ -765,9 +767,11 @@ AmcamCamera::readFeature(std::string_view name) {
     }
 
     std::lock_guard<std::mutex> api(impl_->apiMutex);
-    if (!impl_->handle) {
+    const auto currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming)) {
         return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                            std::string(name), "The Amcam camera session was closed.");
+                            std::string(name), "The Amcam camera session is not operational.");
     }
 
     if (name == "ExposureAuto") {

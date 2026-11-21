@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <exception>
 #include <limits>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -251,7 +252,7 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         "ExposureTime", "Exposure Time", CameraFeatureKind::Integer,
-        std::string("us"), exposureProbe, exposureReadable,
+        std::string("us"), exposureProbe, exposureProbe,
         exposureProbe && autoMode == static_cast<int>(amscope::AmcamAutoExposureMode::Off),
         exposureProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
@@ -261,7 +262,7 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         "AmcamAnalogGainPercent", "Analog Gain", CameraFeatureKind::Integer,
-        std::string("%"), gainProbe, gainReadable, gainProbe,
+        std::string("%"), gainProbe, gainProbe, gainProbe,
         gainProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
                   static_cast<double>(minGain), static_cast<double>(maxGain), std::nullopt})
@@ -1321,7 +1322,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         int readback = 0;
         hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_PRECISE_FRAMERATE, &readback);
         if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(PRECISE_FRAMERATE)", hr);
-        if (std::abs(readback - tenths) > 0)
+        if (readback != tenths)
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "Fixed-frame-rate readback did not match the requested value.");
         return std::monostate{};

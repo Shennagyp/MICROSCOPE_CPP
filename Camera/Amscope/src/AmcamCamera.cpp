@@ -479,11 +479,11 @@ struct AmcamCamera::Impl {
         }
     }
 
-    void reportFatal(CameraError error) noexcept {
+    bool reportFatal(CameraError error) noexcept {
         bool expected = false;
         if (!stopRequested.compare_exchange_strong(
                 expected, true, std::memory_order_acq_rel))
-            return;
+            return false;
 
         // Stop the worker's event wait before asking the SDK to terminate
         // callback production. SDK callbacks can only enqueue and return.
@@ -521,163 +521,185 @@ struct AmcamCamera::Impl {
         } catch (...) {
             // Observer exceptions must not unwind through the acquisition thread.
         }
+        return true;
     }
 
     void acquisitionLoop(const std::shared_ptr<FramePool>& activePool) noexcept {
         g_acquisitionOwner = this;
-        bool fatal = false;
-        CameraError error;
 
+        // The outer loop is important: a fatal event can race a user Stop.
+        // If Stop owns the transition, reportFatal declines ownership and the
+        // worker waits for the Stop outcome instead of exiting prematurely.
         for (;;) {
-            std::uint32_t event = 0;
-            const auto waitResult = eventQueue.waitNext(event);
-            if (waitResult == detail::AmcamEventQueue::WaitResult::Stopped) {
-                if (!stopRequested.load(std::memory_order_acquire)) {
+            bool fatal = false;
+            CameraError error;
+
+            for (;;) {
+                std::uint32_t event = 0;
+                const auto waitResult = eventQueue.waitNext(event);
+                if (waitResult == detail::AmcamEventQueue::WaitResult::Stopped) {
+                    if (!stopRequested.load(std::memory_order_acquire)) {
+                        fatal = true;
+                        error = {-1, "Amcam event callback queue",
+                                 "The acquisition event queue stopped unexpectedly while the camera was streaming."};
+                    }
+                    break;
+                }
+
+                if (waitResult == detail::AmcamEventQueue::WaitResult::Overflow) {
+                    // A user Stop transition temporarily suppresses event processing.
+                    // Overflow during that interval is equivalent to callbacks handled
+                    // while Swift has streaming=false: discard that transient backlog.
+                    if (stopRequested.load(std::memory_order_acquire) &&
+                        state.load(std::memory_order_acquire) == CameraState::Stopping) {
+                        eventQueue.clearPending();
+                        continue;
+                    }
                     fatal = true;
                     error = {-1, "Amcam event callback queue",
-                             "The acquisition event queue stopped unexpectedly while the camera was streaming."};
+                             "The camera generated more pending callback events than the bounded queue can retain."};
+                    break;
                 }
-                break;
-            }
-            if (waitResult == detail::AmcamEventQueue::WaitResult::Overflow) {
-                // A user Stop transition temporarily suppresses event processing.
-                // Overflow during that interval is equivalent to callbacks handled
-                // while Swift has streaming=false: discard that transient backlog.
+
+                // Stop temporarily suppresses frame pulls but leaves the callback
+                // queue accepting events. If Stop fails, streaming resumes and later
+                // callbacks continue to be handled without rebuilding the session.
                 if (stopRequested.load(std::memory_order_acquire) &&
-                    state.load(std::memory_order_acquire) == CameraState::Stopping) {
-                    eventQueue.clearPending();
+                    state.load(std::memory_order_acquire) == CameraState::Stopping)
+                    continue;
+
+                if (event == AMCAM_EVENT_DISCONNECTED) {
+                    fatal = true;
+                    error = {static_cast<std::int32_t>(E_GEN_FAILURE),
+                             "AMCAM_EVENT_DISCONNECTED", "The camera reported a disconnect."};
+                    break;
+                }
+                if (event == AMCAM_EVENT_ERROR) {
+                    fatal = true;
+                    error = {static_cast<std::int32_t>(E_FAIL),
+                             "AMCAM_EVENT_ERROR", "The camera SDK reported a generic device error."};
+                    break;
+                }
+                if (event == AMCAM_EVENT_NOFRAMETIMEOUT) {
+                    fatal = true;
+                    error = {static_cast<std::int32_t>(E_TIMEOUT),
+                             "AMCAM_EVENT_NOFRAMETIMEOUT", "The camera reported a no-frame timeout."};
+                    break;
+                }
+                if (event == AMCAM_EVENT_NOPACKETTIMEOUT) {
+                    fatal = true;
+                    error = {static_cast<std::int32_t>(E_TIMEOUT),
+                             "AMCAM_EVENT_NOPACKETTIMEOUT", "The camera reported a no-packet timeout."};
+                    break;
+                }
+                if (event != AMCAM_EVENT_IMAGE)
+                    continue;
+
+                auto writable = activePool->tryAcquire();
+                void* destination = writable
+                    ? static_cast<void*>(writable->pixels.data())
+                    : static_cast<void*>(activePool->discard.data());
+
+                AmcamFrameInfoV4 info{};
+                HRESULT hr = E_FAIL;
+                bool pullSuppressedByStop = false;
+                {
+                    std::lock_guard<std::mutex> lock(apiMutex);
+                    // Recheck after acquiring the SDK lock. A user Stop may have
+                    // started after the event was dequeued but before this pull.
+                    if (stopRequested.load(std::memory_order_acquire) &&
+                        state.load(std::memory_order_acquire) == CameraState::Stopping) {
+                        pullSuppressedByStop = true;
+                    } else if (!handle) {
+                        fatal = true;
+                        error = {-1, "Amcam_PullImageV4", "Camera handle is no longer open."};
+                    } else {
+                        hr = Amcam_PullImageV4(
+                            handle, destination, 0, kRgb24Bits, kPackedRows, &info);
+                    }
+                }
+                if (pullSuppressedByStop)
+                    continue;
+                if (fatal)
+                    break;
+
+                // The vendor documents E_PENDING as "no image data is available
+                // yet". The callback can race the frame-ready transition; this
+                // event is consumed and acquisition waits for the next image event.
+                if (hr == E_PENDING)
+                    continue;
+                if (FAILED(hr)) {
+                    fatal = true;
+                    error = {static_cast<std::int32_t>(hr),
+                             "Amcam_PullImageV4", hrMessage("Amcam_PullImageV4", hr)};
+                    break;
+                }
+
+                // Keep draining the SDK even when all frame leases are retained.
+                // Pull into the private discard buffer and account for the drop.
+                if (!writable) {
+                    dropped.fetch_add(1, std::memory_order_relaxed);
                     continue;
                 }
-                fatal = true;
-                error = {-1, "Amcam event callback queue",
-                         "The camera generated more pending callback events than the bounded queue can retain."};
-                break;
-            }
 
-            // Stop temporarily suppresses frame pulls but leaves the callback
-            // queue accepting events. If Stop fails, streaming resumes and later
-            // callbacks continue to be handled without rebuilding the session.
-            if (stopRequested.load(std::memory_order_acquire) &&
-                state.load(std::memory_order_acquire) == CameraState::Stopping)
-                continue;
-
-            if (event == AMCAM_EVENT_DISCONNECTED) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_GEN_FAILURE),
-                         "AMCAM_EVENT_DISCONNECTED", "The camera reported a disconnect."};
-                break;
-            }
-            if (event == AMCAM_EVENT_ERROR) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_FAIL),
-                         "AMCAM_EVENT_ERROR", "The camera SDK reported a generic device error."};
-                break;
-            }
-            if (event == AMCAM_EVENT_NOFRAMETIMEOUT) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_TIMEOUT),
-                         "AMCAM_EVENT_NOFRAMETIMEOUT", "The camera reported a no-frame timeout."};
-                break;
-            }
-            if (event == AMCAM_EVENT_NOPACKETTIMEOUT) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_TIMEOUT),
-                         "AMCAM_EVENT_NOPACKETTIMEOUT", "The camera reported a no-packet timeout."};
-                break;
-            }
-            if (event != AMCAM_EVENT_IMAGE)
-                continue;
-
-            auto writable = activePool->tryAcquire();
-            void* destination = writable
-                ? static_cast<void*>(writable->pixels.data())
-                : static_cast<void*>(activePool->discard.data());
-
-            AmcamFrameInfoV4 info{};
-            HRESULT hr = E_FAIL;
-            bool pullSuppressedByStop = false;
-            {
-                std::lock_guard<std::mutex> lock(apiMutex);
-                // Recheck after acquiring the SDK lock. A user Stop may have
-                // started after the event was dequeued but before this pull.
-                if (stopRequested.load(std::memory_order_acquire) &&
-                    state.load(std::memory_order_acquire) == CameraState::Stopping) {
-                    pullSuppressedByStop = true;
-                } else if (!handle) {
+                const auto w = info.v3.width;
+                const auto h = info.v3.height;
+                std::size_t required = 0;
+                if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
                     fatal = true;
-                    error = {-1, "Amcam_PullImageV4", "Camera handle is no longer open."};
-                } else {
-                    hr = Amcam_PullImageV4(
-                        handle, destination, 0, kRgb24Bits, kPackedRows, &info);
+                    error = {-1, "Amcam_PullImageV4",
+                             "SDK frame dimensions exceed the allocated RGB24 buffer."};
+                    break;
+                }
+
+                // Keep the logical byte count equal to this frame's dimensions,
+                // while retaining vector capacity for later frames of this size.
+                writable->pixels.resize(required);
+
+                writable->width = w;
+                writable->height = h;
+                writable->strideBytes = w * 3U;
+                writable->sequence = info.v3.seq;
+                writable->timestampMicroseconds = info.v3.timestamp;
+                writable->sdkFlags = info.v3.flag;
+                writable->exposureMicroseconds = info.v3.expotime;
+                writable->exposureGainPercent = info.v3.expogain;
+                writable->blackLevel = info.v3.blacklevel;
+
+                FramePtr lease = std::move(writable);
+                try {
+                    if (onFrame) onFrame(std::move(lease));
+                } catch (...) {
+                    dropped.fetch_add(1, std::memory_order_relaxed);
                 }
             }
-            if (pullSuppressedByStop)
-                continue;
-            if (fatal) break;
 
-            // The vendor documents E_PENDING as "no image data is available
-            // yet". The callback can race the frame-ready transition; this
-            // event is consumed and acquisition waits for the next image event.
-            if (hr == E_PENDING)
-                continue;
-            if (FAILED(hr)) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(hr),
-                         "Amcam_PullImageV4", hrMessage("Amcam_PullImageV4", hr)};
-                break;
+            if (fatal) {
+                if (stopRequested.load(std::memory_order_acquire) &&
+                    state.load(std::memory_order_acquire) == CameraState::Stopping) {
+                    // The user Stop currently owns the transition. Keep the
+                    // worker attached to the live event queue until it resolves.
+                    continue;
+                }
+
+                if (!reportFatal(std::move(error))) {
+                    const CameraState current = state.load(std::memory_order_acquire);
+                    if ((stopRequested.load(std::memory_order_acquire) &&
+                         current == CameraState::Stopping) ||
+                        (current == CameraState::Streaming &&
+                         sdkStarted.load(std::memory_order_acquire))) {
+                        // The user Stop won the atomic transition just before
+                        // reportFatal. Resume/wait rather than losing the worker.
+                        continue;
+                    }
+                }
             }
 
-            // Keep draining the SDK even when all frame leases are retained.
-            // Pull into the private discard buffer and account for the drop.
-            if (!writable) {
-                dropped.fetch_add(1, std::memory_order_relaxed);
-                continue;
-            }
-
-            const auto w = info.v3.width;
-            const auto h = info.v3.height;
-            std::size_t required = 0;
-            if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
-                fatal = true;
-                error = {-1, "Amcam_PullImageV4",
-                         "SDK frame dimensions exceed the allocated RGB24 buffer."};
-                break;
-            }
-
-            // Keep the logical byte count equal to this frame's dimensions,
-            // while retaining vector capacity for later frames of this size.
-            writable->pixels.resize(required);
-
-            writable->width = w;
-            writable->height = h;
-            writable->strideBytes = w * 3U;
-            writable->sequence = info.v3.seq;
-            writable->timestampMicroseconds = info.v3.timestamp;
-            writable->sdkFlags = info.v3.flag;
-            writable->exposureMicroseconds = info.v3.expotime;
-            writable->exposureGainPercent = info.v3.expogain;
-            writable->blackLevel = info.v3.blacklevel;
-
-            FramePtr lease = std::move(writable);
-            try {
-                if (onFrame) onFrame(std::move(lease));
-            } catch (...) {
-                dropped.fetch_add(1, std::memory_order_relaxed);
-            }
+            // The queue was stopped by successful Stop, Close, or a fatal
+            // transition that this worker successfully claimed.
+            break;
         }
 
-        if (fatal) {
-            // If the user is in a recoverable Stop transition, discard this
-            // event just as the Swift handler ignores queued events while
-            // streaming=false. A failed Stop restores the worker for later events.
-            if (stopRequested.load(std::memory_order_acquire) &&
-                state.load(std::memory_order_acquire) == CameraState::Stopping) {
-                fatal = false;
-                error = {};
-                continue;
-            }
-            reportFatal(std::move(error));
-        }
         g_acquisitionOwner = nullptr;
     }
 
@@ -731,7 +753,10 @@ struct AmcamCamera::Impl {
         pool.reset();
         onFrame = {};
         onError = {};
-        state.store(alreadyFaulted ? CameraState::Faulted : CameraState::Open,
+        const bool endedFaulted =
+            alreadyFaulted ||
+            state.load(std::memory_order_acquire) == CameraState::Faulted;
+        state.store(endedFaulted ? CameraState::Faulted : CameraState::Open,
                     std::memory_order_release);
         return flushStoppedFrameCaches(error);
     }

@@ -540,11 +540,26 @@ struct AmcamCamera::Impl {
                 break;
             }
             if (waitResult == detail::AmcamEventQueue::WaitResult::Overflow) {
+                // A user Stop transition temporarily suppresses event processing.
+                // Overflow during that interval is equivalent to callbacks handled
+                // while Swift has streaming=false: discard that transient backlog.
+                if (stopRequested.load(std::memory_order_acquire) &&
+                    state.load(std::memory_order_acquire) == CameraState::Stopping) {
+                    eventQueue.clearPending();
+                    continue;
+                }
                 fatal = true;
                 error = {-1, "Amcam event callback queue",
                          "The camera generated more pending callback events than the bounded queue can retain."};
                 break;
             }
+
+            // Stop temporarily suppresses frame pulls but leaves the callback
+            // queue accepting events. If Stop fails, streaming resumes and later
+            // callbacks continue to be handled without rebuilding the session.
+            if (stopRequested.load(std::memory_order_acquire) &&
+                state.load(std::memory_order_acquire) == CameraState::Stopping)
+                continue;
 
             if (event == AMCAM_EVENT_DISCONNECTED) {
                 fatal = true;
@@ -580,9 +595,15 @@ struct AmcamCamera::Impl {
 
             AmcamFrameInfoV4 info{};
             HRESULT hr = E_FAIL;
+            bool pullSuppressedByStop = false;
             {
                 std::lock_guard<std::mutex> lock(apiMutex);
-                if (!handle) {
+                // Recheck after acquiring the SDK lock. A user Stop may have
+                // started after the event was dequeued but before this pull.
+                if (stopRequested.load(std::memory_order_acquire) &&
+                    state.load(std::memory_order_acquire) == CameraState::Stopping) {
+                    pullSuppressedByStop = true;
+                } else if (!handle) {
                     fatal = true;
                     error = {-1, "Amcam_PullImageV4", "Camera handle is no longer open."};
                 } else {
@@ -590,7 +611,9 @@ struct AmcamCamera::Impl {
                         handle, destination, 0, kRgb24Bits, kPackedRows, &info);
                 }
             }
-            if (fatal || stopRequested.load(std::memory_order_acquire)) break;
+            if (pullSuppressedByStop)
+                continue;
+            if (fatal) break;
 
             // The vendor documents E_PENDING as "no image data is available
             // yet". The callback can race the frame-ready transition; this
@@ -643,7 +666,18 @@ struct AmcamCamera::Impl {
             }
         }
 
-        if (fatal) reportFatal(std::move(error));
+        if (fatal) {
+            // If the user is in a recoverable Stop transition, discard this
+            // event just as the Swift handler ignores queued events while
+            // streaming=false. A failed Stop restores the worker for later events.
+            if (stopRequested.load(std::memory_order_acquire) &&
+                state.load(std::memory_order_acquire) == CameraState::Stopping) {
+                fatal = false;
+                error = {};
+                continue;
+            }
+            reportFatal(std::move(error));
+        }
         g_acquisitionOwner = nullptr;
     }
 
@@ -653,12 +687,17 @@ struct AmcamCamera::Impl {
         if (before == CameraState::Open)
             return flushStoppedFrameCaches(error);
 
+        const bool wasStreaming = before == CameraState::Streaming;
         const bool alreadyFaulted = before == CameraState::Faulted;
-        if (!alreadyFaulted) state.store(CameraState::Stopping, std::memory_order_release);
-        stopRequested.store(true, std::memory_order_release);
-        eventQueue.stop();
+        if (!alreadyFaulted)
+            state.store(CameraState::Stopping, std::memory_order_release);
 
-        if (worker.joinable()) worker.join();
+        // Do not stop the callback queue or join its worker until the SDK has
+        // confirmed Stop. During this transition the worker suppresses PullImage,
+        // while the vendor callback continues enqueueing events. This mirrors
+        // Swift stopIfNeeded(): on SDK failure, restore the prior streaming state
+        // and keep callback context and image buffers alive.
+        stopRequested.store(true, std::memory_order_release);
 
         HRESULT hr = S_OK;
         {
@@ -672,18 +711,26 @@ struct AmcamCamera::Impl {
             }
         }
 
-        if (SUCCEEDED(hr)) {
-            waitForSdkCallbacks();
-            eventQueue.clearPending();
+        if (FAILED(hr)) {
+            if (wasStreaming) {
+                stopRequested.store(false, std::memory_order_release);
+                state.store(CameraState::Streaming, std::memory_order_release);
+            } else {
+                state.store(CameraState::Faulted, std::memory_order_release);
+            }
+            return failHr(error, "Amcam_Stop", hr);
         }
+
+        // A successful Stop ends callback production. Now wake/join the worker,
+        // drain any callbacks already in flight, and only then release its pool.
+        eventQueue.stop();
+        if (worker.joinable()) worker.join();
+        waitForSdkCallbacks();
+        eventQueue.clearPending();
 
         pool.reset();
         onFrame = {};
         onError = {};
-        if (FAILED(hr)) {
-            state.store(CameraState::Faulted, std::memory_order_release);
-            return failHr(error, "Amcam_Stop", hr);
-        }
         state.store(alreadyFaulted ? CameraState::Faulted : CameraState::Open,
                     std::memory_order_release);
         return flushStoppedFrameCaches(error);

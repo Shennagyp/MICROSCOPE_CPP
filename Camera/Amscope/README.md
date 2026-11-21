@@ -16,9 +16,10 @@ integration and does not modify vendor sample code.
 - E_PENDING is a transient callback/frame-readiness race. Disconnect, generic
   SDK error, no-frame timeout, no-packet timeout and event-queue overflow are
   fatal acquisition conditions.
-- Stop and Close are never called from the vendor callback. Stop the event queue
-  and join the pull worker before SDK teardown; drain callbacks after successful
-  Stop/Close before releasing session-owned resources.
+- Stop and Close are never called from the vendor callback. A failed user Stop
+  while Streaming restores the previous stream and retains callback/frame state;
+  successful Stop shuts down the event worker, drains callbacks, then releases
+  session resources. Terminal Close remains independent of Stop success.
 - Every successful Amcam_Stop marks a both-cache flush obligation
   (AMCAM_OPTION_FLUSH = 3). The driver flushes immediately and retries before
   the next Start if the SDK rejects the first flush. Terminal Close stops the event queue, joins the

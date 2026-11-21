@@ -35,14 +35,16 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
         return CameraFeatureAccessError{
             CameraFeatureAccessError::Code::FeatureUnavailable,
             descriptor.name,
-            "Camera feature is not available on this device."
+            "Camera feature is not available on this device.",
+            0, std::nullopt, std::nullopt
         };
     }
     if (!descriptor.isWritable) {
         return CameraFeatureAccessError{
             CameraFeatureAccessError::Code::FeatureNotWritable,
             descriptor.name,
-            "Camera feature is not writable in the current state."
+            "Camera feature is not writable in the current state.",
+            0, std::nullopt, std::nullopt
         };
     }
 
@@ -51,10 +53,9 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
         CameraFeatureAccessError error{
             CameraFeatureAccessError::Code::ValueTypeMismatch,
             descriptor.name,
-            "Camera feature value has the wrong type."
+            "Camera feature value has the wrong type.",
+            0, descriptor.kind, actualKind
         };
-        error.expectedKind = descriptor.kind;
-        error.actualKind = actualKind;
         return error;
     }
 
@@ -63,7 +64,8 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
             return CameraFeatureAccessError{
                 CameraFeatureAccessError::Code::BackendFailure,
                 descriptor.name,
-                "Invalid descriptor: elementCount requires an integer-vector feature."
+                "Invalid descriptor: elementCount requires an integer-vector feature.",
+                0, std::nullopt, std::nullopt
             };
         }
         const auto& values = std::get<std::vector<std::int64_t>>(value);
@@ -71,7 +73,8 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
             return CameraFeatureAccessError{
                 CameraFeatureAccessError::Code::InvalidValue,
                 descriptor.name,
-                "Vector length does not match the feature descriptor."
+                "Vector length does not match the feature descriptor.",
+                0, std::nullopt, std::nullopt
             };
         }
     }
@@ -84,7 +87,8 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
             return CameraFeatureAccessError{
                 CameraFeatureAccessError::Code::InvalidValue,
                 descriptor.name,
-                "Enumeration symbol is not supported by this camera."
+                "Enumeration symbol is not supported by this camera.",
+                0, std::nullopt, std::nullopt
             };
         }
     }
@@ -95,7 +99,8 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
             return CameraFeatureAccessError{
                 CameraFeatureAccessError::Code::BackendFailure,
                 descriptor.name,
-                "Invalid descriptor: numericRange requires a scalar numeric feature."
+                "Invalid descriptor: numericRange requires a scalar numeric feature.",
+                0, std::nullopt, std::nullopt
             };
         }
 
@@ -108,7 +113,8 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
             return CameraFeatureAccessError{
                 CameraFeatureAccessError::Code::BackendFailure,
                 descriptor.name,
-                "Camera returned an invalid numeric range or increment."
+                "Camera returned an invalid numeric range or increment.",
+                0, std::nullopt, std::nullopt
             };
         }
 
@@ -121,7 +127,8 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
             return CameraFeatureAccessError{
                 CameraFeatureAccessError::Code::InvalidValue,
                 descriptor.name,
-                "Value is outside the current feature range."
+                "Value is outside the current feature range.",
+                0, std::nullopt, std::nullopt
             };
         }
 
@@ -132,7 +139,8 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
                 return CameraFeatureAccessError{
                     CameraFeatureAccessError::Code::InvalidValue,
                     descriptor.name,
-                    "Value does not satisfy the feature increment."
+                    "Value does not satisfy the feature increment.",
+                    0, std::nullopt, std::nullopt
                 };
             }
         }

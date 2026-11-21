@@ -14,6 +14,9 @@ integration and does not modify vendor sample code.
   C++ worker. The SDK event callback only records disconnect/error flags.
 - Stop and Close are never called from an SDK callback. Handle operations are
   serialized; WaitImageV4 uses a 50 ms timeout to bound control/stop waiting.
+- Every successful Amcam_Stop marks a both-cache flush obligation
+  (AMCAM_OPTION_FLUSH = 3). The driver flushes immediately and retries before
+  the next Start if the SDK rejects the first flush. Close remains terminal.
 - Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
   sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every
@@ -34,6 +37,9 @@ integration and does not modify vendor sample code.
 - An injectable exact-model allow/deny registry narrows the probed feature
   capabilities; a missing profile leaves SDK-probed capabilities unchanged.
   Profiles are available through AmcamCamera and QtAmcamCamera constructors.
+  The current registry covers the capability families used by the eleven
+  implemented feature descriptors; the wider sensor/trigger/accessory taxonomy
+  remains a separate extension.
 - Auto white-balance-once remains a separate native command.
 - The acquisition lifecycle parity work remains outstanding.
 - Shared feature-value validation is unit-tested through the common CMake target;

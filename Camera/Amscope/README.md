@@ -23,6 +23,11 @@ integration and does not modify vendor sample code.
   image dimensions and sizes the pool for the selected configuration.
 - Exposure auto/manual, exposure time/gain, Temp/Tint white balance, one-shot
   auto white balance, and SDK frame-rate statistics are implemented.
+- The common application feature contract currently exposes ExposureAuto,
+  ExposureTime, and AmcamAnalogGainPercent with runtime descriptors and
+  typed reads/writes. Additional Swift feature parity is incremental.
+- Application-owned delivered libraries use camera_-prefixed artifact names;
+  the original Amcam SDK library remains libamcam.dylib.
 - The Qt Core adapter has a one-frame latest mailbox. It coalesces notifications
   and schedules Qt signals onto the QObject affinity thread.
 - The Qt Widgets preview app demonstrates camera enumeration, open/start/stop,
@@ -94,7 +99,7 @@ The SDK contains two macOS libraries:
 
 CMake selects based on the requested/native architecture. Override with
 -DAMSCOPE_VENDOR_MAC_ARCH=x64+arm64 or -DAMSCOPE_VENDOR_MAC_ARCH=x64+x86.
-The selected dylib is copied beside libamscope_driver.dylib and the driver
+The selected libamcam.dylib is copied beside libcamera_amscope_driver.dylib and the driver
 uses @loader_path for runtime resolution.
 
 ## Qt frame handoff

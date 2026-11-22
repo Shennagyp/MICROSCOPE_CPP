@@ -51,6 +51,43 @@ std::string hrMessage(const char* operation, HRESULT hr) {
 bool failHr(amscope::CameraError* out, const char* operation, HRESULT hr) {
     return fail(out, operation, static_cast<std::int32_t>(hr), hrMessage(operation, hr));
 }
+
+// AMCAM_OPTION_BITDEPTH is model-specific. Fixed 8-bit sensors have no
+// selectable 8/16-bit mode, so the SDK may return E_NOTIMPL for that option.
+// Amcam_get_MaxBitDepth returns the camera's maximum sensor depth as its
+// HRESULT value; only cameras above 8 bits need the optional mode readback.
+HRESULT getRawStorageMode(
+    HAmcam handle,
+    int& storageMode,
+    const char** failureOperation) {
+    if (failureOperation)
+        *failureOperation = "Amcam_get_MaxBitDepth";
+
+    const HRESULT maxBitDepthResult = Amcam_get_MaxBitDepth(handle);
+    if (FAILED(maxBitDepthResult))
+        return maxBitDepthResult;
+
+    const unsigned maxBitDepth =
+        static_cast<unsigned>(maxBitDepthResult);
+    if (maxBitDepth < 8 || maxBitDepth > 16)
+        return E_INVALIDARG;
+
+    if (maxBitDepth == 8) {
+        storageMode = 0;
+        return S_OK;
+    }
+
+    if (failureOperation)
+        *failureOperation = "Amcam_get_Option(BITDEPTH)";
+    const HRESULT optionResult =
+        Amcam_get_Option(handle, AMCAM_OPTION_BITDEPTH, &storageMode);
+    if (FAILED(optionResult))
+        return optionResult;
+    if (storageMode != 0 && storageMode != 1)
+        return E_INVALIDARG;
+
+    return S_OK;
+}
 std::string boundedString(const char* value, std::size_t capacity) {
     if (!value) return {};
     return std::string(value, std::find(value, value + capacity, '\0'));
@@ -2268,6 +2305,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
     int rawStorageMode = 0;
+    const char* failureOperation = "Amcam_get_FinalSize";
     HRESULT hr = S_OK;
     {
         std::lock_guard<std::mutex> api(impl_->apiMutex);
@@ -2289,6 +2327,8 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             int rawOption = 0;
             const HRESULT rawHr =
                 Amcam_get_Option(impl_->handle, AMCAM_OPTION_RAW, &rawOption);
+            if (FAILED(rawHr))
+                failureOperation = "Amcam_get_Option(RAW)";
             constexpr std::uint64_t rawCapabilityFlags =
                 AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
                 AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW14 | AMCAM_FLAG_RAW16 |
@@ -2300,6 +2340,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                     hr = E_INVALIDARG;
                 } else if (rawOption == 1) {
                     rawOutput = true;
+                    failureOperation = "Amcam_get_RawFormat";
                     hr = Amcam_get_RawFormat(
                         impl_->handle, &rawFourCC, &rawBitsPerPixel);
                     if (SUCCEEDED(hr) &&
@@ -2311,14 +2352,9 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                             impl_->modelCode, AmcamCameraFeature::RawOutput)) {
                         rawPolicyDenied = true;
                     }
-                    if (SUCCEEDED(hr)) {
-                        hr = Amcam_get_Option(
-                            impl_->handle, AMCAM_OPTION_BITDEPTH, &rawStorageMode);
-                        if (SUCCEEDED(hr) &&
-                            rawStorageMode != 0 && rawStorageMode != 1) {
-                            hr = E_INVALIDARG;
-                        }
-                    }
+                    if (SUCCEEDED(hr))
+                        hr = getRawStorageMode(
+                            impl_->handle, rawStorageMode, &failureOperation);
                 }
             } else if (modelAdvertisesRaw) {
                 hr = rawHr;
@@ -2332,7 +2368,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     }
     if (FAILED(hr)) {
         impl_->state.store(CameraState::Open, std::memory_order_release);
-        return failHr(error, rawOutput ? "Amcam_get_RawFormat" : "Amcam_get_FinalSize", hr);
+        return failHr(error, failureOperation, hr);
     }
 
     if (width <= 0 || height <= 0) {
@@ -4172,14 +4208,11 @@ bool AmcamCamera::captureStill(
                 return fail(error, "Amcam_get_RawFormat", -1,
                             "The SDK returned an unsupported RAW sensor bit depth.");
             }
-            const HRESULT bitDepthResult = Amcam_get_Option(
-                impl_->handle, AMCAM_OPTION_BITDEPTH, &rawStorageMode);
-            if (FAILED(bitDepthResult)) {
-                return failHr(error, "Amcam_get_Option(BITDEPTH)", bitDepthResult);
-            }
-            if (rawStorageMode != 0 && rawStorageMode != 1) {
-                return fail(error, "Amcam_get_Option(BITDEPTH)", -1,
-                            "The SDK returned an unknown RAW storage bit-depth mode.");
+            const char* storageModeFailureOperation = "Amcam_get_MaxBitDepth";
+            const HRESULT storageModeResult = getRawStorageMode(
+                impl_->handle, rawStorageMode, &storageModeFailureOperation);
+            if (FAILED(storageModeResult)) {
+                return failHr(error, storageModeFailureOperation, storageModeResult);
             }
         }
     }

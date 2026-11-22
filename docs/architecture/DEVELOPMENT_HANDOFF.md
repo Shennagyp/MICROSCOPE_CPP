@@ -3,7 +3,7 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last verified branch head before this handoff refresh:** `48be6c9b635fe9fa40760f66b2efec024bf4fec4`  
+**Last verified branch head before this handoff refresh:** `e0bc94a3bcbb7c3c96de0a0580a3a0c3115234a5`  
 **Last implementation-bearing commit:** `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`  
 **Current phase:** Phase 0 — baseline freeze and verification  
 **Phase status:** OPEN — the user reports that a clean local rebuild and live-resolution change now work on the physical camera. The FPS/throughput measurements and complete baseline hardware regression are still outstanding.
@@ -29,7 +29,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The current verified branch head before this handoff refresh is `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The last implementation-bearing commit is `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`; commits after it updated the implementation inventory and handoff while preserving the current performance work. The implementation changes the preview presentation/telemetry path, frame handoff, descriptor read caching, and Amcam Start-time maximum-rate configuration. It preserves the native callback -> bounded event queue -> single `Amcam_PullImageV4` worker. This handoff update records the latest physical-camera smoke result and CI state.
+The branch head before this handoff refresh is `e0bc94a3bcbb7c3c96de0a0580a3a0c3115234a5`. The latest implementation-bearing commit remains `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`; the source tree verified by the latest CI run is `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. Four subsequent commits (`06de96b`, `dcb41f2`, `5f686e2`, and `e0bc94a`) are documentation-only. They record the successful live-resolution smoke check, refresh the implementation/test inventory, extend the SDK seam design to cover discrete maximum-speed configuration, and synchronize the completion plan. No C++ source or acquisition behavior changed. The implementation still preserves the native callback -> bounded event queue -> single `Amcam_PullImageV4` worker.
 
 ### Relationship with `main`
 
@@ -43,12 +43,12 @@ Those two commits have no net file change to import. The comparison also shows t
 Relevant links:
 
 - [Active branch](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/amscope-native-driver)
-- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/48be6c9b635fe9fa40760f66b2efec024bf4fec4)
+- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/e0bc94a3bcbb7c3c96de0a0580a3a0c3115234a5)
 - [Comparison with main](https://github.com/Shennagyp/MICROSCOPE_CPP/compare/main...amscope-native-driver)
 
 ## 3. CI and test evidence
 
-The latest branch-head workflow is [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), run against `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. Both Intel x86_64 and Apple Silicon arm64 jobs completed successfully. The workflow includes configuration/build, CTest, artifact/architecture checks, launcher syntax, and launcher smoke checks. Earlier path-filtered runs were cancelled by the workflow's `cancel-in-progress` rule; they are superseded by this successful run. The assistant did not run a local build or CTest. The user reports that deleting the stale `build/amscope` output and rebuilding with `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh` succeeded, the app launched, and changing live resolution now works.
+The latest code-verification workflow is [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), run against source/documentation head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. Both Intel x86_64 and Apple Silicon arm64 jobs completed successfully. The workflow includes configuration/build, CTest, artifact/architecture checks, launcher syntax, and launcher smoke checks. Four later commits changed documentation only, so they do not alter the C++ source validated by this run. Earlier path-filtered runs were cancelled by the workflow's `cancel-in-progress` rule; they are superseded by this successful run. The assistant did not run a local build or CTest. The user reports that deleting the stale `build/amscope` output and rebuilding with `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh` succeeded, the app launched, and changing live resolution now works.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -174,7 +174,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 | Phase | Current status |
 |---|---|
-| 0 — Baseline freeze and verification | OPEN. Current branch CI is green; the user reports a successful clean local rebuild and working live-resolution change. The full physical-camera baseline record and performance measurements are still missing. |
+| 0 — Baseline freeze and verification | OPEN. CI is green for source head `48be6c9`; the user reports a successful clean local rebuild and working live-resolution change. The exact dimensions/FPS and full physical-camera baseline record are still missing. |
 | 1 — Native driver stabilization | OPEN. Native implementation and eight tests exist; more deterministic failure-path tests and physical qualification are required. |
 | 2 — Backend-neutral models | OPEN. Feature types are common; other important camera models still reside in AmScope. |
 | 3 — Driver/control/Qt streaming separation | OPEN. Current Qt facade combines responsibilities. |
@@ -187,6 +187,8 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 ### Phase 0 work now recorded
 
 - Repository/source/branch review and the implementation inventory are documented.
+- The implementation inventory was refreshed against the latest implementation-bearing source (`41d7471`) and now records the user-reported resolution smoke result separately from formal hardware qualification.
+- The native SDK test-seam design was rechecked against the current `Start` implementation. It now includes `Amcam_get_Speed` / `Amcam_put_Speed` so the non-precise-FPS model path and its readback/failure cleanup can be tested alongside the precise-FPS option path. This is design-only; the seam has not been implemented.
 - The user reports that the physical camera opens and produces live preview frames.
 - After removing the stale generated `build/amscope` tree and rebuilding with `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh`, the user reports that the build and application launch succeeded and the live `Resolution` feature successfully changed resolution. The earlier `Operation not permitted` failure while writing `AmcamCamera.cpp.o` is no longer blocking the clean build.
 - The user did not provide exact selected/reported dimensions or still-capture dimensions; do not infer that the 640×480 performance mode or toolbar still-capture path has been verified.
@@ -220,9 +222,9 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Work that can proceed after/beside the physical baseline without altering behavior
 
-- Complete the source-to-test mapping in [the implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md).
-- Review the C++ source against the Swift behavior and identify untested native SDK call paths.
-- The Phase 1 internal SDK-call seam has been statically scoped and documented in [the native-driver test seam design](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). Implement it only after Phase 0 hardware acceptance; it must remain private to implementation/testing and must not change the public camera abstraction.
+- Keep the source-to-test mapping current in [the implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md); the current inventory and targeted smoke observation are refreshed.
+- Continue the C++/Swift behavior comparison and identify untested native SDK call paths without changing runtime behavior before Phase 0 acceptance.
+- The Phase 1 internal SDK-call seam is documented in [the native-driver test seam design](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md), including both post-Start maximum-rate model branches. Implement it only after Phase 0 hardware acceptance; it must remain private to implementation/testing and must not change the public camera abstraction.
 - Design the common model extraction as a type migration with explicit AmScope adapters.
 - Identify the external GenTL/GenApi C++ runtime and its supply/version/licensing constraints. Do not create a replacement implementation.
 

@@ -353,8 +353,6 @@ public:
                 this, [this]() { refreshTriggerConfiguration(); });
         connect(softwareTriggerButton_, &QPushButton::clicked,
                 this, [this]() { sendSoftwareTrigger(); });
-        connect(lensApertureSetButton_, &QPushButton::clicked,
-                this, [this]() { setLensAperturePosition(); });
 
         connect(&camera_, &amscope::QtAmcamCamera::frameAvailable,
                 this, [this]() {

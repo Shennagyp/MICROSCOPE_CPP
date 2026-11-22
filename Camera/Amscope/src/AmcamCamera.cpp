@@ -1387,7 +1387,7 @@ struct AmcamCamera::Impl {
         auto* self = static_cast<Impl*>(context);
         if (!self) return;
 
-        auto callbackLease = self->sdkCallbacks.enter();
+        [[maybe_unused]] auto callbackLease = self->sdkCallbacks.enter();
 
         // Still-image events use an independent waiter, never the live FIFO.
         if (event == AMCAM_EVENT_STILLIMAGE) {

@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `41d74718fa9a0be37060889b5d2bfcdbd6892e0f` (latest implementation-bearing commit in the reviewed branch)  
-**Branch head reviewed for this inventory refresh:** `48be6c9b635fe9fa40760f66b2efec024bf4fec4` (later commits at that point were documentation-only)  
+**Source snapshot:** `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff` (current implementation snapshot, including the physical-camera rate test utility)  
+**Branch head reviewed for this inventory refresh:** `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff`  
 **Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported smoke observations; it does not claim full physical-camera qualification.
 
 ---
@@ -33,7 +33,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Common validation | `CameraFeatureValidation.h` | Shared type, range, increment, enum, vector, availability, and writability validation |
 | Common FPS estimator | `FrameRateEstimator.h` | Host frame-rate estimation |
 | Qt facade | `QtAmcamCamera.h/.cpp` | Qt QObject facade, lifecycle/request worker, queued feature/control operations, frame mailbox |
-| Preview | `app/main.cpp` | Current single-window Qt Widgets application |
+| Preview | `app/main.cpp` | Current single-window Qt Widgets application |\n| Physical-camera rate test | `app/hardware_rate_test.cpp` | Dedicated Qt preview/test executable measuring event, pull, callback-delivery and paint rates on a connected camera |
 | Build/CI | `CMakeLists.txt`, `.github/workflows/amscope-macos.yml` | macOS driver/Qt/preview build, CTest, architecture and launcher checks |
 
 ## 3. Session lifecycle and live acquisition
@@ -56,7 +56,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Frame notifications bypass feature-request queue lock | Source implemented | No dedicated contention test | Not recorded |
 | SDK image-event, successful-pull, and actual paint counters | Source implemented | Counter wiring is compile/CI pending; no unit-level hardware-rate test | Not recorded |
 | Maximum supported frame rate selected on Start by model flags | Source implemented | No deterministic SDK-setting test yet | Not recorded |
-| Generic SDK FPS cap removed (`AMCAM_OPTION_FRAMERATE=0`) | Source implemented | No deterministic SDK-setting test yet | Not recorded |
+| Generic SDK FPS cap removed (`AMCAM_OPTION_FRAMERATE=0`) | Source implemented | No deterministic SDK-setting test yet | Not recorded |\n| Physical-camera rate measurement | Test executable implemented; manual run required | `amscope_hardware_rate_test` reports event/pull/callback/paint FPS, actual dimensions, sequence, exposure and drops | Not run on hardware yet |
 | Frame-pool exhaustion and dropped-frame accounting | Source implemented/documented | No dedicated frame-pool behavior test identified | Not recorded |
 
 ## 4. Frame and image payload behavior
@@ -177,7 +177,9 @@ Additional target-architecture gaps:
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
-All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in the latest branch-head workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with source/documentation branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The launcher found zero cameras in CI. This list must be expanded when tests are added; it must not be interpreted as complete native lifecycle coverage.
+All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. This earlier run verifies the existing unit-test targets, not the later-added hardware rate executable. A new build is pending for `c98ab6b`; the new workflow also checks the hardware-test executable's architecture and linkage. The launcher found zero cameras in CI.
+
+The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event FPS, successful-pull FPS, frame-callback FPS, unique painted-frame FPS, actual dimensions, sequence range, exposure, and frame-pool drops. It attempts to restore the original resolution after Stop. No physical run of this executable is recorded yet.
 
 ## 10. Current evidence classification
 
@@ -193,7 +195,7 @@ All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon
 - Existing GenTL Consumer implementation: **present in Swift AMSCOPE_DRIVER/macos-version-0.4; no direct C++ interface**.
 - C++ GenTL Consumer/CTI adapter: **not delivered; integration choice pending**.
 - Exported CMake package: **not established**.
-- Intel and Apple Silicon CI: **passed at branch head `48be6c9` in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867); eight of eight CTest tests passed on both architectures**.
+- Intel and Apple Silicon CI: **previous branch head `48be6c9` passed in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867); eight of eight registered CTest tests passed on both architectures. The hardware-test executable is added after that run; CI for `c98ab6b` is pending at this inventory refresh**.
 - Targeted physical-camera smoke observation: **user reports that live resolution switching now works after a clean rebuild; see Section 10.1**.
 - Physical AmScope hardware baseline: **not recorded; a full exact-commit regression record is still required**.
 - Physical CTI-camera test: **not recorded**.

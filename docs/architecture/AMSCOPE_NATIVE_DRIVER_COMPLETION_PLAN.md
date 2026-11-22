@@ -257,6 +257,29 @@ No assistant-side local build or CTest run was performed for these changes. The 
 
 This targeted physical-camera smoke result establishes that the live resolution setting path works in the user's setup. The exact tested local commit, camera/model identity, selected resolution index, resulting frame dimensions, still-capture dimensions, and event/pull/paint FPS values were not supplied. It does not establish the 640×480 throughput target, the still-resolution toolbar path, other feature setters, or lifecycle/recovery behavior.
 
+### First MU503 hardware rate result — 22 November 2026
+
+The user ran the dedicated utility on the camera enumerated by the SDK as `MU503(USB2.0)`. The selected live-resolution symbol was `2:640x480`; the original `1:1280x960` setting was restored successfully after Stop. The measured interval was 15.090 seconds:
+
+| Metric | Result |
+|---|---:|
+| SDK image-event rate | 91.253 FPS |
+| Successful `Amcam_PullImageV4` rate | 91.253 FPS |
+| Driver callback delivery rate | 91.253 FPS |
+| Actual frame dimensions | 640×480 |
+| Frame-pool drops | 0 |
+| Stop / resolution restore / Close | All succeeded |
+
+Equal event, pull, and callback rates with zero pool drops indicate no measured loss between the camera-event, pull-worker, and driver-callback stages during this interval. The observed camera-delivery rate was below the 100 FPS target.
+
+The initial report's `paint_fps=0` and `result=FAIL` were invalid presentation evidence. The MU503 returned SDK frame sequence zero for both the first and last observed frames. The first hardware-test implementation used this SDK sequence field to reject repeated frames and count newly painted frames; the production preview's paint estimator also used sequence changes as its uniqueness condition. The test preview therefore stopped submitting new frames after the first sequence-zero frame, and the paint counter did not measure the actual paint path.
+
+The production preview and test now count a newly submitted/delivered frame when it is actually painted, without depending on SDK sequence metadata. The corrected test uses a monotonically increasing host-side callback revision for each delivered frame. It also reports the SDK timestamp range, reads the configured `ExposureTime` feature separately from per-frame `expotime` metadata, computes the theoretical exposure-limited FPS, and reads back the model-selected frame-speed level outside the timed interval. The first run's 91.253 FPS acquisition observation remains valid; its paint rate must be discarded.
+
+The SDK's per-frame `expotime` metadata was zero in the first run, so the configured exposure duration is not yet known. Do not infer an exposure limit from that field. The device name includes `USB2.0`; this is a relevant transport clue because the published [AmScope MU503 specification](https://amscope.com/products/mu503) lists 101 FPS at 640×480 and USB 3.0. ToupTek's [USB 3.0 recognition guidance](https://www.touptekphotonics.com/FAQ/) notes that a USB 3.0 camera may be recognized as USB 2.0 due to port/cable/connection problems. The configured exposure can independently limit FPS; see [ToupTek FAQ Q16](https://www.touptekphotonics.com/FAQ/78). These are investigation leads, not yet a proven cause of the 91.253 FPS result.
+
+Do not change the native acquisition path or force an FPS value based on this run. First rerun the corrected measurement, record `configured_exposure_us`, `exposure_fps_limit`, `applied_speed_level`, `last_timestamp_us`, and the corrected `paint_fps`, and check the actual macOS USB link speed.
+
 Phase 0 remains OPEN. The next hardware step is to run the dedicated physical-camera rate measurement executable introduced for this purpose.
 
 From the repository root, run:

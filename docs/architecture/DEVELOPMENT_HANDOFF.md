@@ -4,9 +4,9 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
 **Physical run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
-**Latest diagnostic source revision:** `a54c56c0b7d9b6e586c7d99b8cae3051836e8ec3`  
-**Current phase:** Phase 0 — baseline freeze and verification  
-**Phase status:** OPEN — two MU503 runs report 91.253 and 91.183 event/pull/callback FPS at 640×480, both with zero frame-pool drops and successful Stop/resolution restore/Close. The second run reports 14.140 painted FPS and a 70,000 µs pre-Start exposure readback; active exposure mode/value and the reason for the lower paint rate are not yet established. Diagnostic code now records exposure state/readbacks at multiple lifecycle points and separates preview polls, submissions, paint events, and painted frames. This latest diagnostic source revision has not yet been locally built or hardware-run.
+**Latest diagnostic source revision used for the second physical run:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
+**Current phase:** Phase 2 — backend-neutral camera models  
+**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. The MU503 produced 91.253 and 91.183 event/pull/callback FPS at 640×480 in two runs, with zero reported frame-pool drops and successful Stop/resolution restore/Close. The second run measured 14.140 painted FPS and a 70,000 µs pre-Start exposure readback; neither the active exposure limit nor the lower presentation rate was established. Extended 15-minute hardware regression and full SDK fault-injection remain recommended follow-ups, not blockers to the owner's phase acceptance. Post-acceptance deterministic tests now cover callback draining, cache-flush retry semantics, and retained frame leases; CI for those new tests is pending.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -21,9 +21,9 @@ This is the continuation entrypoint for subsequent development sessions. It is a
    - [Swift-to-C++ Translation Paradigm](SWIFT_TO_CPP_TRANSLATION_PARADIGM.md)
    - [AmScope Driver README](../../Camera/Amscope/README.md)
    - The authoritative Camera Module and UI Libraries architecture paper agreed in the project discussion.
-3. Phase 0 remains OPEN. The user has built and run the hardware test at 640×480 twice, but the 100 FPS target remains unmet. The latest exposure/preview instrumentation requires a fresh local build and hardware run; the complete baseline regression also remains outstanding.
-4. Do not begin Phase 1 native-driver lifecycle refactoring until Phase 0 is accepted. Continue only behavior-preserving/documentation work in parallel; the next hardware gate is the measured 640×480 performance run and baseline regression.
-5. For every phase, keep the mandatory physical-camera test gate. A phase with code and green CI but no passing physical-camera record remains OPEN.
+3. Phases 0 and 1 are accepted by the project owner. Do not reopen them solely because the requested 100 FPS target was not reached; that target is a measured performance objective, not a lifecycle correctness threshold.
+4. The next planned implementation phase is Phase 2 — backend-neutral camera models. Keep the remaining 15-minute hardware run, repeated lifecycle cycles, still-capture test where supported, and full SDK fault injection as explicit follow-up qualification work.
+5. Preserve the distinction between owner phase acceptance and the stricter `Hardware verified` evidence label, which still requires an exact-commit record under `docs/testing/hardware/`.
 
 ## 2. Current Git state
 
@@ -52,7 +52,9 @@ The initial hardware-test executable passed both-architecture build, CTest, arti
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
-All eight registered CTest tests passed on both architectures in the latest completed run [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867):
+All eight CTest targets in the earlier suite passed on both architectures in [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867). The current branch now adds `amscope_session_primitives_tests`; the latest branch-head workflow must confirm all nine targets. The additional target verifies production callback-lease draining, cache-flush retry/generation preservation, and retained frame-pool leases.
+
+The eight targets in the earlier completed suite were:
 
 1. `amscope_camera_types_tests`
 2. `amscope_acquisition_frame_gate_tests`
@@ -187,8 +189,8 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 | Phase | Current status |
 |---|---|
-| 0 — Baseline freeze and verification | OPEN. Two physical runs measured 91.253 and 91.183 event/pull/callback FPS at 640×480 with zero drops and successful Stop/restore/Close. The second run's measured paint rate was 14.140 FPS; its 70 ms pre-Start exposure readback is not yet an established active exposure limit. Latest exposure/preview diagnostics need a local run; full 15-minute baseline regression remains outstanding. |
-| 1 — Native driver stabilization | OPEN. Native implementation and eight tests exist; more deterministic failure-path tests and physical qualification are required. |
+| 0 — Baseline freeze and verification | ACCEPTED BY OWNER. Two MU503 640×480 physical runs measured 91.253 and 91.183 event/pull/callback FPS, zero drops, successful Stop/restore/Close. A 15-minute exact-commit hardware record remains follow-up coverage. |
+| 1 — Native driver stabilization | ACCEPTED BY OWNER. The single-session native acquisition path is accepted; deterministic callback/cache/lease tests are added as post-acceptance hardening. Full injected SDK failure coverage remains future work. |
 | 2 — Backend-neutral models | OPEN. Feature types are common; other important camera models still reside in AmScope. |
 | 3 — Driver/control/Qt streaming separation | OPEN. Current Qt facade combines responsibilities. |
 | 4 — Reusable Qt UI library | OPEN. Preview exists; reusable UI library is not delivered. |
@@ -213,7 +215,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 - The current source changes preserve the callback -> bounded event queue -> single `Amcam_PullImageV4` worker. The earlier SDK frame-rate polling path was removed because it acquired the SDK-call mutex during acquisition.
 - The completion plan and README describe the new implementation and hardware acceptance criteria.
 
-### Phase 0 work still required
+### Phase 0 residual follow-up coverage
 
 - The latest branch-head CI run is green on Intel x86_64 and Apple Silicon arm64, with all eight registered CTest tests passing.
 - The user has built and launched the branch locally after removing the stale generated build directory, and has confirmed that the live `Resolution` feature changes resolution. Record the exact resulting live frame dimensions before treating 640×480 as the measured mode.
@@ -224,18 +226,15 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 - Record actual camera manufacturer/model, SDK model code, firmware, SDK version, OS, and architecture.
 - Complete Section 3.2, including safe setting readback/restoration, Stop/Start, Close/reopen, still capture where supported, and the required 15-minute continuous acquisition interval.
 - Save the complete hardware record under `docs/testing/hardware/`.
-- Keep Phase 0 OPEN until the performance retest and complete hardware record pass.
+- These are recommended evidence improvements, not blockers to the owner's explicit Phase 0 acceptance.
 
 ## 8. Immediate next actions
 
-### Required before Phase 1 refactoring
+### Immediate local validation of the new post-acceptance tests
 
-1. Check that CI passes for the latest `amscope-native-driver` head, then pull it, build, and rerun:
-   `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh --hardware-rate-test --resolution 640x480 --warmup 3 --duration 15 --target-fps 100`.
-2. Keep the test preview window visible. Send the JSON output, including all exposure-auto/exposure readback points, `exposure_fps_limit_basis`, `frame_poll_ticks`, `preview_frame_submissions`, `paint_events`, `paint_fps`, and `applied_speed_level`.
-3. In a second terminal, inspect the USB device tree with `system_profiler SPUSBDataType` and send the MU503 device entry showing the negotiated connection speed. Do not infer this solely from the SDK display name.
-4. Interpret the measurements before changing code. The pre-Start 70,000 µs value from the second run is not sufficient to establish an exposure limit; the new report distinguishes automatic/manual mode and checks stability during the timed interval. Compare poll ticks, frame submissions, paint events and painted frames to localize UI presentation.
-5. Then complete the Section 3.2 baseline regression, including the required 15-minute continuous acquisition interval, Stop/Start, Close/reopen, safe reversible setting readback/restoration, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`; keep Phase 0 OPEN until it passes.
+Pull the branch and run the CTest suite with testing enabled. The exact command is recorded in Section 10 below. The new test target must pass on the user's Mac before treating the source change as locally validated. GitHub Actions must also pass on both Apple Silicon and Intel.
+
+The 15-minute acquisition, USB negotiation inspection, and safe setting/still-capture regression remain useful follow-up measurements. Do not infer an exposure limit from the earlier pre-Start 70,000 µs value.
 
 ### Work that can proceed after/beside the physical baseline without altering behavior
 
@@ -245,9 +244,11 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 - Design the common model extraction as a type migration with explicit AmScope adapters.
 - Identify the external GenTL/GenApi C++ runtime and its supply/version/licensing constraints. Do not create a replacement implementation.
 
-### First Phase 1 source change after Phase 0 acceptance
+### Phase 1 post-acceptance hardening
 
-Implement the private SDK dispatch seam in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md), then add deterministic native-session tests for:
+The first post-acceptance test increment is now implemented in `AmcamSessionPrimitives.h` and `AmcamSessionPrimitivesTests.cpp`. It covers callback lease drain behavior, cache-flush failure/retry and newer-obligation preservation, and frame-slot reuse only after a lease is released.
+
+The broader private SDK dispatch seam remains a possible next hardening increment for deterministic native-session tests covering:
 
 1. Open failure and idempotent terminal Close.
 2. Start setup failure and StartPull callback-start failure.
@@ -261,7 +262,7 @@ Implement the private SDK dispatch seam in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](
 
 Keep the test seam private to implementation and test support. Do not add a second public camera abstraction, second `HAmcam`, second SDK-call lock, or a different acquisition mechanism.
 
-The physical AmScope regression remains mandatory after those code changes. The Phase 1 record must identify the exact camera/model and tested commit, include the baseline procedure, and measure the required 15-minute acquisition interval.
+Those additional fault-injection tests are follow-up coverage. The user has accepted Phase 1; the follow-up must preserve the single `HAmcam` owner and the callback → bounded queue → single pull worker mechanism.
 
 ## 8. GenTL/GenApi dependency assessment
 

@@ -2299,7 +2299,6 @@ bool AmcamCamera::moveFilterWheel(
 }
 
 bool AmcamCamera::readStillResolutions(
-bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {
     if (error) *error = {};

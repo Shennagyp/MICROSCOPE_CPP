@@ -130,6 +130,7 @@ public:
     [[nodiscard]] CameraState state() const noexcept;
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] std::uint64_t framesPulled() const noexcept;
+    [[nodiscard]] std::uint64_t imageEventsReceived() const noexcept;
     [[nodiscard]] FramePtr takeLatestFrame();
 
     // Synchronous command/telemetry entry points are for non-GUI consumers.

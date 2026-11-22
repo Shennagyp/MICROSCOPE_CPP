@@ -87,8 +87,11 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   fallback only when subsequent SDK readback is unavailable. If readback is
   available, it remains authoritative and must match the request. Frame
   metadata keeps significant source depth separate from storage width;
-  vendor RAW payload bytes are not transformed. The Qt preview refuses to
-  interpret RAW sensor bytes as RGB888 until a decoder is attached.
+  vendor RAW payload bytes are not transformed. After a still capture, the UI
+  reports the returned frame's measured significant and storage bit depths
+  separately above the capture controls; this readout is not a requested
+  setting and is not inferred from the selected RAW mode. The Qt preview
+  refuses to interpret RAW sensor bytes as RGB888 until a decoder is attached.
 - Live and still payloads use the backend-neutral `camera::Frame` /
   `camera::FramePtr` contract from `Camera/Common`. It carries dimensions,
   row stride, buffer format, opaque format identity, significant source depth,

@@ -446,7 +446,11 @@ buildAmcamFeatureDescriptors(
         SUCCEEDED(rawBitDepthModeHr) &&
         (rawBitDepth == 0 ||
          (rawBitDepth == 1 && rawMaximumBitDepthValid));
-    const bool rawBitDepthWritable = rawModeReadable && rawMode == 1 &&
+    // Bit depth is an independent stopped-state camera setting. It can be
+    // configured before RAW output is enabled; tying writability to the
+    // current RAW/RGB mode made the selector unusable in the normal default
+    // RGB state.
+    const bool rawBitDepthWritable = rawModeReadable &&
         rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
     std::vector<std::int64_t> rawBitDepthValues{8};
     if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U) {
@@ -5053,12 +5057,11 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
             return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
                                 std::string(name), "RAW output bit depth can only be changed while acquisition is stopped.");
-        int rawMode = 0;
-        HRESULT hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_RAW, &rawMode);
-        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(RAW)", hr);
-        if (rawMode != 1)
-            return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
-                                std::string(name), "Enable RAW sensor output before selecting its bit-depth mode.");
+        // AMCAM_OPTION_BITDEPTH is independently configurable while the
+        // camera is stopped. Do not require RAW output to be enabled first:
+        // applications commonly configure sensor precision before selecting
+        // the RAW transport mode.
+        HRESULT hr = S_OK;
         const auto selectedBitDepth =
             std::get<std::int64_t>(value);
         const unsigned maximumBitDepth =

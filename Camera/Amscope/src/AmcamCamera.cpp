@@ -421,9 +421,11 @@ buildAmcamFeatureDescriptors(
     int rawMode = 0;
     const HRESULT rawModeHr =
         Amcam_get_Option(handle, AMCAM_OPTION_RAW, &rawMode);
-    int rawBitDepth = 0;
-    const HRESULT rawBitDepthHr =
-        Amcam_get_Option(handle, AMCAM_OPTION_BITDEPTH, &rawBitDepth);
+    int rawBitDepth = -1;
+    const char* rawBitDepthFailureOperation = nullptr;
+    const HRESULT rawBitDepthModeHr = getRawBitDepthMode(
+        handle, modelFlags, rawBitDepth, &rawBitDepthFailureOperation,
+        requestedRawBitDepthModeFallback);
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
     const HRESULT rawFormatHr =
@@ -442,13 +444,11 @@ buildAmcamFeatureDescriptors(
     // the SDK's maximum; intermediate depths are not configurable through
     // AMCAM_OPTION_BITDEPTH and must not be advertised.
     const bool rawBitDepthReadable = rawModeReadable &&
-        (SUCCEEDED(rawBitDepthHr)
-            ? (rawBitDepth == 0 ||
-               (rawBitDepth == 1 && rawMaximumBitDepthValid))
-            : (requestedRawBitDepthModeFallback == 0 ||
-               (requestedRawBitDepthModeFallback == 1 &&
-                rawMaximumBitDepthValid)));
-    const bool rawBitDepthWritable = rawModeReadable && rawMode == 1;
+        SUCCEEDED(rawBitDepthModeHr) &&
+        (rawBitDepth == 0 ||
+         (rawBitDepth == 1 && rawMaximumBitDepthValid));
+    const bool rawBitDepthWritable = rawModeReadable && rawMode == 1 &&
+        rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
     std::vector<std::int64_t> rawBitDepthValues{8};
     if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U) {
         rawBitDepthValues.push_back(
@@ -4766,19 +4766,17 @@ AmcamCamera::readFeature(std::string_view name) {
     }
     if (name == camera::RawOutputBitDepthFeature) {
         int mode = -1;
-        const HRESULT hr = Amcam_get_Option(
-            impl_->handle, AMCAM_OPTION_BITDEPTH, &mode);
-        if (SUCCEEDED(hr)) {
-            if (mode != 0 && mode != 1)
-                return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                    std::string(name), "The camera returned an unknown RAW bit-depth mode.");
-        } else {
-            mode = impl_->requestedRawBitDepthMode.load(
-                std::memory_order_acquire);
-            if (mode != 0 && mode != 1)
-                return featureBackendError(
-                    std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
-        }
+        const char* failureOperation = nullptr;
+        const int requestedFallback =
+            impl_->requestedRawBitDepthMode.load(std::memory_order_acquire);
+        const HRESULT modeHr = getRawBitDepthMode(
+            impl_->handle, impl_->modelFlags, mode, &failureOperation,
+            requestedFallback);
+        if (FAILED(modeHr))
+            return featureBackendError(
+                std::string(name),
+                failureOperation ? failureOperation : "getRawBitDepthMode",
+                modeHr);
 
         const unsigned maximumBitDepth =
             rawMaximumBitDepth(impl_->handle, impl_->modelFlags);

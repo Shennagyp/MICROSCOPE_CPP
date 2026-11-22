@@ -3477,6 +3477,19 @@ bool AmcamCamera::configureIoLine(
                     "The requested direction is not supported by this I/O line.");
     }
 
+    const bool directionChanges = targetDirection != currentDirection;
+    // The SDK's direction-specific getters are only meaningful for the
+    // currently active direction. Keep direction switching as its own
+    // transaction; callers can then refresh state and configure the new mode.
+    if (directionChanges &&
+        (configuration.inputActivation || configuration.debounceTimeMicroseconds ||
+         configuration.outputInverted || configuration.outputMode ||
+         configuration.strobeDelayMode || configuration.strobeDelayMicroseconds ||
+         configuration.strobeDurationMicroseconds)) {
+        return fail(error, "configureIoLine", -1,
+                    "Change the line direction separately before configuring direction-specific settings.");
+    }
+
     if (targetDirection == 1 &&
         (configuration.line == AmcamIoLine::GPIO0 ||
          configuration.line == AmcamIoLine::GPIO1)) {

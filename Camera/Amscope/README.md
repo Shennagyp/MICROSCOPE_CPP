@@ -80,6 +80,8 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   maximum is never advertised as an exact bit count. The backend maps the
   exact public values to the SDK's native mode values 0 and 1.
   The feature is writable only while stopped and RAW output is enabled.
+  This sensor-output precision setting is independent of the application's
+  `Processed still` / `RAW still` capture-request selector.
   Some SDK models implement the setter but not the getter: after a successful
   set, the requested native mode is retained for the session and used as a
   fallback only when subsequent SDK readback is unavailable. If readback is

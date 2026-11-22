@@ -180,12 +180,36 @@ public:
         filterWheelLayout->addWidget(filterWheelMoveButton_);
         filterWheelLayout->addWidget(filterWheelRefreshButton_);
         accessoryForm_->addRow("Filter wheel", filterWheelRow_);
+
+        astroAutoFocuserGroup_ = new QGroupBox("Astronomy auto-focuser", central);
+        auto* astroFocuserForm = new QFormLayout(astroAutoFocuserGroup_);
+        astroAutoFocuserRow_ = new QWidget(astroAutoFocuserGroup_);
+        auto* astroFocuserLayout = new QHBoxLayout(astroAutoFocuserRow_);
+        astroFocuserLayout->setContentsMargins(0, 0, 0, 0);
+        astroAutoFocuserTargetSelector_ = new QSpinBox(astroAutoFocuserRow_);
+        astroAutoFocuserTargetSelector_->setRange(0, 0);
+        astroAutoFocuserMoveButton_ = new QPushButton("Move", astroAutoFocuserRow_);
+        astroAutoFocuserHaltButton_ = new QPushButton("Halt", astroAutoFocuserRow_);
+        astroAutoFocuserRefreshButton_ = new QPushButton("Refresh", astroAutoFocuserRow_);
+        astroFocuserLayout->addWidget(astroAutoFocuserTargetSelector_, 1);
+        astroFocuserLayout->addWidget(astroAutoFocuserMoveButton_);
+        astroFocuserLayout->addWidget(astroAutoFocuserHaltButton_);
+        astroFocuserLayout->addWidget(astroAutoFocuserRefreshButton_);
+        astroFocuserForm->addRow("Target position", astroAutoFocuserRow_);
+        astroAutoFocuserStatusLabel_ = new QLabel("Position unknown", astroAutoFocuserGroup_);
+        astroAutoFocuserStatusLabel_->setWordWrap(true);
+        astroFocuserForm->addRow("Status", astroAutoFocuserStatusLabel_);
+        astroAutoFocuserGroup_->hide();
+
         accessoryGroup_->hide();
+
+        auto* settingsColumn = new QVBoxLayout();        accessoryGroup_->hide();
 
         auto* settingsColumn = new QVBoxLayout();
         settingsColumn->addWidget(featureStatus_);
         settingsColumn->addWidget(refreshFeaturesButton_);
         settingsColumn->addWidget(accessoryGroup_);
+        settingsColumn->addWidget(astroAutoFocuserGroup_);
         settingsColumn->addWidget(featureScroll_, 1);
 
         auto* workspace = new QHBoxLayout();
@@ -228,6 +252,15 @@ public:
                 this, [this]() { applyEmbeddedLightSourceLevel(); });
         connect(filterWheelMoveButton_, &QPushButton::clicked,
                 this, [this]() { submitFilterWheelMove(); });
+        connect(filterWheelRefreshButton_, &QPushButton::clicked,
+                this, [this]() { refreshFilterWheelState(); });
+
+        connect(astroAutoFocuserMoveButton_, &QPushButton::clicked,
+                this, [this]() { moveAstroAutoFocuser(); });
+        connect(astroAutoFocuserHaltButton_, &QPushButton::clicked,
+                this, [this]() { haltAstroAutoFocuser(); });
+        connect(astroAutoFocuserRefreshButton_, &QPushButton::clicked,
+                this, [this]() { refreshAstroAutoFocuserState(); });
         connect(filterWheelRefreshButton_, &QPushButton::clicked,
                 this, [this]() { refreshFilterWheelState(); });
 
@@ -683,8 +716,12 @@ private:
         embeddedLightSourceStateKnown_ = false;
         filterWheelStateKnown_ = false;
         filterWheelMoving_ = false;
+        astroAutoFocuserReadPending_ = false;
+        astroAutoFocuserStateKnown_ = false;
+        astroAutoFocuserMoving_ = false;
         accessoryOperationPending_ = false;
         accessoryGroup_->hide();
+        astroAutoFocuserGroup_->hide();
         setFeatureControlsEnabled(false);
         featureStatus_->setText("Reading feature descriptors…");
 
@@ -1207,8 +1244,16 @@ private:
         embeddedLightSourceStateKnown_ = false;
         filterWheelStateKnown_ = false;
         filterWheelMoving_ = false;
+        astroAutoFocuserAvailable_ = false;
+        astroAutoFocuserReadPending_ = false;
+        astroAutoFocuserStateKnown_ = false;
+        astroAutoFocuserMoving_ = false;
         accessoryOperationPending_ = false;
         accessoryGroup_->hide();
+        astroAutoFocuserGroup_->hide();
+        astroAutoFocuserTargetSelector_->setRange(0, 0);
+        astroAutoFocuserTargetSelector_->setValue(0);
+        astroAutoFocuserStatusLabel_->setText("Position unknown");
         embeddedLightSourceSlider_->setRange(0, 0);
         embeddedLightSourceSlider_->setValue(0);
         embeddedLightSourceValueLabel_->setText("—");
@@ -1229,6 +1274,9 @@ private:
         embeddedLightSourceAvailable_ =
             available("AmcamEmbeddedLightSourceAvailable");
         filterWheelAvailable_ = available("AmcamFilterWheelAvailable");
+        astroAutoFocuserAvailable_ =
+            available("AmcamAstroAutoFocuserAvailable");
+        astroAutoFocuserGroup_->setVisible(astroAutoFocuserAvailable_);
 
         embeddedLightSourceRow_->setVisible(embeddedLightSourceAvailable_);
         if (QWidget* label = accessoryForm_->labelForField(embeddedLightSourceRow_))
@@ -1242,6 +1290,8 @@ private:
         accessoryGroup_->setVisible(anyAccessory);
         if (anyAccessory)
             refreshAccessoryState(generation);
+        if (astroAutoFocuserAvailable_)
+            refreshAstroAutoFocuserState(generation);
     }
 
     void refreshAccessoryState(std::uint64_t generation) {
@@ -1249,6 +1299,8 @@ private:
             refreshEmbeddedLightSource(generation);
         if (filterWheelAvailable_)
             refreshFilterWheelState(generation);
+        if (astroAutoFocuserAvailable_)
+            refreshAstroAutoFocuserState(generation);
     }
 
     void refreshEmbeddedLightSource(std::uint64_t generation) {
@@ -1420,7 +1472,139 @@ private:
         }
     }
 
-    void updateControls(amscope::CameraState state) {
+
+    void refreshAstroAutoFocuserState(std::uint64_t generation) {
+        if (!astroAutoFocuserAvailable_ || astroAutoFocuserReadPending_)
+            return;
+        astroAutoFocuserReadPending_ = true;
+        updateControls(camera_.state());
+
+        const auto requestId = camera_.requestAstroAutoFocuserState(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AstroAutoFocuserResult result) {
+                if (generation != featureUiGeneration_) return;
+                astroAutoFocuserReadPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    astroAutoFocuserStateKnown_ = false;
+                    astroAutoFocuserMoving_ = false;
+                    astroAutoFocuserStatusLabel_->setText("Unavailable");
+                    featureStatus_->setText(
+                        QString("Astro auto-focuser read failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                } else {
+                    const auto& state =
+                        std::get<amscope::AstroAutoFocuserState>(result);
+                    astroAutoFocuserStateKnown_ = true;
+                    astroAutoFocuserMoving_ = state.moving;
+                    {
+                        const QSignalBlocker blocker(astroAutoFocuserTargetSelector_);
+                        astroAutoFocuserTargetSelector_->setRange(
+                            state.minimumPosition, state.maximumPosition);
+                        astroAutoFocuserTargetSelector_->setSingleStep(
+                            std::max(1, state.stepSize));
+                        astroAutoFocuserTargetSelector_->setValue(state.position);
+                    }
+
+                    QString status = state.moving ? "Moving" : "Idle";
+                    status += QString(" | position %1 | range %2…%3 | step %4")
+                        .arg(state.position)
+                        .arg(state.minimumPosition)
+                        .arg(state.maximumPosition)
+                        .arg(state.stepSize);
+                    if (state.temperatureTenthsC) {
+                        status += QString(" | focuser %1 °C")
+                            .arg(*state.temperatureTenthsC / 10.0, 0, 'f', 1);
+                    }
+                    if (state.ambientTemperatureTenthsC) {
+                        status += QString(" | ambient %1 °C")
+                            .arg(*state.ambientTemperatureTenthsC / 10.0, 0, 'f', 1);
+                    }
+                    astroAutoFocuserStatusLabel_->setText(status);
+                }
+                updateControls(camera_.state());
+            });
+        if (requestId == 0) {
+            astroAutoFocuserReadPending_ = false;
+            astroAutoFocuserStateKnown_ = false;
+            astroAutoFocuserMoving_ = false;
+            astroAutoFocuserStatusLabel_->setText("Request rejected");
+            updateControls(camera_.state());
+        }
+    }
+
+    void refreshAstroAutoFocuserState() {
+        refreshAstroAutoFocuserState(featureUiGeneration_);
+    }
+
+    void moveAstroAutoFocuser() {
+        if (!astroAutoFocuserAvailable_ || accessoryOperationPending_ ||
+            astroAutoFocuserReadPending_ || !astroAutoFocuserStateKnown_ ||
+            astroAutoFocuserMoving_)
+            return;
+        accessoryOperationPending_ = true;
+        updateControls(camera_.state());
+        const auto generation = featureUiGeneration_;
+        const auto target = static_cast<std::int32_t>(
+            astroAutoFocuserTargetSelector_->value());
+        const auto requestId = camera_.requestMoveAstroAutoFocuser(
+            target,
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AccessoryCommandResult result) {
+                if (generation != featureUiGeneration_) return;
+                accessoryOperationPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    featureStatus_->setText(
+                        QString("Astro focuser move failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                    updateControls(camera_.state());
+                } else {
+                    astroAutoFocuserStatusLabel_->setText(
+                        "Move accepted; refreshing focuser state…");
+                    refreshAstroAutoFocuserState(generation);
+                }
+            });
+        if (requestId == 0) {
+            accessoryOperationPending_ = false;
+            featureStatus_->setText("Astro focuser move could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
+    void haltAstroAutoFocuser() {
+        if (!astroAutoFocuserAvailable_ || accessoryOperationPending_ ||
+            astroAutoFocuserReadPending_ || !astroAutoFocuserStateKnown_ ||
+            !astroAutoFocuserMoving_)
+            return;
+        accessoryOperationPending_ = true;
+        updateControls(camera_.state());
+        const auto generation = featureUiGeneration_;
+        const auto requestId = camera_.requestHaltAstroAutoFocuser(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AccessoryCommandResult result) {
+                if (generation != featureUiGeneration_) return;
+                accessoryOperationPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    featureStatus_->setText(
+                        QString("Astro focuser halt failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                    updateControls(camera_.state());
+                } else {
+                    astroAutoFocuserStatusLabel_->setText(
+                        "Halt accepted; refreshing focuser state…");
+                    refreshAstroAutoFocuserState(generation);
+                }
+            });
+        if (requestId == 0) {
+            accessoryOperationPending_ = false;
+            featureStatus_->setText("Astro focuser halt could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
+    void updateControls(amscope::CameraState state) {    void updateControls(amscope::CameraState state) {
         const bool closed = state == amscope::CameraState::Closed;
         const bool open = state == amscope::CameraState::Open;
         const bool streaming = state == amscope::CameraState::Streaming;
@@ -1446,6 +1630,18 @@ private:
             !embeddedLightSourceReadPending_ && !filterWheelReadPending_;
         const bool accessoryControlsIdle = (open || streaming) && accessoriesIdle;
         accessoryGroup_->setEnabled(accessoryControlsIdle);
+        astroAutoFocuserGroup_->setEnabled((open || streaming) && accessoriesIdle);
+        astroAutoFocuserTargetSelector_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
+            astroAutoFocuserStateKnown_ && !astroAutoFocuserMoving_);
+        astroAutoFocuserMoveButton_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
+            astroAutoFocuserStateKnown_ && !astroAutoFocuserMoving_);
+        astroAutoFocuserHaltButton_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
+            astroAutoFocuserStateKnown_ && astroAutoFocuserMoving_);
+        astroAutoFocuserRefreshButton_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_);
         embeddedLightSourceSlider_->setEnabled(
             accessoryControlsIdle && embeddedLightSourceAvailable_ &&
             embeddedLightSourceStateKnown_);
@@ -1487,6 +1683,10 @@ private:
     bool embeddedLightSourceStateKnown_ = false;
     bool filterWheelStateKnown_ = false;
     bool filterWheelMoving_ = false;
+    bool astroAutoFocuserAvailable_ = false;
+    bool astroAutoFocuserReadPending_ = false;
+    bool astroAutoFocuserStateKnown_ = false;
+    bool astroAutoFocuserMoving_ = false;
     bool accessoryOperationPending_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
 
@@ -1515,6 +1715,13 @@ private:
     QPushButton* filterWheelMoveButton_ = nullptr;
     QPushButton* filterWheelRefreshButton_ = nullptr;
     QLabel* filterWheelStatusLabel_ = nullptr;
+    QGroupBox* astroAutoFocuserGroup_ = nullptr;
+    QWidget* astroAutoFocuserRow_ = nullptr;
+    QSpinBox* astroAutoFocuserTargetSelector_ = nullptr;
+    QPushButton* astroAutoFocuserMoveButton_ = nullptr;
+    QPushButton* astroAutoFocuserHaltButton_ = nullptr;
+    QPushButton* astroAutoFocuserRefreshButton_ = nullptr;
+    QLabel* astroAutoFocuserStatusLabel_ = nullptr;
     QScrollArea* featureScroll_ = nullptr;
     QWidget* featureContent_ = nullptr;
     QFormLayout* featureForm_ = nullptr;

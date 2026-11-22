@@ -220,8 +220,6 @@ public:
 
         astroAutoFocuserGroup_->hide();
 
-        accessoryGroup_->hide();        astroAutoFocuserGroup_->hide();
-
         accessoryGroup_->hide();
 
         auto* settingsColumn = new QVBoxLayout();
@@ -285,10 +283,6 @@ public:
                 this, [this]() { moveLensFocus(); });
         connect(lensFocusRefreshButton_, &QPushButton::clicked,
                 this, [this]() { refreshLensFocusState(); });
-        connect(astroAutoFocuserRefreshButton_, &QPushButton::clicked,
-                this, [this]() { refreshAstroAutoFocuserState(); });
-        connect(filterWheelRefreshButton_, &QPushButton::clicked,
-                this, [this]() { refreshFilterWheelState(); });
 
         connect(&camera_, &amscope::QtAmcamCamera::frameAvailable,
                 this, [this]() {

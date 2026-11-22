@@ -82,7 +82,8 @@ integration and does not modify vendor sample code.
   remains a separate extension.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
-- Still capture is independent of live-frame delivery. Processed capture uses
+- Still capture is independent of live-frame delivery. The complete SDK still-
+  resolution table is queryable and selectable. Processed capture uses
   Amcam_SnapN; RAW capture uses Amcam_SnapR. Both commands require a still-table
   resolution index; UINT32_MAX is mapped to the still entry matching current
   preview dimensions. No sentinel is passed directly to the SDK.

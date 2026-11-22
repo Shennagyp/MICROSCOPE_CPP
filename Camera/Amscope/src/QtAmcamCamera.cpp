@@ -514,6 +514,24 @@ bool QtAmcamCamera::captureStill(
     return ok;
 }
 
+bool QtAmcamCamera::readStillResolutions(
+    StillResolutionList& resolutions,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("readStillResolutions", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readStillResolutions(resolutions, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
@@ -586,6 +604,47 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFrameRate(
                 }
 
                 if (ok) result.emplace(std::move(statistics));
+                else result.emplace(std::move(local));
+            }
+
+            dispatchFeatureCallback(
+                requestContext,
+                [callback = std::move(callback),
+                 requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        });
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestStillResolutions(
+    StillResolutionListCallback callback) {
+    if (!callback) return 0;
+
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<StillResolutionListResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) {
+                    return;
+                }
+
+                StillResolutionList resolutions;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readStillResolutions(resolutions, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readStillResolutions", exception.what()};
+                } catch (...) {
+                    local = {0, "readStillResolutions",
+                             "Unknown exception while reading still resolutions."};
+                }
+
+                if (ok) result.emplace(std::move(resolutions));
                 else result.emplace(std::move(local));
             }
 

@@ -102,6 +102,8 @@ public:
         stopButton_ = new QPushButton("Stop", central);
         closeButton_ = new QPushButton("Close", central);
         stillCaptureModeSelector_ = new QComboBox(central);
+        stillResolutionSelector_ = new QComboBox(central);
+        stillResolutionSelector_->setToolTip("Still-image resolution reported by the camera SDK.");
         stillCaptureModeSelector_->addItem(
             "Processed still", static_cast<int>(amscope::StillCaptureMode::Processed));
         stillCaptureModeSelector_->addItem(
@@ -114,6 +116,7 @@ public:
         toolbar->addWidget(startButton_);
         toolbar->addWidget(stopButton_);
         toolbar->addWidget(closeButton_);
+        toolbar->addWidget(stillResolutionSelector_);
         toolbar->addWidget(stillCaptureModeSelector_);
         toolbar->addWidget(captureStillButton_);
 
@@ -309,6 +312,7 @@ private:
                 } else {
                     preview_->setText("Camera opened. Press Start to begin acquisition.");
                     statusBar()->showMessage("Camera session opened.");
+                    refreshStillResolutions();
                 }
                 updateControls(camera_.state());
             });
@@ -392,15 +396,75 @@ private:
         }
     }
 
+    void refreshStillResolutions() {
+        ++stillResolutionUiGeneration_;
+        stillResolutionsPending_ = true;
+        stillResolutionSelector_->clear();
+        stillResolutionSelector_->setEnabled(false);
+        updateControls(camera_.state());
+
+        const std::uint64_t generation = stillResolutionUiGeneration_;
+        const auto requestId = camera_.requestStillResolutions(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::StillResolutionListResult result) {
+                if (generation != stillResolutionUiGeneration_) return;
+                stillResolutionsPending_ = false;
+                stillResolutionSelector_->clear();
+
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    updateControls(camera_.state());
+                    return;
+                }
+
+                const auto resolutions =
+                    std::get<amscope::QtAmcamCamera::StillResolutionList>(
+                        std::move(result));
+                for (const auto& resolution : resolutions) {
+                    const QString label = QString("%1 — %2 × %3")
+                        .arg(resolution.index)
+                        .arg(resolution.width)
+                        .arg(resolution.height);
+                    stillResolutionSelector_->addItem(
+                        label, static_cast<uint>(resolution.index));
+                }
+
+                // Explicitly expose matching the current live dimensions, but
+                // default to SDK still index zero so capture is usable even
+                // when the live mode has no exact counterpart in the still table.
+                if (!resolutions.empty()) {
+                    stillResolutionSelector_->addItem(
+                        "Match live preview",
+                        static_cast<uint>(std::numeric_limits<std::uint32_t>::max()));
+                    stillResolutionSelector_->setCurrentIndex(0);
+                }
+                updateControls(camera_.state());
+            });
+
+        if (requestId == 0) {
+            stillResolutionsPending_ = false;
+            stillResolutionSelector_->clear();
+            statusBar()->showMessage("Still-resolution discovery could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
     void captureStill() {
         if (lifecycleRequestPending_ || stillCapturePending_ ||
             camera_.state() != amscope::CameraState::Streaming) {
             return;
         }
 
+        if (stillResolutionSelector_->currentIndex() < 0) {
+            statusBar()->showMessage("The camera has no available still-resolution mode.");
+            return;
+        }
+
         amscope::StillCaptureRequest request;
         request.mode = static_cast<amscope::StillCaptureMode>(
             stillCaptureModeSelector_->currentData().toInt());
+        request.resolutionIndex = stillResolutionSelector_->currentData().toUInt();
         request.timeoutMilliseconds = 30000;
 
         stillCapturePending_ = true;
@@ -510,6 +574,9 @@ private:
         ++featureUiGeneration_;
         pendingFeatureWrite_ = false;
         const std::uint64_t generation = ++lifecycleUiGeneration_;
+        ++stillResolutionUiGeneration_;
+        stillResolutionsPending_ = false;
+        stillResolutionSelector_->clear();
         lifecycleRequestPending_ = true;
         setFeatureControlsEnabled(false);
         clearFeatureControls();
@@ -1075,15 +1142,18 @@ private:
 
         const bool idle =
             !lifecycleRequestPending_ && !cameraEnumerationPending_ &&
-            !stillCapturePending_;
+            !stillCapturePending_ && !stillResolutionsPending_;
         cameraSelector_->setEnabled(closed && idle);
         refreshCamerasButton_->setEnabled(closed && idle);
         openButton_->setEnabled(closed && idle && cameraSelector_->count() > 0);
         startButton_->setEnabled(open && idle);
         stopButton_->setEnabled(streaming && idle);
         closeButton_->setEnabled(!closed && idle);
+        stillResolutionSelector_->setEnabled(
+            streaming && idle && stillResolutionSelector_->count() > 0);
         stillCaptureModeSelector_->setEnabled(streaming && idle);
-        captureStillButton_->setEnabled(streaming && idle);
+        captureStillButton_->setEnabled(
+            streaming && idle && stillResolutionSelector_->count() > 0);
         refreshFeaturesButton_->setEnabled((open || streaming) && idle);
     }
 
@@ -1096,6 +1166,8 @@ private:
     std::uint64_t lifecycleUiGeneration_ = 0;
     bool lifecycleRequestPending_ = false;
     bool stillCapturePending_ = false;
+    bool stillResolutionsPending_ = false;
+    std::uint64_t stillResolutionUiGeneration_ = 0;
     std::uint64_t cameraEnumerationGeneration_ = 0;
     bool cameraEnumerationPending_ = false;
     std::size_t pendingFeatureReads_ = 0;
@@ -1108,6 +1180,7 @@ private:
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
     QPushButton* closeButton_ = nullptr;
+    QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
     QPushButton* captureStillButton_ = nullptr;
     QPushButton* refreshFeaturesButton_ = nullptr;

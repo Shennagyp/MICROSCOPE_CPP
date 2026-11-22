@@ -10,6 +10,11 @@
 namespace amscope {
 enum class CameraState : std::uint8_t { Closed, Open, Starting, Streaming, Stopping, Faulted };
 struct Resolution { std::uint32_t width = 0; std::uint32_t height = 0; };
+struct StillResolution {
+    std::uint32_t index = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
 struct CameraInfo {
     std::string id;
     std::string displayName;

@@ -1506,7 +1506,67 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
         static_cast<double>(frames) * 1000.0 / static_cast<double>(milliseconds);
     stats.totalFrames = total;
     return true;
-} 
+}
+
+bool AmcamCamera::readStillResolutions(
+    std::vector<StillResolution>& resolutions,
+    CameraError* error) {
+    if (error) *error = {};
+    resolutions.clear();
+
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open &&
+         currentState != CameraState::Streaming)) {
+        return fail(error, "readStillResolutions", -1,
+                    "The camera must be open to query still-image resolutions.");
+    }
+    if (!impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::StillCapture)) {
+        return fail(error, "readStillResolutions", -1,
+                    "Still capture is disabled by the selected model profile.");
+    }
+
+    const HRESULT countResult = Amcam_get_StillResolutionNumber(impl_->handle);
+    if (FAILED(countResult))
+        return failHr(error, "Amcam_get_StillResolutionNumber", countResult);
+
+    const unsigned count = static_cast<unsigned>(countResult);
+    if (count > 256U) {
+        return fail(error, "Amcam_get_StillResolutionNumber", -1,
+                    "The SDK reported an unreasonable still-resolution count.");
+    }
+
+    try {
+        resolutions.reserve(count);
+        for (unsigned index = 0; index < count; ++index) {
+            int width = 0;
+            int height = 0;
+            const HRESULT hr = Amcam_get_StillResolution(
+                impl_->handle, index, &width, &height);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_get_StillResolution", hr);
+            if (width <= 0 || height <= 0) {
+                return fail(error, "Amcam_get_StillResolution", -1,
+                            "The SDK returned an invalid still-resolution entry.");
+            }
+            resolutions.push_back(StillResolution{
+                index,
+                static_cast<std::uint32_t>(width),
+                static_cast<std::uint32_t>(height)
+            });
+        }
+    } catch (const std::exception& exception) {
+        resolutions.clear();
+        return fail(error, "readStillResolutions", -1,
+                    std::string("Still-resolution list allocation failed: ") +
+                        exception.what());
+    }
+
+    return true;
+}
+ 
 
 bool AmcamCamera::captureStill(
     const StillCaptureRequest& request,

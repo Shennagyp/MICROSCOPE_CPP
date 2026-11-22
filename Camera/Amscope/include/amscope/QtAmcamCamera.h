@@ -61,12 +61,16 @@ public:
     using AutoWhiteBalanceResult = CameraOperationResult<std::monostate>;
     using FrameRateResult = CameraOperationResult<FrameRateStatistics>;
     using StillCaptureResult = CameraOperationResult<FramePtr>;
+    using StillResolutionList = std::vector<StillResolution>;
+    using StillResolutionListResult = CameraOperationResult<StillResolutionList>;
     using AutoWhiteBalanceCallback =
         std::function<void(FeatureRequestId, AutoWhiteBalanceResult)>;
     using FrameRateCallback =
         std::function<void(FeatureRequestId, FrameRateResult)>;
     using StillCaptureCallback =
         std::function<void(FeatureRequestId, StillCaptureResult)>;
+    using StillResolutionListCallback =
+        std::function<void(FeatureRequestId, StillResolutionListResult)>;
     using LifecycleResult = CameraOperationResult<std::monostate>;
     using LifecycleCallback =
         std::function<void(CameraRequestId, LifecycleResult)>;
@@ -108,6 +112,9 @@ public:
     bool captureStill(const StillCaptureRequest& request,
                       FramePtr& frame,
                       CameraError* error = nullptr);
+    bool readStillResolutions(StillResolutionList& resolutions,
+                              CameraError* error = nullptr);
+    FeatureRequestId requestStillResolutions(StillResolutionListCallback callback);
     FeatureRequestId requestAutoWhiteBalance(AutoWhiteBalanceCallback callback);
     FeatureRequestId requestFrameRate(FrameRateCallback callback);
     FeatureRequestId requestStillCapture(

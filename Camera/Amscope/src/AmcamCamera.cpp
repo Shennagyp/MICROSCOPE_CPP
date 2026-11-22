@@ -445,10 +445,10 @@ buildAmcamFeatureDescriptors(
         (rawBitDepth == 0 ||
          (rawBitDepth == 1 && rawMaximumBitDepthValid));
     const bool rawBitDepthWritable = rawModeReadable && rawMode == 1;
-    std::vector<std::string> rawBitDepthValues{"8-bit"};
+    std::vector<std::int64_t> rawBitDepthValues{8};
     if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U) {
         rawBitDepthValues.push_back(
-            std::to_string(rawMaxBitDepth) + "-bit");
+            static_cast<std::int64_t>(rawMaxBitDepth));
     }
 
 
@@ -837,13 +837,14 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         std::string(camera::RawOutputBitDepthFeature),
-        "RAW Output Bit Depth", CameraFeatureKind::Enumeration,
+        "RAW Output Bit Depth", CameraFeatureKind::Integer,
         std::string("significant bits"),
         rawAvailable && rawOutputAllowed,
         rawBitDepthReadable,
         rawAvailable && rawOutputAllowed && rawBitDepthWritable && stopped,
-        std::nullopt, std::nullopt, std::move(rawBitDepthValues),
-        camera::CameraFeatureGroup::ImageFormat
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::ImageFormat,
+        std::move(rawBitDepthValues)
     });
     descriptors.push_back({
         "AmcamRawSensorFormat", "RAW Sensor Format", CameraFeatureKind::Enumeration,
@@ -4776,8 +4777,8 @@ AmcamCamera::readFeature(std::string_view name) {
                                 std::string(name),
                                 "The SDK selected maximum RAW precision but did not report its exact significant bit depth.");
 
-        return CameraFeatureValue{FeatureEnumeration{
-            std::to_string(selectedBitDepth) + "-bit"}};
+        return CameraFeatureValue{
+            static_cast<std::int64_t>(selectedBitDepth)};
     }
     if (name == "AmcamRawSensorFormat") {
         unsigned fourCC = 0, bitsPerPixel = 0;
@@ -5048,16 +5049,15 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (rawMode != 1)
             return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
                                 std::string(name), "Enable RAW sensor output before selecting its bit-depth mode.");
-        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        const auto selectedBitDepth =
+            std::get<std::int64_t>(value);
         const unsigned maximumBitDepth =
             rawMaximumBitDepth(impl_->handle, impl_->modelFlags);
-        const std::string maximumBitDepthSymbol =
-            maximumBitDepth >= 8U && maximumBitDepth <= 16U
-                ? std::to_string(maximumBitDepth) + "-bit"
-                : std::string{};
         const int requested =
-            symbol == "8-bit" ? 0 :
-            (maximumBitDepth > 8U && symbol == maximumBitDepthSymbol) ? 1 : -1;
+            selectedBitDepth == 8 ? 0 :
+            (maximumBitDepth > 8U &&
+             selectedBitDepth == static_cast<std::int64_t>(maximumBitDepth))
+                ? 1 : -1;
         if (requested < 0)
             return featureError(CameraFeatureAccessError::Code::InvalidValue,
                                 std::string(name),

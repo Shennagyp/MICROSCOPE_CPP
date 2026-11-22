@@ -279,6 +279,9 @@ public:
         stillCaptureModeSelector_ = new QComboBox(central);
         stillResolutionSelector_ = new QComboBox(central);
         stillResolutionSelector_->setToolTip("Still-image resolution reported by the camera SDK.");
+        stillPrecisionLabel_ = new QLabel("Last still: —", central);
+        stillPrecisionLabel_->setToolTip(
+            "Significant and storage bit depths reported by the most recently captured still frame. This is measured output metadata, not a requested setting.");
         stillCaptureModeSelector_->addItem(
             "Processed still", static_cast<int>(amscope::StillCaptureMode::Processed));
         stillCaptureModeSelector_->addItem(
@@ -293,6 +296,7 @@ public:
         toolbar->addWidget(closeButton_);
         toolbar->addWidget(stillResolutionSelector_);
         toolbar->addWidget(stillCaptureModeSelector_);
+        toolbar->addWidget(stillPrecisionLabel_);
         toolbar->addWidget(captureStillButton_);
 
         preview_ = new FrameView(central);
@@ -871,6 +875,22 @@ private:
                     return;
                 }
 
+                const QString captureKind =
+                    request.mode == amscope::StillCaptureMode::Raw
+                        ? QStringLiteral("RAW still")
+                        : QStringLiteral("Processed still");
+                if (frame->significantBitsPerPixel > 0 &&
+                    frame->storageBitsPerPixel > 0) {
+                    stillPrecisionLabel_->setText(
+                        QString("%1: %2 significant / %3 storage bits")
+                            .arg(captureKind)
+                            .arg(static_cast<unsigned>(frame->significantBitsPerPixel))
+                            .arg(static_cast<unsigned>(frame->storageBitsPerPixel)));
+                } else {
+                    stillPrecisionLabel_->setText(
+                        QString("%1: precision unavailable").arg(captureKind));
+                }
+
                 const bool raw =
                     frame->pixelFormat == camera::PixelFormat::Raw8 ||
                     frame->pixelFormat == camera::PixelFormat::Raw16;
@@ -1029,6 +1049,7 @@ private:
                 } else {
                     preview_->setMessage("Select a camera and press Open, then Start.");
                     frameInfo_->setText("No frames received");
+                    stillPrecisionLabel_->setText("Last still: —");
                     statusBar()->showMessage("Camera session closed.");
                     featureStatus_->setText(
                         "Open a camera to inspect its available features.");

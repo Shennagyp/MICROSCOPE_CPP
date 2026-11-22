@@ -3,10 +3,10 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last verified branch head before this handoff refresh:** `1e44fa8bab23f26587adffe8c5e06471956d9e54`  
+**Last verified branch head before this handoff refresh:** `f9045faed0828e3625cee985086bfd35f2faa382`  
 **Last implementation-bearing commit:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
 **Current phase:** Phase 0 — baseline freeze and verification  
-**Phase status:** OPEN — real-camera baseline has not been recorded.
+**Phase status:** OPEN — user reports that the physical camera opens and displays live frames; the low-FPS regression and complete baseline record remain unresolved.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -29,7 +29,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The last verified head before this handoff refresh is `1e44fa8bab23f26587adffe8c5e06471956d9e54` — `docs(amscope): prepare native driver failure-path testing`. Its parent was `4de57806a898799173adb04af1272e00ff00fb24`. The source snapshot remains `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; commits after that implementation revision are documentation-only. This handoff refresh is also documentation-only. No C++ source implementation commit has been added after `a3a03fbd`.
+The last verified head before this handoff refresh is `f9045faed0828e3625cee985086bfd35f2faa382` — `docs(amscope): record initial camera FPS feedback`. It follows the documentation-only GenTL/GenApi assessment commit `ff6dfd1703f8ced0f5a62a7ba015f5ec4ee36dfd`. The implementation-bearing source snapshot remains `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; no C++ source implementation has been added after that revision. This handoff refresh is documentation-only.
 
 ### Relationship with `main`
 
@@ -43,16 +43,12 @@ Those two commits have no net file change to import. The comparison also shows t
 Relevant links:
 
 - [Active branch](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/amscope-native-driver)
-- [Branch head](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/4de57806a898799173adb04af1272e00ff00fb24)
+- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/f9045faed0828e3625cee985086bfd35f2faa382)
 - [Comparison with main](https://github.com/Shennagyp/MICROSCOPE_CPP/compare/main...amscope-native-driver)
 
 ## 3. CI and test evidence
 
-The latest completed successful workflow verified is [Amcam macOS build #45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740), associated with commit `4de57806a898799173adb04af1272e00ff00fb24`. The newer run [#45051829571](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051829571), associated with `1e44fa8bab23f26587adffe8c5e06471956d9e54`, was still in progress on both architectures at the last status check. This handoff-only refresh also triggers the same path-filtered workflow, so the next session must verify its resulting run before reporting current-head CI.
-
-Workflow [#45051829571](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051829571) completed successfully on both architectures on the prior documentation-only commit.
-
-On the last reviewed head e1f2e65, workflow [#45052203962](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45052203962) had Intel x86_64 completed successfully; Apple Silicon arm64 was still queued at the last status check. Check the run before reporting complete current-head CI.
+The last fully verified green workflow for the current C++ source is [Amcam macOS build #45052203962](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45052203962), associated with commit `e1f2e65`; Intel x86_64 and Apple Silicon arm64 completed successfully. The later documentation-only commit `ff6dfd1703f8ced0f5a62a7ba015f5ec4ee36dfd` triggered workflow [#45053165511](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45053165511), which was queued at the last recorded check. A combined-status query for `ff6dfd1` returned no status entries. Current-head CI has therefore not been established by this handoff; verify the latest workflow before claiming it is green.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -69,7 +65,7 @@ All eight CTest tests passed on both architectures in completed run #45051829571
 
 The launcher reported `0 camera(s) found` in the hosted CI environment. This proves the no-device enumeration path only. It does not prove physical camera enumeration, acquisition, control readback, RAW/still capture, Stop/Close timing, accessory operation, or recovery.
 
-No local C++ build/test run or physical-camera run was performed during this continuation review. The CI result is not a hardware record.
+No local C++ build/test run was performed during this continuation review. The user reports a successful physical camera open and live preview, but this is only an initial smoke observation and is not a complete hardware qualification record.
 
 ## 4. Actual implementation state at the last source revision
 
@@ -183,29 +179,32 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Phase 0 work now recorded
 
-- Current branch and exact head verified.
-- Latest documentation-triggered CI run #45051151740 verified green on Intel and Apple Silicon; all eight CTest tests passed and the launcher found zero cameras.
-- The two commits missing from `main` were inspected; they add and revert the same unintended file, with no net change to import.
-- Source tree and main architecture gaps reviewed.
-- The completion plan, implementation inventory, and hardware test-record template are now present in the repository.
-- The completion plan ledger now records that Phase 0 repository/source review is documented while the physical-camera baseline remains OPEN.
+- Repository/source/branch review and the implementation inventory are documented.
+- The user reports that the physical camera now opens and produces live preview frames.
+- The user reports preview FPS substantially below the approximately 100 FPS previously obtained at 640p with the earlier minimal application.
+- Static comparison confirms that both branches use callback-driven `Amcam_StartPullModeWithCallback` and a single `Amcam_PullImageV4` worker. No fixed FPS limiter was found in the current acquisition loop.
+- The current displayed FPS is measured in `PreviewWindow::presentLatestFrame()` after a detached `QImage` copy, `QPixmap` conversion, and widget scaling. This is a GUI presentation measurement, not a separate acquisition measurement.
+- The current `start()` reads the camera's existing preview dimensions; it does not select 640p. The toolbar resolution selector applies to still capture.
+- The completion plan now records this initial physical-camera report and keeps Phase 0 OPEN.
 
 ### Phase 0 work still required
 
-- Identify the physical reference AmScope camera actually connected to the development environment; do not assume a model based on a previous shopping comparison or SDK availability.
-- Run the physical-camera baseline in the completion plan.
-- Save the completed record under `docs/testing/hardware/`.
-- Confirm original camera settings are restored after safe reversible tests.
-- Keep Phase 0 OPEN until that record passes.
+- Record the actual camera manufacturer/model, SDK model code, firmware, SDK version, OS, and architecture.
+- Record the current live frame dimensions and the numerical preview FPS. Compare the active preview mode with 640p where the physical model supports it.
+- Distinguish camera/SDK sequence progression from the UI presentation rate before changing the native acquisition mechanism.
+- Complete all Section 3.2 steps, including safe setting readback/restoration, Stop/Start, Close/reopen, still capture where supported, and the required 15-minute acquisition interval.
+- Save the completed hardware record under `docs/testing/hardware/`.
+- Keep Phase 0 OPEN until the complete record passes.
 
 ## 8. Immediate next actions
 
 ### Required before Phase 1 refactoring
 
-1. Obtain/confirm the actual physical AmScope reference camera and its connection to the development machine.
-2. Run the baseline procedure in [the completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md), using [the hardware record template](../testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
-3. Record the exact model code, SDK version, OS/architecture, results, duration, and observations.
-4. If the baseline fails, fix the baseline defect before architectural extraction.
+1. Record the actual physical camera identity, SDK model code, SDK version, firmware, OS, and architecture; do not infer them from the repository or another camera.
+2. Capture the live frame width/height and the numerical `preview FPS` shown by the app. Check the current `AmcamResolutionIndex` feature while stopped; the top toolbar selector is still-capture-only.
+3. Compare a supported 640p preview mode with the current mode. Record frame sequence progression over a fixed interval so camera/SDK delivery can be distinguished from GUI presentation throughput.
+4. Complete the remaining Section 3.2 steps, including a 15-minute acquisition interval, safe setting readback/restoration, Stop/Start, Close/reopen, and still capture where supported.
+5. Save the full hardware record using [the hardware record template](../testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md). Fix the FPS regression before declaring the baseline passed or beginning Phase 1 behavior-changing refactoring.
 
 ### Work that can proceed after/beside the physical baseline without altering behavior
 

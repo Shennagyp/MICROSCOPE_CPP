@@ -609,7 +609,6 @@ bool QtAmcamCamera::moveFilterWheel(
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
-QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
 
@@ -912,7 +911,6 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestMoveFilterWheel(
         }, FeatureRequestSemantics::StateMutation);
 }
 
-QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     FeatureDescriptorsCallback callback) {
     if (!callback) return 0;

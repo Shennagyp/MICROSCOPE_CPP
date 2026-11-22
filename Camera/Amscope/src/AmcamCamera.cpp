@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <limits>
@@ -20,6 +21,9 @@ constexpr unsigned kWaitTimeoutMs = 50;
 constexpr std::size_t kPoolSize = 4;
 constexpr int kRgb24Bits = 24;
 constexpr int kPackedRows = -1;
+constexpr auto kMinimumFrameStallTimeout = std::chrono::seconds(5);
+constexpr std::uint64_t kExposureTimeoutMultiplier = 3;
+constexpr std::uint64_t kExposureTimeoutGraceMs = 1000;
 thread_local const void* g_acquisitionOwner = nullptr;
 
 bool fail(amscope::CameraError* out, const char* operation,
@@ -53,6 +57,18 @@ std::string boundedString(const char* value, std::size_t capacity) {
     if (!value) return {};
     return std::string(value, std::find(value, value + capacity, '\0'));
 }
+std::chrono::milliseconds frameStallTimeout(unsigned exposureMicroseconds) noexcept {
+    const std::uint64_t exposureMilliseconds =
+        (static_cast<std::uint64_t>(exposureMicroseconds) + 999U) / 1000U;
+    const std::uint64_t exposureBasedTimeout =
+        exposureMilliseconds * kExposureTimeoutMultiplier + kExposureTimeoutGraceMs;
+    const auto minimum = std::chrono::duration_cast<std::chrono::milliseconds>(
+        kMinimumFrameStallTimeout).count();
+    return std::chrono::milliseconds(
+        static_cast<std::chrono::milliseconds::rep>(
+            std::max<std::uint64_t>(static_cast<std::uint64_t>(minimum),
+                                    exposureBasedTimeout)));
+}
 } // namespace
 
 namespace amscope {
@@ -83,8 +99,7 @@ struct AmcamCamera::Impl {
     std::atomic<CameraState> state{CameraState::Closed};
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> sdkStarted{false};
-    std::atomic<bool> disconnected{false};
-    std::atomic<bool> sdkError{false};
+    std::atomic<unsigned> expectedExposureMicroseconds{0};
     std::atomic<std::uint64_t> dropped{0};
 
     std::mutex lifecycleMutex;
@@ -96,16 +111,6 @@ struct AmcamCamera::Impl {
     ErrorCallback onError;
 
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
-
-    static void __stdcall sdkEvent(unsigned event, void* context) {
-        auto* self = static_cast<Impl*>(context);
-        if (!self) return;
-        // SDK-owned callback thread: atomics only. Never Stop/Close here.
-        if (event == AMCAM_EVENT_DISCONNECTED)
-            self->disconnected.store(true, std::memory_order_release);
-        else if (event == AMCAM_EVENT_ERROR)
-            self->sdkError.store(true, std::memory_order_release);
-    }
 
     void reportFatal(CameraError error) noexcept {
         if (stopRequested.load(std::memory_order_acquire)) return;
@@ -134,6 +139,7 @@ struct AmcamCamera::Impl {
         g_acquisitionOwner = this;
         bool fatal = false;
         CameraError error;
+        auto lastFrameAt = std::chrono::steady_clock::now();
 
         while (!stopRequested.load(std::memory_order_acquire)) {
             auto writable = activePool->tryAcquire();
@@ -155,25 +161,39 @@ struct AmcamCamera::Impl {
             }
             if (fatal || stopRequested.load(std::memory_order_acquire)) break;
 
-            if (disconnected.load(std::memory_order_acquire)) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_GEN_FAILURE),
-                         "Amcam_WaitImageV4", "The camera reported a disconnect."};
-                break;
+            if (hr == E_TIMEOUT) {
+                const auto now = std::chrono::steady_clock::now();
+                const auto timeout = frameStallTimeout(
+                    expectedExposureMicroseconds.load(std::memory_order_acquire));
+                if (now - lastFrameAt >= timeout) {
+                    const auto stalledMilliseconds =
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            now - lastFrameAt).count();
+                    const unsigned exposure =
+                        expectedExposureMicroseconds.load(std::memory_order_acquire);
+                    fatal = true;
+                    error = {static_cast<std::int32_t>(E_TIMEOUT),
+                             "Amcam_WaitImageV4",
+                             "No preview frame received for " +
+                                 std::to_string(stalledMilliseconds) +
+                                 " ms (last exposure " +
+                                 std::to_string(exposure) +
+                                 " us; watchdog threshold " +
+                                 std::to_string(timeout.count()) + " ms)."};
+                    break;
+                }
+                continue;
             }
-            if (sdkError.load(std::memory_order_acquire)) {
-                fatal = true;
-                error = {static_cast<std::int32_t>(E_FAIL),
-                         "Amcam_WaitImageV4", "The camera SDK reported a generic device error."};
-                break;
-            }
-            if (hr == E_TIMEOUT) continue;
             if (FAILED(hr)) {
                 fatal = true;
                 error = {static_cast<std::int32_t>(hr),
                          "Amcam_WaitImageV4", hrMessage("Amcam_WaitImageV4", hr)};
                 break;
             }
+
+            lastFrameAt = std::chrono::steady_clock::now();
+            expectedExposureMicroseconds.store(info.v3.expotime,
+                                               std::memory_order_release);
 
             // Keep draining the SDK when all leases are retained. A slow
             // consumer drops preview frames rather than blocking acquisition.
@@ -302,8 +322,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
 
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->sdkStarted.store(false, std::memory_order_release);
-    impl_->disconnected.store(false, std::memory_order_release);
-    impl_->sdkError.store(false, std::memory_order_release);
+    impl_->expectedExposureMicroseconds.store(0, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
     impl_->state.store(CameraState::Open, std::memory_order_release);
     return true;
@@ -347,8 +366,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
 
     impl_->state.store(CameraState::Starting, std::memory_order_release);
     impl_->stopRequested.store(false, std::memory_order_release);
-    impl_->disconnected.store(false, std::memory_order_release);
-    impl_->sdkError.store(false, std::memory_order_release);
+    impl_->expectedExposureMicroseconds.store(0, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
 
     int width = 0, height = 0;
@@ -360,6 +378,12 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             return fail(error, "start", -1, "Camera handle is not open.");
         }
         hr = Amcam_get_FinalSize(impl_->handle, &width, &height);
+        if (SUCCEEDED(hr)) {
+            unsigned exposureMicroseconds = 0;
+            if (SUCCEEDED(Amcam_get_ExpoTime(impl_->handle, &exposureMicroseconds)))
+                impl_->expectedExposureMicroseconds.store(
+                    exposureMicroseconds, std::memory_order_release);
+        }
     }
     if (FAILED(hr)) {
         impl_->state.store(CameraState::Open, std::memory_order_release);
@@ -398,8 +422,10 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             impl_->state.store(CameraState::Open, std::memory_order_release);
             return failHr(error, "Amcam_put_Option(AMCAM_OPTION_BYTEORDER)", hr);
         }
+        // Match the vendor's demowait acquisition pairing: no event callback
+        // when frames are retrieved by WaitImage.
         hr = Amcam_StartPullModeWithCallback(
-            impl_->handle, &Impl::sdkEvent, impl_.get());
+            impl_->handle, nullptr, nullptr);
     }
     if (FAILED(hr)) {
         impl_->pool.reset();
@@ -481,7 +507,9 @@ bool AmcamCamera::setExposureTime(std::uint32_t time, CameraError* error) {
     if (!impl_->handle || (s != CameraState::Open && s != CameraState::Streaming))
         return fail(error, "setExposureTime", -1, "The camera must be open.");
     const HRESULT hr = Amcam_put_ExpoTime(impl_->handle, time);
-    return FAILED(hr) ? failHr(error, "Amcam_put_ExpoTime", hr) : true;
+    if (FAILED(hr)) return failHr(error, "Amcam_put_ExpoTime", hr);
+    impl_->expectedExposureMicroseconds.store(time, std::memory_order_release);
+    return true;
 }
 
 bool AmcamCamera::setExposureGain(std::uint16_t gain, CameraError* error) {
@@ -517,6 +545,7 @@ bool AmcamCamera::readExposure(ExposureSettings& settings, CameraError* error) {
 
     settings.automatic = automatic != 0;
     settings.timeMicroseconds = time;
+    impl_->expectedExposureMicroseconds.store(time, std::memory_order_release);
     settings.minimumTimeMicroseconds = minTime;
     settings.maximumTimeMicroseconds = maxTime;
     settings.defaultTimeMicroseconds = defaultTime;

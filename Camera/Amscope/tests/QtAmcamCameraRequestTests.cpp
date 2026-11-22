@@ -274,6 +274,43 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+
+    // I/O-line reads are snapshots too: a later line configuration request
+    // invalidates an older pending read before it can be published.
+    QEventLoop ioSupersessionLoop;
+    QTimer ioSupersessionTimeout;
+    ioSupersessionTimeout.setSingleShot(true);
+    QObject::connect(&ioSupersessionTimeout, &QTimer::timeout,
+                     &ioSupersessionLoop, &QEventLoop::quit);
+    bool staleIoReadDelivered = false;
+    bool ioMutationCompleted = false;
+    const auto staleIoRead = camera.requestIoLines(
+        [&](amscope::QtAmcamCamera::FeatureRequestId,
+            amscope::QtAmcamCamera::IoLineListResult) {
+            staleIoReadDelivered = true;
+        });
+    amscope::AmcamIoLineConfiguration ioConfiguration;
+    ioConfiguration.line = amscope::AmcamIoLine::GPIO0;
+    ioConfiguration.direction = amscope::AmcamIoDirection::Output;
+    const auto ioMutation = camera.requestConfigureIoLine(
+        ioConfiguration,
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::AccessoryCommandResult result) {
+            ioMutationCompleted = requestId != 0 &&
+                std::holds_alternative<amscope::CameraError>(result);
+            ioSupersessionLoop.quit();
+        });
+    if (staleIoRead == 0 || ioMutation == 0) {
+        std::cerr << "A valid I/O snapshot supersession request was rejected.\n";
+        return EXIT_FAILURE;
+    }
+    ioSupersessionTimeout.start(5000);
+    ioSupersessionLoop.exec();
+    if (!ioMutationCompleted || staleIoReadDelivered) {
+        std::cerr << "I/O configuration failed to invalidate an older I/O snapshot.\n";
+        return EXIT_FAILURE;
+    }
+
     // Lifecycle requests share the same FIFO. Start on a closed camera
     // reports an error; later Stop and Close remain accepted and execute in order.
     QEventLoop lifecycleLoop;

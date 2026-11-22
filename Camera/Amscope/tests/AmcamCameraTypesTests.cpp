@@ -1,5 +1,13 @@
 #include "amscope/CameraTypes.h"
 
+static_assert(static_cast<std::uint8_t>(amscope::AmcamIoLine::OptoIsolatedInput) == 0);
+static_assert(static_cast<std::uint8_t>(amscope::AmcamIoLine::OptoIsolatedOutput) == 1);
+static_assert(static_cast<std::uint8_t>(amscope::AmcamIoLine::GPIO0) == 2);
+static_assert(static_cast<std::uint8_t>(amscope::AmcamIoLine::GPIO1) == 3);
+static_assert(static_cast<std::uint8_t>(amscope::AmcamIoDirection::Input) == 0);
+static_assert(static_cast<std::uint8_t>(amscope::AmcamIoDirection::Output) == 1);
+static_assert(static_cast<std::uint8_t>(amscope::AmcamIoOutputMode::Strobe) == 2);
+
 #include <cstdlib>
 #include <iostream>
 

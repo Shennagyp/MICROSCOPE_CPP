@@ -31,6 +31,7 @@
 #include <QStatusBar>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QVariant>
 #include <QWidget>
 
 #include <algorithm>
@@ -1174,7 +1175,7 @@ private:
                 auto* control = new QComboBox(featureContent_);
                 for (const auto item : descriptor.discreteIntegerValues) {
                     control->addItem(
-                        QString("%1-bit").arg(static_cast<qlonglong>(item)),
+                        QString::number(static_cast<qlonglong>(item)),
                         QVariant::fromValue<qlonglong>(
                             static_cast<qlonglong>(item)));
                 }

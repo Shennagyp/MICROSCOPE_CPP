@@ -76,7 +76,9 @@ integration and does not modify vendor sample code.
 - The AmScope descriptors use model metadata and non-mutating SDK probes.
   One-shot auto white balance remains a command, not a Boolean feature.
 - The shared typed feature contract also exposes the probed ISP controls
-  (linear tone mapping, curve mode, video/still demosaic and denoise strength),
+  (linear tone mapping, curve mode, video/still demosaic, denoise, flat-field
+  and dark-field correction, defect-pixel correction, sharpening, orientation,
+  test pattern and auto-exposure threshold),
   sensor controls (black level, conversion gain, low-noise and high-full-well
   modes), and hardware controls (sensor temperature, TEC enabled/target/voltage,
   fan speed and anti-fog heater level). Every control is hidden unless its

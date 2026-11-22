@@ -482,6 +482,70 @@ buildAmcamFeatureDescriptors(
     const bool tecVoltageProbe = (modelFlags & AMCAM_FLAG_TEC) != 0 &&
         SUCCEEDED(tecVoltageHr);
 
+    int flatFieldState = -1;
+    const HRESULT flatFieldHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_FFC, &flatFieldState);
+    const int flatFieldLow = static_cast<int>(
+        static_cast<std::uint32_t>(flatFieldState) & 0xffU);
+    const bool flatFieldProbe = SUCCEEDED(flatFieldHr) &&
+        flatFieldLow <= 2;
+
+    int darkFieldState = -1;
+    const HRESULT darkFieldHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_DFC, &darkFieldState);
+    const int darkFieldLow = static_cast<int>(
+        static_cast<std::uint32_t>(darkFieldState) & 0xffU);
+    const bool darkFieldProbe = SUCCEEDED(darkFieldHr) &&
+        darkFieldLow <= 2;
+
+    int defectPixelState = -1;
+    const HRESULT defectPixelHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_DEFECT_PIXEL, &defectPixelState);
+    const bool defectPixelProbe = SUCCEEDED(defectPixelHr) &&
+        (defectPixelState == 0 || defectPixelState == 1);
+
+    int sharpeningPacked = 0;
+    const HRESULT sharpeningHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_SHARPENING, &sharpeningPacked);
+    const std::uint32_t sharpeningBits =
+        static_cast<std::uint32_t>(sharpeningPacked);
+    const unsigned sharpeningStrength = sharpeningBits & 0xffffU;
+    const unsigned sharpeningRadius = (sharpeningBits >> 16U) & 0xffU;
+    const bool sharpeningProbe = SUCCEEDED(sharpeningHr) &&
+        sharpeningStrength <= 500U &&
+        ((sharpeningStrength == 0U && sharpeningRadius <= 10U) ||
+         (sharpeningRadius >= 1U && sharpeningRadius <= 10U));
+
+    int rotationDegrees = -1;
+    const HRESULT rotationHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_ROTATE, &rotationDegrees);
+    const bool rotationProbe = SUCCEEDED(rotationHr) &&
+        (rotationDegrees == 0 || rotationDegrees == 90 ||
+         rotationDegrees == 180 || rotationDegrees == 270);
+
+    int upsideDown = -1;
+    const HRESULT upsideDownHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_UPSIDE_DOWN, &upsideDown);
+    const bool upsideDownProbe = SUCCEEDED(upsideDownHr) &&
+        (upsideDown == 0 || upsideDown == 1);
+
+    int testPattern = -1;
+    const HRESULT testPatternHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_TESTPATTERN, &testPattern);
+    const bool testPatternProbe = SUCCEEDED(testPatternHr) &&
+        (testPattern == 0 || testPattern == 3 || testPattern == 5 ||
+         testPattern == 7 || testPattern == 9);
+
+    int autoExposureThreshold = -1;
+    const HRESULT autoExposureThresholdHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_AUTOEXP_THRESHOLD,
+                         &autoExposureThreshold);
+    const bool autoExposureThresholdProbe =
+        SUCCEEDED(autoExposureThresholdHr) &&
+        autoExposureThreshold >= 2 && autoExposureThreshold <= 15;
+    const bool tecVoltageProbe = (modelFlags & AMCAM_FLAG_TEC) != 0 &&
+        SUCCEEDED(tecVoltageHr);
+
 
     const bool roiModelSupported = hasModelDescriptor &&
         (modelFlags & AMCAM_FLAG_ROI_HARDWARE) != 0;
@@ -859,7 +923,77 @@ buildAmcamFeatureDescriptors(
         camera::CameraFeatureGroup::ImageFormat
     });
 
-    // Model flags are hardware facts, not mutable camera settings. Keep them
+
+    descriptors.push_back({
+        "AmcamFlatFieldCorrectionEnabled", "Flat-Field Correction",
+        CameraFeatureKind::Boolean, std::nullopt,
+        flatFieldProbe && imageProcessingAllowed, flatFieldProbe,
+        flatFieldProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamDarkFieldCorrectionEnabled", "Dark-Field Correction",
+        CameraFeatureKind::Boolean, std::nullopt,
+        darkFieldProbe && imageProcessingAllowed, darkFieldProbe,
+        darkFieldProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamDefectPixelCorrectionEnabled", "Defect-Pixel Correction",
+        CameraFeatureKind::Boolean, std::nullopt,
+        defectPixelProbe && imageProcessingAllowed, defectPixelProbe,
+        defectPixelProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamSharpeningParameters", "Sharpening Parameters",
+        CameraFeatureKind::IntegerVector, std::string("strength, radius, threshold"),
+        sharpeningProbe && imageProcessingAllowed, sharpeningProbe,
+        sharpeningProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::size_t{3}, {},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamRotationDegrees", "Clockwise Image Rotation",
+        CameraFeatureKind::Enumeration, std::string("degrees"),
+        rotationProbe && imageProcessingAllowed, rotationProbe,
+        rotationProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt, {"0", "90", "180", "270"},
+        camera::CameraFeatureGroup::ImageFormat
+    });
+    descriptors.push_back({
+        "AmcamUpsideDownEnabled", "Upside-Down Image",
+        CameraFeatureKind::Boolean, std::nullopt,
+        upsideDownProbe && imageProcessingAllowed, upsideDownProbe,
+        upsideDownProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::ImageFormat
+    });
+    descriptors.push_back({
+        "AmcamTestPattern", "Sensor Test Pattern",
+        CameraFeatureKind::Enumeration, std::nullopt,
+        testPatternProbe && imageProcessingAllowed, testPatternProbe,
+        testPatternProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt,
+        {"Off", "MonochromeDiagonal", "MonochromeVertical",
+         "MonochromeHorizontal", "ChromaticDiagonal"},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamAutoExposureThreshold", "Auto-Exposure Threshold",
+        CameraFeatureKind::Integer, std::string("SDK units"),
+        autoExposureThresholdProbe && exposureAutoAllowed,
+        autoExposureThresholdProbe,
+        autoExposureThresholdProbe && exposureAutoAllowed && stopped,
+        CameraFeatureNumericRange{2.0, 15.0, 1.0},
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Exposure
+    });
+
+    // Model flags are hardware facts, not mutable camera settings.    // Model flags are hardware facts, not mutable camera settings. Keep them
     // read-only and apply the same exact-model allow/deny policy as controls.
     for (const auto& capability : kModelFlagCapabilities) {
         const bool supported = hasModelDescriptor &&
@@ -2464,6 +2598,85 @@ AmcamCamera::readFeature(std::string_view name) {
                             std::string(name), "Camera feature is not readable in the current state.");
 
 
+
+    if (name == "AmcamFlatFieldCorrectionEnabled" ||
+        name == "AmcamDarkFieldCorrectionEnabled") {
+        const unsigned option =
+            name == "AmcamFlatFieldCorrectionEnabled"
+                ? AMCAM_OPTION_FFC : AMCAM_OPTION_DFC;
+        int raw = 0;
+        const HRESULT hr = Amcam_get_Option(impl_->handle, option, &raw);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(correction)", hr);
+        const auto state = static_cast<std::uint32_t>(raw) & 0xffU;
+        if (state > 2U)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an unknown correction state.");
+        return CameraFeatureValue{state != 0U};
+    }
+    if (name == "AmcamDefectPixelCorrectionEnabled" ||
+        name == "AmcamUpsideDownEnabled") {
+        const unsigned option =
+            name == "AmcamDefectPixelCorrectionEnabled"
+                ? AMCAM_OPTION_DEFECT_PIXEL : AMCAM_OPTION_UPSIDE_DOWN;
+        int value = -1;
+        const HRESULT hr = Amcam_get_Option(impl_->handle, option, &value);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option", hr);
+        if (value != 0 && value != 1)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an invalid Boolean value.");
+        return CameraFeatureValue{value != 0};
+    }
+    if (name == "AmcamSharpeningParameters") {
+        int packed = 0;
+        const HRESULT hr =
+            Amcam_get_Option(impl_->handle, AMCAM_OPTION_SHARPENING, &packed);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(SHARPENING)", hr);
+        const auto bits = static_cast<std::uint32_t>(packed);
+        return CameraFeatureValue{std::vector<std::int64_t>{
+            static_cast<std::int64_t>(bits & 0xffffU),
+            static_cast<std::int64_t>((bits >> 16U) & 0xffU),
+            static_cast<std::int64_t>((bits >> 24U) & 0xffU)}};
+    }
+    if (name == "AmcamRotationDegrees" ||
+        name == "AmcamTestPattern") {
+        const unsigned option =
+            name == "AmcamRotationDegrees"
+                ? AMCAM_OPTION_ROTATE : AMCAM_OPTION_TESTPATTERN;
+        int value = -1;
+        const HRESULT hr = Amcam_get_Option(impl_->handle, option, &value);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option", hr);
+        if (name == "AmcamRotationDegrees") {
+            if (value != 0 && value != 90 && value != 180 && value != 270)
+                return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                    std::string(name), "The SDK returned an unknown rotation.");
+            return CameraFeatureValue{FeatureEnumeration{std::to_string(value)}};
+        }
+        switch (value) {
+        case 0: return CameraFeatureValue{FeatureEnumeration{"Off"}};
+        case 3: return CameraFeatureValue{FeatureEnumeration{"MonochromeDiagonal"}};
+        case 5: return CameraFeatureValue{FeatureEnumeration{"MonochromeVertical"}};
+        case 7: return CameraFeatureValue{FeatureEnumeration{"MonochromeHorizontal"}};
+        case 9: return CameraFeatureValue{FeatureEnumeration{"ChromaticDiagonal"}};
+        default:
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an unknown test-pattern mode.");
+        }
+    }
+    if (name == "AmcamAutoExposureThreshold") {
+        int value = -1;
+        const HRESULT hr = Amcam_get_Option(
+            impl_->handle, AMCAM_OPTION_AUTOEXP_THRESHOLD, &value);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(AUTOEXP_THRESHOLD)", hr);
+        if (value < 2 || value > 15)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an out-of-range auto-exposure threshold.");
+        return CameraFeatureValue{static_cast<std::int64_t>(value)};
+    }
     for (const auto& capability : kModelFlagCapabilities) {
         if (name == capability.name) {
             return CameraFeatureValue{
@@ -2969,6 +3182,142 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         return std::monostate{};
     }
 
+
+    if (name == "AmcamFlatFieldCorrectionEnabled" ||
+        name == "AmcamDarkFieldCorrectionEnabled") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "Field correction can only be changed while acquisition is stopped.");
+        const unsigned option =
+            name == "AmcamFlatFieldCorrectionEnabled"
+                ? AMCAM_OPTION_FFC : AMCAM_OPTION_DFC;
+        const int requested = std::get<bool>(value) ? 1 : 0;
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option(correction)", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(correction readback)", readHr);
+        const auto state = static_cast<std::uint32_t>(readback) & 0xffU;
+        if ((requested == 0 && state != 0U) ||
+            (requested == 1 && state == 0U))
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "Correction state readback did not match the request.");
+        return std::monostate{};
+    }
+    if (name == "AmcamDefectPixelCorrectionEnabled" ||
+        name == "AmcamUpsideDownEnabled") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "Image correction can only be changed while acquisition is stopped.");
+        const unsigned option =
+            name == "AmcamDefectPixelCorrectionEnabled"
+                ? AMCAM_OPTION_DEFECT_PIXEL : AMCAM_OPTION_UPSIDE_DOWN;
+        const int requested = std::get<bool>(value) ? 1 : 0;
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "Image-correction readback did not match the request.");
+        return std::monostate{};
+    }
+    if (name == "AmcamSharpeningParameters") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "Sharpening can only be changed while acquisition is stopped.");
+        const auto& parameters = std::get<std::vector<std::int64_t>>(value);
+        if (parameters.size() != 3 ||
+            parameters[0] < 0 || parameters[0] > 500 ||
+            parameters[1] < 1 || parameters[1] > 10 ||
+            parameters[2] < 0 || parameters[2] > 255) {
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "Sharpening requires [strength 0..500, radius 1..10, threshold 0..255].");
+        }
+        const std::uint32_t packed =
+            (static_cast<std::uint32_t>(parameters[2]) << 24U) |
+            (static_cast<std::uint32_t>(parameters[1]) << 16U) |
+            static_cast<std::uint32_t>(parameters[0]);
+        const int requested = static_cast<int>(static_cast<std::int32_t>(packed));
+        const HRESULT hr = Amcam_put_Option(
+            impl_->handle, AMCAM_OPTION_SHARPENING, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option(SHARPENING)", hr);
+        int readback = 0;
+        const HRESULT readHr = Amcam_get_Option(
+            impl_->handle, AMCAM_OPTION_SHARPENING, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(SHARPENING readback)", readHr);
+        if (static_cast<std::uint32_t>(readback) != packed)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "Sharpening readback did not match the requested parameters.");
+        return std::monostate{};
+    }
+    if (name == "AmcamRotationDegrees" ||
+        name == "AmcamTestPattern") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "Image orientation and test-pattern settings can only be changed while acquisition is stopped.");
+        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        int requested = -1;
+        unsigned option = 0;
+        if (name == "AmcamRotationDegrees") {
+            option = AMCAM_OPTION_ROTATE;
+            if (symbol == "0") requested = 0;
+            else if (symbol == "90") requested = 90;
+            else if (symbol == "180") requested = 180;
+            else if (symbol == "270") requested = 270;
+        } else {
+            option = AMCAM_OPTION_TESTPATTERN;
+            if (symbol == "Off") requested = 0;
+            else if (symbol == "MonochromeDiagonal") requested = 3;
+            else if (symbol == "MonochromeVertical") requested = 5;
+            else if (symbol == "MonochromeHorizontal") requested = 7;
+            else if (symbol == "ChromaticDiagonal") requested = 9;
+        }
+        if (requested < 0)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "The requested mode is not supported.");
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The selected mode readback did not match the request.");
+        return std::monostate{};
+    }
+    if (name == "AmcamAutoExposureThreshold") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "Auto-exposure threshold can only be changed while acquisition is stopped.");
+        const auto requested = std::get<std::int64_t>(value);
+        if (requested < 2 || requested > 15)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "Auto-exposure threshold must be between 2 and 15.");
+        const HRESULT hr = Amcam_put_Option(
+            impl_->handle, AMCAM_OPTION_AUTOEXP_THRESHOLD,
+            static_cast<int>(requested));
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option(AUTOEXP_THRESHOLD)", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(
+            impl_->handle, AMCAM_OPTION_AUTOEXP_THRESHOLD, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(AUTOEXP_THRESHOLD readback)", readHr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "Auto-exposure threshold readback did not match the request.");
+        return std::monostate{};
+    }
     if (name == "AmcamBinning") {
         if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
             return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,

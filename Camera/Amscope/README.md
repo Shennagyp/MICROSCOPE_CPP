@@ -71,9 +71,19 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   policy must all permit the feature. The Qt preview explicitly refuses to
   interpret RAW sensor bytes as RGB888; it reports the active RAW format until
   a Bayer/RAW decoder is attached.
-- Every frame includes sequence, timestamp, exposure, gain, and black-level metadata.
-- Four reusable buffers are exposed as immutable FramePtr leases. If every
-  buffer is retained, the worker drains into a private discard buffer and
+- Live and still payloads use the backend-neutral `camera::Frame` /
+  `camera::FramePtr` contract from `Camera/Common`. It carries dimensions,
+  row stride, buffer format, opaque format identity, significant source depth,
+  storage width, payload ownership, and optional sequence/timestamp/exposure
+  metadata. The Amcam SDK validity flags determine whether each metadata value
+  is present; a reported zero is retained as a valid value.
+- Amcam-only `sdkFlags`, exposure gain percent, and black level remain on the
+  typed `amscope::AmcamFrame` extension. RAW pixel identifiers use the
+  `amcam.fourcc` scheme and are not relabelled as PFNC. Amcam timestamps and
+  per-frame exposure durations are represented in microsecond timebases; the
+  timestamp clock origin remains unspecified.
+- Four reusable buffers are exposed as immutable common `FramePtr` leases. If
+  every buffer is retained, the worker drains into a private discard buffer and
   increments droppedFrames rather than blocking acquisition.
 - Resolution can be changed while open and stopped. Start reads the final
   image dimensions and sizes the pool for the selected configuration.

@@ -1514,9 +1514,9 @@ private:
                         status += QString(" | focuser %1 °C")
                             .arg(*state.temperatureTenthsC / 10.0, 0, 'f', 1);
                     }
-                    if (state.ambientTemperatureTenthsC) {
-                        status += QString(" | ambient %1 °C")
-                            .arg(*state.ambientTemperatureTenthsC / 10.0, 0, 'f', 1);
+                    if (state.ambientTemperatureSdkUnits) {
+                        status += QString(" | ambient SDK value %1")
+                            .arg(*state.ambientTemperatureSdkUnits);
                     }
                     astroAutoFocuserStatusLabel_->setText(status);
                 }

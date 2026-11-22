@@ -167,6 +167,15 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
     target_link_libraries(amscope_preview PRIVATE Amscope::Qt Qt6::Widgets)
     set_target_properties(amscope_preview PROPERTIES
         BUILD_RPATH "@loader_path")
+
+    # Physical-camera performance test. Intentionally not registered with
+    # CTest because hosted CI has no camera attached.
+    add_executable(amscope_hardware_rate_test app/hardware_rate_test.cpp)
+    target_compile_features(amscope_hardware_rate_test PRIVATE cxx_std_17)
+    target_link_libraries(amscope_hardware_rate_test
+        PRIVATE Amscope::Driver Qt6::Widgets)
+    set_target_properties(amscope_hardware_rate_test PROPERTIES
+        BUILD_RPATH "@loader_path")
 endif()
 
 include(GNUInstallDirs)

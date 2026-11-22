@@ -422,9 +422,8 @@ buildAmcamFeatureDescriptors(
     const HRESULT rawModeHr =
         Amcam_get_Option(handle, AMCAM_OPTION_RAW, &rawMode);
     int rawBitDepth = -1;
-    const char* rawBitDepthFailureOperation = nullptr;
     const HRESULT rawBitDepthModeHr = getRawBitDepthMode(
-        handle, modelFlags, rawBitDepth, &rawBitDepthFailureOperation,
+        handle, modelFlags, rawBitDepth, nullptr,
         requestedRawBitDepthModeFallback);
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;

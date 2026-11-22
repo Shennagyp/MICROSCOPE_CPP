@@ -257,7 +257,24 @@ No assistant-side local build or CTest run was performed for these changes. The 
 
 This targeted physical-camera smoke result establishes that the live resolution setting path works in the user's setup. The exact tested local commit, camera/model identity, selected resolution index, resulting frame dimensions, still-capture dimensions, and event/pull/paint FPS values were not supplied. It does not establish the 640×480 throughput target, the still-resolution toolbar path, other feature setters, or lifecycle/recovery behavior.
 
-Phase 0 remains OPEN. The next hardware step is to record the actual 640×480 live frame dimensions and event/pull/paint FPS, exposure, sequence progression, and pool drops over a measured interval. Then complete Section 3.2, including the 15-minute continuous acquisition run, safe setting readback/restoration, Stop/Start, Close/reopen, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`.
+Phase 0 remains OPEN. The next hardware step is to run the dedicated physical-camera rate measurement executable introduced for this purpose.
+
+From the repository root, run:
+
+```sh
+AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh \
+  --hardware-rate-test \
+  --resolution 640x480 \
+  --warmup 3 \
+  --duration 15 \
+  --target-fps 100
+```
+
+The test opens the selected camera (device index 0 by default), saves the current live-resolution selection, selects 640×480 via `AmcamResolutionIndex`, verifies feature readback, and starts the normal native acquisition path. Its small visible Qt preview measures unique frame paints while the native driver supplies separate image-event and successful-pull counters. The JSON report includes event/pull/callback/paint FPS, actual dimensions, sequence range, exposure statistics, dropped frames, and Stop/restore/Close outcomes. It restores the original live resolution after Stop. The test requires RGB24 live output; it refuses to run while RAW sensor output is enabled. Keep its preview window visible during measurement.
+
+Result classification: `PASS` means operational checks passed and pulled FPS met the requested target; `BELOW_TARGET` means the test ran but pulled FPS was below target; `FAIL` means an operational condition failed. Exit codes are 0, 10, and 8 respectively for those three result classes (setup failures use separate non-zero codes). This executable is a physical-camera test, not a CTest target, and is not run by hosted CI.
+
+After reviewing this short measurement, complete the full Section 3.2 baseline regression, including the 15-minute continuous acquisition run, safe setting readback/restoration, Stop/Start, Close/reopen, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`.
 
 ### Exit criteria
 

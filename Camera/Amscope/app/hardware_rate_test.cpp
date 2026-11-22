@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QColor>
 #include <QImage>
 #include <QPaintEvent>
 #include <QPainter>
@@ -630,7 +631,7 @@ int main(int argc, char** argv) {
 
     QTimer framePoll;
     framePoll.setTimerType(Qt::PreciseTimer);
-    framePoll.setInterval(1);
+    framePoll.setInterval(4);
     QObject::connect(&framePoll, &QTimer::timeout, [&]() {
         preview.setFrame(capture->takeLatestFrame());
     });

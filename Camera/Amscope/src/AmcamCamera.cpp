@@ -2293,102 +2293,6 @@ AmcamCamera::readFeature(std::string_view name) {
         return CameraFeatureValue{FeatureEnumeration{std::to_string(value)}};
     }
 
-    if (name == "AmcamLinearToneMappingEnabled" ||
-        name == "AmcamLowNoiseModeEnabled" ||
-        name == "AmcamHighFullWellEnabled" ||
-        name == "AmcamTecEnabled") {
-        const unsigned option =
-            name == "AmcamLinearToneMappingEnabled" ? AMCAM_OPTION_LINEAR :
-            name == "AmcamLowNoiseModeEnabled" ? AMCAM_OPTION_LOW_NOISE :
-            name == "AmcamHighFullWellEnabled" ? AMCAM_OPTION_HIGH_FULLWELL :
-                                                  AMCAM_OPTION_TEC;
-        const int requested = std::get<bool>(value) ? 1 : 0;
-        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
-        if (FAILED(hr))
-            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
-        int readback = -1;
-        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
-        if (FAILED(readHr))
-            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
-        if (readback != requested)
-            return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                std::string(name), "The Boolean option readback did not match the request.");
-        return std::monostate{};
-    }
-    if (name == "AmcamCurveMode" ||
-        name == "AmcamDemosaicVideo" ||
-        name == "AmcamDemosaicStill" ||
-        name == "AmcamConversionGainMode") {
-        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
-        int requested = -1;
-        unsigned option = 0;
-        if (name == "AmcamCurveMode") {
-            option = AMCAM_OPTION_CURVE;
-            if (symbol == "Off") requested = 0;
-            else if (symbol == "Polynomial") requested = 1;
-            else if (symbol == "Logarithmic") requested = 2;
-        } else if (name == "AmcamConversionGainMode") {
-            option = AMCAM_OPTION_CG;
-            if (symbol == "LCG") requested = 0;
-            else if (symbol == "HCG") requested = 1;
-            else if (symbol == "HDR" &&
-                     (impl_->modelFlags & AMCAM_FLAG_CGHDR) != 0) requested = 2;
-            else if (symbol == "MCG" &&
-                     (impl_->modelFlags & AMCAM_FLAG_GHOPTO) != 0) requested = 2;
-        } else {
-            option = name == "AmcamDemosaicVideo"
-                ? AMCAM_OPTION_DEMOSAIC_VIDEO : AMCAM_OPTION_DEMOSAIC_STILL;
-            if (symbol == "Bilinear") requested = 0;
-            else if (symbol == "VNG") requested = 1;
-            else if (symbol == "PPG") requested = 2;
-            else if (symbol == "AHD") requested = 3;
-            else if (symbol == "EdgeAware") requested = 4;
-        }
-        if (requested < 0)
-            return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "The requested enumeration symbol is not supported by this camera.");
-        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
-        if (FAILED(hr))
-            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
-        int readback = -1;
-        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
-        if (FAILED(readHr))
-            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
-        if (readback != requested)
-            return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                std::string(name), "The enumeration readback did not match the request.");
-        return std::monostate{};
-    }
-    if (name == "AmcamDenoiseStrength" ||
-        name == "AmcamBlackLevel" ||
-        name == "AmcamTecTargetTemperature" ||
-        name == "AmcamFanSpeed" ||
-        name == "AmcamHeatAntiFogLevel") {
-        const auto requested = std::get<std::int64_t>(value);
-        if (requested < std::numeric_limits<int>::min() ||
-            requested > std::numeric_limits<int>::max())
-            return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "The requested value does not fit the SDK signed integer.");
-        const int target = static_cast<int>(requested);
-        unsigned option = 0;
-        if (name == "AmcamDenoiseStrength") option = AMCAM_OPTION_DENOISE;
-        else if (name == "AmcamBlackLevel") option = AMCAM_OPTION_BLACKLEVEL;
-        else if (name == "AmcamTecTargetTemperature") option = AMCAM_OPTION_TECTARGET;
-        else if (name == "AmcamFanSpeed") option = AMCAM_OPTION_FAN;
-        else option = AMCAM_OPTION_HEAT;
-
-        const HRESULT hr = Amcam_put_Option(impl_->handle, option, target);
-        if (FAILED(hr))
-            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
-        int readback = 0;
-        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
-        if (FAILED(readHr))
-            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
-        if (readback != target)
-            return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                std::string(name), "The numeric option readback did not match the request.");
-        return std::monostate{};
-    }
     if (name == "AmcamWhiteBalanceTemperature" ||
         name == "AmcamWhiteBalanceTint") {
         int temperature = 0, tint = 0;
@@ -2726,6 +2630,102 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         return std::monostate{};
     }
 
+    if (name == "AmcamLinearToneMappingEnabled" ||
+        name == "AmcamLowNoiseModeEnabled" ||
+        name == "AmcamHighFullWellEnabled" ||
+        name == "AmcamTecEnabled") {
+        const unsigned option =
+            name == "AmcamLinearToneMappingEnabled" ? AMCAM_OPTION_LINEAR :
+            name == "AmcamLowNoiseModeEnabled" ? AMCAM_OPTION_LOW_NOISE :
+            name == "AmcamHighFullWellEnabled" ? AMCAM_OPTION_HIGH_FULLWELL :
+                                                  AMCAM_OPTION_TEC;
+        const int requested = std::get<bool>(value) ? 1 : 0;
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The Boolean option readback did not match the request.");
+        return std::monostate{};
+    }
+    if (name == "AmcamCurveMode" ||
+        name == "AmcamDemosaicVideo" ||
+        name == "AmcamDemosaicStill" ||
+        name == "AmcamConversionGainMode") {
+        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        int requested = -1;
+        unsigned option = 0;
+        if (name == "AmcamCurveMode") {
+            option = AMCAM_OPTION_CURVE;
+            if (symbol == "Off") requested = 0;
+            else if (symbol == "Polynomial") requested = 1;
+            else if (symbol == "Logarithmic") requested = 2;
+        } else if (name == "AmcamConversionGainMode") {
+            option = AMCAM_OPTION_CG;
+            if (symbol == "LCG") requested = 0;
+            else if (symbol == "HCG") requested = 1;
+            else if (symbol == "HDR" &&
+                     (impl_->modelFlags & AMCAM_FLAG_CGHDR) != 0) requested = 2;
+            else if (symbol == "MCG" &&
+                     (impl_->modelFlags & AMCAM_FLAG_GHOPTO) != 0) requested = 2;
+        } else {
+            option = name == "AmcamDemosaicVideo"
+                ? AMCAM_OPTION_DEMOSAIC_VIDEO : AMCAM_OPTION_DEMOSAIC_STILL;
+            if (symbol == "Bilinear") requested = 0;
+            else if (symbol == "VNG") requested = 1;
+            else if (symbol == "PPG") requested = 2;
+            else if (symbol == "AHD") requested = 3;
+            else if (symbol == "EdgeAware") requested = 4;
+        }
+        if (requested < 0)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "The requested enumeration symbol is not supported by this camera.");
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The enumeration readback did not match the request.");
+        return std::monostate{};
+    }
+    if (name == "AmcamDenoiseStrength" ||
+        name == "AmcamBlackLevel" ||
+        name == "AmcamTecTargetTemperature" ||
+        name == "AmcamFanSpeed" ||
+        name == "AmcamHeatAntiFogLevel") {
+        const auto requested = std::get<std::int64_t>(value);
+        if (requested < std::numeric_limits<int>::min() ||
+            requested > std::numeric_limits<int>::max())
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "The requested value does not fit the SDK signed integer.");
+        const int target = static_cast<int>(requested);
+        unsigned option = 0;
+        if (name == "AmcamDenoiseStrength") option = AMCAM_OPTION_DENOISE;
+        else if (name == "AmcamBlackLevel") option = AMCAM_OPTION_BLACKLEVEL;
+        else if (name == "AmcamTecTargetTemperature") option = AMCAM_OPTION_TECTARGET;
+        else if (name == "AmcamFanSpeed") option = AMCAM_OPTION_FAN;
+        else option = AMCAM_OPTION_HEAT;
+
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, target);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = 0;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != target)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The numeric option readback did not match the request.");
+        return std::monostate{};
+    }
     if (name == "AmcamWhiteBalanceTemperature" ||
         name == "AmcamWhiteBalanceTint") {
         const auto requested = std::get<std::int64_t>(value);

@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `3da2a385508f1b639f98bbd34f5a6dabd9a3406a` (common discovery and frame models, AmScope adapters, frame metadata mapping, and common frame tests)  
-**Branch head reviewed for this inventory refresh:** `25e09ca9987bdabab240a193b0b168f8944bc847`  
+**Source snapshot:** `0952952a32d084b4f29f860c07c472aedeb023a5` (common discovery and frame models, AmScope adapter, common metadata, and preview migration)  
+**Branch head reviewed for this inventory refresh:** `a114f1953f740d35212a6d3b517c8ba977eb52cf`  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---

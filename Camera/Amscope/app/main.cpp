@@ -1179,6 +1179,8 @@ private:
                         QVariant::fromValue<qlonglong>(
                             static_cast<qlonglong>(item)));
                 }
+                if (!descriptor.isReadable)
+                    control->setCurrentIndex(-1);
                 connect(control, qOverload<int>(&QComboBox::currentIndexChanged),
                         this, [this, name = descriptor.name](int index) {
                     if (index >= 0) submitFeatureWrite(name);

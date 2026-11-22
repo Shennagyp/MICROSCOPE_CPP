@@ -3272,10 +3272,9 @@ bool AmcamCamera::readIoLines(
 
     std::lock_guard<std::mutex> api(impl_->apiMutex);
     const CameraState currentState = impl_->state.load(std::memory_order_acquire);
-    if (!impl_->handle ||
-        (currentState != CameraState::Open && currentState != CameraState::Streaming)) {
+    if (!impl_->handle || currentState != CameraState::Open) {
         return fail(error, "readIoLines", -1,
-                    "The camera must be open to read hardware I/O lines.");
+                    "Hardware I/O line reads are available only while the camera is open and stopped.");
     }
     if (!impl_->profileRegistry.allows(
             impl_->modelCode, AmcamCameraFeature::IoControl)) {

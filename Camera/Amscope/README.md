@@ -73,13 +73,12 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   `AMCAM_OPTION_BITDEPTH` values 0 and 1. The maximum-depth choice is never
   labelled as 16-bit merely because the SDK stores it in a 16-bit container.
   The feature is writable only while stopped and RAW output is enabled.
-  The selector is exposed when the SDK reports the BITDEPTH option as
-  readable; it does not depend on model-flag interpretation or the optional
-  maximum-depth query. The choices are `8-bit` and `Maximum supported`.
-  The latter deliberately avoids claiming an exact significant depth when the
-  SDK does not report one. The selector is further restricted by the
-  RAW-output profile policy and is writable only while stopped with RAW
-  output enabled. Some SDK models implement the setter but not the getter:
+  The selector is exposed whenever the camera exposes RAW output and the
+  RAW-output profile policy allows it; it does not depend on the optional
+  BITDEPTH getter or maximum-depth query. The choices are `8-bit` and
+  `Maximum supported`. The latter deliberately avoids claiming an exact
+  significant depth when the SDK does not report one. The selector is writable
+  only while stopped with RAW output enabled. Some SDK models implement the setter but not the getter:
   after a successful set, the requested mode is retained for the session and
   used as a fallback only when subsequent SDK readback is unavailable. If
   readback is available, it remains authoritative and must match the request.

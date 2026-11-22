@@ -296,7 +296,6 @@ public:
         toolbar->addWidget(closeButton_);
         toolbar->addWidget(stillResolutionSelector_);
         toolbar->addWidget(stillCaptureModeSelector_);
-        toolbar->addWidget(stillPrecisionLabel_);
         toolbar->addWidget(captureStillButton_);
 
         preview_ = new FrameView(central);
@@ -479,6 +478,7 @@ public:
             updatePulledFrameRate();
         });
 
+        root->addWidget(stillPrecisionLabel_, 0, Qt::AlignRight);
         root->addLayout(toolbar);
         root->addLayout(workspace, 1);
         root->addWidget(frameInfo_);

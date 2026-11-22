@@ -65,10 +65,19 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   depth and AMCAM_OPTION_BITDEPTH for the returned storage container: one byte
   per pixel in 8-bit mode or two bytes per pixel in 16-bit mode, with no row
   padding. Frame metadata keeps both values distinct.
-- AmcamRawOutputEnabled and AmcamRawBitDepth are exposed through the same
-  typed feature interface and are writable only while the camera is stopped.
-  Model RAW flags, SDK option probes, and the exact-model RawOutput profile
-  policy must all permit the feature. The Qt preview explicitly refuses to
+- RAW output enablement remains an Amcam-specific feature. RAW storage bit
+  depth is exposed through the common feature identifier
+  `camera::RawStorageBitDepthFeature` with the enumeration values `8-bit`
+  and `16-bit`; the Amcam backend maps them to
+  `AMCAM_OPTION_BITDEPTH` values 0 and 1. The feature is writable only while
+  stopped and RAW output is enabled. Availability is based on model RAW/high-
+  depth capability facts and the RAW-output profile policy, not on successful
+  BITDEPTH readback. Some SDK models implement the setter but not the getter:
+  after a successful set, the requested mode is retained for the session and
+  used as a fallback only when subsequent SDK readback is unavailable. If
+  readback is available, it remains authoritative and must match the request.
+  The 16-bit choice describes the output container, not sensor precision;
+  significant sensor depth remains the value reported by `Amcam_get_RawFormat`. The Qt preview explicitly refuses to
   interpret RAW sensor bytes as RGB888; it reports the active RAW format until
   a Bayer/RAW decoder is attached.
 - Live and still payloads use the backend-neutral `camera::Frame` /

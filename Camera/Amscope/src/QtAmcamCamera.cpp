@@ -808,7 +808,7 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestEmbeddedLightSource(
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));
                 });
-        });
+        }, FeatureRequestSemantics::FeatureSnapshot);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSetEmbeddedLightSourceLevel(
@@ -874,7 +874,7 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFilterWheelState(
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));
                 });
-        });
+        }, FeatureRequestSemantics::FeatureSnapshot);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestMoveFilterWheel(

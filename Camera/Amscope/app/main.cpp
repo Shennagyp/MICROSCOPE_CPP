@@ -8,6 +8,7 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QGroupBox>
 #include <QImage>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -21,11 +22,13 @@
 #include <QJsonObject>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QSlider>
 #include <QStringList>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -141,9 +144,45 @@ public:
         featureForm_->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         featureScroll_->setWidget(featureContent_);
 
+        accessoryGroup_ = new QGroupBox("Camera accessories", central);
+        accessoryForm_ = new QFormLayout(accessoryGroup_);
+
+        embeddedLightSourceRow_ = new QWidget(accessoryGroup_);
+        auto* lightSourceLayout = new QHBoxLayout(embeddedLightSourceRow_);
+        lightSourceLayout->setContentsMargins(0, 0, 0, 0);
+        embeddedLightSourceSlider_ = new QSlider(Qt::Horizontal, embeddedLightSourceRow_);
+        embeddedLightSourceSlider_->setRange(0, 0);
+        embeddedLightSourceSlider_->setTracking(false);
+        embeddedLightSourceValueLabel_ = new QLabel("—", embeddedLightSourceRow_);
+        embeddedLightSourceApplyButton_ = new QPushButton("Apply", embeddedLightSourceRow_);
+        lightSourceLayout->addWidget(embeddedLightSourceSlider_, 1);
+        lightSourceLayout->addWidget(embeddedLightSourceValueLabel_);
+        lightSourceLayout->addWidget(embeddedLightSourceApplyButton_);
+        accessoryForm_->addRow("Embedded light source", embeddedLightSourceRow_);
+
+        filterWheelRow_ = new QWidget(accessoryGroup_);
+        auto* filterWheelLayout = new QHBoxLayout(filterWheelRow_);
+        filterWheelLayout->setContentsMargins(0, 0, 0, 0);
+        filterWheelPositionSelector_ = new QComboBox(filterWheelRow_);
+        filterWheelDirectionSelector_ = new QComboBox(filterWheelRow_);
+        filterWheelDirectionSelector_->addItem(
+            "Clockwise", static_cast<int>(amscope::FilterWheelDirection::Clockwise));
+        filterWheelDirectionSelector_->addItem(
+            "Automatic", static_cast<int>(amscope::FilterWheelDirection::Automatic));
+        filterWheelMoveButton_ = new QPushButton("Move", filterWheelRow_);
+        filterWheelRefreshButton_ = new QPushButton("Refresh", filterWheelRow_);
+        filterWheelStatusLabel_ = new QLabel("Position unknown", filterWheelRow_);
+        filterWheelLayout->addWidget(filterWheelPositionSelector_);
+        filterWheelLayout->addWidget(filterWheelDirectionSelector_);
+        filterWheelLayout->addWidget(filterWheelMoveButton_);
+        filterWheelLayout->addWidget(filterWheelRefreshButton_);
+        accessoryForm_->addRow("Filter wheel", filterWheelRow_);
+        accessoryGroup_->hide();
+
         auto* settingsColumn = new QVBoxLayout();
         settingsColumn->addWidget(featureStatus_);
         settingsColumn->addWidget(refreshFeaturesButton_);
+        settingsColumn->addWidget(accessoryGroup_);
         settingsColumn->addWidget(featureScroll_, 1);
 
         auto* workspace = new QHBoxLayout();
@@ -177,6 +216,17 @@ public:
         connect(refreshFeaturesButton_, &QPushButton::clicked, this, [this]() {
             refreshFeatureDescriptors();
         });
+
+        connect(embeddedLightSourceSlider_, &QSlider::valueChanged,
+                this, [this](int level) {
+            embeddedLightSourceValueLabel_->setText(QString::number(level));
+        });
+        connect(embeddedLightSourceApplyButton_, &QPushButton::clicked,
+                this, [this]() { applyEmbeddedLightSourceLevel(); });
+        connect(filterWheelMoveButton_, &QPushButton::clicked,
+                this, [this]() { submitFilterWheelMove(); });
+        connect(filterWheelRefreshButton_, &QPushButton::clicked,
+                this, [this]() { refreshFilterWheelState(); });
 
         connect(&camera_, &amscope::QtAmcamCamera::frameAvailable,
                 this, [this]() {
@@ -625,6 +675,13 @@ private:
         const std::uint64_t generation = ++featureUiGeneration_;
         pendingFeatureReads_ = 0;
         pendingFeatureWrite_ = false;
+        embeddedLightSourceReadPending_ = false;
+        filterWheelReadPending_ = false;
+        embeddedLightSourceStateKnown_ = false;
+        filterWheelStateKnown_ = false;
+        filterWheelMoving_ = false;
+        accessoryOperationPending_ = false;
+        accessoryGroup_->hide();
         setFeatureControlsEnabled(false);
         featureStatus_->setText("Reading feature descriptors…");
 
@@ -645,6 +702,7 @@ private:
                 const auto descriptors =
                     std::get<amscope::QtAmcamCamera::FeatureDescriptors>(std::move(result));
                 rebuildFeatureControls(descriptors);
+                rebuildAccessoryControls(descriptors, generation);
                 refreshFeatureValues(generation);
 
                 featureStatus_->setText(
@@ -669,6 +727,7 @@ private:
         }
         featureControls_.clear();
         pendingFeatureReads_ = 0;
+        clearAccessoryControls();
     }
 
     void rebuildFeatureControls(
@@ -1136,6 +1195,233 @@ private:
         previewFramesPerSecond_.reset();
     }
 
+
+    void clearAccessoryControls() {
+        embeddedLightSourceAvailable_ = false;
+        filterWheelAvailable_ = false;
+        embeddedLightSourceReadPending_ = false;
+        filterWheelReadPending_ = false;
+        embeddedLightSourceStateKnown_ = false;
+        filterWheelStateKnown_ = false;
+        filterWheelMoving_ = false;
+        accessoryOperationPending_ = false;
+        accessoryGroup_->hide();
+        embeddedLightSourceSlider_->setRange(0, 0);
+        embeddedLightSourceSlider_->setValue(0);
+        embeddedLightSourceValueLabel_->setText("—");
+        filterWheelPositionSelector_->clear();
+        filterWheelStatusLabel_->setText("Position unknown");
+    }
+
+    void rebuildAccessoryControls(
+        const std::vector<camera::CameraFeatureDescriptor>& descriptors,
+        std::uint64_t generation) {
+        const auto available = [&descriptors](const char* name) {
+            const auto item = std::find_if(
+                descriptors.begin(), descriptors.end(),
+                [name](const auto& descriptor) { return descriptor.name == name; });
+            return item != descriptors.end() && item->isAvailable;
+        };
+        embeddedLightSourceAvailable_ =
+            available("AmcamEmbeddedLightSourceAvailable");
+        filterWheelAvailable_ = available("AmcamFilterWheelAvailable");
+
+        embeddedLightSourceRow_->setVisible(embeddedLightSourceAvailable_);
+        if (QWidget* label = accessoryForm_->labelForField(embeddedLightSourceRow_))
+            label->setVisible(embeddedLightSourceAvailable_);
+        filterWheelRow_->setVisible(filterWheelAvailable_);
+        if (QWidget* label = accessoryForm_->labelForField(filterWheelRow_))
+            label->setVisible(filterWheelAvailable_);
+
+        const bool anyAccessory =
+            embeddedLightSourceAvailable_ || filterWheelAvailable_;
+        accessoryGroup_->setVisible(anyAccessory);
+        if (anyAccessory)
+            refreshAccessoryState(generation);
+    }
+
+    void refreshAccessoryState(std::uint64_t generation) {
+        if (embeddedLightSourceAvailable_)
+            refreshEmbeddedLightSource(generation);
+        if (filterWheelAvailable_)
+            refreshFilterWheelState(generation);
+    }
+
+    void refreshEmbeddedLightSource(std::uint64_t generation) {
+        if (!embeddedLightSourceAvailable_ || embeddedLightSourceReadPending_)
+            return;
+        embeddedLightSourceReadPending_ = true;
+        updateControls(camera_.state());
+
+        const auto requestId = camera_.requestEmbeddedLightSource(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::EmbeddedLightSourceResult result) {
+                if (generation != featureUiGeneration_) return;
+                embeddedLightSourceReadPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    embeddedLightSourceStateKnown_ = false;
+                    embeddedLightSourceValueLabel_->setText("Unavailable");
+                    featureStatus_->setText(
+                        QString("Embedded light-source read failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                } else {
+                    const auto& state =
+                        std::get<amscope::EmbeddedLightSourceState>(result);
+                    embeddedLightSourceStateKnown_ = true;
+                    {
+                        const QSignalBlocker blocker(embeddedLightSourceSlider_);
+                        embeddedLightSourceSlider_->setRange(
+                            0, static_cast<int>(state.maximumLevel));
+                        embeddedLightSourceSlider_->setValue(
+                            static_cast<int>(state.level));
+                    }
+                    embeddedLightSourceValueLabel_->setText(
+                        QString("%1 / %2")
+                            .arg(static_cast<qulonglong>(state.level))
+                            .arg(static_cast<qulonglong>(state.maximumLevel)));
+                }
+                updateControls(camera_.state());
+            });
+        if (requestId == 0) {
+            embeddedLightSourceReadPending_ = false;
+            embeddedLightSourceStateKnown_ = false;
+            embeddedLightSourceValueLabel_->setText("Request rejected");
+            updateControls(camera_.state());
+        }
+    }
+
+    void refreshFilterWheelState(std::uint64_t generation) {
+        if (!filterWheelAvailable_ || filterWheelReadPending_)
+            return;
+        filterWheelReadPending_ = true;
+        updateControls(camera_.state());
+
+        const auto requestId = camera_.requestFilterWheelState(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::FilterWheelStateResult result) {
+                if (generation != featureUiGeneration_) return;
+                filterWheelReadPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    filterWheelStateKnown_ = false;
+                    filterWheelMoving_ = false;
+                    filterWheelStatusLabel_->setText("Unavailable");
+                    featureStatus_->setText(
+                        QString("Filter-wheel read failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                } else {
+                    const auto& state =
+                        std::get<amscope::FilterWheelState>(result);
+                    filterWheelStateKnown_ = true;
+                    filterWheelMoving_ = state.moving;
+                    const QSignalBlocker blocker(filterWheelPositionSelector_);
+                    const bool slotCountChanged =
+                        filterWheelPositionSelector_->count() !=
+                        static_cast<int>(state.slotCount);
+                    if (slotCountChanged) {
+                        filterWheelPositionSelector_->clear();
+                        for (std::uint32_t slot = 0; slot < state.slotCount; ++slot) {
+                            filterWheelPositionSelector_->addItem(
+                                QString("Slot %1").arg(static_cast<qulonglong>(slot)),
+                                static_cast<qulonglong>(slot));
+                        }
+                    }
+                    if (state.moving) {
+                        filterWheelStatusLabel_->setText("Moving…");
+                    } else if (state.position) {
+                        filterWheelPositionSelector_->setCurrentIndex(
+                            static_cast<int>(*state.position));
+                        filterWheelStatusLabel_->setText(
+                            QString("At slot %1")
+                                .arg(static_cast<qulonglong>(*state.position)));
+                    } else {
+                        filterWheelStatusLabel_->setText("Position unknown");
+                    }
+                }
+                updateControls(camera_.state());
+            });
+        if (requestId == 0) {
+            filterWheelReadPending_ = false;
+            filterWheelStateKnown_ = false;
+            filterWheelMoving_ = false;
+            filterWheelStatusLabel_->setText("Request rejected");
+            updateControls(camera_.state());
+        }
+    }
+
+    void refreshFilterWheelState() {
+        refreshFilterWheelState(featureUiGeneration_);
+    }
+
+    void applyEmbeddedLightSourceLevel() {
+        if (!embeddedLightSourceAvailable_ || accessoryOperationPending_)
+            return;
+        accessoryOperationPending_ = true;
+        updateControls(camera_.state());
+        const std::uint64_t generation = featureUiGeneration_;
+        const auto level = static_cast<std::uint32_t>(
+            embeddedLightSourceSlider_->value());
+        const auto requestId = camera_.requestSetEmbeddedLightSourceLevel(
+            level,
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AccessoryCommandResult result) {
+                if (generation != featureUiGeneration_) return;
+                accessoryOperationPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    featureStatus_->setText(
+                        QString("Embedded light-source update failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                    updateControls(camera_.state());
+                } else {
+                    featureStatus_->setText("Embedded light-source level updated.");
+                    refreshFeatureDescriptors();
+                }
+            });
+        if (requestId == 0) {
+            accessoryOperationPending_ = false;
+            featureStatus_->setText("Embedded light-source command could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
+    void submitFilterWheelMove() {
+        if (!filterWheelAvailable_ || accessoryOperationPending_ ||
+            filterWheelPositionSelector_->currentIndex() < 0 ||
+            filterWheelDirectionSelector_->currentIndex() < 0)
+            return;
+        accessoryOperationPending_ = true;
+        updateControls(camera_.state());
+        const std::uint64_t generation = featureUiGeneration_;
+        const auto position = static_cast<std::uint32_t>(
+            filterWheelPositionSelector_->currentData().toUInt());
+        const auto direction = static_cast<amscope::FilterWheelDirection>(
+            filterWheelDirectionSelector_->currentData().toInt());
+        const auto requestId = camera_.requestMoveFilterWheel(
+            position, direction,
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AccessoryCommandResult result) {
+                if (generation != featureUiGeneration_) return;
+                accessoryOperationPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    featureStatus_->setText(
+                        QString("Filter-wheel command failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                    updateControls(camera_.state());
+                } else {
+                    filterWheelStatusLabel_->setText("Move accepted; refreshing position…");
+                    refreshFilterWheelState(generation);
+                }
+            });
+        if (requestId == 0) {
+            accessoryOperationPending_ = false;
+            featureStatus_->setText("Filter-wheel command could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
     void updateControls(amscope::CameraState state) {
         const bool closed = state == amscope::CameraState::Closed;
         const bool open = state == amscope::CameraState::Open;
@@ -1155,7 +1441,31 @@ private:
         stillCaptureModeSelector_->setEnabled(streaming && idle);
         captureStillButton_->setEnabled(
             streaming && idle && stillResolutionSelector_->count() > 0);
-        refreshFeaturesButton_->setEnabled((open || streaming) && idle);
+        refreshFeaturesButton_->setEnabled((open || streaming) && idle &&
+                                            !accessoryOperationPending_);
+        const bool accessoriesIdle =
+            idle && !accessoryOperationPending_ &&
+            !embeddedLightSourceReadPending_ && !filterWheelReadPending_;
+        const bool accessoryControlsIdle = (open || streaming) && accessoriesIdle;
+        accessoryGroup_->setEnabled(accessoryControlsIdle);
+        embeddedLightSourceSlider_->setEnabled(
+            accessoryControlsIdle && embeddedLightSourceAvailable_ &&
+            embeddedLightSourceStateKnown_);
+        embeddedLightSourceApplyButton_->setEnabled(
+            accessoryControlsIdle && embeddedLightSourceAvailable_ &&
+            embeddedLightSourceStateKnown_);
+        filterWheelPositionSelector_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_ &&
+            filterWheelStateKnown_ && !filterWheelMoving_);
+        filterWheelDirectionSelector_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_ &&
+            filterWheelStateKnown_ && !filterWheelMoving_);
+        filterWheelMoveButton_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_ &&
+            filterWheelStateKnown_ && !filterWheelMoving_ &&
+            filterWheelPositionSelector_->currentIndex() >= 0);
+        filterWheelRefreshButton_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_);
     }
 
     amscope::QtAmcamCamera camera_;
@@ -1173,6 +1483,14 @@ private:
     bool cameraEnumerationPending_ = false;
     std::size_t pendingFeatureReads_ = 0;
     bool pendingFeatureWrite_ = false;
+    bool embeddedLightSourceAvailable_ = false;
+    bool filterWheelAvailable_ = false;
+    bool embeddedLightSourceReadPending_ = false;
+    bool filterWheelReadPending_ = false;
+    bool embeddedLightSourceStateKnown_ = false;
+    bool filterWheelStateKnown_ = false;
+    bool filterWheelMoving_ = false;
+    bool accessoryOperationPending_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
 
     QComboBox* cameraSelector_ = nullptr;
@@ -1188,6 +1506,18 @@ private:
     QLabel* preview_ = nullptr;
     QLabel* frameInfo_ = nullptr;
     QLabel* featureStatus_ = nullptr;
+    QGroupBox* accessoryGroup_ = nullptr;
+    QFormLayout* accessoryForm_ = nullptr;
+    QWidget* embeddedLightSourceRow_ = nullptr;
+    QSlider* embeddedLightSourceSlider_ = nullptr;
+    QLabel* embeddedLightSourceValueLabel_ = nullptr;
+    QPushButton* embeddedLightSourceApplyButton_ = nullptr;
+    QWidget* filterWheelRow_ = nullptr;
+    QComboBox* filterWheelPositionSelector_ = nullptr;
+    QComboBox* filterWheelDirectionSelector_ = nullptr;
+    QPushButton* filterWheelMoveButton_ = nullptr;
+    QPushButton* filterWheelRefreshButton_ = nullptr;
+    QLabel* filterWheelStatusLabel_ = nullptr;
     QScrollArea* featureScroll_ = nullptr;
     QWidget* featureContent_ = nullptr;
     QFormLayout* featureForm_ = nullptr;

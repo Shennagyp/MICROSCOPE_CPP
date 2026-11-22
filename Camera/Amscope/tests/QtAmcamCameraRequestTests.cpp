@@ -140,83 +140,89 @@ int main(int argc, char** argv) {
     }
 
 
+
     // Accessory reads/commands share the Qt queue and return typed errors
     // while closed; they must not reach the vendor SDK without an open handle.
-    QEventLoop accessoryLoop;
-    QTimer accessoryTimeout;
-    accessoryTimeout.setSingleShot(true);
-    QObject::connect(&accessoryTimeout, &QTimer::timeout,
-                     &accessoryLoop, &QEventLoop::quit);
+    const auto runAccessoryRequest = [&camera](auto submitRequest) {
+        QEventLoop accessoryLoop;
+        QTimer accessoryTimeout;
+        accessoryTimeout.setSingleShot(true);
+        QObject::connect(&accessoryTimeout, &QTimer::timeout,
+                         &accessoryLoop, &QEventLoop::quit);
 
-    std::vector<int> accessoryCompletionOrder;
-    bool accessoryCallbacksOnAffinityThread = true;
-    bool accessoryErrorsTyped = true;
-    const auto finishAccessory = [&]() {
-        if (accessoryCompletionOrder.size() == 4)
-            accessoryLoop.quit();
+        bool completed = false;
+        bool validCallback = false;
+        const auto requestId = submitRequest(
+            [&](auto callbackRequestId, auto result) {
+                completed = true;
+                validCallback =
+                    callbackRequestId != 0 &&
+                    QThread::currentThread() == camera.thread() &&
+                    std::holds_alternative<amscope::CameraError>(result);
+                accessoryLoop.quit();
+            });
+        if (requestId == 0)
+            return false;
+
+        accessoryTimeout.start(5000);
+        accessoryLoop.exec();
+        return completed && validCallback;
     };
 
-    const auto lightReadRequest = camera.requestEmbeddedLightSource(
-        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
-            amscope::QtAmcamCamera::EmbeddedLightSourceResult result) {
-            accessoryCallbacksOnAffinityThread =
-                accessoryCallbacksOnAffinityThread &&
-                QThread::currentThread() == camera.thread();
-            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
-                std::holds_alternative<amscope::CameraError>(result);
-            accessoryCompletionOrder.push_back(1);
-            finishAccessory();
-        });
-    const auto lightWriteRequest = camera.requestSetEmbeddedLightSourceLevel(
-        10,
-        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
-            amscope::QtAmcamCamera::AccessoryCommandResult result) {
-            accessoryCallbacksOnAffinityThread =
-                accessoryCallbacksOnAffinityThread &&
-                QThread::currentThread() == camera.thread();
-            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
-                std::holds_alternative<amscope::CameraError>(result);
-            accessoryCompletionOrder.push_back(2);
-            finishAccessory();
-        });
-    const auto wheelReadRequest = camera.requestFilterWheelState(
-        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
-            amscope::QtAmcamCamera::FilterWheelStateResult result) {
-            accessoryCallbacksOnAffinityThread =
-                accessoryCallbacksOnAffinityThread &&
-                QThread::currentThread() == camera.thread();
-            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
-                std::holds_alternative<amscope::CameraError>(result);
-            accessoryCompletionOrder.push_back(3);
-            finishAccessory();
-        });
-    const auto wheelMoveRequest = camera.requestMoveFilterWheel(
-        0, amscope::FilterWheelDirection::Clockwise,
-        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
-            amscope::QtAmcamCamera::AccessoryCommandResult result) {
-            accessoryCallbacksOnAffinityThread =
-                accessoryCallbacksOnAffinityThread &&
-                QThread::currentThread() == camera.thread();
-            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
-                std::holds_alternative<amscope::CameraError>(result);
-            accessoryCompletionOrder.push_back(4);
-            finishAccessory();
-        });
-
-    if (lightReadRequest == 0 || lightWriteRequest == 0 ||
-        wheelReadRequest == 0 || wheelMoveRequest == 0) {
-        std::cerr << "A valid accessory request was rejected.\n";
-        return EXIT_FAILURE;
-    }
-    accessoryTimeout.start(5000);
-    accessoryLoop.exec();
-    if (accessoryCompletionOrder != std::vector<int>{1, 2, 3, 4} ||
-        !accessoryCallbacksOnAffinityThread || !accessoryErrorsTyped) {
-        std::cerr << "Accessory requests lost FIFO order, Qt affinity or typed errors.\n";
+    if (!runAccessoryRequest([&](auto callback) {
+            return camera.requestEmbeddedLightSource(std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestSetEmbeddedLightSourceLevel(
+                10, std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestFilterWheelState(std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestMoveFilterWheel(
+                0, amscope::FilterWheelDirection::Clockwise,
+                std::move(callback));
+        })) {
+        std::cerr << "Accessory requests lost their typed error or Qt affinity contract.\\n";
         return EXIT_FAILURE;
     }
 
-    // Lifecycle requests share the same FIFO.    // Lifecycle requests share the same FIFO. Start on a closed camera
+    // An accessory read is a feature snapshot. A later accessory mutation
+    // invalidates that older read even though both requests share the session.
+    QEventLoop accessorySupersessionLoop;
+    QTimer accessorySupersessionTimeout;
+    accessorySupersessionTimeout.setSingleShot(true);
+    QObject::connect(&accessorySupersessionTimeout, &QTimer::timeout,
+                     &accessorySupersessionLoop, &QEventLoop::quit);
+    bool staleAccessoryReadDelivered = false;
+    bool accessoryMutationCompleted = false;
+
+    const auto staleAccessoryRead = camera.requestEmbeddedLightSource(
+        [&](amscope::QtAmcamCamera::FeatureRequestId,
+            amscope::QtAmcamCamera::EmbeddedLightSourceResult) {
+            staleAccessoryReadDelivered = true;
+        });
+    const auto accessoryMutation = camera.requestSetEmbeddedLightSourceLevel(
+        5,
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::AccessoryCommandResult result) {
+            accessoryMutationCompleted = requestId != 0 &&
+                std::holds_alternative<amscope::CameraError>(result);
+            accessorySupersessionLoop.quit();
+        });
+    if (staleAccessoryRead == 0 || accessoryMutation == 0) {
+        std::cerr << "A valid accessory supersession request was rejected.\\n";
+        return EXIT_FAILURE;
+    }
+    accessorySupersessionTimeout.start(5000);
+    accessorySupersessionLoop.exec();
+    if (!accessoryMutationCompleted || staleAccessoryReadDelivered) {
+        std::cerr << "A later accessory mutation failed to invalidate an older accessory read.\\n";
+        return EXIT_FAILURE;
+    }
+
+    // Lifecycle requests share the same FIFO. Start on a closed camera
     // reports an error; later Stop and Close remain accepted and execute in order.
     QEventLoop lifecycleLoop;
     QTimer lifecycleTimeout;

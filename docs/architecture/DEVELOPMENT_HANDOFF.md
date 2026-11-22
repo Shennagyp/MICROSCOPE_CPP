@@ -3,8 +3,8 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last verified branch head before this handoff refresh:** `f9045faed0828e3625cee985086bfd35f2faa382`  
-**Last implementation-bearing commit:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
+**Last verified branch head before this handoff refresh:** `8c5e1b3f9c0348d987315d56288efa3c78443656`  
+**Last implementation-bearing commit:** `ea74eb3bab5d8cae2601e1d44a137b2a4c5bdf1c`  
 **Current phase:** Phase 0 — baseline freeze and verification  
 **Phase status:** OPEN — user reports that the physical camera opens and displays live frames; the low-FPS regression and complete baseline record remain unresolved.
 
@@ -29,7 +29,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The last verified head before this handoff refresh is `f9045faed0828e3625cee985086bfd35f2faa382` — `docs(amscope): record initial camera FPS feedback`. It follows the documentation-only GenTL/GenApi assessment commit `ff6dfd1703f8ced0f5a62a7ba015f5ec4ee36dfd`. The implementation-bearing source snapshot remains `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; no C++ source implementation has been added after that revision. This handoff refresh is documentation-only.
+The last verified head before this handoff refresh is `8c5e1b3f9c0348d987315d56288efa3c78443656` — `docs(amscope): record SDK FPS diagnostic implementation`. It follows the diagnostic UI implementation at `d47a6ea9191220154fa17c7d0f37218a14ba1b42`, its non-repetitive telemetry failure handling at `ea74eb3bab5d8cae2601e1d44a137b2a4c5bdf1c`, and the README update at `828dfce4a4dd19c333a69dfe2db00d8c925c9429`. The native Amcam acquisition implementation is still based on `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; the added C++ source change is limited to preview-UI diagnostics. This handoff refresh is documentation-only.
 
 ### Relationship with `main`
 
@@ -43,12 +43,12 @@ Those two commits have no net file change to import. The comparison also shows t
 Relevant links:
 
 - [Active branch](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/amscope-native-driver)
-- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/f9045faed0828e3625cee985086bfd35f2faa382)
+- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/8c5e1b3f9c0348d987315d56288efa3c78443656)
 - [Comparison with main](https://github.com/Shennagyp/MICROSCOPE_CPP/compare/main...amscope-native-driver)
 
 ## 3. CI and test evidence
 
-The last fully verified green workflow for the current C++ source is [Amcam macOS build #45052203962](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45052203962), associated with commit `e1f2e65`; Intel x86_64 and Apple Silicon arm64 completed successfully. The later documentation-only commit `ff6dfd1703f8ced0f5a62a7ba015f5ec4ee36dfd` triggered workflow [#45053165511](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45053165511), which was queued at the last recorded check. A combined-status query for `ff6dfd1` returned no status entries. Current-head CI has therefore not been established by this handoff; verify the latest workflow before claiming it is green.
+The last fully verified green workflow before the FPS UI change is [Amcam macOS build #45053165511](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45053165511), associated with `ff6dfd1703f8ced0f5a62a7ba015f5ec4ee36dfd`; Intel x86_64 and Apple Silicon arm64 completed successfully. The new diagnostic UI code was built by workflow [#45054722777](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45054722777), which was in progress at the last status check. The follow-up fix commit `ea74eb3bab5d8cae2601e1d44a137b2a4c5bdf1c` superseded/cancelled its own run [#45054793929](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45054793929). Workflow [#45054806232](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45054806232) was pending for `828dfce4a4dd19c333a69dfe2db00d8c925c9429`; check the latest run after this handoff commit. No current-head CI pass is claimed.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -69,7 +69,7 @@ No local C++ build/test run was performed during this continuation review. The u
 
 ## 4. Actual implementation state at the last source revision
 
-The implementation-bearing source revision is `a3a03fbd`. Subsequent branch commits added the completion plan, implementation inventory, hardware record template, continuation handoff, and private Phase 1 SDK-seam design; they do not alter the native C++ source.
+The Amcam native acquisition and session-lifecycle source baseline remains `a3a03fbd`. The preview application has since gained separate once-per-second SDK frame-rate telemetry in `d47a6ea`; `ea74eb3` makes SDK telemetry failure non-repetitive. These changes are UI diagnostics only and do not change the native callback-to-pull acquisition mechanism.
 
 ### Native driver
 
@@ -107,7 +107,7 @@ Primary files:
 
 `QtAmcamCamera` currently combines Qt frame handoff with lifecycle operations, feature access, asynchronous feature requests, commands, telemetry, still capture, triggers, I/O, and accessory request wrappers. It has a bounded FIFO request worker, session and feature-state generations, and a one-frame latest mailbox.
 
-The preview still has one `PreviewWindow` implementation. It already includes generic descriptor-driven controls, trigger UI, lens aperture/focus UI, and accessory UI, but is not yet a reusable backend-neutral UI library. The latest README also says that hardware-I/O operations have native/Qt APIs while several I/O capabilities remain outside the preview UI.
+The preview still has one `PreviewWindow` implementation. It already includes generic descriptor-driven controls, trigger UI, lens aperture/focus UI, and accessory UI, but is not yet a reusable backend-neutral UI library. It now polls the existing `requestFrameRate` API at 1 Hz and displays SDK-reported FPS/total frames separately from the host-side preview FPS. This telemetry is serialized through the existing camera request worker.
 
 ### CMake and backend scope
 
@@ -182,6 +182,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 - Repository/source/branch review and the implementation inventory are documented.
 - The user reports that the physical camera now opens and produces live preview frames.
 - The user reports preview FPS substantially below the approximately 100 FPS previously obtained at 640p with the earlier minimal application.
+- The preview now exposes both SDK-reported FPS/total count and host-side presentation FPS. This instrumentation is present in `Camera/Amscope/app/main.cpp`; physical-camera validation is pending.
 - Static comparison confirms that both branches use callback-driven `Amcam_StartPullModeWithCallback` and a single `Amcam_PullImageV4` worker. No fixed FPS limiter was found in the current acquisition loop.
 - The current displayed FPS is measured in `PreviewWindow::presentLatestFrame()` after a detached `QImage` copy, `QPixmap` conversion, and widget scaling. This is a GUI presentation measurement, not a separate acquisition measurement.
 - The current `start()` reads the camera's existing preview dimensions; it does not select 640p. The toolbar resolution selector applies to still capture.
@@ -191,6 +192,8 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 - Record the actual camera manufacturer/model, SDK model code, firmware, SDK version, OS, and architecture.
 - Record the current live frame dimensions and the numerical preview FPS. Compare the active preview mode with 640p where the physical model supports it.
+- Pull the latest branch and rebuild after the SDK-FPS diagnostic UI change. Record SDK FPS, SDK total frames, preview FPS, actual frame dimensions, and sequence progression over the same fixed interval.
+- If SDK FPS is healthy while preview FPS is low, profile/optimize GUI image presentation. If both rates are low, investigate active preview resolution, exposure, trigger mode, and transport before changing acquisition.
 - Distinguish camera/SDK sequence progression from the UI presentation rate before changing the native acquisition mechanism.
 - Complete all Section 3.2 steps, including safe setting readback/restoration, Stop/Start, Close/reopen, still capture where supported, and the required 15-minute acquisition interval.
 - Save the completed hardware record under `docs/testing/hardware/`.

@@ -1,8 +1,8 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff` (current implementation snapshot, including the physical-camera rate test utility)  
-**Branch head reviewed for this inventory refresh:** `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff`  
-**Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported smoke observations; it does not claim full physical-camera qualification.
+**Source snapshot:** `15be30850ea573dd06ffe3128befcdb27ce2e974` (latest implementation-bearing source: host-revision paint measurement, configured-exposure/speed diagnostics)  
+**Branch head reviewed for this inventory refresh:** `c98be94d115a752638b4ca6153caf4c638aa55c7`  
+**Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations; it does not claim full physical-camera qualification.
 
 ---
 
@@ -177,7 +177,7 @@ Additional target-architecture gaps:
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
-All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The subsequent hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
+All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The initial hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). That CI run predates the sequence-independent paint and exposure/speed diagnostic corrections. The corrected source is being checked in workflow [#45063651610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063651610), which is in progress at this inventory refresh. The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
 
 The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event FPS, successful-pull FPS, frame-callback FPS, host-revision-based painted-frame FPS, actual dimensions, device sequence/timestamp metadata, configured exposure readback, per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop.
 

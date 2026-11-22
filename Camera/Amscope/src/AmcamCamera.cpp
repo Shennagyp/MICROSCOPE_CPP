@@ -1111,11 +1111,42 @@ struct AmcamCamera::Impl {
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
 
 
-    bool restoreHeartbeatMonitoringLocked(CameraError* error) {
-        if (!heartbeatSnapshot.valid) {
-            heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
-            return true;
-        }
+    bool readHeartbeatOptionsLocked(
+        HeartbeatOptionSnapshot& snapshot,
+        CameraError* error) {
+        snapshot = {};
+        HRESULT hr = Amcam_get_Option(handle, AMCAM_OPTION_EVENT_HARDWARE,
+                                      &snapshot.eventMaster);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_get_Option(EVENT_HARDWARE)", hr);
+        hr = Amcam_get_Option(
+            handle, AMCAM_OPTION_EVENT_HARDWARE | AMCAM_EVENT_HEARTBEAT,
+            &snapshot.heartbeatSubscription);
+        if (FAILED(hr))
+            return failHr(error,
+                          "Amcam_get_Option(EVENT_HARDWARE | HEARTBEAT)", hr);
+        hr = Amcam_get_Option(handle, AMCAM_OPTION_HEARTBEAT,
+                              &snapshot.heartbeatInterval);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_get_Option(HEARTBEAT)", hr);
+        hr = Amcam_get_Option(handle, AMCAM_OPTION_NOFRAME_TIMEOUT,
+                              &snapshot.noFrameTimeout);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_get_Option(NOFRAME_TIMEOUT)", hr);
+        hr = Amcam_get_Option(handle, AMCAM_OPTION_NOPACKET_TIMEOUT,
+                              &snapshot.noPacketTimeout);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_get_Option(NOPACKET_TIMEOUT)", hr);
+        snapshot.valid = true;
+        return true;
+    }
+
+    bool restoreHeartbeatOptionsLocked(
+        const HeartbeatOptionSnapshot& snapshot,
+        CameraError* error) {
+        if (!snapshot.valid)
+            return fail(error, "restoreHeartbeatOptionsLocked", -1,
+                        "Heartbeat option rollback snapshot is invalid.");
 
         HRESULT firstFailure = S_OK;
         const auto restoreOption = [&](unsigned option, int value) {
@@ -1123,20 +1154,26 @@ struct AmcamCamera::Impl {
             if (FAILED(hr) && SUCCEEDED(firstFailure))
                 firstFailure = hr;
         };
-
-        restoreOption(AMCAM_OPTION_HEARTBEAT,
-                      heartbeatSnapshot.heartbeatInterval);
+        restoreOption(AMCAM_OPTION_HEARTBEAT, snapshot.heartbeatInterval);
         restoreOption(AMCAM_OPTION_EVENT_HARDWARE | AMCAM_EVENT_HEARTBEAT,
-                      heartbeatSnapshot.heartbeatSubscription);
-        restoreOption(AMCAM_OPTION_EVENT_HARDWARE,
-                      heartbeatSnapshot.eventMaster);
-        restoreOption(AMCAM_OPTION_NOFRAME_TIMEOUT,
-                      heartbeatSnapshot.noFrameTimeout);
-        restoreOption(AMCAM_OPTION_NOPACKET_TIMEOUT,
-                      heartbeatSnapshot.noPacketTimeout);
+                      snapshot.heartbeatSubscription);
+        restoreOption(AMCAM_OPTION_EVENT_HARDWARE, snapshot.eventMaster);
+        restoreOption(AMCAM_OPTION_NOFRAME_TIMEOUT, snapshot.noFrameTimeout);
+        restoreOption(AMCAM_OPTION_NOPACKET_TIMEOUT, snapshot.noPacketTimeout);
 
         if (FAILED(firstFailure))
-            return failHr(error, "restore Amcam trigger-heartbeat options", firstFailure);
+            return failHr(error, "restore Amcam trigger-heartbeat options",
+                          firstFailure);
+        return true;
+    }
+
+    bool restoreHeartbeatMonitoringLocked(CameraError* error) {
+        if (!heartbeatSnapshot.valid) {
+            heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+            return true;
+        }
+        if (!restoreHeartbeatOptionsLocked(heartbeatSnapshot, error))
+            return false;
 
         heartbeatSnapshot = {};
         heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
@@ -1157,33 +1194,12 @@ struct AmcamCamera::Impl {
                         "Heartbeat interval must be within the SDK range [100, 10000] ms.");
         }
 
-        if (!heartbeatSnapshot.valid) {
-            HeartbeatOptionSnapshot snapshot;
-            HRESULT hr = Amcam_get_Option(handle, AMCAM_OPTION_EVENT_HARDWARE,
-                                          &snapshot.eventMaster);
-            if (FAILED(hr))
-                return failHr(error, "Amcam_get_Option(EVENT_HARDWARE)", hr);
-            hr = Amcam_get_Option(
-                handle, AMCAM_OPTION_EVENT_HARDWARE | AMCAM_EVENT_HEARTBEAT,
-                &snapshot.heartbeatSubscription);
-            if (FAILED(hr))
-                return failHr(error,
-                              "Amcam_get_Option(EVENT_HARDWARE | HEARTBEAT)", hr);
-            hr = Amcam_get_Option(handle, AMCAM_OPTION_HEARTBEAT,
-                                  &snapshot.heartbeatInterval);
-            if (FAILED(hr))
-                return failHr(error, "Amcam_get_Option(HEARTBEAT)", hr);
-            hr = Amcam_get_Option(handle, AMCAM_OPTION_NOFRAME_TIMEOUT,
-                                  &snapshot.noFrameTimeout);
-            if (FAILED(hr))
-                return failHr(error, "Amcam_get_Option(NOFRAME_TIMEOUT)", hr);
-            hr = Amcam_get_Option(handle, AMCAM_OPTION_NOPACKET_TIMEOUT,
-                                  &snapshot.noPacketTimeout);
-            if (FAILED(hr))
-                return failHr(error, "Amcam_get_Option(NOPACKET_TIMEOUT)", hr);
-            snapshot.valid = true;
-            heartbeatSnapshot = snapshot;
-        }
+        const bool hadOriginalSnapshot = heartbeatSnapshot.valid;
+        HeartbeatOptionSnapshot previousOptions;
+        if (!readHeartbeatOptionsLocked(previousOptions, error))
+            return false;
+        if (!hadOriginalSnapshot)
+            heartbeatSnapshot = previousOptions;
 
         const auto setOption = [&](unsigned option, int value,
                                    const char* operation) -> bool {
@@ -1203,10 +1219,12 @@ struct AmcamCamera::Impl {
             !setOption(AMCAM_OPTION_EVENT_HARDWARE, 1,
                        "Amcam_put_Option(EVENT_HARDWARE)")) {
             CameraError original = error ? *error : CameraError{};
-            CameraError restoreError;
-            if (!restoreHeartbeatMonitoringLocked(&restoreError)) {
+            CameraError rollbackError;
+            if (!restoreHeartbeatOptionsLocked(previousOptions, &rollbackError)) {
                 original.message += " Heartbeat option rollback failed: " +
-                                    restoreError.message;
+                                    rollbackError.message;
+            } else if (!hadOriginalSnapshot) {
+                heartbeatSnapshot = {};
             }
             if (error) *error = std::move(original);
             return false;

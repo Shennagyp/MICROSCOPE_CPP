@@ -3,10 +3,10 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last verified branch head before this handoff refresh:** `8c5e1b3f9c0348d987315d56288efa3c78443656`  
-**Last implementation-bearing commit:** `ea74eb3bab5d8cae2601e1d44a137b2a4c5bdf1c`  
+**Last verified branch head before this handoff refresh:** `b5fdd7c1e1b261e9f9c5008d525a76745353dd4a`  
+**Last implementation-bearing commit:** `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`  
 **Current phase:** Phase 0 — baseline freeze and verification  
-**Phase status:** OPEN — user reports that the physical camera opens and displays live frames; the low-FPS regression and complete baseline record remain unresolved.
+**Phase status:** OPEN — the initial camera open/live preview succeeded, but the maximum-rate/zero-copy changes have not yet been built and retested on physical hardware; the complete baseline record is outstanding.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -21,15 +21,15 @@ This is the continuation entrypoint for subsequent development sessions. It is a
    - [Swift-to-C++ Translation Paradigm](SWIFT_TO_CPP_TRANSLATION_PARADIGM.md)
    - [AmScope Driver README](../../Camera/Amscope/README.md)
    - The authoritative Camera Module and UI Libraries architecture paper agreed in the project discussion.
-3. Do not begin behavior-changing refactoring until Phase 0's physical-camera baseline has been recorded.
-4. The next meaningful implementation task after baseline acceptance is Phase 1: implement the private SDK dispatch seam and deterministic native-session failure tests in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md), preserving callback-to-pull acquisition.
+3. Phase 0 remains OPEN until the latest performance changes pass CI and the user repeats the 640×480 physical-camera test, followed by the complete baseline regression.
+4. Do not begin Phase 1 native-driver lifecycle refactoring until Phase 0 is accepted. The required implementation work for the FPS regression is already recorded in the completion plan; the next intervention gate is the user's physical-camera retest.
 5. For every phase, keep the mandatory physical-camera test gate. A phase with code and green CI but no passing physical-camera record remains OPEN.
 
 ## 2. Current Git state
 
 ### Branch head and recent work
 
-The last verified head before this handoff refresh is `8c5e1b3f9c0348d987315d56288efa3c78443656` — `docs(amscope): record SDK FPS diagnostic implementation`. It follows the diagnostic UI implementation at `d47a6ea9191220154fa17c7d0f37218a14ba1b42`, its non-repetitive telemetry failure handling at `ea74eb3bab5d8cae2601e1d44a137b2a4c5bdf1c`, and the README update at `828dfce4a4dd19c333a69dfe2db00d8c925c9429`. The native Amcam acquisition implementation is still based on `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; the added C++ source change is limited to preview-UI diagnostics. This handoff refresh is documentation-only.
+The last verified branch head before this handoff refresh is `b5fdd7c1e1b261e9f9c5008d525a76745353dd4a`. The last implementation-bearing commit is `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`; the current performance work changes the preview presentation/telemetry path, frame handoff, descriptor read caching, and Amcam Start-time maximum-rate configuration. It preserves the native callback -> bounded event queue -> single `Amcam_PullImageV4` worker. The latest README and completion-plan entries record the implementation and outstanding verification. This handoff refresh is documentation-only.
 
 ### Relationship with `main`
 
@@ -43,12 +43,12 @@ Those two commits have no net file change to import. The comparison also shows t
 Relevant links:
 
 - [Active branch](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/amscope-native-driver)
-- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/8c5e1b3f9c0348d987315d56288efa3c78443656)
+- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/b5fdd7c1e1b261e9f9c5008d525a76745353dd4a)
 - [Comparison with main](https://github.com/Shennagyp/MICROSCOPE_CPP/compare/main...amscope-native-driver)
 
 ## 3. CI and test evidence
 
-The last fully verified green workflow before the FPS UI change is [Amcam macOS build #45053165511](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45053165511), associated with `ff6dfd1703f8ced0f5a62a7ba015f5ec4ee36dfd`; Intel x86_64 and Apple Silicon arm64 completed successfully. The new diagnostic UI code was built by workflow [#45054722777](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45054722777), which was in progress at the last status check. The follow-up fix commit `ea74eb3bab5d8cae2601e1d44a137b2a4c5bdf1c` superseded/cancelled its own run [#45054793929](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45054793929). Workflow [#45054806232](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45054806232) was pending for `828dfce4a4dd19c333a69dfe2db00d8c925c9429`; check the latest run after this handoff commit. No current-head CI pass is claimed.
+The performance implementation has triggered several path-filtered CI runs; older runs were cancelled by the workflow's `cancel-in-progress` concurrency rule as later commits were pushed. The latest source-containing run at the time of this handoff is [#45058730726](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45058730726), associated with `ee700a1016e4bf108255daab67cedb93b96bee83`; both Apple Silicon arm64 and Intel x86_64 were still in progress at the last status check. The follow-up SDK error-code correction and documentation commits trigger newer runs. Check the run associated with the latest branch head before requesting the user's build or claiming CI success. No local build or CTest run has been performed during this work, and no physical-camera retest has yet been reported.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -69,7 +69,14 @@ No local C++ build/test run was performed during this continuation review. The u
 
 ## 4. Actual implementation state at the last source revision
 
-The Amcam native acquisition and session-lifecycle source baseline remains `a3a03fbd`. The preview application has since gained separate once-per-second SDK frame-rate telemetry in `d47a6ea`; `ea74eb3` makes SDK telemetry failure non-repetitive. These changes are UI diagnostics only and do not change the native callback-to-pull acquisition mechanism.
+The original native acquisition and session-lifecycle implementation remains based on `a3a03fbd`; performance changes preserve its callback-to-pull acquisition mechanism. The current implementation adds:
+
+- Direct zero-copy preview: `FrameView` wraps the immutable frame-pool bytes in a non-owning `QImage` and paints with `QPainter`. It no longer performs a per-frame `QImage::copy()`, `QPixmap` conversion, or pixmap allocation. The view retains the `FramePtr` lease until replacement.
+- A C++17 atomic-shared-pointer latest-frame mailbox replaces the mailbox mutex and does not accumulate stale frames. Frame notifications bypass the feature-request queue mutex.
+- Feature descriptor discovery is cached per camera state. Individual feature reads reuse the inventory instead of repeating every SDK feature probe under the SDK mutex. The preview does not rebuild the inventory when entering Streaming; setting editors are disabled until Stop.
+- The driver counts `AMCAM_EVENT_IMAGE` callbacks and successful `Amcam_PullImageV4` calls with independent atomics. The UI separately measures actual painted frame sequences. The one-second monitor does not call the SDK or acquire the SDK-call mutex. It displays event FPS, pull FPS, paint FPS, exposure time, dimensions/sequence, and pool drops.
+- Every Start clears the generic SDK FPS limit with `AMCAM_OPTION_FRAMERATE=0`. After `Amcam_StartPullModeWithCallback` succeeds, it sets the model-specific maximum: maximum precise FPS plus 100% bandwidth for precise-rate models, or maximum model `maxspeed` through `Amcam_put_Speed` otherwise. Low-noise mode is disabled when the model advertises it. This follows ToupTek's documented post-Start procedure; no arbitrary fixed FPS target is set.
+- Status-label formatting was removed from the per-frame path and throttled to the one-second diagnostics update.
 
 ### Native driver
 
@@ -83,7 +90,7 @@ Primary files:
 - `Camera/Amscope/include/amscope/AmcamCameraProfiles.h`
 - `Camera/Amscope/src/AmcamCameraProfiles.cpp`
 
-The native driver already contains enumeration/open/close/start/stop, the callback-to-pull acquisition loop, a bounded event FIFO, watchdog logic for video and triggered acquisition, frame-pool/lease handling, RAW frame metadata, still capture, and broad feature/command APIs.
+The native driver contains enumeration/open/close/start/stop, the callback-to-pull acquisition loop, a bounded event FIFO, watchdog logic for video and triggered acquisition, frame-pool/lease handling, RAW frame metadata, still capture, and broad feature/command APIs. It now also has lock-free counter reads for image-event and successfully-pulled-frame totals. The maximum-rate configuration is performed after callback acquisition starts and before the pull worker is launched, following the vendor's documented order.
 
 ### Common feature contract
 
@@ -107,7 +114,7 @@ Primary files:
 
 `QtAmcamCamera` currently combines Qt frame handoff with lifecycle operations, feature access, asynchronous feature requests, commands, telemetry, still capture, triggers, I/O, and accessory request wrappers. It has a bounded FIFO request worker, session and feature-state generations, and a one-frame latest mailbox.
 
-The preview still has one `PreviewWindow` implementation. It already includes generic descriptor-driven controls, trigger UI, lens aperture/focus UI, and accessory UI, but is not yet a reusable backend-neutral UI library. It now polls the existing `requestFrameRate` API at 1 Hz and displays SDK-reported FPS/total frames separately from the host-side preview FPS. This telemetry is serialized through the existing camera request worker.
+The preview still has one `PreviewWindow` implementation and is not yet a reusable backend-neutral UI library. Its custom `FrameView` reads the retained pool buffer directly. The UI reports event/pull/paint FPS and exposure without calling the SDK from the FPS timer; frame metadata/status text is formatted once per second.
 
 ### CMake and backend scope
 
@@ -180,34 +187,34 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 ### Phase 0 work now recorded
 
 - Repository/source/branch review and the implementation inventory are documented.
-- The user reports that the physical camera now opens and produces live preview frames.
-- The user reports preview FPS substantially below the approximately 100 FPS previously obtained at 640p with the earlier minimal application.
-- The preview now exposes both SDK-reported FPS/total count and host-side presentation FPS. This instrumentation is present in `Camera/Amscope/app/main.cpp`; physical-camera validation is pending.
-- Static comparison confirms that both branches use callback-driven `Amcam_StartPullModeWithCallback` and a single `Amcam_PullImageV4` worker. No fixed FPS limiter was found in the current acquisition loop.
-- The current displayed FPS is measured in `PreviewWindow::presentLatestFrame()` after a detached `QImage` copy, `QPixmap` conversion, and widget scaling. This is a GUI presentation measurement, not a separate acquisition measurement.
-- The current `start()` reads the camera's existing preview dimensions; it does not select 640p. The toolbar resolution selector applies to still capture.
-- The completion plan now records this initial physical-camera report and keeps Phase 0 OPEN.
+- The user reports that the physical camera opens and produces live preview frames.
+- The initial live preview was substantially below the approximately 100 FPS previously seen at 640p. No exact model, dimensions, numerical rate, or complete baseline test record has yet been provided.
+- The source has since been optimized for the reported objective: direct frame-pool rendering with a retained immutable frame lease; atomic latest-frame mailbox; no feature-queue lock on frame notifications; cached feature descriptor inventory; no full feature inventory refresh during Streaming; and no per-frame status-label formatting.
+- Maximum supported rate is now selected per model after `Amcam_StartPullModeWithCallback`, following the vendor SDK procedure. The generic SDK frame-rate cap is set to zero; no arbitrary FPS target is used.
+- The UI now displays event FPS, pull FPS, paint FPS, frame dimensions/sequence, exposure time, and pool drops. These counters do not call the SDK or acquire the SDK-call mutex.
+- The current source changes preserve the callback -> bounded event queue -> single `Amcam_PullImageV4` worker. The earlier SDK frame-rate polling path was removed because it acquired the SDK-call mutex during acquisition.
+- The completion plan and README describe the new implementation and hardware acceptance criteria.
 
 ### Phase 0 work still required
 
-- Record the actual camera manufacturer/model, SDK model code, firmware, SDK version, OS, and architecture.
-- Record the current live frame dimensions and the numerical preview FPS. Compare the active preview mode with 640p where the physical model supports it.
-- Pull the latest branch and rebuild after the SDK-FPS diagnostic UI change. Record SDK FPS, SDK total frames, preview FPS, actual frame dimensions, and sequence progression over the same fixed interval.
-- If SDK FPS is healthy while preview FPS is low, profile/optimize GUI image presentation. If both rates are low, investigate active preview resolution, exposure, trigger mode, and transport before changing acquisition.
-- Distinguish camera/SDK sequence progression from the UI presentation rate before changing the native acquisition mechanism.
-- Complete all Section 3.2 steps, including safe setting readback/restoration, Stop/Start, Close/reopen, still capture where supported, and the required 15-minute acquisition interval.
-- Save the completed hardware record under `docs/testing/hardware/`.
-- Keep Phase 0 OPEN until the complete record passes.
+- Wait for a successful CI run for the latest branch head; no local build or test has been run for these changes.
+- Pull and run the latest physical-camera build. Verify that the actual live mode is 640×480 before comparing against the 100 FPS target.
+- Record event FPS, pull FPS, paint FPS, exposure microseconds, frame dimensions, sequence progression, and dropped count over a fixed interval.
+- Interpret the three rates: low event FPS is upstream of the pull worker; event-to-pull loss points to callback/queue/pull throughput; pull-to-paint loss points to UI rendering.
+- Record actual camera manufacturer/model, SDK model code, firmware, SDK version, OS, and architecture.
+- Complete Section 3.2, including safe setting readback/restoration, Stop/Start, Close/reopen, still capture where supported, and the required 15-minute continuous acquisition interval.
+- Save the complete hardware record under `docs/testing/hardware/`.
+- Keep Phase 0 OPEN until the performance retest and complete hardware record pass.
 
 ## 8. Immediate next actions
 
 ### Required before Phase 1 refactoring
 
-1. Record the actual physical camera identity, SDK model code, SDK version, firmware, OS, and architecture; do not infer them from the repository or another camera.
-2. Capture the live frame width/height and the numerical `preview FPS` shown by the app. Check the current `AmcamResolutionIndex` feature while stopped; the top toolbar selector is still-capture-only.
-3. Compare a supported 640p preview mode with the current mode. Record frame sequence progression over a fixed interval so camera/SDK delivery can be distinguished from GUI presentation throughput.
-4. Complete the remaining Section 3.2 steps, including a 15-minute acquisition interval, safe setting readback/restoration, Stop/Start, Close/reopen, and still capture where supported.
-5. Save the full hardware record using [the hardware record template](../testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md). Fix the FPS regression before declaring the baseline passed or beginning Phase 1 behavior-changing refactoring.
+1. Check the latest GitHub Actions run for the current branch head. Do not run the physical test with an unbuilt or older commit.
+2. Pull and build the latest branch, then open the camera. Set its preview resolution to 640×480 while stopped using the `AmcamResolutionIndex` feature.
+3. Run the preview for 15 seconds and record event FPS, pull FPS, paint FPS, exposure microseconds, frame dimensions, sequence progression, and dropped count. The top-toolbar resolution selector is still-capture-only.
+4. Compare the stage rates before changing any additional code. If event FPS is below target, examine exposure and camera/transport limits; if event FPS is high but pull is low, examine callback/queue/pull; if pull is high but paint is low, examine UI rendering.
+5. After the rate target is achieved, complete the full Section 3.2 regression and save the hardware record. Keep Phase 0 open until it passes.
 
 ### Work that can proceed after/beside the physical baseline without altering behavior
 

@@ -59,6 +59,31 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
         return error;
     }
 
+    if (!descriptor.discreteIntegerValues.empty() &&
+        descriptor.kind != CameraFeatureKind::Integer) {
+        return CameraFeatureAccessError{
+            CameraFeatureAccessError::Code::BackendFailure,
+            descriptor.name,
+            "Invalid descriptor: discreteIntegerValues requires an integer feature.",
+            0, std::nullopt, std::nullopt
+        };
+    }
+
+    if (descriptor.kind == CameraFeatureKind::Integer &&
+        !descriptor.discreteIntegerValues.empty()) {
+        const auto requested = std::get<std::int64_t>(value);
+        if (std::find(descriptor.discreteIntegerValues.begin(),
+                      descriptor.discreteIntegerValues.end(), requested) ==
+            descriptor.discreteIntegerValues.end()) {
+            return CameraFeatureAccessError{
+                CameraFeatureAccessError::Code::InvalidValue,
+                descriptor.name,
+                "Integer value is not one of the supported discrete values.",
+                0, std::nullopt, std::nullopt
+            };
+        }
+    }
+
     if (descriptor.elementCount) {
         if (descriptor.kind != CameraFeatureKind::IntegerVector) {
             return CameraFeatureAccessError{

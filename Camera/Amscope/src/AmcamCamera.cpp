@@ -166,7 +166,7 @@ struct AmcamCamera::Impl {
                 std::lock_guard<std::mutex> lock(apiMutex);
                 if (!handle) {
                     fatal = true;
-                    error = {-1, "Amcam_WaitImageV4", "Camera handle is no longer open."};
+                    error = {-1, "Amcam_WaitImageV3", "Camera handle is no longer open."};
                 } else {
                     hr = Amcam_WaitImageV3(handle, kWaitTimeoutMs, destination,
                                            0, kRgb24Bits, kPackedRows, &info);
@@ -200,7 +200,7 @@ struct AmcamCamera::Impl {
             if (FAILED(hr)) {
                 fatal = true;
                 error = {static_cast<std::int32_t>(hr),
-                         "Amcam_WaitImageV4", hrMessage("Amcam_WaitImageV4", hr)};
+                         "Amcam_WaitImageV3", hrMessage("Amcam_WaitImageV3", hr)};
                 break;
             }
 
@@ -222,7 +222,7 @@ struct AmcamCamera::Impl {
             std::size_t required = 0;
             if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
                 fatal = true;
-                error = {-1, "Amcam_WaitImageV4",
+                error = {-1, "Amcam_WaitImageV3",
                          "SDK frame dimensions exceed the allocated RGB24 buffer."};
                 break;
             }

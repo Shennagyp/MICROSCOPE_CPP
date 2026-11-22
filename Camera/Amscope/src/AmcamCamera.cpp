@@ -1024,6 +1024,45 @@ camera::CameraFeatureAccessError featureBackendError(
 } // namespace
 
 namespace amscope {
+namespace {
+
+void assignAmcamFrameMetadata(
+    AmcamFrame& frame,
+    const AmcamFrameInfoV3& info) noexcept {
+    frame.sdkFlags = info.flag;
+
+    if ((info.flag & AMCAM_FRAMEINFO_FLAG_SEQ) != 0)
+        frame.sequenceNumber = static_cast<std::uint64_t>(info.seq);
+    else
+        frame.sequenceNumber.reset();
+
+    if ((info.flag & AMCAM_FRAMEINFO_FLAG_TIMESTAMP) != 0) {
+        frame.timestamp = camera::FrameTimestamp{
+            info.timestamp, 1000000ULL, std::nullopt};
+    } else {
+        frame.timestamp.reset();
+    }
+
+    if ((info.flag & AMCAM_FRAMEINFO_FLAG_EXPOTIME) != 0) {
+        frame.exposure = camera::FrameExposure{
+            info.expotime, 1000000ULL};
+    } else {
+        frame.exposure.reset();
+    }
+
+    if ((info.flag & AMCAM_FRAMEINFO_FLAG_EXPOGAIN) != 0)
+        frame.exposureGainPercent = info.expogain;
+    else
+        frame.exposureGainPercent.reset();
+
+    if ((info.flag & AMCAM_FRAMEINFO_FLAG_BLACKLEVEL) != 0)
+        frame.blackLevel = info.blacklevel;
+    else
+        frame.blackLevel.reset();
+}
+
+} // namespace
+
 struct AmcamCamera::Impl {
     explicit Impl(AmcamCameraProfileRegistry profiles)
         : profileRegistry(std::move(profiles)) {}
@@ -1031,36 +1070,40 @@ struct AmcamCamera::Impl {
     struct FramePool {
         FramePool(std::uint32_t w, std::uint32_t h,
                   std::uint32_t stride, std::size_t bytes,
-                  PixelFormat format, std::uint32_t formatCode,
-                  std::uint8_t bitsPerPixel, std::uint8_t containerBitsPerPixel,
+                  PixelFormat format,
+                  std::optional<camera::PixelFormatIdentifier> formatIdentifier,
+                  std::uint8_t significantBitsPerPixel,
+                  std::uint8_t storageBitsPerPixel,
                   std::size_t bytesPerPixel)
-            : discard(bytes), pixelFormat(format), pixelFormatCode(formatCode),
-              bitsPerPixel(bitsPerPixel), containerBitsPerPixel(containerBitsPerPixel),
+            : discard(bytes), pixelFormat(format),
+              pixelFormatIdentifier(std::move(formatIdentifier)),
+              significantBitsPerPixel(significantBitsPerPixel),
+              storageBitsPerPixel(storageBitsPerPixel),
               bytesPerPixel(bytesPerPixel) {
             slots.reserve(kPoolSize);
             for (std::size_t i = 0; i < kPoolSize; ++i) {
-                auto frame = std::make_shared<Frame>();
+                auto frame = std::make_shared<AmcamFrame>();
                 frame->width = w;
                 frame->height = h;
                 frame->strideBytes = stride;
                 frame->pixelFormat = format;
-                frame->pixelFormatCode = formatCode;
-                frame->bitsPerPixel = bitsPerPixel;
-                frame->containerBitsPerPixel = containerBitsPerPixel;
+                frame->pixelFormatIdentifier = pixelFormatIdentifier;
+                frame->significantBitsPerPixel = significantBitsPerPixel;
+                frame->storageBitsPerPixel = storageBitsPerPixel;
                 frame->pixels.resize(bytes);
                 slots.push_back(std::move(frame));
             }
         }
         // Only the acquisition worker calls this; consumer leases are shared_ptrs.
-        std::shared_ptr<Frame> tryAcquire() noexcept {
+        std::shared_ptr<AmcamFrame> tryAcquire() noexcept {
             return detail::tryAcquireUnleasedFrameSlot(slots);
         }
-        std::vector<std::shared_ptr<Frame>> slots;
+        std::vector<std::shared_ptr<AmcamFrame>> slots;
         std::vector<std::uint8_t> discard;
         const PixelFormat pixelFormat;
-        const std::uint32_t pixelFormatCode;
-        const std::uint8_t bitsPerPixel;
-        const std::uint8_t containerBitsPerPixel;
+        const std::optional<camera::PixelFormatIdentifier> pixelFormatIdentifier;
+        const std::uint8_t significantBitsPerPixel;
+        const std::uint8_t storageBitsPerPixel;
         const std::size_t bytesPerPixel;
     };
 
@@ -1729,15 +1772,10 @@ struct AmcamCamera::Impl {
                 writable->height = h;
                 writable->strideBytes = static_cast<std::uint32_t>(stride64);
                 writable->pixelFormat = activePool->pixelFormat;
-                writable->pixelFormatCode = activePool->pixelFormatCode;
-                writable->bitsPerPixel = activePool->bitsPerPixel;
-                writable->containerBitsPerPixel = activePool->containerBitsPerPixel;
-                writable->sequence = info.v3.seq;
-                writable->timestampMicroseconds = info.v3.timestamp;
-                writable->sdkFlags = info.v3.flag;
-                writable->exposureMicroseconds = info.v3.expotime;
-                writable->exposureGainPercent = info.v3.expogain;
-                writable->blackLevel = info.v3.blacklevel;
+                writable->significantBitsPerPixel =
+                    activePool->significantBitsPerPixel;
+                writable->storageBitsPerPixel = activePool->storageBitsPerPixel;
+                assignAmcamFrameMetadata(*writable, info.v3);
 
                 FramePtr lease = std::move(writable);
                 try {
@@ -2333,7 +2371,10 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             static_cast<std::uint32_t>(width),
             static_cast<std::uint32_t>(height),
             strideBytes, bytes, pixelFormat,
-            rawOutput ? rawFourCC : 0U,
+            rawOutput
+                ? std::optional<camera::PixelFormatIdentifier>{
+                      camera::PixelFormatIdentifier{"amcam.fourcc", rawFourCC}}
+                : std::nullopt,
             frameBitsPerPixel, containerBitsPerPixel, bytesPerPixel);
     } catch (const std::exception& ex) {
         impl_->pool.reset();
@@ -4288,16 +4329,19 @@ bool AmcamCamera::captureStill(
         }
 
         try {
-            auto mutableFrame = std::make_shared<Frame>();
+            auto mutableFrame = std::make_shared<AmcamFrame>();
             mutableFrame->width = info.v3.width;
             mutableFrame->height = info.v3.height;
             mutableFrame->strideBytes = static_cast<std::uint32_t>(stride64);
             mutableFrame->pixelFormat = !raw ? PixelFormat::RGB24 :
                 (containerBitsPerPixel == 8U ? PixelFormat::Raw8 : PixelFormat::Raw16);
-            mutableFrame->pixelFormatCode = raw ? rawFourCC : 0U;
-            mutableFrame->bitsPerPixel = static_cast<std::uint8_t>(
+            if (raw) {
+                mutableFrame->pixelFormatIdentifier =
+                    camera::PixelFormatIdentifier{"amcam.fourcc", rawFourCC};
+            }
+            mutableFrame->significantBitsPerPixel = static_cast<std::uint8_t>(
                 raw ? rawBitsPerPixel : 24U);
-            mutableFrame->containerBitsPerPixel = containerBitsPerPixel;
+            mutableFrame->storageBitsPerPixel = containerBitsPerPixel;
             mutableFrame->isStill = true;
             mutableFrame->pixels.resize(static_cast<std::size_t>(byteCount64));
 
@@ -4310,12 +4354,7 @@ bool AmcamCamera::captureStill(
                 return failHr(error, "Amcam_PullImageV4(still image)", pullResult);
             }
 
-            mutableFrame->sequence = info.v3.seq;
-            mutableFrame->timestampMicroseconds = info.v3.timestamp;
-            mutableFrame->sdkFlags = info.v3.flag;
-            mutableFrame->exposureMicroseconds = info.v3.expotime;
-            mutableFrame->exposureGainPercent = info.v3.expogain;
-            mutableFrame->blackLevel = info.v3.blacklevel;
+            assignAmcamFrameMetadata(*mutableFrame, info.v3);
             completedFrame = std::move(mutableFrame);
         } catch (const std::exception& exception) {
             std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);

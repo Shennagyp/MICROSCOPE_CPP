@@ -23,6 +23,7 @@
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QSpinBox>
 #include <QStringList>
 #include <QStatusBar>
 #include <QVBoxLayout>
@@ -163,7 +164,9 @@ public:
         filterWheelRow_ = new QWidget(accessoryGroup_);
         auto* filterWheelLayout = new QHBoxLayout(filterWheelRow_);
         filterWheelLayout->setContentsMargins(0, 0, 0, 0);
-        filterWheelPositionSelector_ = new QComboBox(filterWheelRow_);
+        filterWheelPositionSelector_ = new QSpinBox(filterWheelRow_);
+        filterWheelPositionSelector_->setPrefix("Slot ");
+        filterWheelPositionSelector_->setRange(0, 0);
         filterWheelDirectionSelector_ = new QComboBox(filterWheelRow_);
         filterWheelDirectionSelector_->addItem(
             "Clockwise", static_cast<int>(amscope::FilterWheelDirection::Clockwise));
@@ -1209,7 +1212,8 @@ private:
         embeddedLightSourceSlider_->setRange(0, 0);
         embeddedLightSourceSlider_->setValue(0);
         embeddedLightSourceValueLabel_->setText("—");
-        filterWheelPositionSelector_->clear();
+        filterWheelPositionSelector_->setRange(0, 0);
+        filterWheelPositionSelector_->setValue(0);
         filterWheelStatusLabel_->setText("Position unknown");
     }
 
@@ -1316,16 +1320,11 @@ private:
                     filterWheelStateKnown_ = true;
                     filterWheelMoving_ = state.moving;
                     const QSignalBlocker blocker(filterWheelPositionSelector_);
-                    const bool slotCountChanged =
-                        filterWheelPositionSelector_->count() !=
-                        static_cast<int>(state.slotCount);
-                    if (slotCountChanged) {
-                        filterWheelPositionSelector_->clear();
-                        for (std::uint32_t slot = 0; slot < state.slotCount; ++slot) {
-                            filterWheelPositionSelector_->addItem(
-                                QString("Slot %1").arg(static_cast<qulonglong>(slot)),
-                                static_cast<qulonglong>(slot));
-                        }
+                    filterWheelPositionSelector_->setRange(
+                        0, static_cast<int>(state.slotCount) - 1);
+                    if (state.position) {
+                        filterWheelPositionSelector_->setValue(
+                            static_cast<int>(*state.position));
                     }
                     if (state.moving) {
                         filterWheelStatusLabel_->setText("Moving…");
@@ -1388,14 +1387,13 @@ private:
 
     void submitFilterWheelMove() {
         if (!filterWheelAvailable_ || accessoryOperationPending_ ||
-            filterWheelPositionSelector_->currentIndex() < 0 ||
             filterWheelDirectionSelector_->currentIndex() < 0)
             return;
         accessoryOperationPending_ = true;
         updateControls(camera_.state());
         const std::uint64_t generation = featureUiGeneration_;
         const auto position = static_cast<std::uint32_t>(
-            filterWheelPositionSelector_->currentData().toUInt());
+            filterWheelPositionSelector_->value());
         const auto direction = static_cast<amscope::FilterWheelDirection>(
             filterWheelDirectionSelector_->currentData().toInt());
         const auto requestId = camera_.requestMoveFilterWheel(
@@ -1462,8 +1460,7 @@ private:
             filterWheelStateKnown_ && !filterWheelMoving_);
         filterWheelMoveButton_->setEnabled(
             accessoryControlsIdle && filterWheelAvailable_ &&
-            filterWheelStateKnown_ && !filterWheelMoving_ &&
-            filterWheelPositionSelector_->currentIndex() >= 0);
+            filterWheelStateKnown_ && !filterWheelMoving_);
         filterWheelRefreshButton_->setEnabled(
             accessoryControlsIdle && filterWheelAvailable_);
     }
@@ -1513,7 +1510,7 @@ private:
     QLabel* embeddedLightSourceValueLabel_ = nullptr;
     QPushButton* embeddedLightSourceApplyButton_ = nullptr;
     QWidget* filterWheelRow_ = nullptr;
-    QComboBox* filterWheelPositionSelector_ = nullptr;
+    QSpinBox* filterWheelPositionSelector_ = nullptr;
     QComboBox* filterWheelDirectionSelector_ = nullptr;
     QPushButton* filterWheelMoveButton_ = nullptr;
     QPushButton* filterWheelRefreshButton_ = nullptr;

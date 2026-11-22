@@ -2235,7 +2235,7 @@ bool AmcamCamera::readFilterWheelState(
     HRESULT hr = Amcam_get_Option(
         impl_->handle, AMCAM_OPTION_FILTERWHEEL_SLOT, &slots);
     if (FAILED(hr)) return failHr(error, "Amcam_get_Option(FILTERWHEEL_SLOT)", hr);
-    if (slots <= 0 || slots > 256)
+    if (slots <= 0)
         return fail(error, "Amcam_get_Option(FILTERWHEEL_SLOT)", -1,
                     "The SDK returned an invalid filter-wheel slot count.");
 
@@ -2279,7 +2279,7 @@ bool AmcamCamera::moveFilterWheel(
     HRESULT hr = Amcam_get_Option(
         impl_->handle, AMCAM_OPTION_FILTERWHEEL_SLOT, &slots);
     if (FAILED(hr)) return failHr(error, "Amcam_get_Option(FILTERWHEEL_SLOT)", hr);
-    if (slots <= 0 || slots > 256 || position >= static_cast<std::uint32_t>(slots))
+    if (slots <= 0 || position >= static_cast<std::uint32_t>(slots))
         return fail(error, "moveFilterWheel", -1,
                     "Requested slot is outside the SDK-reported filter-wheel range.");
     if (direction != FilterWheelDirection::Clockwise &&

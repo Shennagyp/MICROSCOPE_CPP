@@ -390,7 +390,6 @@ public:
                     previewFrameRateEstimator_.record(monotonicSeconds)) {
                 previewFramesPerSecond_ = *estimate;
             }
-            updateFrameInfoLabel();
         });
         frameRateTimer_ = new QTimer(this);
         frameRateTimer_->setInterval(1000);
@@ -1425,9 +1424,13 @@ private:
     }
 
     void updateFrameInfoLabel() {
-        QString text = frameSummary_.isEmpty()
-            ? QStringLiteral("No frames received")
-            : frameSummary_;
+        QString text = hasReceivedFrame_
+            ? QString("%1 x %2 | frame %3 | %4 bytes")
+                  .arg(static_cast<qulonglong>(lastFrameWidth_))
+                  .arg(static_cast<qulonglong>(lastFrameHeight_))
+                  .arg(static_cast<qulonglong>(lastFrameSequence_))
+                  .arg(static_cast<qulonglong>(lastFrameBytes_))
+            : QStringLiteral("No frames received");
 
         if (pulledFramesPerSecond_) {
             text += QString(" | pull %1 FPS")
@@ -1452,11 +1455,11 @@ private:
             return;
         }
 
-        frameSummary_ = QString("%1 x %2 | frame %3 | %4 bytes")
-            .arg(static_cast<qulonglong>(frame->width))
-            .arg(static_cast<qulonglong>(frame->height))
-            .arg(static_cast<qulonglong>(frame->sequence))
-            .arg(static_cast<qulonglong>(frame->byteSize()));
+        lastFrameWidth_ = frame->width;
+        lastFrameHeight_ = frame->height;
+        lastFrameSequence_ = frame->sequence;
+        lastFrameBytes_ = frame->byteSize();
+        hasReceivedFrame_ = true;
 
         if (frame->pixelFormat != amscope::PixelFormat::RGB24) {
             preview_->setMessage(
@@ -1466,15 +1469,12 @@ private:
                     .arg(static_cast<unsigned>(frame->bitsPerPixel))
                     .arg(static_cast<unsigned>(frame->containerBitsPerPixel))
                     .arg(frame->pixelFormatCode, 8, 16, QChar('0')));
-            updateFrameInfoLabel();
             return;
         }
 
         // FrameView retains the frame lease and paints directly from pooled
         // memory. No per-frame image copy or QPixmap conversion.
         preview_->setFrame(std::move(frame));
-
-        updateFrameInfoLabel();
     }
 
     void resetPreviewFrameRate() {
@@ -2477,7 +2477,11 @@ private:
     std::optional<double> pulledFramesPerSecond_;
     std::optional<std::chrono::steady_clock::time_point> lastPullRateAt_;
     std::uint64_t lastPulledFrameCount_ = 0;
-    QString frameSummary_;
+    std::uint32_t lastFrameWidth_ = 0;
+    std::uint32_t lastFrameHeight_ = 0;
+    std::uint32_t lastFrameSequence_ = 0;
+    std::size_t lastFrameBytes_ = 0;
+    bool hasReceivedFrame_ = false;
     QTimer* frameRateTimer_ = nullptr;
 
     std::uint64_t featureUiGeneration_ = 0;

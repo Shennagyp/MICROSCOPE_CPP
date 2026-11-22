@@ -280,7 +280,40 @@ The SDK's per-frame `expotime` metadata was zero in the first run, so the config
 
 Do not change the native acquisition path or force an FPS value based on this run. First rerun the corrected measurement, record `configured_exposure_us`, `exposure_fps_limit`, `applied_speed_level`, `last_timestamp_us`, and the corrected `paint_fps`, and check the actual macOS USB link speed.
 
-Phase 0 remains OPEN. The next hardware step is to run the dedicated physical-camera rate measurement executable introduced for this purpose.
+Phase 0 remains OPEN. The second hardware run again measured approximately 91 FPS through the native acquisition path, but the 100 FPS target and the exposure/USB/presentation explanations remain unresolved.
+
+
+### Second MU503 hardware rate result — 22 November 2026
+
+After the first corrected-test compile issue was fixed, the user locally built and ran the hardware test from source revision `2da3f5d`. The run used `MU503(USB2.0)`, requested and received 640×480, and lasted 14.498 seconds:
+
+| Metric | Result |
+|---|---:|
+| SDK image-event rate | 91.183 FPS |
+| Successful `Amcam_PullImageV4` rate | 91.183 FPS |
+| Driver callback delivery rate | 91.183 FPS |
+| Preview paint rate | 14.140 FPS (205 frames) |
+| Delivered/pulled frames | 1,322 |
+| Frame-pool drops | 0 |
+| Applied speed level | 6 of 6 |
+| Pre-Start `ExposureTime` readback | 70,000 µs |
+| Arithmetic rate from that pre-Start value | 14.286 FPS |
+| Per-frame SDK exposure metadata | No nonzero samples |
+| SDK timestamps | No nonzero samples |
+| Stop / resolution restore / Close | All succeeded |
+
+Equal event, pull, and callback rates again show no measured loss through the native acquisition stages. Speed level 6 is the model-reported maximum. The rate remains below the official MU503 USB 3.0 640×480 catalog rate of approximately 101 FPS; this does not by itself establish that the USB connection is actually negotiated at USB 2.0.
+
+The `70,000 µs` exposure value was read before Start, and this test revision did not record automatic-exposure mode or active exposure during the timed interval. The 14.286 FPS arithmetic result is therefore **not a validated exposure limit**. The paint rate of 14.140 FPS happens to be close, but the run lacks preview-poll/submission/paint-event counters needed to localize why painting is slower than acquisition.
+
+The next diagnostic source revision adds:
+- `ExposureAuto` and `ExposureTime` readbacks before Start, after Start, and at measurement start/end.
+- An exposure FPS ceiling only when automatic exposure is Off at both measurement boundaries and the readback is stable.
+- Counts for preview timer polls, frame submissions, Qt paint events, and actually painted frames.
+
+These changes do not modify the native callback -> bounded event queue -> single `Amcam_PullImageV4` worker. They are committed after the source used for this second physical run; a fresh local build and hardware run are required. Also capture macOS `system_profiler SPUSBDataType` output for the MU503 to establish the negotiated USB speed.
+
+The next hardware step is to run the updated diagnostic revision of the dedicated physical-camera rate measurement executable.
 
 From the repository root, run:
 

@@ -56,7 +56,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Frame notifications bypass feature-request queue lock | Source implemented | No dedicated contention test | Not recorded |
 | SDK image-event, successful-pull, and actual paint counters | Source implemented | Counter wiring is compile/CI pending; no unit-level hardware-rate test | Not recorded |
 | Maximum supported frame rate selected on Start by model flags | Source implemented | No deterministic SDK-setting test yet | Not recorded |
-| Generic SDK FPS cap removed (`AMCAM_OPTION_FRAMERATE=0`) | Source implemented | No deterministic SDK-setting test yet | Not recorded |\n| Physical-camera rate measurement | Test executable implemented; manual run required | `amscope_hardware_rate_test` reports event/pull/callback/paint FPS, actual dimensions, SDK sequence/timestamp, configured exposure, per-frame exposure metadata and drops | First run recorded 91.253 event/pull/callback FPS at 640×480; paint metric invalid due sequence-based deduplication, now corrected; repeat required |
+| Generic SDK FPS cap removed (`AMCAM_OPTION_FRAMERATE=0`) | Source implemented | No deterministic SDK-setting test yet | Not recorded |\n| Physical-camera rate measurement | Test executable implemented; manual run required | `amscope_hardware_rate_test` reports event/pull/callback rates, preview poll/submission/paint counters, dimensions, SDK metadata, exposure-auto state/readbacks, and drops | Two MU503 runs report about 91.2 event/pull/callback FPS at 640×480 with zero drops; second run reports 14.14 painted FPS and a pre-Start 70 ms exposure readback. Active exposure and GUI-rate causes remain under diagnosis |
 | Frame-pool exhaustion and dropped-frame accounting | Source implemented/documented | No dedicated frame-pool behavior test identified | Not recorded |
 
 ## 4. Frame and image payload behavior
@@ -179,7 +179,7 @@ Additional target-architecture gaps:
 
 All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The initial hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). That CI run predates the sequence-independent paint and exposure/speed diagnostic corrections. The corrected source is being checked in workflow [#45063651610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063651610), which is in progress at this inventory refresh. The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
 
-The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event FPS, successful-pull FPS, frame-callback FPS, host-revision-based painted-frame FPS, actual dimensions, device sequence/timestamp metadata, configured exposure readback, per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop.
+The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event/pull/callback FPS, host-revision-based frame submissions, preview timer ticks, Qt paint events, actually painted frames, actual dimensions, device sequence/timestamp metadata, exposure-auto state and exposure readbacks at multiple lifecycle points, per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop.
 
 ### 9.1 First user-reported hardware rate run — 22 November 2026
 
@@ -202,7 +202,37 @@ The equal event, pull and callback counts show no measured loss between those th
 
 The test and production preview have since been corrected to count a newly delivered frame when it is actually painted, independently of SDK sequence metadata. The next test revision additionally reads the configured `ExposureTime` feature before starting acquisition and reports that separately from per-frame SDK exposure metadata; it also reports timestamp samples where available. This first run is retained as a valid 91.253 FPS acquisition observation, but its paint-rate result must not be used.
 
-Do not mark the physical camera performance target as met or infer the 100 FPS limit from this first run. Repeat the test against the corrected branch revision.
+Do not mark the physical camera performance target as met. The first and second runs show consistent native delivery near 91 FPS, but the 100 FPS target remains unmet and the active exposure/USB/presentation causes remain unresolved.
+
+
+### 9.2 Second user-reported hardware rate run — 22 November 2026
+
+The user rebuilt and ran the test after the missing `Measurement::exposureSamples` snapshot field was fixed (source revision `2da3f5d`). The run selected `2:640x480` on SDK device name `MU503(USB2.0)` and reported:
+
+| Measurement | Observed |
+|---|---:|
+| Measurement duration | 14.498 s |
+| SDK event rate | 91.183 FPS |
+| Successful pull rate | 91.183 FPS |
+| Driver callback rate | 91.183 FPS |
+| Paint rate | 14.140 FPS (205 frames) |
+| Pulled/delivered frames | 1,322 |
+| Dropped frames | 0 |
+| Applied speed level | 6 (model maximum 6) |
+| Reported pre-Start exposure | 70,000 µs |
+| Calculated pre-Start exposure rate | 14.286 FPS |
+| SDK per-frame exposure samples | 0 |
+| SDK sequence / timestamp samples | sequence unchanged at zero; timestamp samples unavailable |
+| Actual frame dimensions | 640×480 |
+| Stop / resolution restore / Close | All succeeded |
+
+The native event/pull/callback counts again match, so the user-observed pipeline did not lose frames between those stages in this interval. The requested 100 FPS target was not met. The applied model speed level was already at its advertised maximum (6/6), so a lower selected speed level is not the explanation.
+
+The `70,000 µs` value was read before Start. The test revision used for this run did not report `ExposureAuto` or sample exposure during the measurement. Therefore the derived `14.286 FPS` value is only arithmetic on a pre-Start readback; it is **not yet evidence that active exposure limited the stream**. The SDK's per-frame exposure metadata was zero, so it cannot resolve this. The 14.140 FPS paint rate is numerically close to the arithmetic value, but that coincidence does not establish a causal relationship. The run also did not count preview timer polls, frame submissions, or all paint events, so the location of the presentation-rate reduction is unresolved.
+
+The next diagnostic revision samples automatic-exposure mode and exposure readback before Start, after Start, and at the beginning/end of the timed interval. It only publishes an exposure-derived FPS limit if automatic exposure is Off at both measurement boundaries and the exposure value is stable. It also reports preview poll ticks, frame submissions, Qt paint events, and painted frames separately. This diagnostic revision is committed after source revision `2da3f5d`; its local build and hardware run are still pending.
+
+Do not change the acquisition mechanism or force a frame-rate value on the basis of this run. Also inspect the actual negotiated USB speed in macOS `system_profiler SPUSBDataType`; the SDK display name `MU503(USB2.0)` is a transport clue but is not a substitute for the operating system's negotiated-link report.
 
 ## 10. Current evidence classification
 

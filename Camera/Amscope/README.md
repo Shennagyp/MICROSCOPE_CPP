@@ -325,18 +325,24 @@ after Stop. It reports JSON to stdout with:
 - SDK image-event FPS.
 - Successful `Amcam_PullImageV4` FPS.
 - Frame callback/delivery FPS.
-- Unique frame paint FPS from the test preview widget.
-- Actual frame dimensions, sequence range, exposure statistics, and dropped frames.
+- Preview timer ticks, host-frame submissions, Qt paint events, and frames actually painted.
+- Actual frame dimensions, sequence/timestamp metadata, per-frame exposure samples, and dropped frames.
+- Exposure-auto mode and exposure-time readbacks before Start, after Start, and at both ends of the timed measurement.
 - Stop, resolution-restoration, and Close results.
 
 The test expects RGB24 live preview; it refuses to start when RAW sensor output
 is enabled because this test specifically measures the RGB preview/render path.
 Paint counting uses a host-side revision for every delivered frame, not the
 device-provided sequence field (some models may leave that field constant).
-The report separates the configured `ExposureTime` feature readback from
-per-frame SDK exposure metadata, and includes the SDK timestamp range when
-available. The default device is index 0; use `--device-index N` when more
-than one camera is connected. The default target is 100 pulled frames per
+The report samples `ExposureAuto` and `ExposureTime` before Start, after
+Start, and at the beginning and end of the timed measurement. An exposure FPS
+ceiling is emitted only when automatic exposure is Off at both measurement
+boundaries and the exposure readback is unchanged. A pre-Start exposure value
+alone is not treated as the active capture exposure. Preview polling,
+submissions, paint-event calls, and painted frames are reported separately so
+a low UI rate can be localized without conflating it with camera acquisition.
+The default device is index 0; use `--device-index N` when more than one camera
+is connected. The default target is 100 pulled frames per
 second. Exit code 0 means the operational checks passed and the pull-rate
 target was met; exit code 10 means the test ran and reported measurements but
 the target was not met; other non-zero codes indicate setup or operational

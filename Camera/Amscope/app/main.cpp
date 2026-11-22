@@ -858,7 +858,8 @@ private:
 
         const auto requestId = camera_.requestStillCapture(
             request,
-            [this](amscope::QtAmcamCamera::FeatureRequestId,
+            [this, captureMode = request.mode](
+                   amscope::QtAmcamCamera::FeatureRequestId,
                    amscope::QtAmcamCamera::StillCaptureResult result) {
                 stillCapturePending_ = false;
                 updateControls(camera_.state());
@@ -876,7 +877,7 @@ private:
                 }
 
                 const QString captureKind =
-                    request.mode == amscope::StillCaptureMode::Raw
+                    captureMode == amscope::StillCaptureMode::Raw
                         ? QStringLiteral("RAW still")
                         : QStringLiteral("Processed still");
                 if (frame->significantBitsPerPixel > 0 &&

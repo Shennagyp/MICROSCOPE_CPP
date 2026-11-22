@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <exception>
 #include <limits>
@@ -17,7 +18,6 @@
 #include <vector>
 
 namespace {
-constexpr unsigned kWaitTimeoutMs = 1000;
 constexpr std::size_t kPoolSize = 4;
 constexpr int kRgb24Bits = 24;
 constexpr int kPackedRows = -1;
@@ -104,6 +104,11 @@ struct AmcamCamera::Impl {
 
     std::mutex lifecycleMutex;
     std::mutex apiMutex;
+    std::mutex eventMutex;
+    std::condition_variable eventAvailable;
+    std::uint64_t pendingImageEvents = 0;
+    unsigned pendingFatalEvent = 0;
+    bool eventQueueOverflow = false;
     HAmcam handle = nullptr;
     std::thread worker;
     std::shared_ptr<FramePool> pool;
@@ -111,6 +116,29 @@ struct AmcamCamera::Impl {
     ErrorCallback onError;
 
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
+
+    static void __stdcall sdkEvent(unsigned event, void* context) {
+        auto* self = static_cast<Impl*>(context);
+        if (!self) return;
+
+        {
+            std::lock_guard<std::mutex> lock(self->eventMutex);
+            if (event == AMCAM_EVENT_IMAGE) {
+                if (self->pendingImageEvents !=
+                    std::numeric_limits<std::uint64_t>::max()) {
+                    ++self->pendingImageEvents;
+                } else {
+                    self->eventQueueOverflow = true;
+                }
+            } else if (event == AMCAM_EVENT_ERROR ||
+                       event == AMCAM_EVENT_DISCONNECTED ||
+                       event == AMCAM_EVENT_NOFRAMETIMEOUT ||
+                       event == AMCAM_EVENT_NOPACKETTIMEOUT) {
+                self->pendingFatalEvent = event;
+            }
+        }
+        self->eventAvailable.notify_one();
+    }
 
     void reportFatal(CameraError error) noexcept {
         if (stopRequested.load(std::memory_order_acquire)) return;
@@ -155,30 +183,37 @@ struct AmcamCamera::Impl {
         auto lastFrameAt = std::chrono::steady_clock::now();
 
         while (!stopRequested.load(std::memory_order_acquire)) {
-            auto writable = activePool->tryAcquire();
-            void* destination = writable
-                ? static_cast<void*>(writable->pixels.data())
-                : static_cast<void*>(activePool->discard.data());
+            bool imageAvailable = false;
+            unsigned fatalEvent = 0;
+            bool queueOverflow = false;
 
-            AmcamFrameInfoV3 info{};
-            HRESULT hr = E_FAIL;
             {
-                std::lock_guard<std::mutex> lock(apiMutex);
-                if (!handle) {
-                    fatal = true;
-                    error = {-1, "Amcam_WaitImageV3", "Camera handle is no longer open."};
-                } else {
-                    hr = Amcam_WaitImageV3(handle, kWaitTimeoutMs, destination,
-                                           0, kRgb24Bits, kPackedRows, &info);
-                }
-            }
-            if (fatal || stopRequested.load(std::memory_order_acquire)) break;
-
-            const auto now = std::chrono::steady_clock::now();
-            if (hr == E_TIMEOUT) {
+                std::unique_lock<std::mutex> lock(eventMutex);
                 const auto timeout = frameStallTimeout(
                     expectedExposureMicroseconds.load(std::memory_order_acquire));
-                if (now - lastFrameAt >= timeout) {
+                const auto deadline = lastFrameAt + timeout;
+
+                eventAvailable.wait_until(lock, deadline, [this]() {
+                    return stopRequested.load(std::memory_order_acquire) ||
+                           pendingImageEvents != 0 ||
+                           pendingFatalEvent != 0 ||
+                           eventQueueOverflow;
+                });
+
+                if (stopRequested.load(std::memory_order_acquire))
+                    break;
+
+                fatalEvent = pendingFatalEvent;
+                pendingFatalEvent = 0;
+                queueOverflow = eventQueueOverflow;
+                eventQueueOverflow = false;
+
+                if (!fatalEvent && !queueOverflow && pendingImageEvents != 0) {
+                    --pendingImageEvents;
+                    imageAvailable = true;
+                } else if (!fatalEvent && !queueOverflow &&
+                           std::chrono::steady_clock::now() >= deadline) {
+                    const auto now = std::chrono::steady_clock::now();
                     const auto stalledMilliseconds =
                         std::chrono::duration_cast<std::chrono::milliseconds>(
                             now - lastFrameAt).count();
@@ -186,60 +221,109 @@ struct AmcamCamera::Impl {
                         expectedExposureMicroseconds.load(std::memory_order_acquire);
                     fatal = true;
                     error = {static_cast<std::int32_t>(E_TIMEOUT),
-                             "Amcam_WaitImageV3",
-                             "No preview frame received for " +
+                             "Amcam_PullImageV4",
+                             "No preview frame event received for " +
                                  std::to_string(stalledMilliseconds) +
                                  " ms (last exposure " +
                                  std::to_string(exposure) +
                                  " us; watchdog threshold " +
                                  std::to_string(timeout.count()) + " ms)."};
+                }
+            }
+
+            if (fatalEvent != 0) {
+                const char* eventName = "unknown SDK event";
+                switch (fatalEvent) {
+                case AMCAM_EVENT_ERROR:
+                    eventName = "AMCAM_EVENT_ERROR";
+                    break;
+                case AMCAM_EVENT_DISCONNECTED:
+                    eventName = "AMCAM_EVENT_DISCONNECTED";
+                    break;
+                case AMCAM_EVENT_NOFRAMETIMEOUT:
+                    eventName = "AMCAM_EVENT_NOFRAMETIMEOUT";
+                    break;
+                case AMCAM_EVENT_NOPACKETTIMEOUT:
+                    eventName = "AMCAM_EVENT_NOPACKETTIMEOUT";
                     break;
                 }
-                continue;
+                fatal = true;
+                error = {static_cast<std::int32_t>(E_GEN_FAILURE),
+                         "Amcam SDK event",
+                         std::string("The Amcam SDK reported ") + eventName + "."};
+            } else if (queueOverflow) {
+                fatal = true;
+                error = {-1, "Amcam event callback",
+                         "The pending image-event counter overflowed."};
             }
+
+            if (fatal || stopRequested.load(std::memory_order_acquire))
+                break;
+            if (!imageAvailable)
+                continue;
+
+            auto writable = activePool->tryAcquire();
+            void* destination = writable
+                ? static_cast<void*>(writable->pixels.data())
+                : static_cast<void*>(activePool->discard.data());
+
+            AmcamFrameInfoV4 info{};
+            HRESULT hr = E_FAIL;
+            {
+                std::lock_guard<std::mutex> lock(apiMutex);
+                if (!handle) {
+                    fatal = true;
+                    error = {-1, "Amcam_PullImageV4",
+                             "Camera handle is no longer open."};
+                } else {
+                    hr = Amcam_PullImageV4(handle, destination, 0,
+                                           kRgb24Bits, kPackedRows, &info);
+                }
+            }
+
+            if (fatal || stopRequested.load(std::memory_order_acquire))
+                break;
             if (FAILED(hr)) {
                 fatal = true;
                 error = {static_cast<std::int32_t>(hr),
-                         "Amcam_WaitImageV3", hrMessage("Amcam_WaitImageV3", hr)};
+                         "Amcam_PullImageV4",
+                         hrMessage("Amcam_PullImageV4", hr)};
                 break;
             }
 
             lastFrameAt = std::chrono::steady_clock::now();
-            if (info.expotime != 0) {
-                expectedExposureMicroseconds.store(info.expotime,
+            if (info.v3.expotime != 0) {
+                expectedExposureMicroseconds.store(info.v3.expotime,
                                                    std::memory_order_release);
             }
 
-            // Keep draining the SDK when all leases are retained. A slow
-            // consumer drops preview frames rather than blocking acquisition.
+            // Keep draining SDK frames even if every application frame lease
+            // is retained. The discard buffer avoids blocking SDK queue drain.
             if (!writable) {
                 dropped.fetch_add(1, std::memory_order_relaxed);
                 continue;
             }
 
-            const auto w = info.width;
-            const auto h = info.height;
+            const auto w = info.v3.width;
+            const auto h = info.v3.height;
             std::size_t required = 0;
             if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
                 fatal = true;
-                error = {-1, "Amcam_WaitImageV3",
+                error = {-1, "Amcam_PullImageV4",
                          "SDK frame dimensions exceed the allocated RGB24 buffer."};
                 break;
             }
 
-            // Keep the logical byte count equal to this frame's dimensions,
-            // while retaining vector capacity for later frames of this size.
             writable->pixels.resize(required);
-
             writable->width = w;
             writable->height = h;
             writable->strideBytes = w * 3U;
-            writable->sequence = info.seq;
-            writable->timestampMicroseconds = info.timestamp;
-            writable->sdkFlags = info.flag;
-            writable->exposureMicroseconds = info.expotime;
-            writable->exposureGainPercent = info.expogain;
-            writable->blackLevel = info.blacklevel;
+            writable->sequence = info.v3.seq;
+            writable->timestampMicroseconds = info.v3.timestamp;
+            writable->sdkFlags = info.v3.flag;
+            writable->exposureMicroseconds = info.v3.expotime;
+            writable->exposureGainPercent = info.v3.expogain;
+            writable->blackLevel = info.v3.blacklevel;
 
             FramePtr lease = std::move(writable);
             try {
@@ -249,7 +333,8 @@ struct AmcamCamera::Impl {
             }
         }
 
-        if (fatal) reportFatal(std::move(error));
+        if (fatal)
+            reportFatal(std::move(error));
         g_acquisitionOwner = nullptr;
     }
 
@@ -260,6 +345,7 @@ struct AmcamCamera::Impl {
         const bool alreadyFaulted = before == CameraState::Faulted;
         if (!alreadyFaulted) state.store(CameraState::Stopping, std::memory_order_release);
         stopRequested.store(true, std::memory_order_release);
+        eventAvailable.notify_all();
 
         if (worker.joinable()) worker.join();
 
@@ -383,6 +469,12 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->expectedExposureMicroseconds.store(0, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> events(impl_->eventMutex);
+        impl_->pendingImageEvents = 0;
+        impl_->pendingFatalEvent = 0;
+        impl_->eventQueueOverflow = false;
+    }
 
     int width = 0, height = 0;
     HRESULT hr = S_OK;
@@ -437,10 +529,10 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             impl_->state.store(CameraState::Open, std::memory_order_release);
             return failHr(error, "Amcam_put_Option(AMCAM_OPTION_BYTEORDER)", hr);
         }
-        // Match the vendor's demowait acquisition pairing: no event callback
-        // when frames are retrieved by WaitImage.
+        // Callback-mode pull acquisition: the SDK reports each image event;
+        // our worker retrieves the corresponding frame with PullImageV4.
         hr = Amcam_StartPullModeWithCallback(
-            impl_->handle, nullptr, nullptr);
+            impl_->handle, &Impl::sdkEvent, impl_.get());
     }
     if (FAILED(hr)) {
         impl_->pool.reset();

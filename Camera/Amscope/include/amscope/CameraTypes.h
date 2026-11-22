@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 #include "camera/CameraModels.h"
+#include "camera/CameraFrames.h"
 
 namespace amscope {
 enum class CameraState : std::uint8_t { Closed, Open, Starting, Streaming, Stopping, Faulted };
@@ -37,7 +38,19 @@ struct CameraError {
     std::string operation;
     std::string message;
 };
-enum class PixelFormat : std::uint8_t { RGB24, Raw8, Raw16 };
+using PixelFormat = camera::PixelFormat;
+using Frame = camera::Frame;
+using FramePtr = camera::FramePtr;
+
+// Amcam-only metadata remains available to native consumers through a typed
+// frame extension. Generic consumers use camera::Frame / camera::FramePtr.
+struct AmcamFrame final : camera::Frame {
+    std::uint32_t sdkFlags = 0;
+    std::optional<std::uint16_t> exposureGainPercent;
+    std::optional<std::uint16_t> blackLevel;
+};
+
+using AmcamFramePtr = std::shared_ptr<const AmcamFrame>;
 enum class StillCaptureMode : std::uint8_t { Processed, Raw };
 
 struct StillCaptureRequest {
@@ -47,32 +60,6 @@ struct StillCaptureRequest {
     std::uint32_t timeoutMilliseconds = 30000;
 };
 
-struct Frame {
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-    std::uint32_t strideBytes = 0;
-    PixelFormat pixelFormat = PixelFormat::RGB24;
-    // Amcam RAW frames retain the SDK FourCC and significant sensor bit depth.
-    // RGB24 uses pixelFormatCode=0 and bitsPerPixel=24.
-    // Significant pixel depth reported by the sensor/RAW format.
-    std::uint32_t pixelFormatCode = 0;
-    std::uint8_t bitsPerPixel = 24;
-    // Actual payload storage container width (8/16 for Amcam RAW).
-    std::uint8_t containerBitsPerPixel = 24;
-    bool isStill = false;
-    std::uint32_t sequence = 0;
-    std::uint64_t timestampMicroseconds = 0;
-    std::uint32_t sdkFlags = 0;
-    std::uint32_t exposureMicroseconds = 0;
-    std::uint16_t exposureGainPercent = 0;
-    std::uint16_t blackLevel = 0;
-    std::vector<std::uint8_t> pixels;
-    [[nodiscard]] const std::uint8_t* data() const noexcept {
-        return pixels.empty() ? nullptr : pixels.data();
-    }
-    [[nodiscard]] std::size_t byteSize() const noexcept { return pixels.size(); }
-};
-using FramePtr = std::shared_ptr<const Frame>;
 // Values intentionally match Amcam_get/put_AutoExpoEnable and Swift's
 // AmcamAutoExposureMode raw values. Once is the vendor's native one-shot mode.
 enum class AmcamAutoExposureMode : std::int32_t {

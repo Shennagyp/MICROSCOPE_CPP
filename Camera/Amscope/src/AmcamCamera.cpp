@@ -49,14 +49,6 @@ std::string hrMessage(const char* operation, HRESULT hr) {
 bool failHr(amscope::CameraError* out, const char* operation, HRESULT hr) {
     return fail(out, operation, static_cast<std::int32_t>(hr), hrMessage(operation, hr));
 }
-bool rgb24Size(std::uint32_t w, std::uint32_t h, std::size_t& bytes) {
-    if (!w || !h || w > std::numeric_limits<std::uint32_t>::max() / 3U)
-        return false;
-    const std::uint64_t n = static_cast<std::uint64_t>(w) * h * 3U;
-    if (n > std::numeric_limits<std::size_t>::max()) return false;
-    bytes = static_cast<std::size_t>(n);
-    return true;
-}
 std::string boundedString(const char* value, std::size_t capacity) {
     if (!value) return {};
     return std::string(value, std::find(value, value + capacity, '\0'));
@@ -417,8 +409,7 @@ struct AmcamCamera::Impl {
                   PixelFormat format, std::uint32_t formatCode,
                   std::uint8_t bitsPerPixel, std::size_t bytesPerPixel)
             : discard(bytes), pixelFormat(format), pixelFormatCode(formatCode),
-              bitsPerPixel(bitsPerPixel), bytesPerPixel(bytesPerPixel),
-              initialStrideBytes(stride) {
+              bitsPerPixel(bitsPerPixel), bytesPerPixel(bytesPerPixel) {
             slots.reserve(kPoolSize);
             for (std::size_t i = 0; i < kPoolSize; ++i) {
                 auto frame = std::make_shared<Frame>();
@@ -444,7 +435,6 @@ struct AmcamCamera::Impl {
         const std::uint32_t pixelFormatCode;
         const std::uint8_t bitsPerPixel;
         const std::size_t bytesPerPixel;
-        const std::uint32_t initialStrideBytes;
     };
 
     std::atomic<CameraState> state{CameraState::Closed};
@@ -766,10 +756,16 @@ struct AmcamCamera::Impl {
                 const auto h = info.v3.height;
                 const std::uint64_t stride64 =
                     static_cast<std::uint64_t>(w) * activePool->bytesPerPixel;
-                const std::uint64_t required64 = stride64 * h;
                 if (w == 0 || h == 0 ||
                     stride64 > std::numeric_limits<std::uint32_t>::max() ||
-                    required64 > std::numeric_limits<std::size_t>::max() ||
+                    stride64 > std::numeric_limits<std::uint64_t>::max() / h) {
+                    fatal = true;
+                    error = {-1, "Amcam_PullImageV4",
+                             "SDK frame dimensions overflow the selected pixel-format layout."};
+                    break;
+                }
+                const std::uint64_t required64 = stride64 * h;
+                if (required64 > std::numeric_limits<std::size_t>::max() ||
                     required64 > writable->pixels.capacity()) {
                     fatal = true;
                     error = {-1, "Amcam_PullImageV4",
@@ -1081,14 +1077,26 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             int rawOption = 0;
             const HRESULT rawHr =
                 Amcam_get_Option(impl_->handle, AMCAM_OPTION_RAW, &rawOption);
-            if (SUCCEEDED(rawHr) && rawOption != 0) {
-                rawOutput = true;
-                hr = Amcam_get_RawFormat(
-                    impl_->handle, &rawFourCC, &rawBitsPerPixel);
-                if (SUCCEEDED(hr) &&
-                    (rawBitsPerPixel == 0 || rawBitsPerPixel > 16)) {
+            constexpr std::uint64_t rawCapabilityFlags =
+                AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
+                AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW14 | AMCAM_FLAG_RAW16 |
+                AMCAM_FLAG_RAW12PACK;
+            const bool modelAdvertisesRaw =
+                (impl_->modelFlags & rawCapabilityFlags) != 0;
+            if (SUCCEEDED(rawHr)) {
+                if (rawOption != 0 && rawOption != 1) {
                     hr = E_INVALIDARG;
+                } else if (rawOption == 1) {
+                    rawOutput = true;
+                    hr = Amcam_get_RawFormat(
+                        impl_->handle, &rawFourCC, &rawBitsPerPixel);
+                    if (SUCCEEDED(hr) &&
+                        (rawBitsPerPixel == 0 || rawBitsPerPixel > 16)) {
+                        hr = E_INVALIDARG;
+                    }
                 }
+            } else if (modelAdvertisesRaw) {
+                hr = rawHr;
             }
         }
     }
@@ -1106,9 +1114,15 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
         (rawBitsPerPixel <= 8U ? 1U : 2U);
     const std::uint64_t stride64 =
         static_cast<std::uint64_t>(width) * bytesPerPixel;
-    const std::uint64_t bytes64 = stride64 * static_cast<std::uint64_t>(height);
     if (stride64 > std::numeric_limits<std::uint32_t>::max() ||
-        bytes64 == 0 || bytes64 > std::numeric_limits<std::size_t>::max() ||
+        stride64 > std::numeric_limits<std::uint64_t>::max() /
+                       static_cast<std::uint64_t>(height)) {
+        impl_->state.store(CameraState::Open, std::memory_order_release);
+        return fail(error, "start", -1,
+                    "The selected pixel format produces an overflowing frame layout.");
+    }
+    const std::uint64_t bytes64 = stride64 * static_cast<std::uint64_t>(height);
+    if (bytes64 == 0 || bytes64 > std::numeric_limits<std::size_t>::max() ||
         bytes64 > 512ULL * 1024ULL * 1024ULL) {
         impl_->state.store(CameraState::Open, std::memory_order_release);
         return fail(error, "start", -1,

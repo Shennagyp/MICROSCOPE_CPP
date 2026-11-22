@@ -12,6 +12,8 @@
 
 This document defines the work required to finish the AmScope native camera driver and deliver the intended reusable Camera Module architecture in `MICROSCOPE_CPP`.
 
+The current continuation state is maintained in [DEVELOPMENT_HANDOFF.md](DEVELOPMENT_HANDOFF.md), and the source-to-test mapping is maintained in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](AMSCOPE_IMPLEMENTATION_INVENTORY.md). Use [the physical-camera test record template](../testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md) for each phase's real-camera evidence.
+
 The objective is not merely to finish the preview application. The deliverable is a coherent camera subsystem in which:
 
 - AmScope cameras use the native Amcam SDK for discovery, session lifecycle, acquisition, image retrieval, and recovery.
@@ -590,7 +592,7 @@ Update this table as implementation progresses. A phase is not complete until bo
 
 | Phase | Implementation status | Automated tests | Real-camera test | Acceptance |
 |---|---|---|---|---|
-| 0 — Baseline | Not accepted | Baseline CI exists | Required; evidence not established by CI | OPEN |
+| 0 — Baseline | Repository/source and branch review recorded; physical baseline pending | Baseline CI passed at reviewed revision | No physical-camera record yet | OPEN |
 | 1 — Native driver | Existing implementation; further qualification required | Existing tests; additional failure-path tests required | Required | OPEN |
 | 2 — Common models | Partial; several models remain under AmScope | Common tests exist; extraction tests required | Required | OPEN |
 | 3 — Library separation | Target boundaries not yet delivered | Required | Required | OPEN |

@@ -139,7 +139,84 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    // Lifecycle requests share the same FIFO. Start on a closed camera
+
+    // Accessory reads/commands share the Qt queue and return typed errors
+    // while closed; they must not reach the vendor SDK without an open handle.
+    QEventLoop accessoryLoop;
+    QTimer accessoryTimeout;
+    accessoryTimeout.setSingleShot(true);
+    QObject::connect(&accessoryTimeout, &QTimer::timeout,
+                     &accessoryLoop, &QEventLoop::quit);
+
+    std::vector<int> accessoryCompletionOrder;
+    bool accessoryCallbacksOnAffinityThread = true;
+    bool accessoryErrorsTyped = true;
+    const auto finishAccessory = [&]() {
+        if (accessoryCompletionOrder.size() == 4)
+            accessoryLoop.quit();
+    };
+
+    const auto lightReadRequest = camera.requestEmbeddedLightSource(
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::EmbeddedLightSourceResult result) {
+            accessoryCallbacksOnAffinityThread =
+                accessoryCallbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
+                std::holds_alternative<amscope::CameraError>(result);
+            accessoryCompletionOrder.push_back(1);
+            finishAccessory();
+        });
+    const auto lightWriteRequest = camera.requestSetEmbeddedLightSourceLevel(
+        10,
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::AccessoryCommandResult result) {
+            accessoryCallbacksOnAffinityThread =
+                accessoryCallbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
+                std::holds_alternative<amscope::CameraError>(result);
+            accessoryCompletionOrder.push_back(2);
+            finishAccessory();
+        });
+    const auto wheelReadRequest = camera.requestFilterWheelState(
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::FilterWheelStateResult result) {
+            accessoryCallbacksOnAffinityThread =
+                accessoryCallbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
+                std::holds_alternative<amscope::CameraError>(result);
+            accessoryCompletionOrder.push_back(3);
+            finishAccessory();
+        });
+    const auto wheelMoveRequest = camera.requestMoveFilterWheel(
+        0, amscope::FilterWheelDirection::Clockwise,
+        [&](amscope::QtAmcamCamera::FeatureRequestId requestId,
+            amscope::QtAmcamCamera::AccessoryCommandResult result) {
+            accessoryCallbacksOnAffinityThread =
+                accessoryCallbacksOnAffinityThread &&
+                QThread::currentThread() == camera.thread();
+            accessoryErrorsTyped = accessoryErrorsTyped && requestId != 0 &&
+                std::holds_alternative<amscope::CameraError>(result);
+            accessoryCompletionOrder.push_back(4);
+            finishAccessory();
+        });
+
+    if (lightReadRequest == 0 || lightWriteRequest == 0 ||
+        wheelReadRequest == 0 || wheelMoveRequest == 0) {
+        std::cerr << "A valid accessory request was rejected.\n";
+        return EXIT_FAILURE;
+    }
+    accessoryTimeout.start(5000);
+    accessoryLoop.exec();
+    if (accessoryCompletionOrder != std::vector<int>{1, 2, 3, 4} ||
+        !accessoryCallbacksOnAffinityThread || !accessoryErrorsTyped) {
+        std::cerr << "Accessory requests lost FIFO order, Qt affinity or typed errors.\n";
+        return EXIT_FAILURE;
+    }
+
+    // Lifecycle requests share the same FIFO.    // Lifecycle requests share the same FIFO. Start on a closed camera
     // reports an error; later Stop and Close remain accepted and execute in order.
     QEventLoop lifecycleLoop;
     QTimer lifecycleTimeout;

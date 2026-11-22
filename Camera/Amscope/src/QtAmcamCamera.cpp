@@ -532,6 +532,83 @@ bool QtAmcamCamera::readStillResolutions(
     return ok;
 }
 
+
+bool QtAmcamCamera::readEmbeddedLightSource(
+    EmbeddedLightSourceState& result,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("readEmbeddedLightSource", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readEmbeddedLightSource(result, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::setEmbeddedLightSourceLevel(
+    std::uint32_t level,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("setEmbeddedLightSourceLevel", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.setEmbeddedLightSourceLevel(level, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::readFilterWheelState(
+    FilterWheelState& result,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("readFilterWheelState", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readFilterWheelState(result, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::moveFilterWheel(
+    std::uint32_t position,
+    FilterWheelDirection direction,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("moveFilterWheel", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.moveFilterWheel(position, direction, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
@@ -701,6 +778,141 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestStillCapture(
         });
 }
 
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestEmbeddedLightSource(
+    EmbeddedLightSourceCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<EmbeddedLightSourceResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                EmbeddedLightSourceState state;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readEmbeddedLightSource(state, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readEmbeddedLightSource", exception.what()};
+                } catch (...) {
+                    local = {0, "readEmbeddedLightSource",
+                             "Unknown exception while reading embedded light-source state."};
+                }
+                if (ok) result.emplace(std::move(state));
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        });
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSetEmbeddedLightSourceLevel(
+    std::uint32_t level,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, level, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.setEmbeddedLightSourceLevel(level, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "setEmbeddedLightSourceLevel", exception.what()};
+                } catch (...) {
+                    local = {0, "setEmbeddedLightSourceLevel",
+                             "Unknown exception while setting embedded light-source level."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFilterWheelState(
+    FilterWheelStateCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<FilterWheelStateResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                FilterWheelState state;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readFilterWheelState(state, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readFilterWheelState", exception.what()};
+                } catch (...) {
+                    local = {0, "readFilterWheelState",
+                             "Unknown exception while reading filter-wheel state."};
+                }
+                if (ok) result.emplace(std::move(state));
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        });
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestMoveFilterWheel(
+    std::uint32_t position,
+    FilterWheelDirection direction,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, position, direction, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.moveFilterWheel(position, direction, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "moveFilterWheel", exception.what()};
+                } catch (...) {
+                    local = {0, "moveFilterWheel",
+                             "Unknown exception while submitting filter-wheel motion."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     FeatureDescriptorsCallback callback) {
     if (!callback) return 0;

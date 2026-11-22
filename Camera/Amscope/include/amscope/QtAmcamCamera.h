@@ -63,6 +63,15 @@ public:
     using StillCaptureResult = CameraOperationResult<FramePtr>;
     using StillResolutionList = std::vector<StillResolution>;
     using StillResolutionListResult = CameraOperationResult<StillResolutionList>;
+    using EmbeddedLightSourceResult = CameraOperationResult<EmbeddedLightSourceState>;
+    using FilterWheelStateResult = CameraOperationResult<FilterWheelState>;
+    using AccessoryCommandResult = CameraOperationResult<std::monostate>;
+    using EmbeddedLightSourceCallback =
+        std::function<void(FeatureRequestId, EmbeddedLightSourceResult)>;
+    using FilterWheelStateCallback =
+        std::function<void(FeatureRequestId, FilterWheelStateResult)>;
+    using AccessoryCommandCallback =
+        std::function<void(FeatureRequestId, AccessoryCommandResult)>;
     using AutoWhiteBalanceCallback =
         std::function<void(FeatureRequestId, AutoWhiteBalanceResult)>;
     using FrameRateCallback =
@@ -114,6 +123,25 @@ public:
                       CameraError* error = nullptr);
     bool readStillResolutions(StillResolutionList& resolutions,
                               CameraError* error = nullptr);
+    bool readEmbeddedLightSource(
+        EmbeddedLightSourceState& state, CameraError* error = nullptr);
+    bool setEmbeddedLightSourceLevel(
+        std::uint32_t level, CameraError* error = nullptr);
+    bool readFilterWheelState(
+        FilterWheelState& state, CameraError* error = nullptr);
+    bool moveFilterWheel(
+        std::uint32_t position,
+        FilterWheelDirection direction = FilterWheelDirection::Automatic,
+        CameraError* error = nullptr);
+    FeatureRequestId requestEmbeddedLightSource(
+        EmbeddedLightSourceCallback callback);
+    FeatureRequestId requestSetEmbeddedLightSourceLevel(
+        std::uint32_t level, AccessoryCommandCallback callback);
+    FeatureRequestId requestFilterWheelState(FilterWheelStateCallback callback);
+    FeatureRequestId requestMoveFilterWheel(
+        std::uint32_t position,
+        FilterWheelDirection direction,
+        AccessoryCommandCallback callback);
     FeatureRequestId requestStillResolutions(StillResolutionListCallback callback);
     FeatureRequestId requestAutoWhiteBalance(AutoWhiteBalanceCallback callback);
     FeatureRequestId requestFrameRate(FrameRateCallback callback);

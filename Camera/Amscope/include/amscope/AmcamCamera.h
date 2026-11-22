@@ -38,6 +38,18 @@ public:
     // Non-feature camera command and telemetry surfaces.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& statistics, CameraError* error = nullptr);
+    bool readEmbeddedLightSource(
+        EmbeddedLightSourceState& state, CameraError* error = nullptr);
+    bool setEmbeddedLightSourceLevel(
+        std::uint32_t level, CameraError* error = nullptr);
+    bool readFilterWheelState(
+        FilterWheelState& state, CameraError* error = nullptr);
+    // Submits a move command. Motion completion is observed through
+    // readFilterWheelState(); this call does not block until the wheel arrives.
+    bool moveFilterWheel(
+        std::uint32_t position,
+        FilterWheelDirection direction = FilterWheelDirection::Automatic,
+        CameraError* error = nullptr);
     bool readStillResolutions(std::vector<StillResolution>& resolutions,
                               CameraError* error = nullptr);
     // Captures a still frame while live acquisition remains active.

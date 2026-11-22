@@ -2142,6 +2142,163 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
     return true;
 }
 
+
+bool AmcamCamera::readEmbeddedLightSource(
+    EmbeddedLightSourceState& result,
+    CameraError* error) {
+    if (error) *error = {};
+    result = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "readEmbeddedLightSource", -1,
+                    "The camera must be open to read its embedded light source.");
+    if ((impl_->modelFlags & AMCAM_FLAG_LIGHTSOURCE) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::EmbeddedLightSource))
+        return fail(error, "readEmbeddedLightSource", -1,
+                    "The selected model does not expose embedded light-source control.");
+
+    int maximum = -1;
+    HRESULT hr = Amcam_get_Option(
+        impl_->handle, AMCAM_OPTION_LIGHTSOURCE_MAX, &maximum);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(LIGHTSOURCE_MAX)", hr);
+    if (maximum < 0)
+        return fail(error, "Amcam_get_Option(LIGHTSOURCE_MAX)", -1,
+                    "The SDK returned an invalid embedded light-source range.");
+    int level = -1;
+    hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_LIGHTSOURCE, &level);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(LIGHTSOURCE)", hr);
+    if (level < 0 || level > maximum)
+        return fail(error, "Amcam_get_Option(LIGHTSOURCE)", -1,
+                    "The SDK returned a light-source level outside its reported range.");
+    result.level = static_cast<std::uint32_t>(level);
+    result.maximumLevel = static_cast<std::uint32_t>(maximum);
+    return true;
+}
+
+bool AmcamCamera::setEmbeddedLightSourceLevel(
+    std::uint32_t level,
+    CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "setEmbeddedLightSourceLevel", -1,
+                    "The camera must be open to set its embedded light source.");
+    if ((impl_->modelFlags & AMCAM_FLAG_LIGHTSOURCE) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::EmbeddedLightSource))
+        return fail(error, "setEmbeddedLightSourceLevel", -1,
+                    "The selected model does not expose embedded light-source control.");
+
+    int maximum = -1;
+    HRESULT hr = Amcam_get_Option(
+        impl_->handle, AMCAM_OPTION_LIGHTSOURCE_MAX, &maximum);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(LIGHTSOURCE_MAX)", hr);
+    if (maximum < 0 || level > static_cast<std::uint32_t>(maximum))
+        return fail(error, "setEmbeddedLightSourceLevel", -1,
+                    "Requested level is outside the SDK-reported light-source range.");
+
+    hr = Amcam_put_Option(
+        impl_->handle, AMCAM_OPTION_LIGHTSOURCE, static_cast<int>(level));
+    if (FAILED(hr)) return failHr(error, "Amcam_put_Option(LIGHTSOURCE)", hr);
+    int readback = -1;
+    hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_LIGHTSOURCE, &readback);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(LIGHTSOURCE readback)", hr);
+    if (readback != static_cast<int>(level))
+        return fail(error, "setEmbeddedLightSourceLevel", -1,
+                    "Light-source readback did not match the requested level.");
+    return true;
+}
+
+bool AmcamCamera::readFilterWheelState(
+    FilterWheelState& result,
+    CameraError* error) {
+    if (error) *error = {};
+    result = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "readFilterWheelState", -1,
+                    "The camera must be open to read filter-wheel state.");
+    if ((impl_->modelFlags & AMCAM_FLAG_FILTERWHEEL) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::FilterWheel))
+        return fail(error, "readFilterWheelState", -1,
+                    "The selected model does not expose a filter wheel.");
+
+    int slots = 0;
+    HRESULT hr = Amcam_get_Option(
+        impl_->handle, AMCAM_OPTION_FILTERWHEEL_SLOT, &slots);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(FILTERWHEEL_SLOT)", hr);
+    if (slots <= 0 || slots > 256)
+        return fail(error, "Amcam_get_Option(FILTERWHEEL_SLOT)", -1,
+                    "The SDK returned an invalid filter-wheel slot count.");
+
+    int position = -1;
+    hr = Amcam_get_Option(
+        impl_->handle, AMCAM_OPTION_FILTERWHEEL_POSITION, &position);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(FILTERWHEEL_POSITION)", hr);
+
+    result.slotCount = static_cast<std::uint32_t>(slots);
+    if (position == -1) {
+        result.moving = true;
+        result.position.reset();
+        return true;
+    }
+    if (position < 0 || position >= slots)
+        return fail(error, "Amcam_get_Option(FILTERWHEEL_POSITION)", -1,
+                    "The SDK returned a filter-wheel position outside the slot range.");
+    result.position = static_cast<std::uint32_t>(position);
+    result.moving = false;
+    return true;
+}
+
+bool AmcamCamera::moveFilterWheel(
+    std::uint32_t position,
+    FilterWheelDirection direction,
+    CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "moveFilterWheel", -1,
+                    "The camera must be open to move its filter wheel.");
+    if ((impl_->modelFlags & AMCAM_FLAG_FILTERWHEEL) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::FilterWheel))
+        return fail(error, "moveFilterWheel", -1,
+                    "The selected model does not expose a filter wheel.");
+
+    int slots = 0;
+    HRESULT hr = Amcam_get_Option(
+        impl_->handle, AMCAM_OPTION_FILTERWHEEL_SLOT, &slots);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(FILTERWHEEL_SLOT)", hr);
+    if (slots <= 0 || slots > 256 || position >= static_cast<std::uint32_t>(slots))
+        return fail(error, "moveFilterWheel", -1,
+                    "Requested slot is outside the SDK-reported filter-wheel range.");
+    if (direction != FilterWheelDirection::Clockwise &&
+        direction != FilterWheelDirection::Automatic)
+        return fail(error, "moveFilterWheel", -1,
+                    "The requested filter-wheel direction is invalid.");
+
+    const int command = static_cast<int>(position) |
+        (direction == FilterWheelDirection::Automatic ? 0x100 : 0);
+    hr = Amcam_put_Option(
+        impl_->handle, AMCAM_OPTION_FILTERWHEEL_POSITION, command);
+    if (FAILED(hr)) return failHr(error, "Amcam_put_Option(FILTERWHEEL_POSITION)", hr);
+
+    // A successful put means command accepted, not motion complete. Poll
+    // readFilterWheelState() until the SDK returns a slot instead of -1.
+    return true;
+}
+
+bool AmcamCamera::readStillResolutions(
 bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {

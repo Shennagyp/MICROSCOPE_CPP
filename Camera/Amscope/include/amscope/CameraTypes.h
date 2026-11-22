@@ -114,4 +114,21 @@ struct ExposureSettings {
 };
 struct WhiteBalanceSettings { int temperature = 0; int tint = 0; };
 struct FrameRateStatistics { double framesPerSecond = 0.0; std::uint32_t totalFrames = 0; };
+
+struct EmbeddedLightSourceState {
+    std::uint32_t level = 0;
+    std::uint32_t maximumLevel = 0;
+};
+
+enum class FilterWheelDirection : std::uint8_t {
+    Clockwise,
+    Automatic
+};
+
+struct FilterWheelState {
+    std::uint32_t slotCount = 0;
+    // Empty only while the SDK reports motion in progress.
+    std::optional<std::uint32_t> position;
+    bool moving = false;
+};
 } // namespace amscope

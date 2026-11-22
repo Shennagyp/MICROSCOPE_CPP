@@ -106,8 +106,12 @@ integration and does not modify vendor sample code.
   frame buffers, hardware trigger support, focus hardware, ST4, filter wheel,
   embedded and standalone light sources, hardware level range, and transport
   flags. These are metadata only: trigger execution, GPIO, focus movement, ST4
-  guiding, light-source control, and filter-wheel commands remain dedicated
-  command surfaces and are not implied by their read-only model flags.
+  guiding remain separate command surfaces. Embedded light-source and filter-
+  wheel operations are implemented separately: light-source levels are
+  range-checked and verified by readback; filter-wheel motion is submitted
+  without blocking acquisition, and state reads distinguish movement from a
+  confirmed slot. Neither accessory is represented as an ordinary camera
+  feature setting.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
 - Still capture is independent of live-frame delivery. The complete SDK still-

@@ -67,9 +67,11 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   padding. Frame metadata keeps both values distinct.
 - RAW output enablement remains an Amcam-specific feature. RAW output
   precision is exposed through the backend-neutral
-  `camera::RawOutputBitDepthFeature`. Its enumeration contains exact,
-  discrete significant-bit counts, not relative modes or storage widths.
-  The Amcam SDK exposes only two configurable modes through
+  `camera::RawOutputBitDepthFeature`. It is an integer feature with an
+  explicit discrete set of exact significant-bit counts, not relative modes
+  or storage widths. The generic feature API and UI preserve these values as
+  integers; backends publish only values they can configure. The Amcam SDK
+  exposes only two configurable modes through
   `AMCAM_OPTION_BITDEPTH`: 8-bit and the camera's maximum significant depth.
   Accordingly, the backend advertises `8-bit` and, when the exact maximum is
   known from the SDK/model descriptor, that exact value (for example,

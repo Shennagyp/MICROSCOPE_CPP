@@ -3,10 +3,10 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last verified branch head before this handoff refresh:** `c6833e8023b23c0e351740ee5cf4bb367752ca9c`  
-**Last implementation-bearing commit:** `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff`  
+**Last verified branch head before this handoff refresh:** `58017979ad7d16c119e5a5a98ccac4a2fc59e932`  
+**Last implementation-bearing commit:** `15be30850ea573dd06ffe3128befcdb27ce2e974`  
 **Current phase:** Phase 0 — baseline freeze and verification  
-**Phase status:** OPEN — the user reports that a clean local rebuild and live-resolution change now work. A dedicated physical-camera rate test has been added and the user can run it with one command; its macOS CI build is pending, and no throughput measurement or complete baseline regression has been recorded.
+**Phase status:** OPEN — the MU503 physical run measured 91.253 event/pull/callback FPS at 640×480 with zero drops and successful Stop/resolution restore/Close. The first paint result was invalid because the SDK sequence stayed at zero; production and test paint counting are corrected. Rerun the corrected test and diagnose exposure/USB link before changing acquisition behavior.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -29,7 +29,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The branch head before this handoff refresh is `c6833e8023b23c0e351740ee5cf4bb367752ca9c`. The last implementation-bearing source change is `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff`. The intervening work adds a standalone physical-camera performance test executable, a launcher mode, CMake wiring, architecture checks in CI, and documentation. The test uses the existing `AmcamCamera` public API and the same native callback -> bounded event queue -> single `Amcam_PullImageV4` acquisition pipeline; it does not modify driver acquisition or session behavior. The later inventory and completion-plan commits document its use.
+The branch head before this handoff refresh is `58017979ad7d16c119e5a5a98ccac4a2fc59e932`. The latest implementation-bearing changes are the physical-camera rate test and its instrumentation correction. The standalone test uses the existing `AmcamCamera` public API and the same native callback -> bounded event queue -> single `Amcam_PullImageV4` acquisition pipeline; it does not modify driver acquisition or session behavior. Production `FrameView` paint telemetry and test preview paint accounting now count a newly submitted frame when it is actually painted, without requiring `AmcamFrameInfoV3::seq` to advance. The test also reports configured exposure, SDK timestamp samples and applied model speed level. Subsequent commits record the first physical result and analysis.
 
 ### Relationship with `main`
 
@@ -48,7 +48,7 @@ Relevant links:
 
 ## 3. CI and test evidence
 
-The last fully successful code-verification workflow is [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), for source head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. Both architectures passed and all eight then-registered CTest targets passed. The newly added hardware-test executable has a separate build/architecture verification in workflow [#45062547191](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062547191), currently in progress at the time of this handoff refresh. That workflow builds the new executable, verifies its architecture/linkage on Intel and Apple Silicon, and runs the existing CTest suite. The assistant did not run a local build or CTest. The user previously reported that the clean rebuild succeeded, the app launched, and live resolution switching worked.
+The first version of the hardware-test executable and launcher passed both-architecture build, CTest, artifact/linkage and launcher checks in [workflow #45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602), on branch head `1d77002`. The latest instrumentation corrections are being checked by [workflow #45063596770](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063596770) on the current head; it is in progress at this handoff update. The assistant did not run a local C++ build or CTest. The user has locally compiled and run the earlier version of the test successfully.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -65,7 +65,7 @@ All eight registered CTest tests passed on both architectures in the latest comp
 
 The launcher reported `0 camera(s) found` in the hosted CI environment. This proves the no-device enumeration path only. It does not prove physical camera enumeration, acquisition, control readback, RAW/still capture, Stop/Close timing, accessory operation, or recovery.
 
-The user's current physical-camera observation goes beyond the earlier open/preview smoke test: after a clean rebuild, the live `Resolution` feature now changes camera resolution successfully. The exact selected resolution, reported frame dimensions, still-capture dimensions, camera model identity, and FPS values were not included in the report. This is a successful targeted hardware smoke check, not a complete hardware qualification record.
+The user's physical-camera run now gives a measured acquisition result. Device string: `MU503(USB2.0)`; requested and received dimensions: 640×480; interval: 15.090 s; event/pull/callback rates: 91.253 FPS each; dropped frames: zero; Stop, restoration to 1280×960, and Close succeeded. SDK sequence was zero for both first and last frame; per-frame SDK exposure metadata was also zero. The initial `paint_fps=0` was a test/telemetry defect caused by treating SDK sequence as a unique-frame key, not valid evidence of a render failure. Corrected source now uses host-side frame-delivery revisions and records configured exposure separately. The first measured acquisition rate remains valid; repeat is required for paint/exposure diagnostics.
 
 ## 4. Actual implementation state at the last source revision
 
@@ -74,13 +74,13 @@ The original native acquisition and session-lifecycle implementation remains bas
 - Direct zero-copy preview: `FrameView` wraps the immutable frame-pool bytes in a non-owning `QImage` and paints with `QPainter`. It no longer performs a per-frame `QImage::copy()`, `QPixmap` conversion, or pixmap allocation. The view retains the `FramePtr` lease until replacement.
 - A C++17 atomic-shared-pointer latest-frame mailbox replaces the mailbox mutex and does not accumulate stale frames. Frame notifications bypass the feature-request queue mutex.
 - Feature descriptor discovery is cached per camera state. Individual feature reads reuse the inventory instead of repeating every SDK feature probe under the SDK mutex. The preview does not rebuild the inventory when entering Streaming; setting editors are disabled until Stop.
-- The driver counts `AMCAM_EVENT_IMAGE` callbacks and successful `Amcam_PullImageV4` calls with independent atomics. The UI separately measures actual painted frame sequences. The one-second monitor does not call the SDK or acquire the SDK-call mutex. It displays event FPS, pull FPS, paint FPS, exposure time, dimensions/sequence, and pool drops.
+- The driver counts `AMCAM_EVENT_IMAGE` callbacks and successful `Amcam_PullImageV4` calls with independent atomics. The UI separately measures newly submitted frames when they are actually painted; it does not use SDK sequence as a frame-identity token. The one-second monitor does not call the SDK or acquire the SDK-call mutex. It displays event FPS, pull FPS, paint FPS, exposure time, dimensions/sequence, and pool drops.
 - Every Start clears the generic SDK FPS limit with `AMCAM_OPTION_FRAMERATE=0`. After `Amcam_StartPullModeWithCallback` succeeds, it sets the model-specific maximum: maximum precise FPS plus 100% bandwidth for precise-rate models, or maximum model `maxspeed` through `Amcam_put_Speed` otherwise. Low-noise mode is disabled when the model advertises it. This follows ToupTek's documented post-Start procedure; no arbitrary fixed FPS target is set.
 - Status-label formatting was removed from the per-frame path and throttled to the one-second diagnostics update.
 
 ### Hardware performance test executable
 
-`Camera/Amscope/app/hardware_rate_test.cpp` builds as `amscope_hardware_rate_test`. It is a physical-camera-only utility and is intentionally not registered with CTest. It selects and verifies a requested live-resolution feature, then runs the existing native acquisition path while a small visible Qt widget renders the latest RGB24 frame. It reports image-event FPS, successful-pull FPS, frame-callback FPS, unique painted-frame FPS, actual frame dimensions, sequence range, exposure statistics, dropped frames, and Stop/resolution-restore/Close outcomes. It refuses to start when the camera reports RAW output enabled because the test renderer measures the RGB24 display path. The original preview resolution is restored after Stop where the camera state permits it.
+`Camera/Amscope/app/hardware_rate_test.cpp` builds as `amscope_hardware_rate_test`. It is a physical-camera-only utility and is intentionally not registered with CTest. It selects and verifies a requested live-resolution feature, then runs the existing native acquisition path while a small visible Qt widget renders the latest RGB24 frame. It reports image-event FPS, successful-pull FPS, frame-callback FPS, host-revision-based painted-frame FPS, actual frame dimensions, SDK sequence/timestamp values, configured exposure readback, per-frame exposure metadata, applied model speed level, dropped frames, and Stop/resolution-restore/Close outcomes. It refuses to start when the camera reports RAW output enabled because the test renderer measures the RGB24 display path. The original preview resolution is restored after Stop where the camera state permits it.
 
 The launcher mode is:
 
@@ -187,7 +187,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 | Phase | Current status |
 |---|---|
-| 0 — Baseline freeze and verification | OPEN. User reports a successful clean build and live-resolution switching. A dedicated rate test is committed; its Intel/Apple Silicon CI build is pending. The physical rate measurement and full baseline record remain outstanding. |
+| 0 — Baseline freeze and verification | OPEN. The user measured 91.253 event/pull/callback FPS at 640×480 on `MU503(USB2.0)` with zero drops and successful Stop/restore/Close. The first paint metric was invalid; corrected instrumentation is awaiting rerun. Full 15-minute baseline regression remains outstanding. |
 | 1 — Native driver stabilization | OPEN. Native implementation and eight tests exist; more deterministic failure-path tests and physical qualification are required. |
 | 2 — Backend-neutral models | OPEN. Feature types are common; other important camera models still reside in AmScope. |
 | 3 — Driver/control/Qt streaming separation | OPEN. Current Qt facade combines responsibilities. |
@@ -217,8 +217,9 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 - The latest branch-head CI run is green on Intel x86_64 and Apple Silicon arm64, with all eight registered CTest tests passing.
 - The user has built and launched the branch locally after removing the stale generated build directory, and has confirmed that the live `Resolution` feature changes resolution. Record the exact resulting live frame dimensions before treating 640×480 as the measured mode.
-- Run the new physical rate-test command documented above. Review its JSON result, especially `event_fps`, `pull_fps`, `callback_fps`, `paint_fps`, actual dimensions, exposure and dropped frames.
-- Record event FPS, pull FPS, paint FPS, exposure microseconds, frame dimensions, sequence progression, and dropped count over a fixed interval.
+- Rerun the physical rate test on the corrected branch head. Review `event_fps`, `pull_fps`, `callback_fps`, `paint_fps`, `configured_exposure_us`, `exposure_fps_limit`, `applied_speed_level`, timestamps, actual dimensions and dropped frames.
+- Check the negotiated macOS USB connection speed for the MU503 using `system_profiler SPUSBDataType` and record whether the connected device is actually running at USB 2.0 (up to 480 Mb/s) or USB 3.x (typically 5 Gb/s or higher). The SDK's `MU503(USB2.0)` device string is a transport lead, not by itself proof of the physical negotiated speed.
+- Do not change the acquisition implementation until the exposure and negotiated transport speed are known.
 - Interpret the three rates: low event FPS is upstream of the pull worker; event-to-pull loss points to callback/queue/pull throughput; pull-to-paint loss points to UI rendering.
 - Record actual camera manufacturer/model, SDK model code, firmware, SDK version, OS, and architecture.
 - Complete Section 3.2, including safe setting readback/restoration, Stop/Start, Close/reopen, still capture where supported, and the required 15-minute continuous acquisition interval.
@@ -229,11 +230,12 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Required before Phase 1 refactoring
 
-1. Pull the latest `amscope-native-driver` branch and run the physical performance test:
+1. Pull the latest `amscope-native-driver` branch, build and run the corrected test:
    `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh --hardware-rate-test --resolution 640x480 --warmup 3 --duration 15 --target-fps 100`.
-2. Keep the test preview window visible. The tool will print JSON when finished; record or paste that output. `BELOW_TARGET` is a measured result, not a setup failure.
-3. Compare event, pull, callback and paint rates. Low event FPS points upstream of the pull worker; event-to-pull loss points to callback/queue/pull; pull-to-paint loss points to presentation.
-4. Then complete the Section 3.2 baseline regression, including the required 15-minute continuous acquisition interval, Stop/Start, Close/reopen, safe reversible setting readback/restoration, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`; keep Phase 0 OPEN until it passes.
+2. Keep the test preview window visible. Send the JSON output, including `configured_exposure_us`, `exposure_fps_limit`, `applied_speed_level`, timestamp range and corrected `paint_fps`.
+3. In a second terminal, inspect the USB device tree with `system_profiler SPUSBDataType` and identify the MU503's reported connection speed. Do not infer this solely from the SDK display name.
+4. Interpret the measurements before changing code: low event FPS points upstream of the pull worker; event-to-pull loss points to callback/queue/pull; pull-to-paint loss points to presentation. A configured exposure at or above 10,000 µs imposes a theoretical limit at or below 100 FPS.
+5. Then complete the Section 3.2 baseline regression, including the required 15-minute continuous acquisition interval, Stop/Start, Close/reopen, safe reversible setting readback/restoration, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`; keep Phase 0 OPEN until it passes.
 
 ### Work that can proceed after/beside the physical baseline without altering behavior
 

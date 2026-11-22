@@ -331,11 +331,16 @@ after Stop. It reports JSON to stdout with:
 
 The test expects RGB24 live preview; it refuses to start when RAW sensor output
 is enabled because this test specifically measures the RGB preview/render path.
-The default device is index 0; use `--device-index N` when more than one camera
-is connected. The default target is 100 pulled frames per second. Exit code 0
-means the operational checks passed and the pull-rate target was met; exit code
-10 means the test ran and reported measurements but the target was not met;
-other non-zero codes indicate setup or operational failure.
+Paint counting uses a host-side revision for every delivered frame, not the
+device-provided sequence field (some models may leave that field constant).
+The report separates the configured `ExposureTime` feature readback from
+per-frame SDK exposure metadata, and includes the SDK timestamp range when
+available. The default device is index 0; use `--device-index N` when more
+than one camera is connected. The default target is 100 pulled frames per
+second. Exit code 0 means the operational checks passed and the pull-rate
+target was met; exit code 10 means the test ran and reported measurements but
+the target was not met; other non-zero codes indicate setup or operational
+failure.
 
 This is a physical-camera test executable, deliberately not registered with
 CTest and not run by hosted CI (which has no camera attached).

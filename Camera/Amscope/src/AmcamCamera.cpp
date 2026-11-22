@@ -2942,21 +2942,19 @@ bool AmcamCamera::configureTrigger(
                     "External trigger modes require one explicit trigger source; video and software/simulated modes do not accept one.");
     }
 
-    if (externalMode) {
-        if ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_EXTERNAL) == 0 ||
-            !impl_->profileRegistry.allows(
-                impl_->modelCode, AmcamCameraFeature::TriggerExternal)) {
-            return fail(error, "configureTrigger", -1,
-                        "The selected model/profile does not allow external triggering.");
-        }
+    if (externalMode &&
+        (((impl_->modelFlags & AMCAM_FLAG_TRIGGER_EXTERNAL) == 0) ||
+         !impl_->profileRegistry.allows(
+             impl_->modelCode, AmcamCameraFeature::TriggerExternal))) {
+        return fail(error, "configureTrigger", -1,
+                    "The selected model/profile does not allow external triggering.");
     }
-    if (configuration.mode == AmcamTriggerMode::ExternalAndSoftware) {
-        if ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) == 0 ||
-            !impl_->profileRegistry.allows(
-                impl_->modelCode, AmcamCameraFeature::TriggerSoftware)) {
-            return fail(error, "configureTrigger", -1,
-                        "The selected model/profile does not allow mixed external and software triggering.");
-        }
+    if (configuration.mode == AmcamTriggerMode::ExternalAndSoftware &&
+        (((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) == 0) ||
+         !impl_->profileRegistry.allows(
+             impl_->modelCode, AmcamCameraFeature::TriggerSoftware))) {
+        return fail(error, "configureTrigger", -1,
+                    "The selected model/profile does not allow mixed external and software triggering.");
     }
     if (configuration.externalSource) {
         const auto source = static_cast<std::uint32_t>(*configuration.externalSource);
@@ -2975,26 +2973,33 @@ bool AmcamCamera::configureTrigger(
                     "The camera is currently in a trigger mode not exposed by this API.");
     }
 
-    int previousSource = -1;
     const bool previousExternal =
         previousMode == static_cast<int>(AmcamTriggerMode::External) ||
         previousMode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware);
-    if (previousExternal) {
+    const bool sourceWillBeChanged = configuration.externalSource.has_value();
+    const bool sourceStateMustBeSaved = previousExternal || sourceWillBeChanged;
+    int previousSource = -1;
+    if (sourceStateMustBeSaved) {
         hr = Amcam_IoControl(
             impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE, 0,
             &previousSource);
         if (FAILED(hr))
             return failHr(error, "Amcam_IoControl(GET_TRIGGERSOURCE)", hr);
+        if (previousSource < 0 || previousSource > 5) {
+            return fail(error, "configureTrigger", -1,
+                        "The SDK returned an unsupported previous trigger source.");
+        }
     }
 
     if (configuration.mode == AmcamTriggerMode::Video) {
-        hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_TRIGGER,
-                              static_cast<int>(AmcamTriggerMode::Video));
+        hr = Amcam_put_Option(
+            impl_->handle, AMCAM_OPTION_TRIGGER,
+            static_cast<int>(AmcamTriggerMode::Video));
         if (FAILED(hr)) return failHr(error, "Amcam_put_Option(TRIGGER)", hr);
 
         impl_->activeTriggerMode.store(0, std::memory_order_release);
-        impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
-        return impl_->restoreHeartbeatMonitoringLocked(error);
+        const bool restored = impl_->restoreHeartbeatMonitoringLocked(error);
+        return restored;
     }
 
     if (configuration.heartbeatIntervalMilliseconds < AMCAM_HEARTBEAT_MIN ||
@@ -3004,26 +3009,61 @@ bool AmcamCamera::configureTrigger(
     }
 
     const bool heartbeatWasConfigured = impl_->heartbeatSnapshot.valid;
+    HeartbeatOptionSnapshot previousHeartbeatOptions;
+    if (!impl_->readHeartbeatOptionsLocked(previousHeartbeatOptions, error))
+        return false;
     if (!impl_->enableHeartbeatMonitoringLocked(
             configuration.heartbeatIntervalMilliseconds, error)) {
         return false;
     }
 
+    const auto rollbackHeartbeat = [&](CameraError& original) {
+        CameraError rollbackError;
+        if (!impl_->restoreHeartbeatOptionsLocked(
+                previousHeartbeatOptions, &rollbackError)) {
+            original.message += " Heartbeat rollback failed: " +
+                                rollbackError.message;
+            return false;
+        }
+        impl_->heartbeatIntervalMilliseconds.store(
+            static_cast<std::uint32_t>(std::max(
+                0, previousHeartbeatOptions.heartbeatInterval)),
+            std::memory_order_release);
+        if (!heartbeatWasConfigured)
+            impl_->heartbeatSnapshot = {};
+        return true;
+    };
+
+    const auto rollbackTriggerMode = [&](CameraError& original,
+                                         bool restoreSource) {
+        const HRESULT modeRestore = Amcam_put_Option(
+            impl_->handle, AMCAM_OPTION_TRIGGER, previousMode);
+        if (FAILED(modeRestore))
+            original.message += " Trigger-mode rollback failed: " +
+                                hrMessage("Amcam_put_Option(TRIGGER rollback)",
+                                          modeRestore);
+        if (restoreSource && sourceStateMustBeSaved) {
+            const HRESULT sourceRestore = Amcam_IoControl(
+                impl_->handle, 0, AMCAM_IOCONTROLTYPE_SET_TRIGGERSOURCE,
+                previousSource, nullptr);
+            if (FAILED(sourceRestore))
+                original.message += " Trigger-source rollback failed: " +
+                                    hrMessage(
+                                        "Amcam_IoControl(SET_TRIGGERSOURCE rollback)",
+                                        sourceRestore);
+        }
+        (void)rollbackHeartbeat(original);
+    };
+
     hr = Amcam_put_Option(
         impl_->handle, AMCAM_OPTION_TRIGGER, static_cast<int>(modeValue));
     if (FAILED(hr)) {
-        CameraError original = error ? *error : CameraError{};
-        CameraError restoreError;
-        if (!heartbeatWasConfigured &&
-            !impl_->restoreHeartbeatMonitoringLocked(&restoreError)) {
-            original.message += " Heartbeat rollback failed: " + restoreError.message;
-        }
-        if (error) {
-            *error = original;
-            failHr(error, "Amcam_put_Option(TRIGGER)", hr);
-            if (!restoreError.message.empty())
-                error->message += " " + restoreError.message;
-        }
+        CameraError original = {
+            static_cast<std::int32_t>(hr),
+            "Amcam_put_Option(TRIGGER)",
+            hrMessage("Amcam_put_Option(TRIGGER)", hr)};
+        rollbackTriggerMode(original, false);
+        if (error) *error = std::move(original);
         return false;
     }
 
@@ -3032,22 +3072,11 @@ bool AmcamCamera::configureTrigger(
             impl_->handle, 0, AMCAM_IOCONTROLTYPE_SET_TRIGGERSOURCE,
             static_cast<int>(*configuration.externalSource), nullptr);
         if (FAILED(hr)) {
-            (void)Amcam_put_Option(
-                impl_->handle, AMCAM_OPTION_TRIGGER, previousMode);
-            if (previousExternal && previousSource >= 0) {
-                (void)Amcam_IoControl(
-                    impl_->handle, 0, AMCAM_IOCONTROLTYPE_SET_TRIGGERSOURCE,
-                    previousSource, nullptr);
-            }
             CameraError original = {
                 static_cast<std::int32_t>(hr),
                 "Amcam_IoControl(SET_TRIGGERSOURCE)",
                 hrMessage("Amcam_IoControl(SET_TRIGGERSOURCE)", hr)};
-            if (!heartbeatWasConfigured) {
-                CameraError restoreError;
-                if (!impl_->restoreHeartbeatMonitoringLocked(&restoreError))
-                    original.message += " Heartbeat rollback failed: " + restoreError.message;
-            }
+            rollbackTriggerMode(original, true);
             if (error) *error = std::move(original);
             return false;
         }
@@ -3056,15 +3085,8 @@ bool AmcamCamera::configureTrigger(
         hr = Amcam_IoControl(
             impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE, 0,
             &sourceReadback);
-        if (FAILED(hr) || sourceReadback !=
-                              static_cast<int>(*configuration.externalSource)) {
-            (void)Amcam_put_Option(
-                impl_->handle, AMCAM_OPTION_TRIGGER, previousMode);
-            if (previousExternal && previousSource >= 0) {
-                (void)Amcam_IoControl(
-                    impl_->handle, 0, AMCAM_IOCONTROLTYPE_SET_TRIGGERSOURCE,
-                    previousSource, nullptr);
-            }
+        if (FAILED(hr) ||
+            sourceReadback != static_cast<int>(*configuration.externalSource)) {
             CameraError original;
             if (FAILED(hr)) {
                 original = {
@@ -3076,11 +3098,7 @@ bool AmcamCamera::configureTrigger(
                     -1, "configureTrigger",
                     "The selected trigger source readback did not match the requested source."};
             }
-            if (!heartbeatWasConfigured) {
-                CameraError restoreError;
-                if (!impl_->restoreHeartbeatMonitoringLocked(&restoreError))
-                    original.message += " Heartbeat rollback failed: " + restoreError.message;
-            }
+            rollbackTriggerMode(original, true);
             if (error) *error = std::move(original);
             return false;
         }

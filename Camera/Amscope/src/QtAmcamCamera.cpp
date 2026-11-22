@@ -514,7 +514,7 @@ bool QtAmcamCamera::sendSoftwareTrigger(
     return ok;
 }
 
-bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
+bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
     if (!requireSynchronousExecutionMode("autoWhiteBalance", error))
         return false;
     CameraError local;

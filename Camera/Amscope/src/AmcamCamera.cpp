@@ -2570,6 +2570,25 @@ AmcamCamera::readFeature(std::string_view name) {
     using camera::FeatureEnumeration;
 
     std::lock_guard<std::mutex> api(impl_->apiMutex);
+
+    // Model facts are immutable for the open session. Resolve them directly
+    // from the cached model descriptor rather than rebuilding the full SDK
+    // feature inventory for each of these read-only metadata fields.
+    for (const auto& capability : kModelFlagCapabilities) {
+        if (name == capability.name) {
+            const bool supported = impl_->hasModelDescriptor &&
+                (impl_->modelFlags & capability.flag) != 0;
+            if (!supported ||
+                !impl_->profileRegistry.allows(
+                    impl_->modelCode, capability.profileFeature)) {
+                return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
+                                    std::string(name),
+                                    "This model does not expose the requested capability.");
+            }
+            return CameraFeatureValue{true};
+        }
+    }
+
     auto described = buildAmcamFeatureDescriptors(
         impl_->handle,
         impl_->state.load(std::memory_order_acquire),
@@ -2677,14 +2696,6 @@ AmcamCamera::readFeature(std::string_view name) {
                                 std::string(name), "The SDK returned an out-of-range auto-exposure threshold.");
         return CameraFeatureValue{static_cast<std::int64_t>(value)};
     }
-    for (const auto& capability : kModelFlagCapabilities) {
-        if (name == capability.name) {
-            return CameraFeatureValue{
-                impl_->hasModelDescriptor &&
-                (impl_->modelFlags & capability.flag) != 0};
-        }
-    }
-
     if (name == "ExposureAuto") {
         int mode = -1;
         const HRESULT hr = Amcam_get_AutoExpoEnable(impl_->handle, &mode);

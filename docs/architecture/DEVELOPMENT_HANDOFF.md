@@ -4,11 +4,12 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
 **Physical run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
-**Latest branch head at this handoff revision:** `f728190cac0c183393258eb5bd7b654526cdf227`  
 **Phase 1 local-test revision:** `d2e5cb37b6c71ba494ff6805361fd94d83a38521`  
+**Phase 2.1 local/CI validation revision:** `03f35bf07d8236e5aab33aea0cde987155cf0425`  
+**Phase 2.2 implementation source snapshot:** `3da2a385508f1b639f98bbd34f5a6dabd9a3406a`  
 **Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
-**Current phase:** Phase 2.1 — common discovery and capability models  
-**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. The user built the post-acceptance hardening revision `d2e5cb3` locally and reported a successful full build plus 9/9 CTest passes (2.24 s), including callback drain, cache-flush retry, and retained-frame lease tests. Phase 2.1 adds common discovery/identity/resolution/capability types and a tenth CTest target; the newest branch revision is awaiting CI and local validation. The two MU503 physical runs and residual 15-minute/fault-injection follow-ups remain recorded below.
+**Current phase:** Phase 2.2 — common frame and image-layout model  
+**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 was validated locally by the user with a clean build and 10/10 CTest tests, and by GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2 has been implemented in the source snapshot above: common frame/payload/layout and optional timing metadata, an opaque format identifier, and an Amcam-specific typed extension. It adds an eleventh CTest target. The Phase 2.2 local clean build, 11/11 CTest result, cross-architecture CI, and real-camera/RAW-capable-camera regression are still pending. The two MU503 physical runs and residual 15-minute/fault-injection follow-ups remain recorded below.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -24,7 +25,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
    - [AmScope Driver README](../../Camera/Amscope/README.md)
    - The authoritative Camera Module and UI Libraries architecture paper agreed in the project discussion.
 3. Phases 0 and 1 are accepted by the project owner. Do not reopen them solely because the requested 100 FPS target was not reached; that target is a performance objective, not a lifecycle correctness threshold.
-4. Phase 2 is in progress. Slice 2.1 establishes common discovery identity, preview resolution, and tri-state model capabilities. The next slice is the common frame/image-layout contract.
+4. Phase 2 is in progress. Slice 2.1 discovery models are locally and cross-architecture CI validated. Slice 2.2 common frames are implemented and await validation; after that, slice 2.3 classifies remaining common errors and value types.
 5. Keep the remaining 15-minute hardware run, repeated lifecycle cycles, still-capture test where supported, and full SDK fault injection as explicit follow-up coverage. Formal `Hardware verified` status still requires an exact-commit record under `docs/testing/hardware/`.
 
 ## 2. Current Git state
@@ -50,7 +51,9 @@ Relevant links:
 
 ## 3. CI and test evidence
 
-The user locally built revision `d2e5cb3` and reported that the driver, Qt adapter, preview, hardware-rate executable, and tests all compiled; all 9/9 CTest targets passed in 2.24 s. This is user-reported local evidence, not an assistant-run build. Phase 2.1 then added `CameraModels.h`, AmScope discovery inheritance/capability mapping, and `camera_common_models_tests`. The latest phase-2 branch-head CI must validate the tenth target on Intel and Apple Silicon. No assistant-side local build or physical-camera run was performed.
+The user locally built the Phase 2.1 revision `03f35bf` with a clean build; the driver, Qt adapter, preview, hardware-rate executable, and tests all compiled, and all 10/10 CTest targets passed. The Qt request test also passed separately with verbose output. This is user-reported local evidence. GitHub Actions run [#45067873506](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45067873506) passed on both Intel x86_64 and Apple Silicon arm64 for the same revision. This validates Phase 2.1's discovery models, not Phase 2.2.
+
+Phase 2.2 adds `CameraFrames.h`, the Amcam frame adapter, optional-metadata mapping using the SDK's validity flags, hardware-rate report adaptation, and `camera_common_frame_tests`. The current suite has 11 CTest targets. The Phase 2.2 source snapshot `3da2a385` has not yet been locally built by the user; its cross-architecture CI is running against the follow-up documentation/source head. No physical-camera regression has been performed against this frame-model extraction.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -109,17 +112,19 @@ Primary files:
 
 The native driver contains enumeration/open/close/start/stop, the callback-to-pull acquisition loop, a bounded event FIFO, watchdog logic for video and triggered acquisition, frame-pool/lease handling, RAW frame metadata, still capture, and broad feature/command APIs. It now also has lock-free counter reads for image-event and successfully-pulled-frame totals. The maximum-rate configuration is performed after callback acquisition starts and before the pull worker is launched, following the vendor's documented order.
 
-### Common feature contract
+### Common camera models and feature contract
 
 Primary files:
 
+- `Camera/Common/include/camera/CameraModels.h` — identity, device discovery, preview resolution, and tri-state capabilities.
+- `Camera/Common/include/camera/CameraFrames.h` — common frame, pixel-buffer layout, opaque pixel-format identity, sequence, timestamp, exposure, payload, and immutable frame pointer.
 - `Camera/Common/include/camera/CameraFeatureAccess.h`
 - `Camera/Common/include/camera/CameraFeatureValidation.h`
 - `Camera/Common/include/camera/FrameRateEstimator.h`
 
-The common feature layer supports typed Boolean, integer, integer vector, floating-point, string, and enumeration values; descriptors; typed results/errors; validation; and frame-rate estimation.
+The common feature layer supports typed Boolean, integer, integer vector, floating-point, string, and enumeration values; descriptors; typed results/errors; validation; and frame-rate estimation. `CameraInfo` derives from the common `CameraDeviceInfo`, while `Resolution`, `Frame`, and `FramePtr` are aliases to common types.
 
-It does **not** yet contain all backend-neutral camera models. For example, `CameraInfo`, `Frame`, `Resolution`, `CameraState`, and `CameraError` are currently declared in the AmScope namespace in `CameraTypes.h`.
+The `AmcamFrame` extension retains only Amcam-specific SDK flags, exposure gain percent, and black level. The common `Frame` carries optional sequence/timestamp/exposure values; Amcam sets them only when the matching `AMCAM_FRAMEINFO_FLAG_*` bit is present. Timestamps and exposure durations use a 1,000,000 ticks-per-second timebase; the timestamp clock origin is unknown. The raw FourCC is represented by a `PixelFormatIdentifier` with scheme `amcam.fourcc`, never assumed to be PFNC. `CameraState` and `CameraError` remain AmScope-specific at this slice.
 
 ### Qt facade and preview
 

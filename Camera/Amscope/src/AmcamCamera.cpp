@@ -1217,7 +1217,7 @@ struct AmcamCamera::Impl {
         return true;
     }
 
-    void updateExpectedExposure(unsigned exposureMicroseconds) noexcept {    void updateExpectedExposure(unsigned exposureMicroseconds) noexcept {
+    void updateExpectedExposure(unsigned exposureMicroseconds) noexcept {
         if (exposureMicroseconds == 0) return;
         const auto previous = expectedExposureMicroseconds.exchange(
             exposureMicroseconds, std::memory_order_acq_rel);
@@ -1954,6 +1954,26 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                     -1, "start", "The configured mixed trigger mode is not allowed by this model/profile."};
                 triggerHealthFailed = true;
             } else {
+                if (configuredTriggerMode == static_cast<int>(AmcamTriggerMode::External) ||
+                    configuredTriggerMode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware)) {
+                    int triggerSource = -1;
+                    const HRESULT sourceHr = Amcam_IoControl(
+                        impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE,
+                        0, &triggerSource);
+                    if (FAILED(sourceHr)) {
+                        triggerHealthError = {
+                            static_cast<std::int32_t>(sourceHr),
+                            "Amcam_IoControl(GET_TRIGGERSOURCE)",
+                            hrMessage("Amcam_IoControl(GET_TRIGGERSOURCE)", sourceHr)};
+                        triggerHealthFailed = true;
+                    } else if (triggerSource < 0 || triggerSource > 5) {
+                        triggerHealthError = {
+                            -1, "start",
+                            "The SDK reports an unsupported external trigger source."};
+                        triggerHealthFailed = true;
+                    }
+                }
+                if (!triggerHealthFailed) {
                 std::uint32_t interval =
                     impl_->heartbeatIntervalMilliseconds.load(std::memory_order_acquire);
                 if (interval < AMCAM_HEARTBEAT_MIN ||
@@ -1970,6 +1990,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                 if (!impl_->enableHeartbeatMonitoringLocked(
                         interval, &triggerHealthError)) {
                     triggerHealthFailed = true;
+                }
                 }
             }
         } else {
@@ -3098,7 +3119,6 @@ bool AmcamCamera::sendSoftwareTrigger(
     return FAILED(hr) ? failHr(error, "Amcam_Trigger", hr) : true;
 }
 
-bool AmcamCamera::readStillResolutions(
 bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {

@@ -100,6 +100,7 @@ struct AmcamCamera::Impl {
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> sdkStarted{false};
     std::atomic<unsigned> expectedExposureMicroseconds{0};
+    std::atomic<std::uint64_t> exposureRevision{0};
     std::atomic<std::uint64_t> dropped{0};
 
     std::mutex lifecycleMutex;
@@ -189,12 +190,15 @@ struct AmcamCamera::Impl {
 
             {
                 std::unique_lock<std::mutex> lock(eventMutex);
+                const auto revision =
+                    exposureRevision.load(std::memory_order_acquire);
                 const auto timeout = frameStallTimeout(
                     expectedExposureMicroseconds.load(std::memory_order_acquire));
                 const auto deadline = lastFrameAt + timeout;
 
-                eventAvailable.wait_until(lock, deadline, [this]() {
+                eventAvailable.wait_until(lock, deadline, [this, revision]() {
                     return stopRequested.load(std::memory_order_acquire) ||
+                           exposureRevision.load(std::memory_order_acquire) != revision ||
                            pendingImageEvents != 0 ||
                            pendingFatalEvent != 0 ||
                            eventQueueOverflow;
@@ -202,6 +206,11 @@ struct AmcamCamera::Impl {
 
                 if (stopRequested.load(std::memory_order_acquire))
                     break;
+                if (exposureRevision.load(std::memory_order_acquire) != revision &&
+                    pendingImageEvents == 0 && pendingFatalEvent == 0 &&
+                    !eventQueueOverflow) {
+                    continue;
+                }
 
                 fatalEvent = pendingFatalEvent;
                 pendingFatalEvent = 0;
@@ -468,6 +477,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     impl_->state.store(CameraState::Starting, std::memory_order_release);
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->expectedExposureMicroseconds.store(0, std::memory_order_release);
+    impl_->exposureRevision.fetch_add(1, std::memory_order_acq_rel);
     impl_->dropped.store(0, std::memory_order_relaxed);
     {
         std::lock_guard<std::mutex> events(impl_->eventMutex);
@@ -616,7 +626,8 @@ bool AmcamCamera::setExposureTime(std::uint32_t time, CameraError* error) {
     const HRESULT hr = Amcam_put_ExpoTime(impl_->handle, time);
     if (FAILED(hr)) return failHr(error, "Amcam_put_ExpoTime", hr);
     impl_->expectedExposureMicroseconds.store(time, std::memory_order_release);
-    impl_->eventAvailable.notify_one();
+    impl_->exposureRevision.fetch_add(1, std::memory_order_acq_rel);
+    impl_->eventAvailable.notify_all();
     return true;
 }
 
@@ -654,6 +665,8 @@ bool AmcamCamera::readExposure(ExposureSettings& settings, CameraError* error) {
     settings.automatic = automatic != 0;
     settings.timeMicroseconds = time;
     impl_->expectedExposureMicroseconds.store(time, std::memory_order_release);
+    impl_->exposureRevision.fetch_add(1, std::memory_order_acq_rel);
+    impl_->eventAvailable.notify_all();
     settings.minimumTimeMicroseconds = minTime;
     settings.maximumTimeMicroseconds = maxTime;
     settings.defaultTimeMicroseconds = defaultTime;

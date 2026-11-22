@@ -1105,6 +1105,11 @@ struct AmcamCamera::Impl {
     std::optional<std::uint32_t> maximumFanSpeed;
     std::uint32_t ioControlLineCount = 0;
     std::vector<Resolution> previewResolutions;
+    // Descriptor discovery performs many SDK probes. Cache the snapshot so
+    // each individual feature read does not repeat the entire SDK inventory.
+    std::vector<camera::CameraFeatureDescriptor> featureDescriptorCache;
+    CameraState featureDescriptorCacheState = CameraState::Closed;
+    bool featureDescriptorCacheValid = false;
     std::thread worker;
     std::shared_ptr<FramePool> pool;
     FrameCallback onFrame;
@@ -1839,6 +1844,9 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
     impl_->maximumFanSpeed = selected->maximumFanSpeed;
     impl_->ioControlLineCount = selected->ioControlLineCount;
     impl_->previewResolutions = selected->previewResolutions;
+    impl_->featureDescriptorCache.clear();
+    impl_->featureDescriptorCacheValid = false;
+    impl_->featureDescriptorCacheState = CameraState::Closed;
 
     impl_->stopRequested.store(true, std::memory_order_release);
     impl_->eventQueue.stop();
@@ -1897,6 +1905,9 @@ bool AmcamCamera::close(CameraError* error) {
         impl_->maximumFanSpeed.reset();
         impl_->ioControlLineCount = 0;
         impl_->previewResolutions.clear();
+        impl_->featureDescriptorCache.clear();
+        impl_->featureDescriptorCacheValid = false;
+        impl_->featureDescriptorCacheState = CameraState::Closed;
     }
 
     // Amcam_Close ends callback production. Wait for callbacks that entered
@@ -4110,9 +4121,11 @@ bool AmcamCamera::captureStill(
 camera::CameraFeatureResult<std::vector<camera::CameraFeatureDescriptor>>
 AmcamCamera::featureDescriptors() {
     std::lock_guard<std::mutex> api(impl_->apiMutex);
-    return buildAmcamFeatureDescriptors(
+    const CameraState currentState =
+        impl_->state.load(std::memory_order_acquire);
+    auto result = buildAmcamFeatureDescriptors(
         impl_->handle,
-        impl_->state.load(std::memory_order_acquire),
+        currentState,
         impl_->modelFlags,
         impl_->hasModelDescriptor,
         impl_->maximumSpeedLevel,
@@ -4120,6 +4133,17 @@ AmcamCamera::featureDescriptors() {
         impl_->previewResolutions,
         impl_->profileRegistry,
         impl_->modelCode);
+
+    if (auto* descriptors =
+            std::get_if<std::vector<camera::CameraFeatureDescriptor>>(&result)) {
+        impl_->featureDescriptorCache = *descriptors;
+        impl_->featureDescriptorCacheState = currentState;
+        impl_->featureDescriptorCacheValid = true;
+    } else {
+        impl_->featureDescriptorCache.clear();
+        impl_->featureDescriptorCacheValid = false;
+    }
+    return result;
 }
 
 camera::CameraFeatureResult<camera::CameraFeatureValue>
@@ -4148,21 +4172,38 @@ AmcamCamera::readFeature(std::string_view name) {
         }
     }
 
-    auto described = buildAmcamFeatureDescriptors(
-        impl_->handle,
-        impl_->state.load(std::memory_order_acquire),
-        impl_->modelFlags,
-        impl_->hasModelDescriptor,
-        impl_->maximumSpeedLevel,
-        impl_->maximumFanSpeed,
-        impl_->previewResolutions,
-        impl_->profileRegistry,
-        impl_->modelCode);
-    if (const auto* error = std::get_if<CameraFeatureAccessError>(&described))
-        return *error;
+    const CameraState currentState =
+        impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle || !featureIsOperational(currentState)) {
+        return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                            std::string(name),
+                            "The Amcam camera session is not operational.");
+    }
 
-    const auto& descriptors =
-        std::get<std::vector<camera::CameraFeatureDescriptor>>(described);
+    if (!impl_->featureDescriptorCacheValid ||
+        impl_->featureDescriptorCacheState != currentState) {
+        auto described = buildAmcamFeatureDescriptors(
+            impl_->handle,
+            currentState,
+            impl_->modelFlags,
+            impl_->hasModelDescriptor,
+            impl_->maximumSpeedLevel,
+            impl_->maximumFanSpeed,
+            impl_->previewResolutions,
+            impl_->profileRegistry,
+            impl_->modelCode);
+        if (const auto* error =
+                std::get_if<CameraFeatureAccessError>(&described)) {
+            return *error;
+        }
+        impl_->featureDescriptorCache =
+            std::get<std::vector<camera::CameraFeatureDescriptor>>(
+                std::move(described));
+        impl_->featureDescriptorCacheState = currentState;
+        impl_->featureDescriptorCacheValid = true;
+    }
+
+    const auto& descriptors = impl_->featureDescriptorCache;
     const auto descriptor = std::find_if(descriptors.begin(), descriptors.end(),
         [name](const auto& item) { return item.name == name; });
     if (descriptor == descriptors.end())

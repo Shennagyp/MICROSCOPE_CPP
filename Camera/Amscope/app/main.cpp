@@ -1604,7 +1604,7 @@ private:
         }
     }
 
-    void updateControls(amscope::CameraState state) {    void updateControls(amscope::CameraState state) {
+    void updateControls(amscope::CameraState state) {
         const bool closed = state == amscope::CameraState::Closed;
         const bool open = state == amscope::CameraState::Open;
         const bool streaming = state == amscope::CameraState::Streaming;

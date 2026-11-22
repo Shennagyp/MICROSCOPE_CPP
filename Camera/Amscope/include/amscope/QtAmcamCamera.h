@@ -304,6 +304,7 @@ private:
     void publishLatestFrame(
         FramePtr frame,
         const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate);
+    void queueFrameNotification();
     void clearFrameMailbox();
     void emitError(const CameraError& error);
 
@@ -330,8 +331,9 @@ private:
     FeatureRequestId nextFeatureRequestId_ = 1;
     bool stoppingFeatureWorker_ = false;
 
-    std::mutex mailboxMutex_;
+    // C++17 atomic shared_ptr free functions provide a latest-frame mailbox.
+    // The frame's storage remains alive through the producer/consumer leases.
     FramePtr latestFrame_;
-    bool notificationPending_ = false;
+    std::atomic<bool> notificationPending_{false};
 };
 } // namespace amscope

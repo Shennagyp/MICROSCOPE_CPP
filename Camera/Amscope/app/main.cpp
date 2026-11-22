@@ -876,10 +876,18 @@ private:
                     return;
                 }
 
-                const QString captureKind =
-                    captureMode == amscope::StillCaptureMode::Raw
-                        ? QStringLiteral("RAW still")
-                        : QStringLiteral("Processed still");
+                const bool raw =
+                    frame->pixelFormat == camera::PixelFormat::Raw8 ||
+                    frame->pixelFormat == camera::PixelFormat::Raw16;
+                if (!raw && frame->pixelFormat != camera::PixelFormat::RGB24) {
+                    statusBar()->showMessage(
+                        "Still capture returned an unknown image-buffer layout.");
+                    return;
+                }
+
+                const QString captureKind = raw
+                    ? QStringLiteral("RAW still")
+                    : QStringLiteral("Processed still");
                 if (frame->significantBitsPerPixel > 0 &&
                     frame->storageBitsPerPixel > 0) {
                     stillPrecisionLabel_->setText(
@@ -892,14 +900,6 @@ private:
                         QString("%1: precision unavailable").arg(captureKind));
                 }
 
-                const bool raw =
-                    frame->pixelFormat == camera::PixelFormat::Raw8 ||
-                    frame->pixelFormat == camera::PixelFormat::Raw16;
-                if (!raw && frame->pixelFormat != camera::PixelFormat::RGB24) {
-                    statusBar()->showMessage(
-                        "Still capture returned an unknown image-buffer layout.");
-                    return;
-                }
                 const QString suggested = raw
                     ? QString("amscope_%1x%2_sensor%3_storage%4.raw")
                           .arg(frame->width).arg(frame->height)

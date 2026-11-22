@@ -1619,18 +1619,9 @@ private:
         }
         hasReceivedFrame_ = true;
 
-        if (frame->pixelFormat == camera::PixelFormat::Raw8 ||
-            frame->pixelFormat == camera::PixelFormat::Raw16) {
-            preview_->setMessage(
-                QString("RAW sensor stream active | %1 x %2 | source %3-bit / storage %4-bit | %5")
-                    .arg(static_cast<qulonglong>(frame->width))
-                    .arg(static_cast<qulonglong>(frame->height))
-                    .arg(static_cast<unsigned>(frame->significantBitsPerPixel))
-                    .arg(static_cast<unsigned>(frame->storageBitsPerPixel))
-                    .arg(pixelFormatIdentifierText(*frame)));
-            return;
-        }
-        if (frame->pixelFormat != camera::PixelFormat::RGB24) {
+        if (frame->pixelFormat != camera::PixelFormat::RGB24 &&
+            frame->pixelFormat != camera::PixelFormat::Raw8 &&
+            frame->pixelFormat != camera::PixelFormat::Raw16) {
             preview_->setMessage(
                 QString("Unknown frame layout | %1 x %2 | %3")
                     .arg(static_cast<qulonglong>(frame->width))
@@ -1639,8 +1630,9 @@ private:
             return;
         }
 
-        // FrameView retains the frame lease and paints directly from pooled
-        // memory. No per-frame image copy or QPixmap conversion.
+        // RGB and RAW frames use the same presentation path. FrameView selects
+        // the QImage interpretation from the declared storage format while
+        // retaining this immutable frame lease; the vendor payload is untouched.
         preview_->setFrame(std::move(frame));
     }
 

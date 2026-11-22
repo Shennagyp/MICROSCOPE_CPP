@@ -1961,6 +1961,15 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                     -1, "start", "The configured external trigger mode is not allowed by this model/profile."};
                 triggerHealthFailed = true;
             } else if (configuredTriggerMode ==
+                       static_cast<int>(AmcamTriggerMode::SoftwareOrSimulated) &&
+                   (impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) != 0 &&
+                   !impl_->profileRegistry.allows(
+                       impl_->modelCode, AmcamCameraFeature::TriggerSoftware)) {
+            triggerHealthError = {
+                -1, "start",
+                "The configured hardware software-trigger mode is denied by this model profile."};
+            triggerHealthFailed = true;
+        } else if (configuredTriggerMode ==
                            static_cast<int>(AmcamTriggerMode::ExternalAndSoftware) &&
                        (((impl_->modelFlags & AMCAM_FLAG_TRIGGER_EXTERNAL) == 0) ||
                         ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) == 0) ||
@@ -1989,6 +1998,17 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                             -1, "start",
                             "The SDK reports an unsupported external trigger source."};
                         triggerHealthFailed = true;
+                    } else if (configuredTriggerMode ==
+                                   static_cast<int>(AmcamTriggerMode::External) &&
+                               triggerSource ==
+                                   static_cast<int>(AmcamTriggerSource::Software) &&
+                               (((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) == 0) ||
+                                !impl_->profileRegistry.allows(
+                                    impl_->modelCode, AmcamCameraFeature::TriggerSoftware))) {
+                        triggerHealthError = {
+                            -1, "start",
+                            "The configured software trigger source is denied by this model profile."};
+                        triggerHealthFailed = true;
                     }
                 }
                 if (!triggerHealthFailed) {
@@ -2013,7 +2033,12 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             }
         } else {
             impl_->activeTriggerMode.store(0, std::memory_order_release);
-            impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+            if (impl_->heartbeatSnapshot.valid) {
+                if (!impl_->restoreHeartbeatMonitoringLocked(&triggerHealthError))
+                    triggerHealthFailed = true;
+            } else {
+                impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+            }
         }
 
         if (!triggerHealthFailed)
@@ -2022,6 +2047,9 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                 std::memory_order_release);
     }
     if (triggerHealthFailed) {
+        impl_->stopRequested.store(true, std::memory_order_release);
+        impl_->eventQueue.stop();
+        impl_->eventQueue.clearPending();
         impl_->state.store(CameraState::Open, std::memory_order_release);
         if (error) *error = triggerHealthError;
         return false;
@@ -2962,6 +2990,20 @@ bool AmcamCamera::configureTrigger(
             return fail(error, "configureTrigger", -1,
                         "The requested external trigger source is invalid.");
         }
+        if (*configuration.externalSource == AmcamTriggerSource::Software &&
+            (((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) == 0) ||
+             !impl_->profileRegistry.allows(
+                 impl_->modelCode, AmcamCameraFeature::TriggerSoftware))) {
+            return fail(error, "configureTrigger", -1,
+                        "A software trigger source requires the model's software-trigger capability and an allowed profile.");
+        }
+    }
+    if (configuration.mode == AmcamTriggerMode::SoftwareOrSimulated &&
+        (impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) != 0 &&
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::TriggerSoftware)) {
+        return fail(error, "configureTrigger", -1,
+                    "This model uses hardware software-trigger mode and the profile denies that capability.");
     }
 
     int previousMode = -1;
@@ -3130,21 +3172,35 @@ bool AmcamCamera::sendSoftwareTrigger(
     HRESULT hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_TRIGGER, &mode);
     if (FAILED(hr)) return failHr(error, "Amcam_get_Option(TRIGGER)", hr);
 
-    bool softwareTriggerAllowed =
-        mode == static_cast<int>(AmcamTriggerMode::SoftwareOrSimulated) ||
-        mode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware);
-    if (mode == static_cast<int>(AmcamTriggerMode::External)) {
+    const bool hardwareSoftwareTrigger =
+        (impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) != 0;
+    const bool softwareProfileAllowed =
+        impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::TriggerSoftware);
+
+    bool softwareTriggerAllowed = false;
+    if (mode == static_cast<int>(AmcamTriggerMode::SoftwareOrSimulated)) {
+        // The SDK uses mode 1 for software-trigger cameras and for simulated
+        // triggering on models that have no hardware software-trigger input.
+        softwareTriggerAllowed =
+            !hardwareSoftwareTrigger || softwareProfileAllowed;
+    } else if (mode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware)) {
+        softwareTriggerAllowed =
+            hardwareSoftwareTrigger && softwareProfileAllowed;
+    } else if (mode == static_cast<int>(AmcamTriggerMode::External)) {
         int source = -1;
         hr = Amcam_IoControl(
             impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE, 0, &source);
         if (FAILED(hr))
             return failHr(error, "Amcam_IoControl(GET_TRIGGERSOURCE)", hr);
         softwareTriggerAllowed =
-            source == static_cast<int>(AmcamTriggerSource::Software);
+            source == static_cast<int>(AmcamTriggerSource::Software) &&
+            hardwareSoftwareTrigger && softwareProfileAllowed;
     }
+
     if (!softwareTriggerAllowed) {
         return fail(error, "sendSoftwareTrigger", -1,
-                    "The active trigger mode/source does not accept software trigger commands.");
+                    "The active trigger mode/source does not allow software triggering under this model/profile.");
     }
     if ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SINGLE) != 0 && imageCount != 1) {
         return fail(error, "sendSoftwareTrigger", -1,

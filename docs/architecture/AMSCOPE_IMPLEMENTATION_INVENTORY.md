@@ -52,7 +52,11 @@ No feature in this inventory is labeled Hardware verified. The reviewed CI run f
 | Recoverable Stop failure while Streaming | Source implemented/documented | Frame gate tests cover reactivation helper semantics, not injected SDK Stop behavior | Not recorded |
 | Cache flush obligation and retry | Source implemented/documented | No explicit cache-flush fault/retry test target identified | Not recorded |
 | Terminal Close independent of Stop/flush success | Source implemented/documented | No dedicated native failure-injection test identified | Not recorded |
-| Old-session frame rejection and latest mailbox | Source implemented | Frame gate test and Qt request tests cover portions | Not recorded |
+| Old-session frame rejection and atomic latest-frame mailbox | Source implemented | Frame gate test and Qt request tests cover portions; concurrent mailbox behavior has no dedicated stress test | Not recorded |
+| Frame notifications bypass feature-request queue lock | Source implemented | No dedicated contention test | Not recorded |
+| SDK image-event, successful-pull, and actual paint counters | Source implemented | Counter wiring is compile/CI pending; no unit-level hardware-rate test | Not recorded |
+| Maximum supported frame rate selected on Start by model flags | Source implemented | No deterministic SDK-setting test yet | Not recorded |
+| Generic SDK FPS cap removed (`AMCAM_OPTION_FRAMERATE=0`) | Source implemented | No deterministic SDK-setting test yet | Not recorded |
 | Frame-pool exhaustion and dropped-frame accounting | Source implemented/documented | No dedicated frame-pool behavior test identified | Not recorded |
 
 ## 4. Frame and image payload behavior
@@ -65,14 +69,16 @@ No feature in this inventory is labeled Hardware verified. The reviewed CI run f
 | Sequence, timestamp, exposure, gain, black-level metadata | Source implemented/documented | No full live metadata hardware test | Not recorded |
 | Four immutable `FramePtr` leases | Source implemented/documented | No dedicated pool/retention stress test identified | Not recorded |
 | Private discard buffer when every lease is retained | Source implemented/documented | No direct pool exhaustion test identified | Not recorded |
-| QImage/QPixmap preview detachment | Source/UI documented | Preview build only; no live device test | Not recorded |
+| Direct `QImage` wrapper over retained `FramePtr` and `QPainter` paint (no per-frame pixel copy or `QPixmap`) | Source implemented; latest CI pending | No dedicated FrameView rendering test; build/CI required | Not recorded |
 | RAW sensor display as RGB | Explicitly refused by current UI | Not applicable | Not recorded |
 | RAW/Bayer demosaic for visible preview | Not present/deferred | No test target | Not recorded |
-| GPU/zero-copy rendering | Not present/deferred | No test target | Not recorded |
+| GPU rendering | Not present/deferred | No test target | Not recorded |
 
 ## 5. Common feature interface and settings
 
 The common contract currently supports Boolean, integer, integer vector, floating-point, string, and enumeration values. Enumeration symbols are distinct from ordinary strings. Descriptors carry availability, readability, writability, unit, scalar range/increment, vector cardinality, enumeration symbols, and group. Errors distinguish unsupported, not found, unavailable, not readable, not writable, type mismatch, invalid value, and backend failure.
+
+The Amcam implementation caches its full descriptor inventory per camera state; individual `readFeature()` operations reuse that inventory instead of repeating the complete set of SDK probes under the SDK mutex. Successful feature writes invalidate the cache. The preview stops automatic descriptor refresh when Streaming so the full probe set does not contend with `Amcam_PullImageV4`.
 
 | Feature family | Current source coverage | Key semantics/constraints | Test/UI coverage | Hardware evidence |
 |---|---|---|---|---|

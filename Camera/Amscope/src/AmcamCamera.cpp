@@ -1879,6 +1879,71 @@ std::vector<CameraInfo> AmcamCamera::enumerate(CameraError* error) {
                 info.modelCode = info.modelName;
             }
             info.modelFlags = device.model->flag;
+            info.identity.model = info.modelName;
+
+            // These are model-descriptor hardware facts, not promises that a
+            // feature is currently readable/writable in the active session.
+            // Runtime probes and profile policy continue to govern feature access.
+            const auto flags = info.modelFlags;
+            auto& capabilities = info.capabilities;
+            capabilities.set(camera::CameraCapability::VideoAcquisition, true);
+            constexpr std::uint64_t rawPixelFlags =
+                AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
+                AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW14 | AMCAM_FLAG_RAW16 |
+                AMCAM_FLAG_RAW12PACK;
+            capabilities.set(camera::CameraCapability::RawPixelOutput,
+                             (flags & rawPixelFlags) != 0);
+            capabilities.set(camera::CameraCapability::HardwareRegionOfInterest,
+                             (flags & AMCAM_FLAG_ROI_HARDWARE) != 0);
+            capabilities.set(camera::CameraCapability::BinningOrSkipping,
+                             (flags & AMCAM_FLAG_BINSKIP_SUPPORTED) != 0);
+            capabilities.set(camera::CameraCapability::SoftwareTrigger,
+                             (flags & AMCAM_FLAG_TRIGGER_SOFTWARE) != 0);
+            capabilities.set(camera::CameraCapability::ExternalTrigger,
+                             (flags & AMCAM_FLAG_TRIGGER_EXTERNAL) != 0);
+            capabilities.set(camera::CameraCapability::SingleFrameTrigger,
+                             (flags & AMCAM_FLAG_TRIGGER_SINGLE) != 0);
+            capabilities.set(camera::CameraCapability::SelfTrigger,
+                             (flags & AMCAM_FLAG_SELFTRIGGER) != 0);
+            capabilities.set(camera::CameraCapability::HardwareEvents,
+                             (flags & AMCAM_FLAG_EVENT_HARDWARE) != 0);
+            capabilities.set(camera::CameraCapability::SensorTemperatureTelemetry,
+                             (flags & AMCAM_FLAG_GETTEMPERATURE) != 0);
+            capabilities.set(camera::CameraCapability::ThermoelectricCooling,
+                             (flags & (AMCAM_FLAG_TEC | AMCAM_FLAG_TEC_ONOFF)) != 0);
+            capabilities.set(camera::CameraCapability::CoolingFan,
+                             (flags & AMCAM_FLAG_FAN) != 0);
+            capabilities.set(camera::CameraCapability::FocusMotor,
+                             (flags & AMCAM_FLAG_FOCUSMOTOR) != 0);
+            capabilities.set(camera::CameraCapability::AutoFocus,
+                             (flags & AMCAM_FLAG_AUTO_FOCUS) != 0);
+            capabilities.set(camera::CameraCapability::AstroAutoFocuser,
+                             (flags & AMCAM_FLAG_AUTOFOCUSER) != 0);
+            capabilities.set(camera::CameraCapability::ST4GuidePort,
+                             (flags & AMCAM_FLAG_ST4) != 0);
+            capabilities.set(camera::CameraCapability::FilterWheel,
+                             (flags & AMCAM_FLAG_FILTERWHEEL) != 0);
+            capabilities.set(camera::CameraCapability::EmbeddedLightSource,
+                             (flags & AMCAM_FLAG_LIGHTSOURCE) != 0);
+            capabilities.set(camera::CameraCapability::StandaloneLightSource,
+                             (flags & AMCAM_FLAG_LIGHT_SOURCE) != 0);
+            capabilities.set(camera::CameraCapability::HardwareFrameBuffer,
+                             (flags & AMCAM_FLAG_BUFFER) != 0);
+            capabilities.set(camera::CameraCapability::LargeHardwareFrameBuffer,
+                             (flags & AMCAM_FLAG_DDR) != 0);
+            capabilities.set(camera::CameraCapability::ImageSignalProcessing,
+                             (flags & AMCAM_FLAG_ISP) != 0);
+            capabilities.set(camera::CameraCapability::BlackLevelControl,
+                             (flags & AMCAM_FLAG_BLACKLEVEL) != 0);
+            capabilities.set(camera::CameraCapability::PreciseFrameRateControl,
+                             (flags & AMCAM_FLAG_PRECISE_FRAMERATE) != 0);
+            capabilities.set(camera::CameraCapability::AntiFogHeater,
+                             (flags & AMCAM_FLAG_HEAT) != 0);
+            capabilities.set(camera::CameraCapability::HighFullWell,
+                             (flags & AMCAM_FLAG_HIGH_FULLWELL) != 0);
+            capabilities.set(camera::CameraCapability::HDRConversionGain,
+                             (flags & AMCAM_FLAG_CGHDR) != 0);
+
             info.maximumSpeedLevel = device.model->maxspeed;
             if ((device.model->flag & AMCAM_FLAG_FAN) != 0)
                 info.maximumFanSpeed = device.model->maxfanspeed;

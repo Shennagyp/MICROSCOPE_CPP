@@ -411,6 +411,12 @@ void printReport(
         static_cast<double>(measurement.callbackFrames) / safeDuration;
     const double paintFps =
         static_cast<double>(measurement.paintedFrames) / safeDuration;
+    const double configuredExposureFpsLimit =
+        measurement.hasConfiguredExposure &&
+        measurement.configuredExposureMicroseconds > 0
+            ? 1000000.0 /
+              static_cast<double>(measurement.configuredExposureMicroseconds)
+            : 0.0;
     const bool operationalPass =
         measurement.callbackFrames > 0 &&
         dimensionsMatch &&
@@ -432,6 +438,9 @@ void printReport(
         << "  \"model_name\": \"" << jsonEscape(info.modelName) << "\",\n"
         << "  \"model_code\": \"" << jsonEscape(info.modelCode) << "\",\n"
         << "  \"model_flags\": " << info.modelFlags << ",\n"
+        << "  \"model_maximum_speed_level\": "
+        << (info.maximumSpeedLevel
+                ? std::to_string(*info.maximumSpeedLevel) : "null") << ",\n"
         << "  \"requested_resolution\": \""
         << resolutionLabel(options.width, options.height) << "\",\n"
         << "  \"selected_resolution_symbol\": \""
@@ -478,6 +487,9 @@ void printReport(
         << "  \"configured_exposure_us\": "
         << (measurement.hasConfiguredExposure
                 ? std::to_string(measurement.configuredExposureMicroseconds) : "null") << ",\n"
+        << "  \"exposure_fps_limit\": "
+        << (configuredExposureFpsLimit > 0.0
+                ? std::to_string(configuredExposureFpsLimit) : "null") << ",\n"
         << "  \"sdk_exposure_samples\": " << measurement.exposureSamples << ",\n"
         << "  \"exposure_us_min\": " << measurement.exposureMinimum << ",\n"
         << "  \"exposure_us_max\": " << measurement.exposureMaximum << ",\n"

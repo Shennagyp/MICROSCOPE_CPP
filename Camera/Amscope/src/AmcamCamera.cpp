@@ -436,19 +436,20 @@ buildAmcamFeatureDescriptors(
         rawMaximumBitDepth(handle, modelFlags);
     const bool rawMaximumBitDepthValid =
         rawMaxBitDepth >= 8U && rawMaxBitDepth <= 16U;
-    // Bit-depth configuration is a camera capability, not a property that
-    // disappears when RAW output is currently disabled. Keep it readable so
-    // the UI can display the current selection; gate writes on RAW being on.
-    // BITDEPTH is an SDK option in its own right. Do not make its UI
-    // visibility depend on model flags or the optional maximum-depth query:
-    // some SDK/model combinations expose the option while the maximum query
-    // is unavailable or incomplete.
+    // The common feature contract publishes exact significant-bit counts,
+    // never a relative "maximum" mode. This backend can select only 8-bit or
+    // the SDK's maximum; intermediate depths are not configurable through
+    // AMCAM_OPTION_BITDEPTH and must not be advertised.
     const bool rawBitDepthReadable = rawModeReadable &&
-        SUCCEEDED(rawBitDepthHr) && (rawBitDepth == 0 || rawBitDepth == 1);
-    const bool rawBitDepthWritable = rawModeReadable &&
-        rawMode == 1;
-    const std::vector<std::string> rawBitDepthValues{
-        "8-bit", "Maximum supported"};
+        SUCCEEDED(rawBitDepthHr) &&
+        (rawBitDepth == 0 ||
+         (rawBitDepth == 1 && rawMaximumBitDepthValid));
+    const bool rawBitDepthWritable = rawModeReadable && rawMode == 1;
+    std::vector<std::string> rawBitDepthValues{"8-bit"};
+    if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U) {
+        rawBitDepthValues.push_back(
+            std::to_string(rawMaxBitDepth) + "-bit");
+    }
 
 
     const bool hasColorRawSensor =
@@ -4758,15 +4759,25 @@ AmcamCamera::readFeature(std::string_view name) {
     }
     if (name == camera::RawOutputBitDepthFeature) {
         int mode = 0;
-        HRESULT hr = Amcam_get_Option(
+        const HRESULT hr = Amcam_get_Option(
             impl_->handle, AMCAM_OPTION_BITDEPTH, &mode);
         if (FAILED(hr))
             return featureBackendError(std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
         if (mode != 0 && mode != 1)
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "The camera returned an unknown RAW bit-depth mode.");
+
+        const unsigned maximumBitDepth =
+            rawMaximumBitDepth(impl_->handle, impl_->modelFlags);
+        const unsigned selectedBitDepth =
+            mode == 0 ? 8U : maximumBitDepth;
+        if (selectedBitDepth < 8U || selectedBitDepth > 16U)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name),
+                                "The SDK selected maximum RAW precision but did not report its exact significant bit depth.");
+
         return CameraFeatureValue{FeatureEnumeration{
-            mode == 0 ? "8-bit" : "Maximum supported"}};
+            std::to_string(selectedBitDepth) + "-bit"}};
     }
     if (name == "AmcamRawSensorFormat") {
         unsigned fourCC = 0, bitsPerPixel = 0;
@@ -5038,12 +5049,19 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
             return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
                                 std::string(name), "Enable RAW sensor output before selecting its bit-depth mode.");
         const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        const unsigned maximumBitDepth =
+            rawMaximumBitDepth(impl_->handle, impl_->modelFlags);
+        const std::string maximumBitDepthSymbol =
+            maximumBitDepth >= 8U && maximumBitDepth <= 16U
+                ? std::to_string(maximumBitDepth) + "-bit"
+                : std::string{};
         const int requested =
             symbol == "8-bit" ? 0 :
-            symbol == "Maximum supported" ? 1 : -1;
+            (maximumBitDepth > 8U && symbol == maximumBitDepthSymbol) ? 1 : -1;
         if (requested < 0)
             return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "RAW output bit depth must be 8-bit or the camera's maximum supported bit depth.");
+                                std::string(name),
+                                "Select one of the exact RAW significant bit depths advertised by this camera.");
         hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_BITDEPTH, requested);
         if (FAILED(hr))
             return featureBackendError(std::string(name), "Amcam_put_Option(BITDEPTH)", hr);

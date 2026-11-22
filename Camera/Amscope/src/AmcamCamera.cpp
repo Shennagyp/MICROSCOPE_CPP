@@ -445,7 +445,7 @@ buildAmcamFeatureDescriptors(
     // is unavailable or incomplete.
     const bool rawBitDepthReadable = rawModeReadable &&
         SUCCEEDED(rawBitDepthHr) && (rawBitDepth == 0 || rawBitDepth == 1);
-    const bool rawBitDepthWritable = rawBitDepthReadable &&
+    const bool rawBitDepthWritable = rawModeReadable &&
         rawMode == 1;
     const std::vector<std::string> rawBitDepthValues{
         "8-bit", "Maximum supported"};
@@ -838,7 +838,7 @@ buildAmcamFeatureDescriptors(
         std::string(camera::RawOutputBitDepthFeature),
         "RAW Output Bit Depth", CameraFeatureKind::Enumeration,
         std::string("significant bits"),
-        rawOutputAllowed && rawBitDepthReadable,
+        rawAvailable && rawOutputAllowed,
         rawBitDepthReadable,
         rawAvailable && rawOutputAllowed && rawBitDepthWritable && stopped,
         std::nullopt, std::nullopt, std::move(rawBitDepthValues),

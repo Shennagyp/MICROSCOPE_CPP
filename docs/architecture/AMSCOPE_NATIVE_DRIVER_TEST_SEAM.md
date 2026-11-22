@@ -1,7 +1,7 @@
 # Native AmScope Driver — Phase 1 SDK Test Seam Design
 
 **Status:** Design prepared; implementation intentionally gated on Phase 0 physical-camera acceptance.  
-**Source reviewed:** `4de57806a898799173adb04af1272e00ff00fb24` (native implementation snapshot `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`).  
+**Source/documentation reviewed:** `1e44fa8bab23f26587adffe8c5e06471956d9e54` (native implementation snapshot `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`).  
 **Purpose:** Define the smallest internal test boundary that can deterministically exercise the native session lifecycle and callback-driven acquisition failure paths.
 
 ---
@@ -43,7 +43,7 @@ Use an implementation-private SDK dispatch table stored by the native session im
 
 ### 3.1 Type and ABI preservation
 
-Each dispatch entry should derive its function-pointer type from the vendor declaration (for example, the equivalent of `decltype(&Amcam_Stop)`) rather than manually duplicating the signature. This preserves the SDK's exact argument types, callback type, and calling convention.
+Each dispatch entry should derive its function-pointer type from the vendor declaration (for example, `decltype(&Amcam_Stop)`) rather than manually duplicating the signature. This preserves the SDK's exact argument types, callback type, and calling convention. The checked vendor header declares `PAMCAM_EVENT_CALLBACK` as `void (__stdcall*)(unsigned, void*)` and `Amcam_StartPullModeWithCallback(HAmcam, PAMCAM_EVENT_CALLBACK, void*)`; the dispatch must use that exact type and must not wrap it in a different calling convention.
 
 The production table is initialized to the original Amcam SDK functions. A test fixture supplies a complete table for the subset it exercises. Missing test entries should fail fixture construction rather than silently fall back to physical SDK calls.
 
@@ -51,9 +51,7 @@ The table is immutable after the camera instance is constructed. The same table 
 
 ### 3.2 Visibility and construction
 
-Keep the dispatch type and injection constructor out of public installed headers.
-
-A private implementation header or test-support header may declare a narrow construction/access path for the CTest target. The public AmcamCamera constructor and public API remain unchanged. Public enumeration uses the production dispatch; the internal open path should use its owning instance's dispatch so a test can exercise fresh-ID validation without a real camera.
+Keep the dispatch type, test factory, and test-support header out of public installed headers. The public `AmcamCamera` callable API, object layout, and vtable must remain unchanged. A macro-gated private friend declaration may be added solely to let an internal `AmcamCameraTestAccess` factory construct the PIMPL with an injected dispatch; it must not add a public constructor or method. Compile the implementation under a separate test-only target with `AMSCOPE_INTERNAL_TESTING`; do not link that executable to the production driver simultaneously. This keeps the test-only class definition isolated from the production library and allows the internal factory to access `impl_` without `#define private public` tricks. Public static `AmcamCamera::enumerate()` uses the production dispatch. `open()` must not call that public static function internally; introduce a private `enumerateWithDispatch(const AmcamSdkDispatch&)` helper and have both public enumeration and instance `open()` call it with their respective dispatch tables. Otherwise the fake can intercept `Amcam_Open` but not the fresh-ID enumeration which happens immediately before it, leaking a real hardware enumeration call into the test. Copy the device ID, display name, model name, model flags, and preview modes while the SDK-provided `AmcamModelV2*` is valid; the fake fixture must own the backing model/name storage for the entire enumeration call.
 
 Do not expose an SDK interface pointer, function table, test tag, or test-only constructor through AmcamCamera.h or QtAmcamCamera.h.
 
@@ -84,6 +82,18 @@ Native SDK dispatch alone cannot force std::thread construction failure. Add a s
 
 Do not generalize this into a public scheduler/executor abstraction.
 
+## 3.5 Callback quiescence is a separate lifetime contract
+
+The vendor header states that `Amcam_Close` closes the handle and that the handle must never be used afterward. It also explicitly forbids `Amcam_Stop` and `Amcam_Close` from inside the SDK callback because they deadlock. The inspected header does **not** explicitly state that Close return guarantees that no new callback can begin.
+
+The current driver increments `activeSdkCallbacks` at callback entry, calls `Amcam_Close`, then waits until that counter returns to zero. This drains callbacks that have already entered and incremented the counter. It cannot, by counter logic alone, exclude a callback that has been scheduled by the SDK but has not yet executed its first increment when the wait observes zero.
+
+Therefore the Phase 1 evidence must separate:
+- **In-flight callback drain:** deterministically block a callback after entry, begin Close, allow SDK Close to return, and prove the session does not release callback-reachable state until that callback exits.
+- **No callback begins after Close returns:** establish this as a vendor SDK guarantee or obtain sufficiently strong vendor/hardware evidence. A fake that simply promises never to call back after Close cannot prove that the real SDK has the same property.
+
+Do not claim the second guarantee from the active-callback counter test alone. If the vendor cannot document it, retain it as an explicit unresolved SDK lifetime assumption and do not weaken cleanup safety by guessing.
+
 ## 4. Deterministic test fixture behavior
 
 The fake SDK fixture should:
@@ -99,7 +109,7 @@ The fake SDK fixture should:
 - Ensure callbacks already entered have exited before the fixture or callback context is destroyed.
 - Fail immediately if an unexpected vendor call falls through to a real SDK entry point.
 
-The fake must model only the API contract required by each test. It must not simulate camera capabilities that the corresponding test is not exercising.
+The fake must model only the API contract required by each test. It must not simulate camera capabilities that the corresponding test is not exercising. For an opaque `HAmcam`, use one stable non-dereferenced sentinel handle owned by the fixture; never fabricate or inspect the vendor's incomplete handle structure.
 
 ## 5. Required native-session tests
 
@@ -144,8 +154,8 @@ Phase 0 must first have a passing hardware record for the baseline source revisi
 ### Exit condition
 
 The first seam increment is accepted only when:
-- The public camera headers and APIs are unchanged.
-- The production dispatch calls the same vendor SDK functions as before.
+- The public callable API, object layout, and vtable are unchanged; any test-only friend access is macro-gated and absent from the installed production interface.
+- The production dispatch calls the same vendor SDK functions as before; public static enumeration remains production-backed while instance open uses its own immutable dispatch through the private enumeration helper.
 - All new deterministic native-session tests pass on Intel and Apple Silicon CI.
 - Existing eight tests continue to pass.
 - The physical AmScope baseline and Phase 1 real-camera procedure both pass on the resulting source revision.

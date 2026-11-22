@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
 **Source snapshot:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
-**Branch head reviewed for this inventory refresh:** `4de57806a898799173adb04af1272e00ff00fb24` (documentation-only relative to the source snapshot)  
+**Branch head reviewed for this inventory refresh:** `1e44fa8bab23f26587adffe8c5e06471956d9e54` (documentation-only relative to the source snapshot)  
 **Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims and visible test/UI coverage; it does not claim physical-camera verification.
 
 ---
@@ -196,4 +196,4 @@ Update this inventory when a source/API/test/UI change lands. Do not change a ha
 
 A static source scan of the current AmScope implementation identifies direct SDK entry points across enumeration/session lifecycle, callback-based acquisition and pulling, feature probes and writes, trigger/heartbeat setup, still capture, hardware I/O, and accessory operations. The native session currently has no injected SDK-call boundary, so the existing helper tests cannot force deterministic native Stop/Open/Start/Pull/Close failures.
 
-The Phase 1 test seam and the initial lifecycle/acquisition API subset are specified in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). This is a design/preparation artifact only; no source seam or native-session mock test has been implemented yet. Phase 0 physical-camera acceptance remains the prerequisite for behavior-changing Phase 1 work.
+The Phase 1 test seam and the initial lifecycle/acquisition API subset are specified in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). The vendor header confirms the exact `PAMCAM_EVENT_CALLBACK` (`__stdcall`) and callback-based pull API, but its `Amcam_Close` comment does not explicitly state that no callback can begin after Close returns. The current driver waits for callbacks already counted as active after `Amcam_Close`; this is not by itself proof against a callback that begins after the counter reaches zero. Treat the post-Close callback-quiescence guarantee as an explicit SDK contract to establish with vendor documentation and controlled hardware observation. No source seam or native-session mock test has been implemented yet. Phase 0 physical-camera acceptance remains the prerequisite for behavior-changing Phase 1 work.

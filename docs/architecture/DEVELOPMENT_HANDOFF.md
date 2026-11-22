@@ -3,7 +3,7 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Branch head verified during this review:** `4de57806a898799173adb04af1272e00ff00fb24`  
+**Last verified branch head before this handoff refresh:** `1e44fa8bab23f26587adffe8c5e06471956d9e54`  
 **Last implementation-bearing commit:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
 **Current phase:** Phase 0 — baseline freeze and verification  
 **Phase status:** OPEN — real-camera baseline has not been recorded.
@@ -22,14 +22,14 @@ This is the continuation entrypoint for subsequent development sessions. It is a
    - [AmScope Driver README](../../Camera/Amscope/README.md)
    - The authoritative Camera Module and UI Libraries architecture paper agreed in the project discussion.
 3. Do not begin behavior-changing refactoring until Phase 0's physical-camera baseline has been recorded.
-4. The next meaningful implementation task after baseline acceptance is Phase 1: strengthen deterministic tests around the native session/lifecycle failure paths while preserving the current callback-to-pull acquisition mechanism.
+4. The next meaningful implementation task after baseline acceptance is Phase 1: implement the private SDK dispatch seam and deterministic native-session failure tests in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md), preserving callback-to-pull acquisition.
 5. For every phase, keep the mandatory physical-camera test gate. A phase with code and green CI but no passing physical-camera record remains OPEN.
 
 ## 2. Current Git state
 
 ### Branch head and recent work
 
-The branch head verified for this review is `4de57806a898799173adb04af1272e00ff00fb24` — `docs(amscope): refresh continuation handoff`. The source snapshot remains `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; commits after that implementation revision are documentation-only. No C++ source implementation commit has been added after `a3a03fbd`.
+The last verified head before this handoff refresh is `1e44fa8bab23f26587adffe8c5e06471956d9e54` — `docs(amscope): prepare native driver failure-path testing`. Its parent was `4de57806a898799173adb04af1272e00ff00fb24`. The source snapshot remains `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; commits after that implementation revision are documentation-only. This handoff refresh is also documentation-only. No C++ source implementation commit has been added after `a3a03fbd`.
 
 ### Relationship with `main`
 
@@ -48,7 +48,7 @@ Relevant links:
 
 ## 3. CI and test evidence
 
-The latest workflow run on the verified branch head is [Amcam macOS build #45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740), associated with commit `4de57806a898799173adb04af1272e00ff00fb24`. It completed successfully.
+The latest completed successful workflow verified is [Amcam macOS build #45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740), associated with commit `4de57806a898799173adb04af1272e00ff00fb24`. The newer run [#45051829571](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051829571), associated with `1e44fa8bab23f26587adffe8c5e06471956d9e54`, was still in progress on both architectures at the last status check. This handoff-only refresh also triggers the same path-filtered workflow, so the next session must verify its resulting run before reporting current-head CI.
 
 Both jobs passed:
 
@@ -74,7 +74,7 @@ No local C++ build/test run or physical-camera run was performed during this con
 
 ## 4. Actual implementation state at the last source revision
 
-The implementation-bearing source revision is `a3a03fbd`. The current branch head adds the completion plan and its README link, but does not alter that source.
+The implementation-bearing source revision is `a3a03fbd`. Subsequent branch commits added the completion plan, implementation inventory, hardware record template, continuation handoff, and private Phase 1 SDK-seam design; they do not alter the native C++ source.
 
 ### Native driver
 
@@ -216,21 +216,23 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 - Design the common model extraction as a type migration with explicit AmScope adapters.
 - Identify the external GenTL/GenApi C++ runtime and its supply/version/licensing constraints. Do not create a replacement implementation.
 
-### First implementation task after Phase 0 acceptance
+### First Phase 1 source change after Phase 0 acceptance
 
-1. Implement the private Phase 1 SDK-call seam described in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md).
-2. Add deterministic native-session tests for recoverable Stop failure, Stop/flush retry, terminal Close, callback drain, fatal-event races, worker-start failure, and still-capture quarantine.
-3. Run the existing baseline regression plus the Phase 1 15-minute physical acquisition/lifecycle test and save the hardware record.
+Implement the private SDK dispatch seam in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md), then add deterministic native-session tests for:
 
+1. Open failure and idempotent terminal Close.
+2. Start setup failure and StartPull callback-start failure.
+3. Worker creation failure with both successful and failed native Stop.
+4. Recoverable Stop failure while Streaming; prove the same worker, callback context, queue, and frame pool remain live.
+5. Successful Stop, callback drain, worker join, and frame-resource release.
+6. Cache flush failure, retained obligation, and retry-before-Start.
+7. Terminal Close after failed Stop, independent of Stop/flush success.
+8. Fatal SDK event versus user Stop transition ownership.
+9. Still-capture timeout/failure quarantine and the successful Stop/Start reset boundary.
 
-Start Phase 1 with a focused change set:
+Keep the test seam private to implementation and test support. Do not add a second public camera abstraction, second `HAmcam`, second SDK-call lock, or a different acquisition mechanism.
 
-1. Add private/test-only injection around the native calls that must fail deterministically.
-2. Cover Stop failure, flush failure/retry, successful Stop callback drain, terminal Close, event worker creation failure, still-capture timeout/quarantine, and session/frame-generation races.
-3. Preserve one `HAmcam`, the existing callback-to-pull mechanism, and existing FIFO operation ordering.
-4. Run the automated tests.
-5. Run the physical-camera regression plus the Phase 1 hardware test.
-6. Update the hardware record and phase ledger before moving on.
+The physical AmScope regression remains mandatory after those code changes. The Phase 1 record must identify the exact camera/model and tested commit, include the baseline procedure, and measure the required 15-minute acquisition interval.
 
 ## 9. Hardware record policy
 

@@ -17,6 +17,7 @@
 #include <QMetaObject>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QColor>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QJsonDocument>
@@ -35,6 +36,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -84,6 +86,10 @@ public:
         update();
     }
 
+    void setFramePresentedCallback(std::function<void()> callback) {
+        framePresentedCallback_ = std::move(callback);
+    }
+
     void setFrame(amscope::FramePtr frame) {
         image_ = QImage{};
         frame_ = std::move(frame);
@@ -131,6 +137,13 @@ protected:
             targetSize.height());
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
         painter.drawImage(targetRect, image_);
+
+        if (!hasPaintedSequence_ || frame_->sequence != lastPaintedSequence_) {
+            lastPaintedSequence_ = frame_->sequence;
+            hasPaintedSequence_ = true;
+            if (framePresentedCallback_)
+                framePresentedCallback_();
+        }
     }
 
 private:
@@ -138,6 +151,9 @@ private:
     amscope::FramePtr frame_;
     QImage image_;
     QString message_ = QStringLiteral("Select a camera and press Open, then Start.");
+    std::function<void()> framePresentedCallback_;
+    std::uint32_t lastPaintedSequence_ = 0;
+    bool hasPaintedSequence_ = false;
 };
 
 int listCameras() {
@@ -366,6 +382,15 @@ public:
         workspace->addLayout(settingsColumn);
 
         frameInfo_ = new QLabel("No frames received", central);
+        preview_->setFramePresentedCallback([this]() {
+            const double monotonicSeconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+            if (const auto estimate =
+                    previewFrameRateEstimator_.record(monotonicSeconds)) {
+                previewFramesPerSecond_ = *estimate;
+            }
+            updateFrameInfoLabel();
+        });
         frameRateTimer_ = new QTimer(this);
         frameRateTimer_->setInterval(1000);
         connect(frameRateTimer_, &QTimer::timeout, this, [this]() {
@@ -1408,7 +1433,7 @@ private:
                 .arg(*pulledFramesPerSecond_, 0, 'f', 1);
         }
         if (previewFramesPerSecond_) {
-            text += QString(" | preview %1 FPS")
+            text += QString(" | paint %1 FPS")
                 .arg(*previewFramesPerSecond_, 0, 'f', 1);
         }
         frameInfo_->setText(text);
@@ -1442,11 +1467,6 @@ private:
         // FrameView retains the frame lease and paints directly from pooled
         // memory. No per-frame image copy or QPixmap conversion.
         preview_->setFrame(std::move(frame));
-
-        const double monotonicSeconds = std::chrono::duration<double>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        if (const auto estimate = previewFrameRateEstimator_.record(monotonicSeconds))
-            previewFramesPerSecond_ = *estimate;
 
         updateFrameInfoLabel();
     }

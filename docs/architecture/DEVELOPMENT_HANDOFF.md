@@ -8,10 +8,10 @@
 **Phase 2.1 local/CI validation revision:** `03f35bf07d8236e5aab33aea0cde987155cf0425`  
 **Phase 2.2 frame-model source snapshot:** `3da2a385508f1b639f98bbd34f5a6dabd9a3406a`  
 **Preview migration fix:** `609174c3ad56b50b25465e5688672627ce315a3f`  
-**Latest branch head reviewed and software-validated:** `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`  
+**Latest source fix:** `a16ae3bd77c56b14384736aa457e859c73a8072f` (fixed-8-bit RAW storage-mode handling; local validation and current CI pending)  
 **Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
 **Current phase:** Phase 2.2 — common frame and image-layout model  
-**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 passed the user's clean local build and 10/10 CTest suite, plus GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2's common frame/payload/layout model, optional timing metadata, opaque pixel-format identifier, Amcam-specific frame extension, and preview migration are implemented. The user then pulled branch head `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`, completed a clean Release build of the driver, Qt adapter, hardware-rate executable, preview app, and test targets, and passed all 11/11 CTest tests. GitHub Actions run [#45070941692](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45070941692) passed on Intel x86_64 and Apple Silicon arm64 for that exact head. Phase 2.2 remains open only for physical-camera validation of frame layout/payload, optional metadata, and RAW format identity/depth on a RAW-capable camera. The two earlier MU503 performance runs and residual 15-minute/fault-injection follow-ups remain recorded below.
+**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 passed the user's clean local build and 10/10 CTest suite, plus GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2's common frame/payload/layout model, optional timing metadata, opaque pixel-format identifier, Amcam-specific frame extension, and preview migration are implemented. The user then pulled branch head `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`, completed a clean Release build of the driver, Qt adapter, hardware-rate executable, preview app, and test targets, and passed all 11/11 CTest tests. GitHub Actions run [#45070941692](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45070941692) passed on Intel x86_64 and Apple Silicon arm64 for that exact head. Phase 2.2's original software revision remains validated, but a newly discovered fixed-8-bit RAW handling correction is now committed at `a16ae3bd77c56b14384736aa457e859c73a8072f` and awaits a clean local build/CTest plus current-head CI. The correction uses `Amcam_get_MaxBitDepth` to skip `AMCAM_OPTION_BITDEPTH` on fixed 8-bit sensors and retains the option query for sensors above 8 bits; it is applied to RAW still capture and RAW live startup. Physical-camera validation of frame layout/payload, optional metadata, and RAW format identity/depth remains open. The two earlier MU503 performance runs and residual 15-minute/fault-injection follow-ups remain recorded below.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -200,7 +200,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 |---|---|
 | 0 — Baseline freeze and verification | ACCEPTED BY OWNER. Two MU503 640×480 physical runs measured 91.253 and 91.183 event/pull/callback FPS, zero drops, successful Stop/restore/Close. A 15-minute exact-commit hardware record remains follow-up coverage. |
 | 1 — Native driver stabilization | ACCEPTED BY OWNER. The single-session native acquisition path is accepted; deterministic callback/cache/lease tests are added as post-acceptance hardening. Full injected SDK failure coverage remains future work. |
-| 2 — Backend-neutral models | IN PROGRESS. Slices 2.1 and 2.2 passed clean local builds/CTest (10/10 and 11/11 respectively) and cross-architecture CI. Slice 2.2 physical-camera frame-layout/payload/metadata and RAW-capable-camera regression remains open. Slice 2.3 common errors/value models has not started. |
+| 2 — Backend-neutral models | IN PROGRESS. Slices 2.1 and 2.2 passed clean local builds/CTest (10/10 and 11/11 respectively) and cross-architecture CI at their recorded revisions. The fixed-8-bit RAW storage-mode correction `a16ae3b` awaits software revalidation; physical-camera frame-layout/payload/metadata and RAW-capable-camera regression remains open. Slice 2.3 common errors/value models has not started. |
 | 3 — Driver/control/Qt streaming separation | OPEN. Current Qt facade combines responsibilities. |
 | 4 — Reusable Qt UI library | OPEN. Preview exists; reusable UI library is not delivered. |
 | 5 — GenTL/GenApi integration | BLOCKED. Existing C++ dependency/runtime and a real CTI camera are not established in this branch. |
@@ -239,9 +239,17 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ## 8. Immediate next actions
 
+
+
+### RAW bit-depth option correction
+
+The Amcam SDK manual describes `AMCAM_OPTION_BITDEPTH` as model-specific: 0 selects 8-bit output and 1 selects the camera's maximum bit depth. `Amcam_get_MaxBitDepth` returns that maximum depth. A fixed 8-bit sensor therefore has no selectable 8/16-bit mode and may return `E_NOTIMPL` (documented HRESULT `0x80004001`) from `Amcam_get_Option(AMCAM_OPTION_BITDEPTH)`.
+
+The initial RAW still implementation treated that option as mandatory for every RAW-capable model and aborted before snap/pull when it was unavailable. Commit `a16ae3b` adds a shared storage-mode resolver: maximum depth 8 selects the fixed 8-bit container without querying the optional option; models above 8 bits still query the option and preserve its 8-bit-versus-16-bit mode. It is used by both RAW still capture and RAW live startup. This source fix is awaiting local clean build/CTest and current-head CI at the time of this handoff update. It does not change the still-event waiter/pull path or live acquisition callback/queue/worker mechanism.
+
 ### Physical-camera validation for Phase 2.2
 
-The software validation gate is closed at branch head 9daf193c7a107ae93984f5bf00f56d0dfbd66b3b: the user's clean Release build completed, all 11/11 CTest targets passed, and GitHub Actions passed on Intel x86_64 and Apple Silicon arm64. Do not repeat the clean build solely for Phase 2.2 unless source changes invalidate this evidence.
+The software validation gate passed at `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`: the user's clean Release build completed, all 11/11 CTest targets passed, and GitHub Actions passed on Intel x86_64 and Apple Silicon arm64. The later fixed-8-bit RAW correction at `a16ae3b` is a new source change and must receive a clean local build/CTest and current-head CI before relying on it.
 
 The remaining required Phase 2.2 regression must use a physical AmScope camera:
 

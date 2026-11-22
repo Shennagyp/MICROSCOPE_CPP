@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `15be30850ea573dd06ffe3128befcdb27ce2e974` (latest implementation-bearing source: host-revision paint measurement, configured-exposure/speed diagnostics)  
-**Branch head reviewed for this inventory refresh:** `c98be94d115a752638b4ca6153caf4c638aa55c7`  
+**Source snapshot:** `aa7475666c1d126ce524e8ed8737aaf9b3b6e44d` (common discovery models, AmScope identity/capability mapping, and common-model CTest registration)  
+**Branch head reviewed for this inventory refresh:** `156052836ecc7f8ce962e8aab7242dfeced53154`  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---

@@ -31,6 +31,24 @@ public:
         Timeout
     };
 
+    PushResult push(std::uint32_t event) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stopped_) return PushResult::Ignored;
+        if (overflow_) return PushResult::Overflow;
+
+        if (count_ == events_.size()) {
+            overflow_ = true;
+            condition_.notify_one();
+            return PushResult::Overflow;
+        }
+
+        const std::size_t tail = (head_ + count_) % events_.size();
+        events_[tail] = event;
+        ++count_;
+        condition_.notify_one();
+        return PushResult::Queued;
+    }
+
     WaitResult waitNext(std::uint32_t& event) {
         std::unique_lock<std::mutex> lock(mutex_);
         condition_.wait(lock, [this]() {

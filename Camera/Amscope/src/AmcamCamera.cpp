@@ -1118,6 +1118,99 @@ struct AmcamCamera::Impl {
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
 
 
+    // Must be called after Amcam_StartPullModeWithCallback, as required
+    // by the vendor's frame-rate configuration procedure.
+    bool configureMaximumFrameRateLocked(CameraError* error) {
+        if (!handle)
+            return fail(error, "configureMaximumFrameRate", -1,
+                        "The Amcam camera handle is not open.");
+
+        if (hasModelDescriptor && (modelFlags & AMCAM_FLAG_LOW_NOISE) != 0) {
+            int lowNoise = 0;
+            HRESULT hr = Amcam_get_Option(
+                handle, AMCAM_OPTION_LOW_NOISE, &lowNoise);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_get_Option(LOW_NOISE)", hr);
+            if (lowNoise != 0) {
+                hr = Amcam_put_Option(handle, AMCAM_OPTION_LOW_NOISE, 0);
+                if (FAILED(hr))
+                    return failHr(error, "Amcam_put_Option(LOW_NOISE, 0)", hr);
+                int readback = -1;
+                hr = Amcam_get_Option(
+                    handle, AMCAM_OPTION_LOW_NOISE, &readback);
+                if (FAILED(hr))
+                    return failHr(error, "Amcam_get_Option(LOW_NOISE readback)", hr);
+                if (readback != 0)
+                    return fail(error, "configureMaximumFrameRate", readback,
+                                "The camera did not disable low-noise mode; that mode reduces frame rate.");
+            }
+        }
+
+        if (hasModelDescriptor &&
+            (modelFlags & AMCAM_FLAG_PRECISE_FRAMERATE) != 0) {
+            int minimumFPS = 0;
+            int maximumFPS = 0;
+            HRESULT hr = Amcam_get_Option(
+                handle, AMCAM_OPTION_MIN_PRECISE_FRAMERATE, &minimumFPS);
+            if (FAILED(hr))
+                return failHr(error,
+                              "Amcam_get_Option(MIN_PRECISE_FRAMERATE)", hr);
+            hr = Amcam_get_Option(
+                handle, AMCAM_OPTION_MAX_PRECISE_FRAMERATE, &maximumFPS);
+            if (FAILED(hr))
+                return failHr(error,
+                              "Amcam_get_Option(MAX_PRECISE_FRAMERATE)", hr);
+            if (minimumFPS <= 0 || maximumFPS < minimumFPS)
+                return fail(error, "configureMaximumFrameRate", -1,
+                            "The SDK returned an invalid precise frame-rate range.");
+
+            hr = Amcam_put_Option(handle, AMCAM_OPTION_BANDWIDTH, 100);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_put_Option(BANDWIDTH, 100)", hr);
+            hr = Amcam_put_Option(
+                handle, AMCAM_OPTION_PRECISE_FRAMERATE, maximumFPS);
+            if (FAILED(hr))
+                return failHr(
+                    error, "Amcam_put_Option(PRECISE_FRAMERATE, maximum)", hr);
+
+            int readback = 0;
+            hr = Amcam_get_Option(
+                handle, AMCAM_OPTION_PRECISE_FRAMERATE, &readback);
+            if (FAILED(hr))
+                return failHr(
+                    error, "Amcam_get_Option(PRECISE_FRAMERATE readback)", hr);
+            if (readback != maximumFPS)
+                return fail(error, "configureMaximumFrameRate", readback,
+                            "The camera did not accept its maximum precise frame rate.");
+            return true;
+        }
+
+        // Cameras without precise-FPS support use the discrete Frame Speed
+        // Level control. The model descriptor reports the SDK MaxSpeed value.
+        if (maximumSpeedLevel.has_value()) {
+            if (*maximumSpeedLevel >
+                std::numeric_limits<unsigned short>::max()) {
+                return fail(error, "configureMaximumFrameRate", -1,
+                            "The model's maximum frame-speed level exceeds the SDK type.");
+            }
+            const auto maximumSpeed =
+                static_cast<unsigned short>(*maximumSpeedLevel);
+            HRESULT hr = Amcam_put_Speed(handle, maximumSpeed);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_put_Speed(maximum)", hr);
+
+            unsigned short readback = 0;
+            hr = Amcam_get_Speed(handle, &readback);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_get_Speed(readback)", hr);
+            if (readback != maximumSpeed)
+                return fail(error, "configureMaximumFrameRate", readback,
+                            "The camera did not accept its maximum frame-speed level.");
+        }
+
+        return true;
+    }
+
     bool readHeartbeatOptionsLocked(
         HeartbeatOptionSnapshot& snapshot,
         CameraError* error) {
@@ -2206,6 +2299,17 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             impl_->state.store(CameraState::Open, std::memory_order_release);
             return failHr(error, "Amcam_put_Option(AMCAM_OPTION_BYTEORDER)", hr);
         }
+        // Zero means no generic SDK frame-rate limit. Model-specific maximum
+        // speed/FPS is selected immediately after StartPull below.
+        hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_FRAMERATE, 0);
+        if (FAILED(hr)) {
+            impl_->eventQueue.stop();
+            impl_->pool.reset();
+            impl_->onFrame = {};
+            impl_->onError = {};
+            impl_->state.store(CameraState::Open, std::memory_order_release);
+            return failHr(error, "Amcam_put_Option(FRAMERATE, 0)", hr);
+        }
         hr = Amcam_StartPullModeWithCallback(
             impl_->handle, &Impl::sdkEvent, impl_.get());
     }
@@ -2222,6 +2326,53 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
 
     impl_->sdkStarted.store(true, std::memory_order_release);
     impl_->state.store(CameraState::Streaming, std::memory_order_release);
+
+    CameraError frameRateConfigurationError;
+    bool maximumFrameRateConfigured = false;
+    {
+        // The vendor requires the maximum speed/precise-FPS selection after
+        // StartPullModeWithCallback. The acquisition worker is not running yet,
+        // so this short configuration sequence cannot contend with PullImage.
+        std::lock_guard<std::mutex> api(impl_->apiMutex);
+        maximumFrameRateConfigured =
+            impl_->configureMaximumFrameRateLocked(&frameRateConfigurationError);
+    }
+
+    if (!maximumFrameRateConfigured) {
+        impl_->stopRequested.store(true, std::memory_order_release);
+        impl_->eventQueue.stop();
+        HRESULT stopHr = S_OK;
+        {
+            std::lock_guard<std::mutex> api(impl_->apiMutex);
+            if (impl_->handle &&
+                impl_->sdkStarted.load(std::memory_order_acquire)) {
+                stopHr = Amcam_Stop(impl_->handle);
+                if (SUCCEEDED(stopHr)) {
+                    impl_->sdkStarted.store(false, std::memory_order_release);
+                    impl_->frameCacheFlushPending.store(true, std::memory_order_release);
+                }
+            }
+        }
+        if (SUCCEEDED(stopHr)) {
+            impl_->waitForSdkCallbacks();
+            impl_->eventQueue.clearPending();
+        }
+        impl_->pool.reset();
+        impl_->onFrame = {};
+        impl_->onError = {};
+        impl_->state.store(FAILED(stopHr) ? CameraState::Faulted : CameraState::Open,
+                           std::memory_order_release);
+        std::string message = frameRateConfigurationError.message;
+        if (FAILED(stopHr)) {
+            message += " " + hrMessage("Amcam_Stop", stopHr);
+        } else {
+            CameraError flushError;
+            if (!impl_->flushStoppedFrameCaches(&flushError))
+                message += " " + flushError.message;
+        }
+        return fail(error, "configure maximum frame rate", -1, std::move(message));
+    }
+
     try {
         auto activePool = impl_->pool;
         impl_->worker = std::thread([p = impl_.get(), activePool]() {

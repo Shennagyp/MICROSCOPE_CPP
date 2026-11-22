@@ -96,6 +96,7 @@ if(BUILD_TESTING)
         tests/AmcamCameraTypesTests.cpp)
     target_compile_features(amscope_camera_types_tests PRIVATE cxx_std_17)
     target_include_directories(amscope_camera_types_tests PRIVATE include)
+    target_link_libraries(amscope_camera_types_tests PRIVATE Camera::Common)
     add_test(NAME amscope_camera_types_tests COMMAND amscope_camera_types_tests)
 
     add_executable(amscope_acquisition_frame_gate_tests

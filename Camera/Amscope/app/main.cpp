@@ -2056,7 +2056,7 @@ private:
         }
     }
 
-    void setLensAperturePosition() {    void setLensAperturePosition() {
+    void setLensAperturePosition() {
         if (!lensFocusAvailable_ || accessoryOperationPending_ ||
             lensFocusReadPending_ || !lensFocusStateKnown_ ||
             !lensApertureChoicesAvailable_ || !lensApertureCalibrated_ ||

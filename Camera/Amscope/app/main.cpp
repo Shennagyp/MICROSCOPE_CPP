@@ -2356,7 +2356,7 @@ private:
         stillCaptureModeSelector_->setEnabled(streaming && idle);
         captureStillButton_->setEnabled(
             streaming && idle && stillResolutionSelector_->count() > 0);
-        refreshFeaturesButton_->setEnabled((open || streaming) && idle &&
+        refreshFeaturesButton_->setEnabled(open && idle &&
                                             !accessoryOperationPending_);
         const bool accessoriesIdle =
             idle && !accessoryOperationPending_ &&

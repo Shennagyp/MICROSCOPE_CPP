@@ -62,7 +62,8 @@ add_library(amscope_driver SHARED
     include/amscope/detail/FrameStallWatchdog.h
     include/amscope/AmcamCamera.h
     include/amscope/AmcamCameraProfiles.h
-    include/amscope/CameraTypes.h)
+    include/amscope/CameraTypes.h
+    ../Common/include/camera/CameraModels.h)
 add_library(Amscope::Driver ALIAS amscope_driver)
 
 target_compile_features(amscope_driver PUBLIC cxx_std_17)

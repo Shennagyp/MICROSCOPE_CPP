@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
 **Source snapshot:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
-**Current branch documentation head at inventory creation:** `3858c29a8e770901bc6baf414df9410e44d8fd57`  
+**Branch head reviewed for this inventory refresh:** `4de57806a898799173adb04af1272e00ff00fb24` (documentation-only relative to the source snapshot)  
 **Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims and visible test/UI coverage; it does not claim physical-camera verification.
 
 ---
@@ -171,7 +171,7 @@ Additional target-architecture gaps:
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
-The eight tests passed in the latest observed CI run. This list must be expanded when tests are added; it must not be interpreted as complete lifecycle coverage.
+All eight tests passed on both Intel x86_64 and Apple Silicon arm64 in workflow run [#45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740), on branch head `4de57806a898799173adb04af1272e00ff00fb24`. The launcher found zero cameras in CI. This list must be expanded when tests are added; it must not be interpreted as complete native lifecycle coverage.
 
 ## 10. Current evidence classification
 
@@ -185,8 +185,15 @@ The eight tests passed in the latest observed CI run. This list must be expanded
 - Reusable backend-neutral Qt UI library: **not delivered**.
 - Existing GenTL/GenApi C++ integration: **not delivered / dependency blocker**.
 - Exported CMake package: **not established**.
-- Intel and Apple Silicon CI: **passed at current reviewed documentation revision**.
+- Intel and Apple Silicon CI: **passed at branch head `4de57806` in workflow #45051151740; eight of eight CTest tests passed on both architectures**.
 - Physical AmScope hardware baseline: **not recorded**.
 - Physical CTI-camera test: **not recorded**.
 
 Update this inventory when a source/API/test/UI change lands. Do not change a hardware-evidence cell from "Not recorded" without a completed record under `docs/testing/hardware/`.
+
+
+## 11. Phase 1 preparation — native SDK seam
+
+A static source scan of the current AmScope implementation identifies direct SDK entry points across enumeration/session lifecycle, callback-based acquisition and pulling, feature probes and writes, trigger/heartbeat setup, still capture, hardware I/O, and accessory operations. The native session currently has no injected SDK-call boundary, so the existing helper tests cannot force deterministic native Stop/Open/Start/Pull/Close failures.
+
+The Phase 1 test seam and the initial lifecycle/acquisition API subset are specified in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). This is a design/preparation artifact only; no source seam or native-session mock test has been implemented yet. Phase 0 physical-camera acceptance remains the prerequisite for behavior-changing Phase 1 work.

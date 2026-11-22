@@ -3,7 +3,7 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last inspected branch head before this handoff refresh:** `24ae88ec4752833c803aaf44147da04e874a2121`  
+**Branch head verified during this review:** `4de57806a898799173adb04af1272e00ff00fb24`  
 **Last implementation-bearing commit:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
 **Current phase:** Phase 0 — baseline freeze and verification  
 **Phase status:** OPEN — real-camera baseline has not been recorded.
@@ -29,37 +29,35 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The last inspected branch head before this handoff refresh was `24ae88ec4752833c803aaf44147da04e874a2121` — `docs(amscope): link development handoff and inventory`. The follow-on commit that updates this handoff is also documentation-only.
-
-The documentation commits after the implementation baseline add the completion plan, its README links, this handoff, the source/test inventory, and the blank hardware-record template. No C++ source implementation commit was added after `a3a03fbd`.
+The branch head verified for this review is `4de57806a898799173adb04af1272e00ff00fb24` — `docs(amscope): refresh continuation handoff`. The source snapshot remains `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`; commits after that implementation revision are documentation-only. No C++ source implementation commit has been added after `a3a03fbd`.
 
 ### Relationship with `main`
 
-At the time of this review, GitHub reports the branch as 194 commits ahead and 2 behind `main`. The two commits on `main` after the merge base are:
+The current GitHub comparison reports `amscope-native-driver` as 200 commits ahead and 2 commits behind `main`, with merge base `a11bec3a1fe6e7ec481ec00de775e69a98f8e1aa`. The two commits on `main` after that merge base are:
 
 1. `f364b7b458f752f4bc0b340e61127ece32124a9c` — adds an unintended 66-line `Camera/Amscope/include/amscope/CameraTypes.h`.
 2. `0edf623c4227b15a3d97a55b59ef4cccead8ba58` — reverts that exact file addition.
 
-The compare from the merge base to `main` shows only this add-then-remove pair and no remaining changed file. There is no net source change from these two commits to import. Do not blindly merge or cherry-pick them. Recheck this comparison if `main` advances later.
+Those two commits have no net file change to import. The comparison also shows the branch's Camera/Amscope, Camera/Common, workflow, and documentation deliverables as additions relative to the merge base; this is the branch's substantive work, not an unexplained source delta. Do not blindly merge or cherry-pick the two main-only commits. Recheck the comparison if `main` advances later.
 
 Relevant links:
 
 - [Active branch](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/amscope-native-driver)
-- [Branch head](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/3858c29a8e770901bc6baf414df9410e44d8fd57)
+- [Branch head](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/4de57806a898799173adb04af1272e00ff00fb24)
 - [Comparison with main](https://github.com/Shennagyp/MICROSCOPE_CPP/compare/main...amscope-native-driver)
 
 ## 3. CI and test evidence
 
-The latest **completed successful** workflow run verified during this review is [Amcam macOS build #45028702181](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45028702181), associated with documentation head `3858c29a`. A newer run for `24ae88ec` was pending when this handoff was prepared. The handoff refresh itself changes documentation under the workflow path filter, so recheck the run associated with the final handoff commit before claiming that the current head's CI passed.
+The latest workflow run on the verified branch head is [Amcam macOS build #45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740), associated with commit `4de57806a898799173adb04af1272e00ff00fb24`. It completed successfully.
 
 Both jobs passed:
 
-- Intel x86_64 macOS.
-- Apple Silicon arm64 macOS.
+- Intel x86_64.
+- Apple Silicon arm64.
 
-Each job configured and compiled the AmScope native driver, Qt adapter, and preview application; ran CTest; checked expected artifacts and architectures; syntax-checked the launcher; and ran the launcher smoke check.
+Each job completed configuration and compilation of the native driver, Qt adapter, and preview application; ran CTest; verified SDK/library/application artifacts and architectures; syntax-checked the launcher; and ran its launcher smoke check.
 
-The CTest suite has eight tests:
+All eight CTest tests passed on both architectures:
 
 1. `amscope_camera_types_tests`
 2. `amscope_acquisition_frame_gate_tests`
@@ -70,11 +68,9 @@ The CTest suite has eight tests:
 7. `camera_common_feature_tests`
 8. `camera_common_frame_rate_tests`
 
-All eight passed in the successful run.
+The launcher reported `0 camera(s) found` in the hosted CI environment. This proves the no-device enumeration path only. It does not prove physical camera enumeration, acquisition, control readback, RAW/still capture, Stop/Close timing, accessory operation, or recovery.
 
-**Important limitation:** the launcher reported `0 camera(s) found` in the hosted CI environment. The CI run proves compilation, the current automated tests, artifact architecture checks, and a no-device launcher path. It does not prove real-camera enumeration, acquisition, controls, RAW format, still capture, Stop/Close behavior, accessory operation, or hardware recovery.
-
-No local C++ build, test, or hardware run was performed during the documentation/handoff work.
+No local C++ build/test run or physical-camera run was performed during this continuation review. The CI result is not a hardware record.
 
 ## 4. Actual implementation state at the last source revision
 
@@ -189,7 +185,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 ### Phase 0 work now recorded
 
 - Current branch and exact head verified.
-- Latest documentation-triggered CI verified green on Intel and Apple Silicon.
+- Latest documentation-triggered CI run #45051151740 verified green on Intel and Apple Silicon; all eight CTest tests passed and the launcher found zero cameras.
 - The two commits missing from `main` were inspected; they add and revert the same unintended file, with no net change to import.
 - Source tree and main architecture gaps reviewed.
 - The completion plan, implementation inventory, and hardware test-record template are now present in the repository.
@@ -216,11 +212,16 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 - Complete the source-to-test mapping in [the implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md).
 - Review the C++ source against the Swift behavior and identify untested native SDK call paths.
-- Design the internal SDK-call seam for deterministic fault injection, without changing the public camera abstraction.
+- The Phase 1 internal SDK-call seam has been statically scoped and documented in [the native-driver test seam design](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). Implement it only after Phase 0 hardware acceptance; it must remain private to implementation/testing and must not change the public camera abstraction.
 - Design the common model extraction as a type migration with explicit AmScope adapters.
 - Identify the external GenTL/GenApi C++ runtime and its supply/version/licensing constraints. Do not create a replacement implementation.
 
 ### First implementation task after Phase 0 acceptance
+
+1. Implement the private Phase 1 SDK-call seam described in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md).
+2. Add deterministic native-session tests for recoverable Stop failure, Stop/flush retry, terminal Close, callback drain, fatal-event races, worker-start failure, and still-capture quarantine.
+3. Run the existing baseline regression plus the Phase 1 15-minute physical acquisition/lifecycle test and save the hardware record.
+
 
 Start Phase 1 with a focused change set:
 

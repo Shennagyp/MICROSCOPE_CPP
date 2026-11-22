@@ -184,6 +184,11 @@ Therefore:
 
 The above status is an evidence snapshot, not a claim that the branch cannot have changed after the reviewed commit.
 
+### Latest branch-head CI evidence (documentation-only revision)
+
+The latest reviewed branch head is `4de57806a898799173adb04af1272e00ff00fb24`. GitHub Actions workflow [#45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740) completed successfully on Intel x86_64 and Apple Silicon arm64. All eight registered CTest tests passed on both architectures. The launcher reported zero cameras in the hosted runner. This updates the CI evidence only; it does not close the Phase 0 physical-camera gate.
+
+
 ## 5. Phase 0 — Freeze and verify the baseline
 
 **Objective:** establish a real-camera-tested reference before changing architecture or implementation.

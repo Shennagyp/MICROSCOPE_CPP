@@ -972,9 +972,6 @@ int main(int argc, char** argv) {
                         measurement.firstTimestamp = capture->firstTimestamp;
                         measurement.lastTimestamp = capture->lastTimestamp;
                         measurement.timestampSamples = capture->timestampSamples;
-                        measurement.hasConfiguredExposure = hasConfiguredExposure;
-                        measurement.configuredExposureMicroseconds =
-                            configuredExposureMicroseconds;
                         measurement.hasAppliedSpeedLevel = hasAppliedSpeedLevel;
                         measurement.appliedSpeedLevel = appliedSpeedLevel;
                         measurement.width = capture->lastWidth;

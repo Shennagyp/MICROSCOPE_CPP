@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -229,6 +230,32 @@ bool restoreResolution(
     return true;
 }
 
+std::optional<std::string> readEnumerationFeature(
+    amscope::AmcamCamera& camera,
+    const std::string& name) {
+    const auto result = camera.readFeature(name);
+    const auto* value =
+        std::get_if<camera::CameraFeatureValue>(&result);
+    if (!value) return std::nullopt;
+    const auto* enumeration =
+        std::get_if<camera::FeatureEnumeration>(value);
+    if (!enumeration) return std::nullopt;
+    return enumeration->symbol;
+}
+
+std::optional<std::uint32_t> readExposureTime(
+    amscope::AmcamCamera& camera) {
+    const auto result = camera.readFeature("ExposureTime");
+    const auto* value =
+        std::get_if<camera::CameraFeatureValue>(&result);
+    if (!value) return std::nullopt;
+    const auto* integer = std::get_if<std::int64_t>(value);
+    if (!integer || *integer < 0 ||
+        *integer > std::numeric_limits<std::uint32_t>::max())
+        return std::nullopt;
+    return static_cast<std::uint32_t>(*integer);
+}
+
 struct CaptureState {
     struct FrameSnapshot {
         amscope::FramePtr frame;
@@ -276,6 +303,7 @@ public:
             return;
 
         lastSubmittedRevision_ = revision;
+        ++submittedFrames_;
         image_ = QImage{};
         frame_ = std::move(frame);
         message_.clear();
@@ -317,12 +345,21 @@ public:
         return paintedFrames_.load(std::memory_order_relaxed);
     }
 
+    std::uint64_t submittedFrames() const noexcept {
+        return submittedFrames_;
+    }
+
+    std::uint64_t paintEvents() const noexcept {
+        return paintEvents_;
+    }
+
 protected:
     void closeEvent(QCloseEvent* event) override {
         event->ignore();
     }
 
     void paintEvent(QPaintEvent*) override {
+        ++paintEvents_;
         QPainter painter(this);
         painter.fillRect(rect(), QColor(23, 25, 29));
 
@@ -363,6 +400,8 @@ private:
     QString message_ = QStringLiteral("Waiting for camera frames...");
     QString status_ = QStringLiteral("Initializing camera...");
     std::atomic<std::uint64_t> paintedFrames_{0};
+    std::uint64_t submittedFrames_ = 0;
+    std::uint64_t paintEvents_ = 0;
     std::uint64_t lastSubmittedRevision_ = 0;
     bool hasUnpaintedFrame_ = false;
 };
@@ -373,6 +412,9 @@ struct Measurement {
     std::uint64_t framesPulled = 0;
     std::uint64_t callbackFrames = 0;
     std::uint64_t paintedFrames = 0;
+    std::uint64_t framePollTicks = 0;
+    std::uint64_t previewFrameSubmissions = 0;
+    std::uint64_t paintEvents = 0;
     std::uint64_t droppedFrames = 0;
     bool hasSequence = false;
     std::uint32_t firstSequence = 0;
@@ -381,8 +423,14 @@ struct Measurement {
     std::uint64_t firstTimestamp = 0;
     std::uint64_t lastTimestamp = 0;
     std::uint64_t timestampSamples = 0;
-    bool hasConfiguredExposure = false;
-    std::uint32_t configuredExposureMicroseconds = 0;
+    std::optional<std::string> exposureAutoBeforeStart;
+    std::optional<std::uint32_t> exposureBeforeStartMicroseconds;
+    std::optional<std::string> exposureAutoAfterStart;
+    std::optional<std::uint32_t> exposureAfterStartMicroseconds;
+    std::optional<std::string> exposureAutoAtMeasurementStart;
+    std::optional<std::uint32_t> exposureAtMeasurementStartMicroseconds;
+    std::optional<std::string> exposureAutoAtMeasurementEnd;
+    std::optional<std::uint32_t> exposureAtMeasurementEndMicroseconds;
     bool hasAppliedSpeedLevel = false;
     std::int64_t appliedSpeedLevel = 0;
     std::uint32_t width = 0;
@@ -414,11 +462,21 @@ void printReport(
         static_cast<double>(measurement.callbackFrames) / safeDuration;
     const double paintFps =
         static_cast<double>(measurement.paintedFrames) / safeDuration;
-    const double configuredExposureFpsLimit =
-        measurement.hasConfiguredExposure &&
-        measurement.configuredExposureMicroseconds > 0
+    const bool manualExposureStable =
+        measurement.exposureAutoAtMeasurementStart &&
+        measurement.exposureAutoAtMeasurementEnd &&
+        *measurement.exposureAutoAtMeasurementStart == "Off" &&
+        *measurement.exposureAutoAtMeasurementEnd == "Off" &&
+        measurement.exposureAtMeasurementStartMicroseconds &&
+        measurement.exposureAtMeasurementEndMicroseconds &&
+        *measurement.exposureAtMeasurementStartMicroseconds ==
+            *measurement.exposureAtMeasurementEndMicroseconds;
+    const double measuredExposureFpsLimit =
+        manualExposureStable &&
+        *measurement.exposureAtMeasurementStartMicroseconds > 0
             ? 1000000.0 /
-              static_cast<double>(measurement.configuredExposureMicroseconds)
+              static_cast<double>(
+                  *measurement.exposureAtMeasurementStartMicroseconds)
             : 0.0;
     const bool operationalPass =
         measurement.callbackFrames > 0 &&
@@ -461,6 +519,10 @@ void printReport(
         << "  \"pull_fps\": " << pullFps << ",\n"
         << "  \"callback_fps\": " << callbackFps << ",\n"
         << "  \"paint_fps\": " << paintFps << ",\n"
+        << "  \"frame_poll_ticks\": " << measurement.framePollTicks << ",\n"
+        << "  \"preview_frame_submissions\": "
+        << measurement.previewFrameSubmissions << ",\n"
+        << "  \"paint_events\": " << measurement.paintEvents << ",\n"
         << "  \"target_fps\": " << options.targetFps << ",\n"
         << "  \"pull_fps_target_met\": "
         << (pullFps >= options.targetFps ? "true" : "false") << ",\n"
@@ -490,12 +552,44 @@ void printReport(
         << (measurement.hasTimestamp
                 ? std::to_string(measurement.lastTimestamp) : "null") << ",\n"
         << "  \"timestamp_samples\": " << measurement.timestampSamples << ",\n"
-        << "  \"configured_exposure_us\": "
-        << (measurement.hasConfiguredExposure
-                ? std::to_string(measurement.configuredExposureMicroseconds) : "null") << ",\n"
+        << "  \"exposure_auto_before_start\": "
+        << (measurement.exposureAutoBeforeStart
+                ? "\"" + jsonEscape(*measurement.exposureAutoBeforeStart) + "\""
+                : "null") << ",\n"
+        << "  \"exposure_us_before_start\": "
+        << (measurement.exposureBeforeStartMicroseconds
+                ? std::to_string(*measurement.exposureBeforeStartMicroseconds)
+                : "null") << ",\n"
+        << "  \"exposure_auto_after_start\": "
+        << (measurement.exposureAutoAfterStart
+                ? "\"" + jsonEscape(*measurement.exposureAutoAfterStart) + "\""
+                : "null") << ",\n"
+        << "  \"exposure_us_after_start\": "
+        << (measurement.exposureAfterStartMicroseconds
+                ? std::to_string(*measurement.exposureAfterStartMicroseconds)
+                : "null") << ",\n"
+        << "  \"exposure_auto_at_measurement_start\": "
+        << (measurement.exposureAutoAtMeasurementStart
+                ? "\"" + jsonEscape(*measurement.exposureAutoAtMeasurementStart) + "\""
+                : "null") << ",\n"
+        << "  \"exposure_us_at_measurement_start\": "
+        << (measurement.exposureAtMeasurementStartMicroseconds
+                ? std::to_string(*measurement.exposureAtMeasurementStartMicroseconds)
+                : "null") << ",\n"
+        << "  \"exposure_auto_at_measurement_end\": "
+        << (measurement.exposureAutoAtMeasurementEnd
+                ? "\"" + jsonEscape(*measurement.exposureAutoAtMeasurementEnd) + "\""
+                : "null") << ",\n"
+        << "  \"exposure_us_at_measurement_end\": "
+        << (measurement.exposureAtMeasurementEndMicroseconds
+                ? std::to_string(*measurement.exposureAtMeasurementEndMicroseconds)
+                : "null") << ",\n"
         << "  \"exposure_fps_limit\": "
-        << (configuredExposureFpsLimit > 0.0
-                ? std::to_string(configuredExposureFpsLimit) : "null") << ",\n"
+        << (measuredExposureFpsLimit > 0.0
+                ? std::to_string(measuredExposureFpsLimit) : "null") << ",\n"
+        << "  \"exposure_fps_limit_basis\": \""
+        << (manualExposureStable ? "stable_manual_exposure" : "not_verified")
+        << "\",\n"
         << "  \"sdk_exposure_samples\": " << measurement.exposureSamples << ",\n"
         << "  \"exposure_us_min\": " << measurement.exposureMinimum << ",\n"
         << "  \"exposure_us_max\": " << measurement.exposureMaximum << ",\n"
@@ -676,26 +770,12 @@ int main(int argc, char** argv) {
         return 6;
     }
 
-    bool hasConfiguredExposure = false;
-    std::uint32_t configuredExposureMicroseconds = 0;
-    const auto exposureResult = camera.readFeature("ExposureTime");
-    if (const auto* exposureValue =
-            std::get_if<camera::CameraFeatureValue>(&exposureResult)) {
-        if (const auto* exposureInteger =
-                std::get_if<std::int64_t>(exposureValue)) {
-            if (*exposureInteger >= 0 &&
-                *exposureInteger <= std::numeric_limits<std::uint32_t>::max()) {
-                hasConfiguredExposure = true;
-                configuredExposureMicroseconds =
-                    static_cast<std::uint32_t>(*exposureInteger);
-            }
-        }
-    } else {
-        const auto& exposureError =
-            std::get<camera::CameraFeatureAccessError>(exposureResult);
-        std::cerr << "Exposure feature readback unavailable: "
-                  << exposureError.message << '\n';
-    }
+    const auto exposureAutoBeforeStart =
+        readEnumerationFeature(camera, "ExposureAuto");
+    const auto exposureBeforeStartMicroseconds =
+        readExposureTime(camera);
+    if (!exposureBeforeStartMicroseconds)
+        std::cerr << "Exposure feature readback unavailable before Start.\n";
 
     auto capture = std::make_shared<CaptureState>();
     HardwarePreview preview;
@@ -704,10 +784,12 @@ int main(int argc, char** argv) {
         .arg(QString::fromStdString(requestedLabel)));
     preview.show();
 
+    std::uint64_t framePollTicks = 0;
     QTimer framePoll;
     framePoll.setTimerType(Qt::PreciseTimer);
     framePoll.setInterval(4);
     QObject::connect(&framePoll, &QTimer::timeout, [&]() {
+        ++framePollTicks;
         const auto snapshot = capture->takeLatestFrame();
         preview.setFrame(snapshot.frame, snapshot.revision);
     });
@@ -765,6 +847,11 @@ int main(int argc, char** argv) {
         return 7;
     }
 
+    const auto exposureAutoAfterStart =
+        readEnumerationFeature(camera, "ExposureAuto");
+    const auto exposureAfterStartMicroseconds =
+        readExposureTime(camera);
+
     // The Start path applies the model's maximum speed after callback
     // acquisition begins. Read that setting once, before the timed interval.
     bool hasAppliedSpeedLevel = false;
@@ -782,6 +869,11 @@ int main(int argc, char** argv) {
     std::uint64_t pullStart = 0;
     std::uint64_t dropStart = 0;
     std::uint64_t paintStart = 0;
+    std::uint64_t framePollStart = 0;
+    std::uint64_t previewSubmissionStart = 0;
+    std::uint64_t paintEventsStart = 0;
+    std::optional<std::string> exposureAutoAtMeasurementStart;
+    std::optional<std::uint32_t> exposureAtMeasurementStartMicroseconds;
     Clock::time_point measurementStart;
     bool measurementFinished = false;
     int exitCode = 0;
@@ -790,6 +882,10 @@ int main(int argc, char** argv) {
         static_cast<int>(options.warmupSeconds * 1000.0),
         &application,
         [&]() {
+            exposureAutoAtMeasurementStart =
+                readEnumerationFeature(camera, "ExposureAuto");
+            exposureAtMeasurementStartMicroseconds =
+                readExposureTime(camera);
             {
                 std::lock_guard<std::mutex> lock(capture->mutex);
                 capture->measuring = true;
@@ -809,6 +905,9 @@ int main(int argc, char** argv) {
             pullStart = camera.framesPulled();
             dropStart = camera.droppedFrames();
             paintStart = preview.paintedFrames();
+            framePollStart = framePollTicks;
+            previewSubmissionStart = preview.submittedFrames();
+            paintEventsStart = preview.paintEvents();
             measurementStart = Clock::now();
 
             preview.setStatus(QStringLiteral(
@@ -826,6 +925,10 @@ int main(int argc, char** argv) {
                     const double elapsed =
                         std::chrono::duration<double>(
                             measurementEnd - measurementStart).count();
+                    const auto exposureAutoAtMeasurementEnd =
+                        readEnumerationFeature(camera, "ExposureAuto");
+                    const auto exposureAtMeasurementEndMicroseconds =
+                        readExposureTime(camera);
 
                     Measurement measurement;
                     measurement.durationSeconds = elapsed;
@@ -837,6 +940,26 @@ int main(int argc, char** argv) {
                         camera.droppedFrames() - dropStart;
                     measurement.paintedFrames =
                         preview.paintedFrames() - paintStart;
+                    measurement.framePollTicks =
+                        framePollTicks - framePollStart;
+                    measurement.previewFrameSubmissions =
+                        preview.submittedFrames() - previewSubmissionStart;
+                    measurement.paintEvents =
+                        preview.paintEvents() - paintEventsStart;
+                    measurement.exposureAutoBeforeStart = exposureAutoBeforeStart;
+                    measurement.exposureBeforeStartMicroseconds =
+                        exposureBeforeStartMicroseconds;
+                    measurement.exposureAutoAfterStart = exposureAutoAfterStart;
+                    measurement.exposureAfterStartMicroseconds =
+                        exposureAfterStartMicroseconds;
+                    measurement.exposureAutoAtMeasurementStart =
+                        exposureAutoAtMeasurementStart;
+                    measurement.exposureAtMeasurementStartMicroseconds =
+                        exposureAtMeasurementStartMicroseconds;
+                    measurement.exposureAutoAtMeasurementEnd =
+                        exposureAutoAtMeasurementEnd;
+                    measurement.exposureAtMeasurementEndMicroseconds =
+                        exposureAtMeasurementEndMicroseconds;
 
                     {
                         std::lock_guard<std::mutex> lock(capture->mutex);

@@ -1169,13 +1169,35 @@ private:
             editor = control;
             break;
         }
-        case camera::CameraFeatureKind::Integer:
+        case camera::CameraFeatureKind::Integer: {
+            if (!descriptor.discreteIntegerValues.empty()) {
+                auto* control = new QComboBox(featureContent_);
+                for (const auto item : descriptor.discreteIntegerValues) {
+                    control->addItem(
+                        QString("%1-bit").arg(static_cast<qlonglong>(item)),
+                        QVariant::fromValue<qlonglong>(
+                            static_cast<qlonglong>(item)));
+                }
+                connect(control, qOverload<int>(&QComboBox::currentIndexChanged),
+                        this, [this, name = descriptor.name](int index) {
+                    if (index >= 0) submitFeatureWrite(name);
+                });
+                editor = control;
+            } else {
+                auto* control = new QLineEdit(featureContent_);
+                control->setPlaceholderText(numericRangeText(descriptor));
+                connect(control, &QLineEdit::editingFinished, this,
+                        [this, name = descriptor.name]() {
+                    submitFeatureWrite(name);
+                });
+                editor = control;
+            }
+            break;
+        }
         case camera::CameraFeatureKind::IntegerVector:
         case camera::CameraFeatureKind::String: {
             auto* control = new QLineEdit(featureContent_);
-            if (descriptor.kind == camera::CameraFeatureKind::Integer) {
-                control->setPlaceholderText(numericRangeText(descriptor));
-            } else if (descriptor.kind == camera::CameraFeatureKind::IntegerVector) {
+            if (descriptor.kind == camera::CameraFeatureKind::IntegerVector) {
                 control->setPlaceholderText(
                     descriptor.elementCount
                         ? QString("%1 comma-separated values")
@@ -1324,11 +1346,21 @@ private:
         }
         case camera::CameraFeatureKind::Integer: {
             const auto* typed = std::get_if<std::int64_t>(&value);
-            auto* editor = qobject_cast<QLineEdit*>(control.editor);
-            if (!typed || !editor) return false;
-            const QSignalBlocker blocker(editor);
-            editor->setText(QString::number(static_cast<qlonglong>(*typed)));
-            return true;
+            if (!typed) return false;
+            if (auto* combo = qobject_cast<QComboBox*>(control.editor)) {
+                const QSignalBlocker blocker(combo);
+                const int index = combo->findData(
+                    QVariant::fromValue<qlonglong>(
+                        static_cast<qlonglong>(*typed)));
+                combo->setCurrentIndex(index);
+                return index >= 0;
+            }
+            if (auto* editor = qobject_cast<QLineEdit*>(control.editor)) {
+                const QSignalBlocker blocker(editor);
+                editor->setText(QString::number(static_cast<qlonglong>(*typed)));
+                return true;
+            }
+            return false;
         }
         case camera::CameraFeatureKind::IntegerVector: {
             const auto* typed = std::get_if<std::vector<std::int64_t>>(&value);
@@ -1405,11 +1437,19 @@ private:
             break;
         }
         case camera::CameraFeatureKind::Integer: {
-            const auto* editor = qobject_cast<QLineEdit*>(control.editor);
             bool ok = false;
-            const qlonglong number = editor ? editor->text().trimmed().toLongLong(&ok) : 0;
+            qlonglong number = 0;
+            if (const auto* combo = qobject_cast<QComboBox*>(control.editor)) {
+                if (combo->currentIndex() >= 0)
+                    number = combo->currentData().toLongLong(&ok);
+            } else if (const auto* editor =
+                           qobject_cast<QLineEdit*>(control.editor)) {
+                number = editor->text().trimmed().toLongLong(&ok);
+            }
             if (!ok) {
-                validationMessage = "Enter a valid signed integer.";
+                validationMessage = control.descriptor.discreteIntegerValues.empty()
+                    ? "Enter a valid signed integer."
+                    : "Select one of the advertised integer values.";
                 break;
             }
             value = static_cast<std::int64_t>(number);

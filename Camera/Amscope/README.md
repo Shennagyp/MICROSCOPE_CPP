@@ -112,9 +112,12 @@ integration and does not modify vendor sample code.
   without blocking acquisition, and state reads distinguish movement from a
   confirmed slot. ST4 guide pulses and Stop are also dedicated operations with
   millisecond durations; guide-state reads preserve the SDK's S_OK (guiding)
-  versus S_FALSE (idle) distinction. These command surfaces do not alter the
-  camera's preview acquisition or trigger mode. None is represented as an
-  ordinary camera feature setting.
+  versus S_FALSE (idle) distinction. Astronomy auto-focus is a third independent
+  accessory API: it exposes position, travel range, step size, moving state and
+  optional temperature telemetry, plus separate absolute Move and Halt
+  commands. It uses the SDK AAF actions and the AstroAutoFocuser model flag,
+  not the lens AF/focus-motor APIs. These command surfaces do not alter preview
+  acquisition or trigger mode and are not ordinary camera feature settings.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
 - Still capture is independent of live-frame delivery. The complete SDK still-

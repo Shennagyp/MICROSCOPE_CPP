@@ -2375,6 +2375,116 @@ bool AmcamCamera::readST4GuideState(
                 "The SDK returned an unrecognized ST4 guide-state result.");
 }
 
+
+bool AmcamCamera::readAstroAutoFocuserState(
+    AstroAutoFocuserState& result,
+    CameraError* error) {
+    if (error) *error = {};
+    result = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "readAstroAutoFocuserState", -1,
+                    "The camera must be open to read the astronomy auto-focuser.");
+    if ((impl_->modelFlags & AMCAM_FLAG_AUTOFOCUSER) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::AstroAutoFocuser))
+        return fail(error, "readAstroAutoFocuserState", -1,
+                    "The selected model does not expose an astronomy auto-focuser.");
+
+    const auto query = [&](int action, int& value, const char* operation,
+                           bool required) -> bool {
+        value = 0;
+        const HRESULT hr = Amcam_AAF(impl_->handle, action, 0, &value);
+        if (FAILED(hr)) {
+            if (required) failHr(error, operation, hr);
+            return false;
+        }
+        return true;
+    };
+
+    int minimum = 0, maximum = 0, position = 0, stepSize = 0, moving = 0;
+    if (!query(AMCAM_AAF_RANGEMIN, minimum, "Amcam_AAF(RANGEMIN)", true) ||
+        !query(AMCAM_AAF_RANGEMAX, maximum, "Amcam_AAF(RANGEMAX)", true) ||
+        !query(AMCAM_AAF_GETPOSITION, position, "Amcam_AAF(GETPOSITION)", true) ||
+        !query(AMCAM_AAF_GETSTEPSIZE, stepSize, "Amcam_AAF(GETSTEPSIZE)", true) ||
+        !query(AMCAM_AAF_ISMOVING, moving, "Amcam_AAF(ISMOVING)", true))
+        return false;
+    if (minimum > maximum || position < minimum || position > maximum ||
+        stepSize < 0 || (moving != 0 && moving != 1))
+        return fail(error, "Amcam_AAF", -1,
+                    "The SDK returned an inconsistent AAF position, range, step size or movement state.");
+
+    result.minimumPosition = minimum;
+    result.maximumPosition = maximum;
+    result.position = position;
+    result.stepSize = stepSize;
+    result.moving = moving != 0;
+
+    int temperature = 0;
+    if (query(AMCAM_AAF_GETTEMP, temperature, "Amcam_AAF(GETTEMP)", false))
+        result.temperatureTenthsC = temperature;
+    int ambientTemperature = 0;
+    if (query(AMCAM_AAF_GETAMBIENTTEMP, ambientTemperature,
+              "Amcam_AAF(GETAMBIENTTEMP)", false))
+        result.ambientTemperatureTenthsC = ambientTemperature;
+    return true;
+}
+
+bool AmcamCamera::moveAstroAutoFocuser(
+    std::int32_t targetPosition,
+    CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "moveAstroAutoFocuser", -1,
+                    "The camera must be open to move the astronomy auto-focuser.");
+    if ((impl_->modelFlags & AMCAM_FLAG_AUTOFOCUSER) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::AstroAutoFocuser))
+        return fail(error, "moveAstroAutoFocuser", -1,
+                    "The selected model does not expose an astronomy auto-focuser.");
+
+    int minimum = 0, maximum = 0;
+    HRESULT hr = Amcam_AAF(impl_->handle, AMCAM_AAF_RANGEMIN, 0, &minimum);
+    if (FAILED(hr)) return failHr(error, "Amcam_AAF(RANGEMIN)", hr);
+    hr = Amcam_AAF(impl_->handle, AMCAM_AAF_RANGEMAX, 0, &maximum);
+    if (FAILED(hr)) return failHr(error, "Amcam_AAF(RANGEMAX)", hr);
+    if (minimum > maximum || targetPosition < minimum || targetPosition > maximum)
+        return fail(error, "moveAstroAutoFocuser", -1,
+                    "Requested target is outside the SDK-reported AAF travel range.");
+
+    int ignored = 0;
+    hr = Amcam_AAF(impl_->handle, AMCAM_AAF_SETPOSITION,
+                   static_cast<int>(targetPosition), &ignored);
+    if (FAILED(hr)) return failHr(error, "Amcam_AAF(SETPOSITION)", hr);
+    return true;
+}
+
+bool AmcamCamera::haltAstroAutoFocuser(CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "haltAstroAutoFocuser", -1,
+                    "The camera must be open to halt the astronomy auto-focuser.");
+    if ((impl_->modelFlags & AMCAM_FLAG_AUTOFOCUSER) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::AstroAutoFocuser))
+        return fail(error, "haltAstroAutoFocuser", -1,
+                    "The selected model does not expose an astronomy auto-focuser.");
+
+    int ignored = 0;
+    const HRESULT hr = Amcam_AAF(impl_->handle, AMCAM_AAF_HALT, 0, &ignored);
+    if (FAILED(hr)) return failHr(error, "Amcam_AAF(HALT)", hr);
+    return true;
+}
+
+bool AmcamCamera::readStillResolutions(
 bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {

@@ -647,6 +647,62 @@ bool QtAmcamCamera::readST4GuideState(
     return ok;
 }
 
+
+bool QtAmcamCamera::readAstroAutoFocuserState(
+    AstroAutoFocuserState& result,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("readAstroAutoFocuserState", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readAstroAutoFocuserState(result, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::moveAstroAutoFocuser(
+    std::int32_t targetPosition,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("moveAstroAutoFocuser", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.moveAstroAutoFocuser(targetPosition, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::haltAstroAutoFocuser(CameraError* error) {
+    if (!requireSynchronousExecutionMode("haltAstroAutoFocuser", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.haltAstroAutoFocuser(&local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
@@ -1018,6 +1074,106 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestST4GuideState(
         }, FeatureRequestSemantics::FeatureSnapshot);
 }
 
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAstroAutoFocuserState(
+    AstroAutoFocuserCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AstroAutoFocuserResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                AstroAutoFocuserState state;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readAstroAutoFocuserState(state, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readAstroAutoFocuserState", exception.what()};
+                } catch (...) {
+                    local = {0, "readAstroAutoFocuserState",
+                             "Unknown exception while reading AAF state."};
+                }
+                if (ok) result.emplace(std::move(state));
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::FeatureSnapshot);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestMoveAstroAutoFocuser(
+    std::int32_t targetPosition,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, targetPosition, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.moveAstroAutoFocuser(targetPosition, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "moveAstroAutoFocuser", exception.what()};
+                } catch (...) {
+                    local = {0, "moveAstroAutoFocuser",
+                             "Unknown exception while submitting an AAF move."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestHaltAstroAutoFocuser(
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.haltAstroAutoFocuser(&local);
+                } catch (const std::exception& exception) {
+                    local = {0, "haltAstroAutoFocuser", exception.what()};
+                } catch (...) {
+                    local = {0, "haltAstroAutoFocuser",
+                             "Unknown exception while halting the AAF."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     FeatureDescriptorsCallback callback) {
     if (!callback) return 0;

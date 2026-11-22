@@ -66,6 +66,7 @@ public:
     using EmbeddedLightSourceResult = CameraOperationResult<EmbeddedLightSourceState>;
     using FilterWheelStateResult = CameraOperationResult<FilterWheelState>;
     using ST4GuideStateResult = CameraOperationResult<ST4GuideState>;
+    using AstroAutoFocuserResult = CameraOperationResult<AstroAutoFocuserState>;
     using AccessoryCommandResult = CameraOperationResult<std::monostate>;
     using EmbeddedLightSourceCallback =
         std::function<void(FeatureRequestId, EmbeddedLightSourceResult)>;
@@ -73,6 +74,8 @@ public:
         std::function<void(FeatureRequestId, FilterWheelStateResult)>;
     using ST4GuideStateCallback =
         std::function<void(FeatureRequestId, ST4GuideStateResult)>;
+    using AstroAutoFocuserCallback =
+        std::function<void(FeatureRequestId, AstroAutoFocuserResult)>;
     using AccessoryCommandCallback =
         std::function<void(FeatureRequestId, AccessoryCommandResult)>;
     using AutoWhiteBalanceCallback =
@@ -140,6 +143,17 @@ public:
         ST4GuideDirection direction, std::uint32_t durationMilliseconds,
         CameraError* error = nullptr);
     bool readST4GuideState(ST4GuideState& state, CameraError* error = nullptr);
+    bool readAstroAutoFocuserState(
+        AstroAutoFocuserState& state, CameraError* error = nullptr);
+    bool moveAstroAutoFocuser(
+        std::int32_t targetPosition, CameraError* error = nullptr);
+    bool haltAstroAutoFocuser(CameraError* error = nullptr);
+    FeatureRequestId requestAstroAutoFocuserState(
+        AstroAutoFocuserCallback callback);
+    FeatureRequestId requestMoveAstroAutoFocuser(
+        std::int32_t targetPosition, AccessoryCommandCallback callback);
+    FeatureRequestId requestHaltAstroAutoFocuser(
+        AccessoryCommandCallback callback);
     FeatureRequestId requestST4Guide(
         ST4GuideDirection direction, std::uint32_t durationMilliseconds,
         AccessoryCommandCallback callback);

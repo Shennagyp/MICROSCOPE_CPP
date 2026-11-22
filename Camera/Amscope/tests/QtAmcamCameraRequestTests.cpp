@@ -196,6 +196,15 @@ int main(int argc, char** argv) {
             return camera.requestST4Guide(
                 amscope::ST4GuideDirection::Stop, 0,
                 std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestAstroAutoFocuserState(std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestMoveAstroAutoFocuser(0, std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestHaltAstroAutoFocuser(std::move(callback));
         })) {
         std::cerr << "Accessory requests lost their typed error or Qt affinity contract.\n";
         return EXIT_FAILURE;

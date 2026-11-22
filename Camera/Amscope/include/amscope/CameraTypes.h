@@ -143,4 +143,14 @@ enum class ST4GuideDirection : std::uint8_t {
 struct ST4GuideState {
     bool pulseGuiding = false;
 };
+
+struct AstroAutoFocuserState {
+    std::int32_t position = 0;
+    std::int32_t minimumPosition = 0;
+    std::int32_t maximumPosition = 0;
+    std::int32_t stepSize = 0;
+    bool moving = false;
+    std::optional<std::int32_t> temperatureTenthsC;
+    std::optional<std::int32_t> ambientTemperatureTenthsC;
+};
 } // namespace amscope

@@ -58,6 +58,12 @@ public:
         CameraError* error = nullptr);
     bool readST4GuideState(
         ST4GuideState& state, CameraError* error = nullptr);
+    bool readAstroAutoFocuserState(
+        AstroAutoFocuserState& state, CameraError* error = nullptr);
+    // Move is asynchronous at device level; read state to observe completion.
+    bool moveAstroAutoFocuser(
+        std::int32_t targetPosition, CameraError* error = nullptr);
+    bool haltAstroAutoFocuser(CameraError* error = nullptr);
     bool readStillResolutions(std::vector<StillResolution>& resolutions,
                               CameraError* error = nullptr);
     // Captures a still frame while live acquisition remains active.

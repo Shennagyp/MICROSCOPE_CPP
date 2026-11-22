@@ -10,6 +10,8 @@ static_assert(static_cast<std::uint8_t>(amscope::AmcamIoOutputMode::Strobe) == 2
 
 #include <cstdlib>
 #include <iostream>
+#include <memory>
+#include <type_traits>
 
 namespace {
 
@@ -48,28 +50,64 @@ static_assert(parsesOnceToNativeMode(),
 int main() {
     using amscope::AmcamAutoExposureMode;
 
-    amscope::Frame raw8;
+    static_assert(std::is_same_v<amscope::FramePtr, camera::FramePtr>,
+                  "The AmScope frame callback must expose the common frame lease");
+    static_assert(std::is_base_of_v<camera::Frame, amscope::AmcamFrame>,
+                  "Native frame metadata must extend, not replace, the common frame");
+
+    amscope::AmcamFrame raw8;
     raw8.pixelFormat = amscope::PixelFormat::Raw8;
-    raw8.pixelFormatCode = 0x42474752U; // RGGB FourCC
-    raw8.bitsPerPixel = 10;
-    raw8.containerBitsPerPixel = 8;
+    raw8.pixelFormatIdentifier =
+        camera::PixelFormatIdentifier{"amcam.fourcc", 0x42474752U}; // RGGB FourCC
+    raw8.significantBitsPerPixel = 10;
+    raw8.storageBitsPerPixel = 8;
     raw8.strideBytes = 1280;
     require(raw8.pixelFormat != amscope::PixelFormat::RGB24,
             "RAW8 storage is not misidentified as RGB24");
-    require(raw8.bitsPerPixel == 10 && raw8.containerBitsPerPixel == 8 &&
-                raw8.pixelFormatCode != 0 && raw8.strideBytes == 1280,
-            "RAW frame retains sensor depth separately from its 8-bit storage container");
+    require(raw8.significantBitsPerPixel == 10 &&
+                raw8.storageBitsPerPixel == 8 &&
+                raw8.pixelFormatIdentifier &&
+                raw8.pixelFormatIdentifier->scheme == "amcam.fourcc" &&
+                raw8.pixelFormatIdentifier->value == 0x42474752U &&
+                raw8.strideBytes == 1280,
+            "RAW frame retains its opaque FourCC and source depth separately from its storage container");
 
-    amscope::Frame raw16;
+    amscope::AmcamFrame raw16;
     raw16.pixelFormat = amscope::PixelFormat::Raw16;
-    raw16.bitsPerPixel = 12;
-    raw16.containerBitsPerPixel = 16;
+    raw16.significantBitsPerPixel = 12;
+    raw16.storageBitsPerPixel = 16;
     raw16.strideBytes = 2560;
     require(raw16.pixelFormat != amscope::PixelFormat::RGB24 &&
-                raw16.bitsPerPixel > 8 &&
-                raw16.containerBitsPerPixel == 16 &&
+                raw16.significantBitsPerPixel > 8 &&
+                raw16.storageBitsPerPixel == 16 &&
                 raw16.strideBytes == 2560,
             "12-bit sensor samples can be represented in a 16-bit storage container");
+
+    // An SDK validity bit distinguishes a reported zero from unavailable data.
+    raw8.sequenceNumber = 0;
+    raw8.timestamp = camera::FrameTimestamp{0, 1000000ULL, std::nullopt};
+    raw8.exposure = camera::FrameExposure{0, 1000000ULL};
+    raw8.sdkFlags = 0x1U | 0x2U | 0x4U;
+    raw8.exposureGainPercent = 100;
+    raw8.blackLevel = 0;
+
+    camera::FramePtr commonLease = std::make_shared<amscope::AmcamFrame>(raw8);
+    require(commonLease->sequenceNumber && *commonLease->sequenceNumber == 0,
+            "A present zero sequence value remains distinguishable from unavailable sequence metadata");
+    require(commonLease->timestamp && commonLease->timestamp->ticks == 0 &&
+                commonLease->timestamp->ticksPerSecond == 1000000ULL &&
+                !commonLease->timestamp->clockDomain,
+            "A zero timestamp retains its timebase and unknown clock domain");
+    require(commonLease->exposure &&
+                commonLease->exposure->durationTicks == 0 &&
+                commonLease->exposure->ticksPerSecond == 1000000ULL,
+            "A present zero exposure sample is not confused with missing metadata");
+    const auto nativeLease =
+        std::dynamic_pointer_cast<const amscope::AmcamFrame>(commonLease);
+    require(nativeLease && nativeLease->sdkFlags == raw8.sdkFlags &&
+                nativeLease->exposureGainPercent == 100 &&
+                nativeLease->blackLevel == 0,
+            "Amcam-specific frame flags and telemetry remain accessible through the native extension");
 
     AmcamAutoExposureMode mode = AmcamAutoExposureMode::Off;
     require(amscope::parseAmcamAutoExposureMode("Continuous", mode) &&

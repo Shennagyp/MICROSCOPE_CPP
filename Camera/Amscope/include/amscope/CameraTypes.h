@@ -25,12 +25,26 @@ struct CameraError {
     std::string operation;
     std::string message;
 };
-enum class PixelFormat : std::uint8_t { RGB24 };
+enum class PixelFormat : std::uint8_t { RGB24, Raw8, Raw16 };
+enum class StillCaptureMode : std::uint8_t { Processed, Raw };
+
+struct StillCaptureRequest {
+    StillCaptureMode mode = StillCaptureMode::Processed;
+    // UINT32_MAX selects the current preview resolution.
+    std::uint32_t resolutionIndex = 0xffffffffU;
+    std::uint32_t timeoutMilliseconds = 30000;
+};
+
 struct Frame {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::uint32_t strideBytes = 0;
     PixelFormat pixelFormat = PixelFormat::RGB24;
+    // Amcam RAW frames retain the SDK FourCC and significant sensor bit depth.
+    // RGB24 uses pixelFormatCode=0 and bitsPerPixel=24.
+    std::uint32_t pixelFormatCode = 0;
+    std::uint8_t bitsPerPixel = 24;
+    bool isStill = false;
     std::uint32_t sequence = 0;
     std::uint64_t timestampMicroseconds = 0;
     std::uint32_t sdkFlags = 0;

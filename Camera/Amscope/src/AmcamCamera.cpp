@@ -80,6 +80,19 @@ std::string resolutionFeatureSymbol(
         std::to_string(resolution.height);
 }
 
+std::string rawFormatFeatureSymbol(unsigned fourCC, unsigned bitsPerPixel) {
+    const auto byte = [](unsigned value, unsigned shift) {
+        const char c = static_cast<char>((value >> shift) & 0xffU);
+        return c >= 32 && c <= 126 ? c : '.';
+    };
+    std::string text;
+    text.push_back(byte(fourCC, 0));
+    text.push_back(byte(fourCC, 8));
+    text.push_back(byte(fourCC, 16));
+    text.push_back(byte(fourCC, 24));
+    return text + ":" + std::to_string(bitsPerPixel);
+}
+
 bool parseSignedInteger(const std::string& text, std::int32_t& value) {
     if (text.empty()) return false;
     const char* first = text.data();
@@ -218,6 +231,30 @@ buildAmcamFeatureDescriptors(
     const bool resolutionReadable = SUCCEEDED(resolutionHr) &&
         currentResolution < previewResolutions.size();
 
+    constexpr std::uint64_t rawCapabilityFlags =
+        AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
+        AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW14 | AMCAM_FLAG_RAW16 |
+        AMCAM_FLAG_RAW12PACK;
+    const bool rawModelSupported = hasModelDescriptor &&
+        (modelFlags & rawCapabilityFlags) != 0;
+    int rawMode = 0;
+    const HRESULT rawModeHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_RAW, &rawMode);
+    int rawBitDepth = 0;
+    const HRESULT rawBitDepthHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_BITDEPTH, &rawBitDepth);
+    unsigned rawFourCC = 0;
+    unsigned rawBitsPerPixel = 0;
+    const HRESULT rawFormatHr =
+        Amcam_get_RawFormat(handle, &rawFourCC, &rawBitsPerPixel);
+    const bool rawModeReadable = SUCCEEDED(rawModeHr) &&
+        (rawMode == 0 || rawMode == 1);
+    const bool rawAvailable = rawModelSupported && rawModeReadable;
+    const bool rawFormatReadable = rawModeReadable && rawMode == 1 &&
+        SUCCEEDED(rawFormatHr) && rawBitsPerPixel > 0 && rawBitsPerPixel <= 16;
+    const bool rawBitDepthReadable = rawModeReadable && rawMode == 1 &&
+        SUCCEEDED(rawBitDepthHr) && (rawBitDepth == 0 || rawBitDepth == 1);
+
     const bool stopped = state == amscope::CameraState::Open;
     const auto allowed = [&profileRegistry, &modelCode](amscope::AmcamCameraFeature feature) {
         return profileRegistry.allows(modelCode, feature);
@@ -231,9 +268,10 @@ buildAmcamFeatureDescriptors(
     const bool fixedFrameRateAllowed = allowed(amscope::AmcamCameraFeature::PreciseFrameRate);
     const bool speedLevelAllowed = allowed(amscope::AmcamCameraFeature::DiscreteFrameSpeed);
     const bool resolutionAllowed = allowed(amscope::AmcamCameraFeature::Resolution);
+    const bool rawOutputAllowed = allowed(amscope::AmcamCameraFeature::RawOutput);
 
     std::vector<CameraFeatureDescriptor> descriptors;
-    descriptors.reserve(11);
+    descriptors.reserve(14);
 
     descriptors.push_back({
         "ExposureAuto", "Automatic Exposure", CameraFeatureKind::Enumeration,
@@ -325,7 +363,34 @@ buildAmcamFeatureDescriptors(
         "AmcamResolutionIndex", "Resolution", CameraFeatureKind::Enumeration,
         std::nullopt, resolutionAvailable && resolutionAllowed,
         resolutionReadable, resolutionAvailable && resolutionAllowed && stopped,
-        std::nullopt, std::nullopt, std::move(resolutionSymbols)
+        std::nullopt, std::nullopt, std::move(resolutionSymbols),
+        camera::CameraFeatureGroup::ImageFormat
+    });
+    descriptors.push_back({
+        "AmcamRawOutputEnabled", "RAW Sensor Output", CameraFeatureKind::Boolean,
+        std::nullopt, rawAvailable && rawOutputAllowed,
+        rawModeReadable, rawAvailable && rawOutputAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::ImageFormat
+    });
+    descriptors.push_back({
+        "AmcamRawBitDepth", "RAW Output Bit Depth", CameraFeatureKind::Enumeration,
+        std::string("bits"), rawAvailable && rawOutputAllowed &&
+            rawMode == 1 && rawBitDepthReadable,
+        rawBitDepthReadable, rawAvailable && rawOutputAllowed &&
+            rawMode == 1 && rawBitDepthReadable && stopped,
+        std::nullopt, std::nullopt, {"8-bit", "16-bit"},
+        camera::CameraFeatureGroup::ImageFormat
+    });
+    descriptors.push_back({
+        "AmcamRawSensorFormat", "RAW Sensor Format", CameraFeatureKind::Enumeration,
+        std::nullopt, rawAvailable && rawOutputAllowed && rawFormatReadable,
+        rawFormatReadable, false,
+        std::nullopt, std::nullopt,
+        rawFormatReadable
+            ? std::vector<std::string>{rawFormatFeatureSymbol(rawFourCC, rawBitsPerPixel)}
+            : std::vector<std::string>{},
+        camera::CameraFeatureGroup::ImageFormat
     });
     return descriptors;
 }
@@ -347,14 +412,22 @@ struct AmcamCamera::Impl {
         : profileRegistry(std::move(profiles)) {}
 
     struct FramePool {
-        FramePool(std::uint32_t w, std::uint32_t h, std::size_t bytes)
-            : discard(bytes) {
+        FramePool(std::uint32_t w, std::uint32_t h,
+                  std::uint32_t stride, std::size_t bytes,
+                  PixelFormat format, std::uint32_t formatCode,
+                  std::uint8_t bitsPerPixel, std::size_t bytesPerPixel)
+            : discard(bytes), pixelFormat(format), pixelFormatCode(formatCode),
+              bitsPerPixel(bitsPerPixel), bytesPerPixel(bytesPerPixel),
+              initialStrideBytes(stride) {
             slots.reserve(kPoolSize);
             for (std::size_t i = 0; i < kPoolSize; ++i) {
                 auto frame = std::make_shared<Frame>();
                 frame->width = w;
                 frame->height = h;
-                frame->strideBytes = w * 3U;
+                frame->strideBytes = stride;
+                frame->pixelFormat = format;
+                frame->pixelFormatCode = formatCode;
+                frame->bitsPerPixel = bitsPerPixel;
                 frame->pixels.resize(bytes);
                 slots.push_back(std::move(frame));
             }
@@ -367,6 +440,11 @@ struct AmcamCamera::Impl {
         }
         std::vector<std::shared_ptr<Frame>> slots;
         std::vector<std::uint8_t> discard;
+        const PixelFormat pixelFormat;
+        const std::uint32_t pixelFormatCode;
+        const std::uint8_t bitsPerPixel;
+        const std::size_t bytesPerPixel;
+        const std::uint32_t initialStrideBytes;
     };
 
     std::atomic<CameraState> state{CameraState::Closed};
@@ -646,8 +724,11 @@ struct AmcamCamera::Impl {
                         fatal = true;
                         error = {-1, "Amcam_PullImageV4", "Camera handle is no longer open."};
                     } else {
+                        const int pullBits =
+                            activePool->pixelFormat == PixelFormat::RGB24
+                                ? kRgb24Bits : 0;
                         hr = Amcam_PullImageV4(
-                            handle, destination, 0, kRgb24Bits, kPackedRows, &info);
+                            handle, destination, 0, pullBits, kPackedRows, &info);
                     }
                 }
                 if (pullSuppressedByStop)
@@ -683,13 +764,19 @@ struct AmcamCamera::Impl {
 
                 const auto w = info.v3.width;
                 const auto h = info.v3.height;
-                std::size_t required = 0;
-                if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
+                const std::uint64_t stride64 =
+                    static_cast<std::uint64_t>(w) * activePool->bytesPerPixel;
+                const std::uint64_t required64 = stride64 * h;
+                if (w == 0 || h == 0 ||
+                    stride64 > std::numeric_limits<std::uint32_t>::max() ||
+                    required64 > std::numeric_limits<std::size_t>::max() ||
+                    required64 > writable->pixels.capacity()) {
                     fatal = true;
                     error = {-1, "Amcam_PullImageV4",
-                             "SDK frame dimensions exceed the allocated RGB24 buffer."};
+                             "SDK frame dimensions exceed the allocated pixel-format buffer."};
                     break;
                 }
+                const auto required = static_cast<std::size_t>(required64);
 
                 // Keep the logical byte count equal to this frame's dimensions,
                 // while retaining vector capacity for later frames of this size.
@@ -697,7 +784,10 @@ struct AmcamCamera::Impl {
 
                 writable->width = w;
                 writable->height = h;
-                writable->strideBytes = w * 3U;
+                writable->strideBytes = static_cast<std::uint32_t>(stride64);
+                writable->pixelFormat = activePool->pixelFormat;
+                writable->pixelFormatCode = activePool->pixelFormatCode;
+                writable->bitsPerPixel = activePool->bitsPerPixel;
                 writable->sequence = info.v3.seq;
                 writable->timestampMicroseconds = info.v3.timestamp;
                 writable->sdkFlags = info.v3.flag;
@@ -967,6 +1057,9 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     impl_->dropped.store(0, std::memory_order_relaxed);
 
     int width = 0, height = 0;
+    bool rawOutput = false;
+    unsigned rawFourCC = 0;
+    unsigned rawBitsPerPixel = 0;
     HRESULT hr = S_OK;
     {
         std::lock_guard<std::mutex> api(impl_->apiMutex);
@@ -985,25 +1078,56 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                 impl_->expectedExposureMicroseconds.store(
                     0, std::memory_order_release);
             }
+            int rawOption = 0;
+            const HRESULT rawHr =
+                Amcam_get_Option(impl_->handle, AMCAM_OPTION_RAW, &rawOption);
+            if (SUCCEEDED(rawHr) && rawOption != 0) {
+                rawOutput = true;
+                hr = Amcam_get_RawFormat(
+                    impl_->handle, &rawFourCC, &rawBitsPerPixel);
+                if (SUCCEEDED(hr) &&
+                    (rawBitsPerPixel == 0 || rawBitsPerPixel > 16)) {
+                    hr = E_INVALIDARG;
+                }
+            }
         }
     }
     if (FAILED(hr)) {
         impl_->state.store(CameraState::Open, std::memory_order_release);
-        return failHr(error, "Amcam_get_FinalSize", hr);
+        return failHr(error, rawOutput ? "Amcam_get_RawFormat" : "Amcam_get_FinalSize", hr);
     }
 
-    std::size_t bytes = 0;
-    if (width <= 0 || height <= 0 ||
-        !rgb24Size(static_cast<std::uint32_t>(width),
-                   static_cast<std::uint32_t>(height), bytes)) {
+    if (width <= 0 || height <= 0) {
         impl_->state.store(CameraState::Open, std::memory_order_release);
         return fail(error, "start", -1, "The SDK returned invalid final image dimensions.");
     }
 
+    const std::size_t bytesPerPixel = !rawOutput ? 3U :
+        (rawBitsPerPixel <= 8U ? 1U : 2U);
+    const std::uint64_t stride64 =
+        static_cast<std::uint64_t>(width) * bytesPerPixel;
+    const std::uint64_t bytes64 = stride64 * static_cast<std::uint64_t>(height);
+    if (stride64 > std::numeric_limits<std::uint32_t>::max() ||
+        bytes64 == 0 || bytes64 > std::numeric_limits<std::size_t>::max() ||
+        bytes64 > 512ULL * 1024ULL * 1024ULL) {
+        impl_->state.store(CameraState::Open, std::memory_order_release);
+        return fail(error, "start", -1,
+                    "The selected pixel format produces an invalid or excessively large frame buffer.");
+    }
+    const auto strideBytes = static_cast<std::uint32_t>(stride64);
+    const auto bytes = static_cast<std::size_t>(bytes64);
+    const PixelFormat pixelFormat = !rawOutput ? PixelFormat::RGB24 :
+        (rawBitsPerPixel <= 8U ? PixelFormat::Raw8 : PixelFormat::Raw16);
+    const auto frameBitsPerPixel = static_cast<std::uint8_t>(
+        rawOutput ? rawBitsPerPixel : 24U);
+
     try {
         impl_->pool = std::make_shared<Impl::FramePool>(
             static_cast<std::uint32_t>(width),
-            static_cast<std::uint32_t>(height), bytes);
+            static_cast<std::uint32_t>(height),
+            strideBytes, bytes, pixelFormat,
+            rawOutput ? rawFourCC : 0U,
+            frameBitsPerPixel, bytesPerPixel);
     } catch (const std::exception& ex) {
         impl_->pool.reset();
         impl_->state.store(CameraState::Open, std::memory_order_release);
@@ -1408,6 +1532,31 @@ AmcamCamera::readFeature(std::string_view name) {
         return CameraFeatureValue{FeatureEnumeration{
             resolutionFeatureSymbol(index, impl_->previewResolutions[index])}};
     }
+    if (name == "AmcamRawOutputEnabled") {
+        int value = 0;
+        const HRESULT hr = Amcam_get_Option(
+            impl_->handle, AMCAM_OPTION_RAW, &value);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(RAW)", hr);
+        return CameraFeatureValue{value != 0};
+    }
+    if (name == "AmcamRawBitDepth") {
+        int value = 0;
+        const HRESULT hr = Amcam_get_Option(
+            impl_->handle, AMCAM_OPTION_BITDEPTH, &value);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
+        if (value != 0 && value != 1)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The camera returned an unknown RAW bit-depth mode.");
+        return CameraFeatureValue{FeatureEnumeration{value == 0 ? "8-bit" : "16-bit"}};
+    }
+    if (name == "AmcamRawSensorFormat") {
+        unsigned fourCC = 0, bitsPerPixel = 0;
+        const HRESULT hr = Amcam_get_RawFormat(
+            impl_->handle, &fourCC, &bitsPerPixel);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_RawFormat", hr);
+        return CameraFeatureValue{FeatureEnumeration{
+            rawFormatFeatureSymbol(fourCC, bitsPerPixel)}};
+    }
 
     return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
                         std::string(name), "Camera feature was not found.");
@@ -1552,6 +1701,48 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (readback != code)
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "Pixel-format readback did not match the requested code.");
+        return std::monostate{};
+    }
+
+    if (name == "AmcamRawOutputEnabled") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "RAW output can only be changed while acquisition is stopped.");
+        const int requested = std::get<bool>(value) ? 1 : 0;
+        HRESULT hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_RAW, requested);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_put_Option(RAW)", hr);
+        int readback = -1;
+        hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_RAW, &readback);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(RAW)", hr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "RAW-output readback did not match the requested mode.");
+        return std::monostate{};
+    }
+
+    if (name == "AmcamRawBitDepth") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "RAW bit depth can only be changed while acquisition is stopped.");
+        int rawMode = 0;
+        HRESULT hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_RAW, &rawMode);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(RAW)", hr);
+        if (rawMode != 1)
+            return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
+                                std::string(name), "Enable RAW sensor output before selecting its bit-depth mode.");
+        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        const int requested = symbol == "8-bit" ? 0 : symbol == "16-bit" ? 1 : -1;
+        if (requested < 0)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "RAW bit depth accepts 8-bit or 16-bit.");
+        hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_BITDEPTH, requested);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_put_Option(BITDEPTH)", hr);
+        int readback = -1;
+        hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_BITDEPTH, &readback);
+        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "RAW bit-depth readback did not match the requested mode.");
         return std::monostate{};
     }
 

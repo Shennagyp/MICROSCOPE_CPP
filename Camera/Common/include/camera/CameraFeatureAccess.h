@@ -38,6 +38,18 @@ struct CameraFeatureNumericRange {
     std::optional<double> increment;
 };
 
+enum class CameraFeatureGroup : std::uint8_t {
+    General,
+    Exposure,
+    ImageFormat,
+    ImageProcessing,
+    Color,
+    Trigger,
+    Sensor,
+    Transport,
+    Hardware
+};
+
 struct CameraFeatureDescriptor {
     std::string name;
     std::string displayName;
@@ -49,6 +61,7 @@ struct CameraFeatureDescriptor {
     std::optional<CameraFeatureNumericRange> numericRange;
     std::optional<std::size_t> elementCount;
     std::vector<std::string> enumerationValues;
+    CameraFeatureGroup group = CameraFeatureGroup::General;
 };
 
 struct CameraFeatureAccessError {

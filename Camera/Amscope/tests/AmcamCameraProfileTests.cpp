@@ -29,17 +29,22 @@ int main() {
     restricted.allowedFeatures = {
         AmcamCameraFeature::ExposureAuto,
         AmcamCameraFeature::WhiteBalance,
-        AmcamCameraFeature::AnalogGain
+        AmcamCameraFeature::AnalogGain,
+        AmcamCameraFeature::RawOutput
     };
     restricted.deniedFeatures = {AmcamCameraFeature::WhiteBalance};
 
     const AmcamCameraProfileRegistry registry({restricted});
     require(registry.allows("Model-A", AmcamCameraFeature::ExposureAuto),
             "allow-list permits an explicitly allowed feature");
+    require(registry.allows("Model-A", AmcamCameraFeature::RawOutput),
+            "allow-list can explicitly permit RAW sensor output");
     require(!registry.allows("Model-A", AmcamCameraFeature::WhiteBalance),
             "deny-list takes precedence over allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::PreciseFrameRate),
             "profile denies features omitted from its allow-list");
+    require(!registry.allows("Model-A", AmcamCameraFeature::DiscreteFrameSpeed),
+            "profile continues to restrict capabilities omitted from its allow-list");
     require(registry.allows("Model-B", AmcamCameraFeature::PreciseFrameRate),
             "unprofiled model retains independently probed support");
 

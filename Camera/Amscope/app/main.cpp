@@ -891,6 +891,17 @@ private:
             return;
         }
 
+        if (frame->pixelFormat != amscope::PixelFormat::RGB24) {
+            preview_->setPixmap(QPixmap{});
+            preview_->setText(
+                QString("RAW sensor stream active | %1 x %2 | %3-bit | format 0x%4")
+                    .arg(static_cast<qulonglong>(frame->width))
+                    .arg(static_cast<qulonglong>(frame->height))
+                    .arg(static_cast<unsigned>(frame->bitsPerPixel))
+                    .arg(frame->pixelFormatCode, 8, 16, QChar('0')));
+            return;
+        }
+
         const QImage borrowed(
             frame->data(),
             static_cast<int>(frame->width),

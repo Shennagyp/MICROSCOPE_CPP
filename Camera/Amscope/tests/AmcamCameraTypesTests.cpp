@@ -40,6 +40,22 @@ static_assert(parsesOnceToNativeMode(),
 int main() {
     using amscope::AmcamAutoExposureMode;
 
+    amscope::Frame raw8;
+    raw8.pixelFormat = amscope::PixelFormat::Raw8;
+    raw8.pixelFormatCode = 0x42474752U; // RGGB FourCC
+    raw8.bitsPerPixel = 8;
+    require(raw8.pixelFormat != amscope::PixelFormat::RGB24,
+            "RAW8 is not misidentified as RGB24");
+    require(raw8.bitsPerPixel == 8 && raw8.pixelFormatCode != 0,
+            "RAW8 retains sensor format identity");
+
+    amscope::Frame raw16;
+    raw16.pixelFormat = amscope::PixelFormat::Raw16;
+    raw16.bitsPerPixel = 12;
+    require(raw16.pixelFormat != amscope::PixelFormat::RGB24 &&
+                raw16.bitsPerPixel > 8,
+            "higher-bit-depth RAW is represented separately from RGB24");
+
     AmcamAutoExposureMode mode = AmcamAutoExposureMode::Off;
     require(amscope::parseAmcamAutoExposureMode("Continuous", mode) &&
                 mode == AmcamAutoExposureMode::Continuous,

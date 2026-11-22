@@ -39,8 +39,22 @@ integration and does not modify vendor sample code.
   (AMCAM_OPTION_FLUSH = 3). The driver flushes immediately and retries before
   the next Start if the SDK rejects the first flush. Terminal Close stops the event queue, joins the
   the callback-driven PullImage worker, and calls Amcam_Close directly; it does not depend on Stop/flush.
-- Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
-  sequence, timestamp, exposure, gain, and black-level metadata.
+- The live acquisition mechanism remains SDK callback -> bounded event FIFO ->
+  one C++ acquisition worker -> Amcam_PullImageV4. The worker selects the
+  payload representation from the stopped-state stream configuration; it does
+  not introduce another callback, polling loop, or acquisition worker.
+- Processed live frames remain packed RGB24 (rowPitch = -1, stride = width * 3).
+  RAW live mode uses the SDK's Amcam_get_RawFormat metadata and PullImageV4's
+  documented RAW representation: one byte per pixel at 8 bits, two bytes per
+  pixel above 8 bits, with no row padding. Frames retain the RAW FourCC and
+  significant sensor bit depth instead of being mislabeled RGB24.
+- AmcamRawOutputEnabled and AmcamRawBitDepth are exposed through the same
+  typed feature interface and are writable only while the camera is stopped.
+  Model RAW flags, SDK option probes, and the exact-model RawOutput profile
+  policy must all permit the feature. The Qt preview explicitly refuses to
+  interpret RAW sensor bytes as RGB888; it reports the active RAW format until
+  a Bayer/RAW decoder is attached.
+- Every frame includes sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every
   buffer is retained, the worker drains into a private discard buffer and
   increments droppedFrames rather than blocking acquisition.
@@ -246,6 +260,6 @@ stops and closes the session.
 
 ## Not included yet
 
-Still capture, RAW output, trigger/GPIO control, synchronized multi-camera
-acquisition, GenTL routing, ImageProcessing integration, and a concrete GPU
-renderer remain separate capabilities.
+Still-image capture (processed SnapN and RAW SnapR), trigger/GPIO control,
+synchronized multi-camera acquisition, GenTL routing, ImageProcessing
+integration, and a concrete GPU renderer remain separate capabilities.

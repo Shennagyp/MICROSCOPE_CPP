@@ -19,6 +19,10 @@ integration and does not modify vendor sample code.
   times the last known exposure plus a 1-second grace period, whichever is
   longer. The exposure-aware threshold avoids treating long exposures as an
   immediate transport failure.
+- At a detected stall, the driver samples the SDK's received-packet counter,
+  USB-received/software-dropped frame counter, and frontend/backend queue
+  depths. The fault message includes the latest values and one-second deltas
+  where available; preserve the complete message when reporting a failure.
 - Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
   sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every

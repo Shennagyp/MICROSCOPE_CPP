@@ -1916,8 +1916,9 @@ void QtAmcamCamera::handleAcquisitionFailure(
         return;
     }
 
-    // Stop frame publication immediately. The gate check and mailbox write are
-    // serialized by mailboxMutex_, so no old frame can appear after this clear.
+    // Stop frame publication immediately. The atomic latest-frame mailbox
+    // rechecks the acquisition gate after publication and removes a superseded
+    // frame if Stop/Close invalidation wins the race.
     clearFrameMailbox();
 
     const CameraError copy = error;

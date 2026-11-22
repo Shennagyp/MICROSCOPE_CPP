@@ -25,6 +25,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 |---|---|---|
 | Native AmScope API | `AmcamCamera.h`, `AmcamCamera.cpp` | Owns native SDK session, handle, lifecycle, feature access, commands, telemetry, still capture, and native acquisition |
 | Event queue | `AmcamEventQueue.h` | Bounded callback-to-worker event transfer |
+| Session primitives | `AmcamSessionPrimitives.h` | Production callback lease tracker, generation-based frame-cache flush obligation, and retained frame-slot selection |
 | Watchdog | `detail/FrameStallWatchdog.h` | Video frame-stall and trigger heartbeat timing logic |
 | Frame gate | `detail/AcquisitionFrameGate.h` | Session/generation-aware publication gate |
 | Model policy | `AmcamCameraProfiles.h/.cpp` | Exact model allow/deny feature policy |
@@ -251,7 +252,7 @@ Do not change the acquisition mechanism or force a frame-rate value on the basis
 - Exported CMake package: **not established**.
 - Intel and Apple Silicon CI: **previous branch head `48be6c9` passed in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867); eight of eight registered CTest tests passed on both architectures. The hardware-test executable is added after that run; CI for `c98ab6b` is pending at this inventory refresh**.
 - Targeted physical-camera smoke observation: **user reports that live resolution switching now works after a clean rebuild; see Section 10.1**.
-- Physical AmScope hardware baseline: **not recorded; a full exact-commit regression record is still required**.
+- Phase 0/1 owner acceptance: **recorded in the completion plan; formal `Hardware verified` evidence remains absent because no exact-commit record has been saved under `docs/testing/hardware/`**.
 - Physical CTI-camera test: **not recorded**.
 
 ### 10.1 Targeted user-reported physical-camera smoke observation — 22 November 2026

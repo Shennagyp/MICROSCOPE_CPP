@@ -616,6 +616,7 @@ bool AmcamCamera::setExposureTime(std::uint32_t time, CameraError* error) {
     const HRESULT hr = Amcam_put_ExpoTime(impl_->handle, time);
     if (FAILED(hr)) return failHr(error, "Amcam_put_ExpoTime", hr);
     impl_->expectedExposureMicroseconds.store(time, std::memory_order_release);
+    impl_->eventAvailable.notify_one();
     return true;
 }
 

@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace {
-constexpr unsigned kWaitTimeoutMs = 50;
+constexpr unsigned kWaitTimeoutMs = 1000;
 constexpr std::size_t kPoolSize = 4;
 constexpr int kRgb24Bits = 24;
 constexpr int kPackedRows = -1;
@@ -153,64 +153,6 @@ struct AmcamCamera::Impl {
         bool fatal = false;
         CameraError error;
         auto lastFrameAt = std::chrono::steady_clock::now();
-        auto lastTelemetryAt = lastFrameAt;
-
-        struct Metric {
-            bool available = false;
-            int value = 0;
-            bool hasDelta = false;
-            int delta = 0;
-        };
-        struct SdkTelemetry {
-            Metric packets;
-            Metric dropped;
-            Metric frontendQueue;
-            Metric backendQueue;
-        } telemetry;
-        Metric previousPackets;
-        Metric previousDropped;
-        Metric previousFrontendQueue;
-        Metric previousBackendQueue;
-
-        auto sampleTelemetry = [&]() {
-            std::lock_guard<std::mutex> lock(apiMutex);
-            if (!handle) return;
-
-            const auto readMetric = [this](unsigned option, Metric& previous) {
-                Metric current;
-                int value = 0;
-                if (SUCCEEDED(Amcam_get_Option(handle, option, &value))) {
-                    current.available = true;
-                    current.value = value;
-                    if (previous.available) {
-                        current.hasDelta = true;
-                        current.delta = value - previous.value;
-                    }
-                    previous = current;
-                }
-                return current;
-            };
-
-            telemetry.packets =
-                readMetric(AMCAM_OPTION_PACKET_NUMBER, previousPackets);
-            telemetry.dropped =
-                readMetric(AMCAM_OPTION_NUMBER_DROP_FRAME, previousDropped);
-            telemetry.frontendQueue =
-                readMetric(AMCAM_OPTION_FRONTEND_DEQUE_CURRENT, previousFrontendQueue);
-            telemetry.backendQueue =
-                readMetric(AMCAM_OPTION_BACKEND_DEQUE_CURRENT, previousBackendQueue);
-        };
-
-        const auto appendMetric = [](std::ostringstream& output,
-                                     const char* name, const Metric& metric) {
-            output << " " << name << "=";
-            if (!metric.available) {
-                output << "unavailable";
-                return;
-            }
-            output << metric.value;
-            if (metric.hasDelta) output << " (delta=" << metric.delta << ")";
-        };
 
         while (!stopRequested.load(std::memory_order_acquire)) {
             auto writable = activePool->tryAcquire();
@@ -218,7 +160,7 @@ struct AmcamCamera::Impl {
                 ? static_cast<void*>(writable->pixels.data())
                 : static_cast<void*>(activePool->discard.data());
 
-            AmcamFrameInfoV4 info{};
+            AmcamFrameInfoV3 info{};
             HRESULT hr = E_FAIL;
             {
                 std::lock_guard<std::mutex> lock(apiMutex);
@@ -226,18 +168,13 @@ struct AmcamCamera::Impl {
                     fatal = true;
                     error = {-1, "Amcam_WaitImageV4", "Camera handle is no longer open."};
                 } else {
-                    hr = Amcam_WaitImageV4(handle, kWaitTimeoutMs, destination,
+                    hr = Amcam_WaitImageV3(handle, kWaitTimeoutMs, destination,
                                            0, kRgb24Bits, kPackedRows, &info);
                 }
             }
             if (fatal || stopRequested.load(std::memory_order_acquire)) break;
 
             const auto now = std::chrono::steady_clock::now();
-            if (now - lastTelemetryAt >= std::chrono::seconds(1)) {
-                sampleTelemetry();
-                lastTelemetryAt = now;
-            }
-
             if (hr == E_TIMEOUT) {
                 const auto timeout = frameStallTimeout(
                     expectedExposureMicroseconds.load(std::memory_order_acquire));
@@ -247,23 +184,15 @@ struct AmcamCamera::Impl {
                             now - lastFrameAt).count();
                     const unsigned exposure =
                         expectedExposureMicroseconds.load(std::memory_order_acquire);
-                    // Capture transport and SDK queue counters at the failure
-                    // boundary to distinguish packet starvation from frame
-                    // assembly or internal queue problems.
-                    sampleTelemetry();
-                    std::ostringstream diagnostic;
-                    diagnostic << "No preview frame received for "
-                               << stalledMilliseconds
-                               << " ms (last exposure " << exposure
-                               << " us; watchdog threshold " << timeout.count()
-                               << " ms). SDK telemetry:";
-                    appendMetric(diagnostic, "packets", telemetry.packets);
-                    appendMetric(diagnostic, "sdk_dropped", telemetry.dropped);
-                    appendMetric(diagnostic, "frontend_q", telemetry.frontendQueue);
-                    appendMetric(diagnostic, "backend_q", telemetry.backendQueue);
                     fatal = true;
                     error = {static_cast<std::int32_t>(E_TIMEOUT),
-                             "Amcam_WaitImageV4", diagnostic.str()};
+                             "Amcam_WaitImageV3",
+                             "No preview frame received for " +
+                                 std::to_string(stalledMilliseconds) +
+                                 " ms (last exposure " +
+                                 std::to_string(exposure) +
+                                 " us; watchdog threshold " +
+                                 std::to_string(timeout.count()) + " ms)."};
                     break;
                 }
                 continue;
@@ -276,8 +205,8 @@ struct AmcamCamera::Impl {
             }
 
             lastFrameAt = std::chrono::steady_clock::now();
-            if (info.v3.expotime != 0) {
-                expectedExposureMicroseconds.store(info.v3.expotime,
+            if (info.expotime != 0) {
+                expectedExposureMicroseconds.store(info.expotime,
                                                    std::memory_order_release);
             }
 
@@ -288,8 +217,8 @@ struct AmcamCamera::Impl {
                 continue;
             }
 
-            const auto w = info.v3.width;
-            const auto h = info.v3.height;
+            const auto w = info.width;
+            const auto h = info.height;
             std::size_t required = 0;
             if (!rgb24Size(w, h, required) || required > writable->pixels.capacity()) {
                 fatal = true;
@@ -305,12 +234,12 @@ struct AmcamCamera::Impl {
             writable->width = w;
             writable->height = h;
             writable->strideBytes = w * 3U;
-            writable->sequence = info.v3.seq;
-            writable->timestampMicroseconds = info.v3.timestamp;
-            writable->sdkFlags = info.v3.flag;
-            writable->exposureMicroseconds = info.v3.expotime;
-            writable->exposureGainPercent = info.v3.expogain;
-            writable->blackLevel = info.v3.blacklevel;
+            writable->sequence = info.seq;
+            writable->timestampMicroseconds = info.timestamp;
+            writable->sdkFlags = info.flag;
+            writable->exposureMicroseconds = info.expotime;
+            writable->exposureGainPercent = info.expogain;
+            writable->blackLevel = info.blacklevel;
 
             FramePtr lease = std::move(writable);
             try {

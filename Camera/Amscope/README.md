@@ -297,6 +297,27 @@ The fast launcher disables test executable builds by default so the first previe
 launch does not spend time compiling tests. Set `AMSCOPE_BUILD_TESTING=ON` to
 include the test executables in a local build; CI explicitly keeps testing enabled.
 
+
+To configure, build, and run the automated test suite without launching the
+preview window:
+
+```sh
+cmake -S Camera/Amscope -B build/amscope \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+  -DAMSCOPE_BUILD_QT_ADAPTER=ON \
+  -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+  -DBUILD_TESTING=ON
+cmake --build build/amscope --config Release --parallel
+ctest --test-dir build/amscope --output-on-failure
+```
+
+The suite includes `amscope_session_primitives_tests`, which exercises the
+production callback-drain tracker, cache-flush obligation/retry behavior,
+and retained frame-pool leases. These are deterministic helper-level tests;
+they do not replace physical-camera regression or a complete injected SDK
+failure test seam.
+
 To run only the SDK camera-enumeration smoke check after building:
 
 ```sh

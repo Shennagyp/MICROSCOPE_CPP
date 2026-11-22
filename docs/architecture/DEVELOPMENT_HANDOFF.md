@@ -224,7 +224,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Phase 0 residual follow-up coverage
 
-- The user locally validated the nine-target suite at revision `d2e5cb3`: the full build succeeded and 9/9 CTest tests passed. Phase 2.1 adds `camera_common_models_tests`, bringing the suite to ten targets; the tenth target and current source migration await validation.
+- Phase 1's nine-target suite passed locally at `d2e5cb3`. Phase 2.1 subsequently passed a clean full build and 10/10 CTest locally at `03f35bf`, plus CI on Intel x86_64 and Apple Silicon arm64. Phase 2.2 adds `camera_common_frame_tests`, bringing the suite to eleven targets; this new source migration is awaiting local and current-head CI validation.
 - The user has built and launched the branch locally after removing the stale generated build directory, and has confirmed that the live `Resolution` feature changes resolution. Record the exact resulting live frame dimensions before treating 640×480 as the measured mode.
 - Rebuild and rerun the newest diagnostic revision. Review `event_fps`, `pull_fps`, `callback_fps`, `paint_fps`, `frame_poll_ticks`, `preview_frame_submissions`, `paint_events`, all four exposure readback points and `exposure_fps_limit_basis`, `applied_speed_level`, timestamps, actual dimensions and dropped frames.
 - Check the negotiated macOS USB connection speed for the MU503 using `system_profiler SPUSBDataType` and record whether the connected device is actually running at USB 2.0 (up to 480 Mb/s) or USB 3.x (typically 5 Gb/s or higher). The SDK's `MU503(USB2.0)` device string is a transport lead, not by itself proof of the physical negotiated speed.
@@ -239,7 +239,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Immediate local validation of Phase 2.2
 
-Pull the latest branch and run the clean 11-target CTest suite with testing enabled. The command is:
+Pull the latest branch and run a clean rebuild followed by the 11-target CTest suite. The command is:
 
 ```sh
 cd ~/Documents/GitHub/MICROSCOPE_CPP
@@ -253,7 +253,7 @@ cmake -S Camera/Amscope -B build/amscope \
   -DAMSCOPE_BUILD_PREVIEW_APP=ON \
   -DBUILD_TESTING=ON
 
-cmake --build build/amscope --config Release --parallel
+cmake --build build/amscope --config Release --clean-first --parallel && \
 ctest --test-dir build/amscope --output-on-failure
 ```
 

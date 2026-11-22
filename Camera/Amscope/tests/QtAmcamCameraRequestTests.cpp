@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
                 0, amscope::FilterWheelDirection::Clockwise,
                 std::move(callback));
         })) {
-        std::cerr << "Accessory requests lost their typed error or Qt affinity contract.\\n";
+        std::cerr << "Accessory requests lost their typed error or Qt affinity contract.\n";
         return EXIT_FAILURE;
     }
 
@@ -212,13 +212,13 @@ int main(int argc, char** argv) {
             accessorySupersessionLoop.quit();
         });
     if (staleAccessoryRead == 0 || accessoryMutation == 0) {
-        std::cerr << "A valid accessory supersession request was rejected.\\n";
+        std::cerr << "A valid accessory supersession request was rejected.\n";
         return EXIT_FAILURE;
     }
     accessorySupersessionTimeout.start(5000);
     accessorySupersessionLoop.exec();
     if (!accessoryMutationCompleted || staleAccessoryReadDelivered) {
-        std::cerr << "A later accessory mutation failed to invalidate an older accessory read.\\n";
+        std::cerr << "A later accessory mutation failed to invalidate an older accessory read.\n";
         return EXIT_FAILURE;
     }
 

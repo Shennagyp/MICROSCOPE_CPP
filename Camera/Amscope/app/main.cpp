@@ -1329,7 +1329,7 @@ private:
                     if (state.moving) {
                         filterWheelStatusLabel_->setText("Moving…");
                     } else if (state.position) {
-                        filterWheelPositionSelector_->setCurrentIndex(
+                        filterWheelPositionSelector_->setValue(
                             static_cast<int>(*state.position));
                         filterWheelStatusLabel_->setText(
                             QString("At slot %1")

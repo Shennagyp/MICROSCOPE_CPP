@@ -6,18 +6,24 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "camera/CameraModels.h"
 
 namespace amscope {
 enum class CameraState : std::uint8_t { Closed, Open, Starting, Streaming, Stopping, Faulted };
-struct Resolution { std::uint32_t width = 0; std::uint32_t height = 0; };
+
+// Preview dimensions are common across camera backends; Amcam-specific
+// resolution indices remain in the native StillResolution type.
+using Resolution = camera::ImageResolution;
+
 struct StillResolution {
     std::uint32_t index = 0;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
 };
-struct CameraInfo {
-    std::string id;
-    std::string displayName;
+
+// Common discovery identity/capabilities are inherited from CameraDeviceInfo.
+// Model flags, speed/fan levels, and I/O line counts remain native Amcam facts.
+struct CameraInfo : camera::CameraDeviceInfo {
     std::string modelName;
     std::string modelCode = "Unknown";
     std::uint64_t modelFlags = 0;
@@ -25,7 +31,6 @@ struct CameraInfo {
     std::optional<std::uint32_t> maximumSpeedLevel;
     std::optional<std::uint32_t> maximumFanSpeed;
     std::uint32_t ioControlLineCount = 0;
-    std::vector<Resolution> previewResolutions;
 };
 struct CameraError {
     std::int32_t vendorCode = 0;

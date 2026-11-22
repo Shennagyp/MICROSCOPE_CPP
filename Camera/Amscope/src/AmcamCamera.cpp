@@ -788,6 +788,9 @@ struct AmcamCamera::Impl {
                 // fatal report cannot claim ownership until stopRequested clears.
                 state.store(CameraState::Streaming, std::memory_order_release);
                 stopRequested.store(false, std::memory_order_release);
+                // The worker may have entered its Stop-transition wait after
+                // the watchdog deadline expired. Wake it to resume monitoring.
+                eventQueue.signal();
             } else {
                 state.store(CameraState::Faulted, std::memory_order_release);
             }

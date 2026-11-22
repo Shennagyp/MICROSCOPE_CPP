@@ -389,6 +389,7 @@ struct Measurement {
     std::uint32_t height = 0;
     std::uint32_t exposureMinimum = 0;
     std::uint32_t exposureMaximum = 0;
+    std::uint64_t exposureSamples = 0;
     double exposureAverage = 0.0;
     std::string asynchronousError;
 };
@@ -857,6 +858,8 @@ int main(int argc, char** argv) {
                         measurement.height = capture->lastHeight;
                         measurement.asynchronousError =
                             capture->asynchronousError;
+                        measurement.exposureSamples =
+                            capture->exposureSamples;
                         if (capture->exposureSamples > 0) {
                             measurement.exposureMinimum =
                                 capture->exposureMinimum;

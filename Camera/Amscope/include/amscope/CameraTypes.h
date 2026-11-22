@@ -23,6 +23,7 @@ struct CameraInfo {
     std::uint64_t modelFlags = 0;
     bool hasModelDescriptor = false;
     std::optional<std::uint32_t> maximumSpeedLevel;
+    std::optional<std::uint32_t> maximumFanSpeed;
     std::vector<Resolution> previewResolutions;
 };
 struct CameraError {

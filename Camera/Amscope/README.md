@@ -67,25 +67,24 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   padding. Frame metadata keeps both values distinct.
 - RAW output enablement remains an Amcam-specific feature. RAW output
   precision is exposed through the backend-neutral
-  `camera::RawOutputBitDepthFeature`. Its choices are `8-bit` and the camera's
-  reported maximum significant depth (for example, `12-bit` when the SDK
-  reports 12). The Amcam backend maps these choices to
-  `AMCAM_OPTION_BITDEPTH` values 0 and 1. The maximum-depth choice is never
-  labelled as 16-bit merely because the SDK stores it in a 16-bit container.
+  `camera::RawOutputBitDepthFeature`. Its enumeration contains exact,
+  discrete significant-bit counts, not relative modes or storage widths.
+  The Amcam SDK exposes only two configurable modes through
+  `AMCAM_OPTION_BITDEPTH`: 8-bit and the camera's maximum significant depth.
+  Accordingly, the backend advertises `8-bit` and, when the exact maximum is
+  known from the SDK/model descriptor, that exact value (for example,
+  `12-bit`). It does not claim that intermediate depths are configurable.
+  A camera whose maximum is 8-bit has only one distinct choice. An unknown
+  maximum is never advertised as an exact bit count. The backend maps the
+  exact public values to the SDK's native mode values 0 and 1.
   The feature is writable only while stopped and RAW output is enabled.
-  The selector is exposed whenever the camera exposes RAW output and the
-  RAW-output profile policy allows it; it does not depend on the optional
-  BITDEPTH getter or maximum-depth query. The choices are `8-bit` and
-  `Maximum supported`. The latter deliberately avoids claiming an exact
-  significant depth when the SDK does not report one. The selector is writable
-  only while stopped with RAW output enabled. Some SDK models implement the setter but not the getter:
-  after a successful set, the requested mode is retained for the session and
-  used as a fallback only when subsequent SDK readback is unavailable. If
-  readback is available, it remains authoritative and must match the request.
-  Frame metadata keeps significant source depth separate from storage width;
-  vendor RAW payload bytes are not transformed. The Qt
-  preview refuses to interpret RAW sensor bytes as RGB888 until a decoder is
-  attached.
+  Some SDK models implement the setter but not the getter: after a successful
+  set, the requested native mode is retained for the session and used as a
+  fallback only when subsequent SDK readback is unavailable. If readback is
+  available, it remains authoritative and must match the request. Frame
+  metadata keeps significant source depth separate from storage width;
+  vendor RAW payload bytes are not transformed. The Qt preview refuses to
+  interpret RAW sensor bytes as RGB888 until a decoder is attached.
 - Live and still payloads use the backend-neutral `camera::Frame` /
   `camera::FramePtr` contract from `Camera/Common`. It carries dimensions,
   row stride, buffer format, opaque format identity, significant source depth,

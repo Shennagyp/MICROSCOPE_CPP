@@ -40,6 +40,13 @@ public:
     bool readFrameRate(FrameRateStatistics& statistics, CameraError* error = nullptr);
     bool readTriggerConfiguration(
         AmcamTriggerConfiguration& configuration, CameraError* error = nullptr);
+    bool readIoLines(
+        std::vector<AmcamIoLineState>& lines, CameraError* error = nullptr);
+    // I/O changes are stopped-state-only and transactional, with readback
+    // verification and restoration of prior values on failure.
+    bool configureIoLine(
+        const AmcamIoLineConfiguration& configuration,
+        CameraError* error = nullptr);
     // Trigger configuration is stopped-state-only. Triggered modes require
     // the SDK hardware heartbeat capability for reliable idle-period health.
     bool configureTrigger(

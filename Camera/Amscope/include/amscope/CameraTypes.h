@@ -24,6 +24,7 @@ struct CameraInfo {
     bool hasModelDescriptor = false;
     std::optional<std::uint32_t> maximumSpeedLevel;
     std::optional<std::uint32_t> maximumFanSpeed;
+    std::uint32_t ioControlLineCount = 0;
     std::vector<Resolution> previewResolutions;
 };
 struct CameraError {
@@ -154,7 +155,50 @@ struct AstroAutoFocuserState {
     std::optional<std::int32_t> ambientTemperatureSdkUnits;
 };
 
-enum class AmcamTriggerMode : std::uint8_t {
+
+enum class AmcamIoLine : std::uint8_t {
+    OptoIsolatedInput = 0, OptoIsolatedOutput = 1, GPIO0 = 2, GPIO1 = 3
+};
+enum class AmcamIoDirection : std::uint8_t { Input = 0, Output = 1 };
+enum class AmcamIoSignalFormat : std::uint8_t {
+    NotConnected = 0, TriState = 1, TTL = 2, LVDS = 3, RS422 = 4, OptoCoupled = 5
+};
+enum class AmcamIoInputActivation : std::uint8_t {
+    RisingEdge = 0, FallingEdge = 1, LevelHigh = 2, LevelLow = 3
+};
+enum class AmcamIoOutputMode : std::uint8_t {
+    FrameTriggerWait = 0, ExposureActive = 1, Strobe = 2,
+    User = 3, Counter = 4, Timer = 5
+};
+struct AmcamIoLineState {
+    AmcamIoLine line = AmcamIoLine::OptoIsolatedInput;
+    // Bit 0 => input supported; bit 1 => output supported.
+    std::uint8_t supportedModes = 0;
+    std::optional<AmcamIoDirection> direction;
+    std::optional<AmcamIoSignalFormat> signalFormat;
+    std::optional<bool> outputInverted;
+    std::optional<AmcamIoInputActivation> inputActivation;
+    std::optional<std::uint32_t> debounceTimeMicroseconds;
+    std::optional<bool> inputHigh;
+    std::optional<AmcamIoOutputMode> outputMode;
+    std::optional<bool> strobeDelayMode;
+    std::optional<std::uint32_t> strobeDelayMicroseconds;
+    std::optional<std::uint32_t> strobeDurationMicroseconds;
+};
+struct AmcamIoLineConfiguration {
+    AmcamIoLine line = AmcamIoLine::OptoIsolatedInput;
+    std::optional<AmcamIoDirection> direction;
+    std::optional<AmcamIoSignalFormat> signalFormat;
+    std::optional<bool> outputInverted;
+    std::optional<AmcamIoInputActivation> inputActivation;
+    std::optional<std::uint32_t> debounceTimeMicroseconds;
+    std::optional<AmcamIoOutputMode> outputMode;
+    std::optional<bool> strobeDelayMode;
+    std::optional<std::uint32_t> strobeDelayMicroseconds;
+    std::optional<std::uint32_t> strobeDurationMicroseconds;
+};
+
+enum class AmcamTriggerMode : std::uint8_t {enum class AmcamTriggerMode : std::uint8_t {
     Video = 0,
     SoftwareOrSimulated = 1,
     External = 2,

@@ -62,6 +62,7 @@ enum class AmcamCameraFeature : std::uint8_t {
     Transport10GigE,
     TransportCameraLink,
     TransportCoaXPress,
+    IoControl,
 };
 
 struct AmcamCameraModelProfile {

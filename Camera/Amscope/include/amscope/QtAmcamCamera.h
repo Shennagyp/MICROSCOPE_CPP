@@ -62,6 +62,8 @@ public:
     using FrameRateResult = CameraOperationResult<FrameRateStatistics>;
     using TriggerConfigurationResult =
         CameraOperationResult<AmcamTriggerConfiguration>;
+    using IoLineList = std::vector<AmcamIoLineState>;
+    using IoLineListResult = CameraOperationResult<IoLineList>;
     using StillCaptureResult = CameraOperationResult<FramePtr>;
     using StillResolutionList = std::vector<StillResolution>;
     using StillResolutionListResult = CameraOperationResult<StillResolutionList>;
@@ -89,6 +91,8 @@ public:
         std::function<void(FeatureRequestId, FrameRateResult)>;
     using TriggerConfigurationCallback =
         std::function<void(FeatureRequestId, TriggerConfigurationResult)>;
+    using IoLineListCallback =
+        std::function<void(FeatureRequestId, IoLineListResult)>;
     using StillCaptureCallback =
         std::function<void(FeatureRequestId, StillCaptureResult)>;
     using StillResolutionListCallback =
@@ -133,6 +137,10 @@ public:
     bool readFrameRate(FrameRateStatistics& stats, CameraError* error = nullptr);
     bool readTriggerConfiguration(
         AmcamTriggerConfiguration& configuration, CameraError* error = nullptr);
+    bool readIoLines(IoLineList& lines, CameraError* error = nullptr);
+    bool configureIoLine(
+        const AmcamIoLineConfiguration& configuration,
+        CameraError* error = nullptr);
     bool configureTrigger(
         const AmcamTriggerConfiguration& configuration,
         CameraError* error = nullptr);
@@ -201,6 +209,10 @@ public:
         AccessoryCommandCallback callback);
     FeatureRequestId requestSoftwareTrigger(
         std::uint16_t imageCount,
+        AccessoryCommandCallback callback);
+    FeatureRequestId requestIoLines(IoLineListCallback callback);
+    FeatureRequestId requestConfigureIoLine(
+        AmcamIoLineConfiguration configuration,
         AccessoryCommandCallback callback);
     FeatureRequestId requestStillCapture(
         StillCaptureRequest request,

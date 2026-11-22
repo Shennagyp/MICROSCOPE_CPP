@@ -34,6 +34,8 @@ public:
 
     [[nodiscard]] CameraState state() const noexcept;
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
+    // Number of successful PullImageV4 calls in the current/most recent run.
+    [[nodiscard]] std::uint64_t framesPulled() const noexcept;
 
     // Non-feature camera command and telemetry surfaces.
     bool autoWhiteBalance(CameraError* error = nullptr);

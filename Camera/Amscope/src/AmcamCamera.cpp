@@ -124,6 +124,14 @@ struct ModelFlagCapability {
 constexpr ModelFlagCapability kModelFlagCapabilities[] = {
     {"AmcamSensorCMOS", "CMOS Sensor", AMCAM_FLAG_CMOS,
      amscope::AmcamCameraFeature::SensorCMOS, camera::CameraFeatureGroup::Sensor},
+
+    {"AmcamHighFullWellCapability", "High Full-Well Sensor Capability", AMCAM_FLAG_HIGH_FULLWELL,
+     amscope::AmcamCameraFeature::HighFullWell, camera::CameraFeatureGroup::Sensor},
+    {"AmcamHDRConversionGainAvailable", "HDR Conversion Gain", AMCAM_FLAG_CGHDR,
+     amscope::AmcamCameraFeature::ConversionGain, camera::CameraFeatureGroup::Sensor},
+    {"AmcamISPProcessorAvailable", "ISP Processor", AMCAM_FLAG_ISP,
+     amscope::AmcamCameraFeature::ImageProcessing, camera::CameraFeatureGroup::ImageProcessing},
+
     {"AmcamSensorCCDProgressive", "Progressive CCD Sensor", AMCAM_FLAG_CCD_PROGRESSIVE,
      amscope::AmcamCameraFeature::SensorCCDProgressive, camera::CameraFeatureGroup::Sensor},
     {"AmcamSensorCCDInterlaced", "Interlaced CCD Sensor", AMCAM_FLAG_CCD_INTERLACED,

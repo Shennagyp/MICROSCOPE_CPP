@@ -66,12 +66,13 @@ integration and does not modify vendor sample code.
   Continuous. The mode setter verifies immediate SDK readback.
 - The Qt application boundary exposes camera settings only through
   ICameraFeatureAccess; vendor-specific setters/readers are private backend
-  primitives. The common feature contract exposes the eleven Swift AmScope
-  control features through runtime descriptors and typed reads/writes:
-  ExposureAuto, ExposureTime, AmcamAnalogGainPercent,
-  AmcamColorMatrixEnabled, AmcamPixelFormat, AmcamWhiteBalanceTemperature,
-  AmcamWhiteBalanceTint, AmcamWhiteBalanceRGBGain, AmcamFixedFrameRate,
-  AmcamFrameSpeedLevel, and AmcamResolutionIndex.
+  primitives. The initial generic control surface includes ExposureAuto,
+  ExposureTime, AmcamAnalogGainPercent, AmcamColorMatrixEnabled,
+  AmcamPixelFormat, AmcamWhiteBalanceTemperature, AmcamWhiteBalanceTint,
+  AmcamWhiteBalanceRGBGain, AmcamFixedFrameRate, AmcamFrameSpeedLevel and
+  AmcamResolutionIndex. Additional AmScope-specific image, sensor and hardware
+  settings, plus read-only model capability facts, use the same typed contract.
+  One-shot commands and still capture remain separate camera operations.
 - The AmScope descriptors use model metadata and non-mutating SDK probes.
   One-shot auto white balance remains a command, not a Boolean feature.
 - The shared typed feature contract also exposes the probed ISP controls

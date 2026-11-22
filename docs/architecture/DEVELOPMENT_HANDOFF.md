@@ -217,7 +217,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Phase 0 residual follow-up coverage
 
-- The latest branch-head CI run is green on Intel x86_64 and Apple Silicon arm64, with all eight registered CTest tests passing.
+- The earlier eight-target CTest suite passed on Intel x86_64 and Apple Silicon arm64. The newly added ninth target `amscope_session_primitives_tests` has not yet been validated by the current branch-head CI run.
 - The user has built and launched the branch locally after removing the stale generated build directory, and has confirmed that the live `Resolution` feature changes resolution. Record the exact resulting live frame dimensions before treating 640×480 as the measured mode.
 - Rebuild and rerun the newest diagnostic revision. Review `event_fps`, `pull_fps`, `callback_fps`, `paint_fps`, `frame_poll_ticks`, `preview_frame_submissions`, `paint_events`, all four exposure readback points and `exposure_fps_limit_basis`, `applied_speed_level`, timestamps, actual dimensions and dropped frames.
 - Check the negotiated macOS USB connection speed for the MU503 using `system_profiler SPUSBDataType` and record whether the connected device is actually running at USB 2.0 (up to 480 Mb/s) or USB 3.x (typically 5 Gb/s or higher). The SDK's `MU503(USB2.0)` device string is a transport lead, not by itself proof of the physical negotiated speed.
@@ -232,11 +232,29 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Immediate local validation of the new post-acceptance tests
 
-Pull the branch and run the CTest suite with testing enabled. The exact command is recorded in Section 10 below. The new test target must pass on the user's Mac before treating the source change as locally validated. GitHub Actions must also pass on both Apple Silicon and Intel.
+Pull the branch and run the CTest suite with testing enabled. The command is:
+
+```sh
+cd ~/Documents/GitHub/MICROSCOPE_CPP
+git switch amscope-native-driver
+git pull --ff-only origin amscope-native-driver
+
+cmake -S Camera/Amscope -B build/amscope \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+  -DAMSCOPE_BUILD_QT_ADAPTER=ON \
+  -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+  -DBUILD_TESTING=ON
+
+cmake --build build/amscope --config Release --parallel
+ctest --test-dir build/amscope --output-on-failure
+```
+
+The new test target must pass on the user's Mac before treating the source change as locally validated. GitHub Actions must also pass on both Apple Silicon and Intel.
 
 The 15-minute acquisition, USB negotiation inspection, and safe setting/still-capture regression remain useful follow-up measurements. Do not infer an exposure limit from the earlier pre-Start 70,000 µs value.
 
-### Work that can proceed after/beside the physical baseline without altering behavior
+### Next-phase and parallel work
 
 - Keep the source-to-test mapping current in [the implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md); the current inventory and targeted smoke observation are refreshed.
 - Continue the C++/Swift behavior comparison and identify untested native SDK call paths without changing runtime behavior before Phase 0 acceptance.

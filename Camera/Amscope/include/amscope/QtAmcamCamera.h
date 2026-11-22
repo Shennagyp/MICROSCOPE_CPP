@@ -65,11 +65,14 @@ public:
     using StillResolutionListResult = CameraOperationResult<StillResolutionList>;
     using EmbeddedLightSourceResult = CameraOperationResult<EmbeddedLightSourceState>;
     using FilterWheelStateResult = CameraOperationResult<FilterWheelState>;
+    using ST4GuideStateResult = CameraOperationResult<ST4GuideState>;
     using AccessoryCommandResult = CameraOperationResult<std::monostate>;
     using EmbeddedLightSourceCallback =
         std::function<void(FeatureRequestId, EmbeddedLightSourceResult)>;
     using FilterWheelStateCallback =
         std::function<void(FeatureRequestId, FilterWheelStateResult)>;
+    using ST4GuideStateCallback =
+        std::function<void(FeatureRequestId, ST4GuideStateResult)>;
     using AccessoryCommandCallback =
         std::function<void(FeatureRequestId, AccessoryCommandResult)>;
     using AutoWhiteBalanceCallback =
@@ -133,6 +136,14 @@ public:
         std::uint32_t position,
         FilterWheelDirection direction = FilterWheelDirection::Automatic,
         CameraError* error = nullptr);
+    bool st4Guide(
+        ST4GuideDirection direction, std::uint32_t durationMilliseconds,
+        CameraError* error = nullptr);
+    bool readST4GuideState(ST4GuideState& state, CameraError* error = nullptr);
+    FeatureRequestId requestST4Guide(
+        ST4GuideDirection direction, std::uint32_t durationMilliseconds,
+        AccessoryCommandCallback callback);
+    FeatureRequestId requestST4GuideState(ST4GuideStateCallback callback);
     FeatureRequestId requestEmbeddedLightSource(
         EmbeddedLightSourceCallback callback);
     FeatureRequestId requestSetEmbeddedLightSourceLevel(

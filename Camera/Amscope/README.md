@@ -110,8 +110,11 @@ integration and does not modify vendor sample code.
   wheel operations are implemented separately: light-source levels are
   range-checked and verified by readback; filter-wheel motion is submitted
   without blocking acquisition, and state reads distinguish movement from a
-  confirmed slot. Neither accessory is represented as an ordinary camera
-  feature setting.
+  confirmed slot. ST4 guide pulses and Stop are also dedicated operations with
+  millisecond durations; guide-state reads preserve the SDK's S_OK (guiding)
+  versus S_FALSE (idle) distinction. These command surfaces do not alter the
+  camera's preview acquisition or trigger mode. None is represented as an
+  ordinary camera feature setting.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
 - Still capture is independent of live-frame delivery. The complete SDK still-

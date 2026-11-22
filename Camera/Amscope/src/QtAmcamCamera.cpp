@@ -608,6 +608,45 @@ bool QtAmcamCamera::moveFilterWheel(
     return ok;
 }
 
+
+bool QtAmcamCamera::st4Guide(
+    ST4GuideDirection direction,
+    std::uint32_t durationMilliseconds,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("st4Guide", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.st4Guide(direction, durationMilliseconds, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::readST4GuideState(
+    ST4GuideState& result,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("readST4GuideState", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readST4GuideState(result, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
@@ -909,6 +948,74 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestMoveFilterWheel(
                     callback(requestId, std::move(result));
                 });
         }, FeatureRequestSemantics::StateMutation);
+}
+
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestST4Guide(
+    ST4GuideDirection direction,
+    std::uint32_t durationMilliseconds,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, direction, durationMilliseconds, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.st4Guide(direction, durationMilliseconds, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "st4Guide", exception.what()};
+                } catch (...) {
+                    local = {0, "st4Guide",
+                             "Unknown exception while submitting an ST4 guide command."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestST4GuideState(
+    ST4GuideStateCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<ST4GuideStateResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                ST4GuideState state;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readST4GuideState(state, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readST4GuideState", exception.what()};
+                } catch (...) {
+                    local = {0, "readST4GuideState",
+                             "Unknown exception while reading ST4 guide state."};
+                }
+                if (ok) result.emplace(std::move(state));
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::FeatureSnapshot);
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(

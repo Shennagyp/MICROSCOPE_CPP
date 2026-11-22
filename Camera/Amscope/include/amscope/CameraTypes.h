@@ -131,4 +131,16 @@ struct FilterWheelState {
     std::optional<std::uint32_t> position;
     bool moving = false;
 };
+
+enum class ST4GuideDirection : std::uint8_t {
+    North = 0,
+    South = 1,
+    East = 2,
+    West = 3,
+    Stop = 4
+};
+
+struct ST4GuideState {
+    bool pulseGuiding = false;
+};
 } // namespace amscope

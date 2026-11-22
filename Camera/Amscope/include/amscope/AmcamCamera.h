@@ -50,6 +50,14 @@ public:
         std::uint32_t position,
         FilterWheelDirection direction = FilterWheelDirection::Automatic,
         CameraError* error = nullptr);
+    // A Stop command must use duration 0; directional guide pulses require
+    // a positive duration in milliseconds.
+    bool st4Guide(
+        ST4GuideDirection direction,
+        std::uint32_t durationMilliseconds,
+        CameraError* error = nullptr);
+    bool readST4GuideState(
+        ST4GuideState& state, CameraError* error = nullptr);
     bool readStillResolutions(std::vector<StillResolution>& resolutions,
                               CameraError* error = nullptr);
     // Captures a still frame while live acquisition remains active.

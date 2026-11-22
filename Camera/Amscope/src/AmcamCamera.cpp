@@ -2298,6 +2298,83 @@ bool AmcamCamera::moveFilterWheel(
     return true;
 }
 
+
+bool AmcamCamera::st4Guide(
+    ST4GuideDirection direction,
+    std::uint32_t durationMilliseconds,
+    CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open &&
+         currentState != CameraState::Streaming)) {
+        return fail(error, "st4Guide", -1,
+                    "The camera must be open to issue an ST4 guide command.");
+    }
+    if ((impl_->modelFlags & AMCAM_FLAG_ST4) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::ST4Port)) {
+        return fail(error, "st4Guide", -1,
+                    "The selected model does not expose an ST4 guide port.");
+    }
+
+    const auto nativeDirection = static_cast<unsigned>(direction);
+    if (nativeDirection > static_cast<unsigned>(ST4GuideDirection::Stop)) {
+        return fail(error, "st4Guide", -1,
+                    "The requested ST4 direction is invalid.");
+    }
+    if (direction == ST4GuideDirection::Stop) {
+        if (durationMilliseconds != 0) {
+            return fail(error, "st4Guide", -1,
+                        "An ST4 Stop command must use a zero duration.");
+        }
+    } else if (durationMilliseconds == 0) {
+        return fail(error, "st4Guide", -1,
+                    "A directional ST4 guide pulse requires a positive duration.");
+    }
+
+    const HRESULT hr = Amcam_ST4PlusGuide(
+        impl_->handle, nativeDirection, durationMilliseconds);
+    if (FAILED(hr))
+        return failHr(error, "Amcam_ST4PlusGuide", hr);
+    return true;
+}
+
+bool AmcamCamera::readST4GuideState(
+    ST4GuideState& result,
+    CameraError* error) {
+    if (error) *error = {};
+    result = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open &&
+         currentState != CameraState::Streaming)) {
+        return fail(error, "readST4GuideState", -1,
+                    "The camera must be open to read ST4 guide state.");
+    }
+    if ((impl_->modelFlags & AMCAM_FLAG_ST4) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::ST4Port)) {
+        return fail(error, "readST4GuideState", -1,
+                    "The selected model does not expose an ST4 guide port.");
+    }
+
+    const HRESULT hr = Amcam_ST4PlusGuideState(impl_->handle);
+    if (hr == S_OK) {
+        result.pulseGuiding = true;
+        return true;
+    }
+    if (hr == S_FALSE) {
+        result.pulseGuiding = false;
+        return true;
+    }
+    return fail(error, "Amcam_ST4PlusGuideState",
+                static_cast<std::int32_t>(hr),
+                "The SDK returned an unrecognized ST4 guide-state result.");
+}
+
 bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {

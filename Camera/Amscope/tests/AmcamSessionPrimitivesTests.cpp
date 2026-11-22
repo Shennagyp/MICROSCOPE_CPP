@@ -63,15 +63,25 @@ void testCallbackTracker() {
     require(tracker.activeCount() == callbackCount,
             "concurrent callback entries are all tracked");
 
-    auto drain = std::async(std::launch::async, [&]() { tracker.wait(); });
+    std::promise<void> drainStarted;
+    auto drainStartedFuture = drainStarted.get_future();
+    auto drain = std::async(std::launch::async, [&]() {
+        drainStarted.set_value();
+        tracker.wait();
+    });
+    drainStartedFuture.wait();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     const auto concurrentBlockedStatus =
         drain.wait_for(std::chrono::milliseconds(20));
     releaseCallbacks.store(true, std::memory_order_release);
     for (auto& callback : callbacks) callback.join();
-    drain.wait();
+    const auto drainCompletionStatus =
+        drain.wait_for(std::chrono::seconds(2));
 
     require(concurrentBlockedStatus == std::future_status::timeout,
             "drain waits for all concurrent callbacks");
+    require(drainCompletionStatus == std::future_status::ready,
+            "drain completes after all concurrent callbacks leave");
     require(tracker.activeCount() == 0,
             "all concurrent callback leases are released");
 

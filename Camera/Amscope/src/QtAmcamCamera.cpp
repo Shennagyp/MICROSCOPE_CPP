@@ -703,7 +703,6 @@ bool QtAmcamCamera::haltAstroAutoFocuser(CameraError* error) {
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
-QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
 
@@ -1173,7 +1172,6 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestHaltAstroAutoFocuser(
         }, FeatureRequestSemantics::StateMutation);
 }
 
-QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     FeatureDescriptorsCallback callback) {
     if (!callback) return 0;

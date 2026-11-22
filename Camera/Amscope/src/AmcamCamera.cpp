@@ -2457,6 +2457,16 @@ bool AmcamCamera::moveAstroAutoFocuser(
         return fail(error, "moveAstroAutoFocuser", -1,
                     "Requested target is outside the SDK-reported AAF travel range.");
 
+    int moving = 0;
+    hr = Amcam_AAF(impl_->handle, AMCAM_AAF_ISMOVING, 0, &moving);
+    if (FAILED(hr)) return failHr(error, "Amcam_AAF(ISMOVING)", hr);
+    if (moving != 0 && moving != 1)
+        return fail(error, "moveAstroAutoFocuser", -1,
+                    "The SDK returned an invalid AAF movement state.");
+    if (moving != 0)
+        return fail(error, "moveAstroAutoFocuser", -1,
+                    "The astronomy auto-focuser is already moving; wait or Halt before submitting another target.");
+
     int ignored = 0;
     hr = Amcam_AAF(impl_->handle, AMCAM_AAF_SETPOSITION,
                    static_cast<int>(targetPosition), &ignored);
@@ -2484,7 +2494,6 @@ bool AmcamCamera::haltAstroAutoFocuser(CameraError* error) {
     return true;
 }
 
-bool AmcamCamera::readStillResolutions(
 bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {

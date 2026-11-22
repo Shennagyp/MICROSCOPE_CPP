@@ -82,6 +82,7 @@ public:
     void setMessage(QString message) {
         image_ = QImage{};
         frame_.reset();
+        hasPaintedSequence_ = false;
         message_ = std::move(message);
         update();
     }
@@ -1435,6 +1436,11 @@ private:
         if (previewFramesPerSecond_) {
             text += QString(" | paint %1 FPS")
                 .arg(*previewFramesPerSecond_, 0, 'f', 1);
+        }
+        const std::uint64_t dropped = camera_.droppedFrames();
+        if (dropped != 0) {
+            text += QString(" | dropped %1")
+                .arg(static_cast<qulonglong>(dropped));
         }
         frameInfo_->setText(text);
     }

@@ -453,6 +453,10 @@ std::uint64_t QtAmcamCamera::droppedFrames() const noexcept {
     return camera_.droppedFrames();
 }
 
+std::uint64_t QtAmcamCamera::framesPulled() const noexcept {
+    return camera_.framesPulled();
+}
+
 FramePtr QtAmcamCamera::takeLatestFrame() {
     std::lock_guard<std::mutex> lock(mailboxMutex_);
     FramePtr frame = std::move(latestFrame_);

@@ -383,6 +383,8 @@ struct Measurement {
     std::uint64_t timestampSamples = 0;
     bool hasConfiguredExposure = false;
     std::uint32_t configuredExposureMicroseconds = 0;
+    bool hasAppliedSpeedLevel = false;
+    std::int64_t appliedSpeedLevel = 0;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::uint32_t exposureMinimum = 0;
@@ -441,6 +443,9 @@ void printReport(
         << "  \"model_maximum_speed_level\": "
         << (info.maximumSpeedLevel
                 ? std::to_string(*info.maximumSpeedLevel) : "null") << ",\n"
+        << "  \"applied_speed_level\": "
+        << (measurement.hasAppliedSpeedLevel
+                ? std::to_string(measurement.appliedSpeedLevel) : "null") << ",\n"
         << "  \"requested_resolution\": \""
         << resolutionLabel(options.width, options.height) << "\",\n"
         << "  \"selected_resolution_symbol\": \""
@@ -759,6 +764,19 @@ int main(int argc, char** argv) {
         return 7;
     }
 
+    // The Start path applies the model's maximum speed after callback
+    // acquisition begins. Read that setting once, before the timed interval.
+    bool hasAppliedSpeedLevel = false;
+    std::int64_t appliedSpeedLevel = 0;
+    const auto speedResult = camera.readFeature("AmcamFrameSpeedLevel");
+    if (const auto* speedValue =
+            std::get_if<camera::CameraFeatureValue>(&speedResult)) {
+        if (const auto* speedInteger = std::get_if<std::int64_t>(speedValue)) {
+            hasAppliedSpeedLevel = true;
+            appliedSpeedLevel = *speedInteger;
+        }
+    }
+
     std::uint64_t eventStart = 0;
     std::uint64_t pullStart = 0;
     std::uint64_t dropStart = 0;
@@ -833,6 +851,8 @@ int main(int argc, char** argv) {
                         measurement.hasConfiguredExposure = hasConfiguredExposure;
                         measurement.configuredExposureMicroseconds =
                             configuredExposureMicroseconds;
+                        measurement.hasAppliedSpeedLevel = hasAppliedSpeedLevel;
+                        measurement.appliedSpeedLevel = appliedSpeedLevel;
                         measurement.width = capture->lastWidth;
                         measurement.height = capture->lastHeight;
                         measurement.asynchronousError =

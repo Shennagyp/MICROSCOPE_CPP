@@ -406,7 +406,10 @@ buildAmcamFeatureDescriptors(
         ? static_cast<unsigned>(rawMaxBitDepthHr) : 0U;
     const bool rawMaximumBitDepthValid =
         rawMaxBitDepth >= 8U && rawMaxBitDepth <= 16U;
-    const bool rawBitDepthReadable = rawModeReadable && rawMode == 1 &&
+    // Bit-depth configuration is a camera capability, not a property that
+    // disappears when RAW output is currently disabled. Keep it readable so
+    // the UI can display the current selection; gate writes on RAW being on.
+    const bool rawBitDepthReadable = rawModeReadable &&
         SUCCEEDED(rawBitDepthHr) && (rawBitDepth == 0 || rawBitDepth == 1) &&
         rawMaximumBitDepthValid;
     const bool rawBitDepthWritable = rawModeReadable && rawMode == 1 &&
@@ -803,7 +806,8 @@ buildAmcamFeatureDescriptors(
         std::string(camera::RawOutputBitDepthFeature),
         "RAW Output Bit Depth", CameraFeatureKind::Enumeration,
         std::string("significant bits"),
-        rawAvailable && rawOutputAllowed && rawBitDepthWritable,
+        rawModelSupported && rawOutputAllowed &&
+            rawMaximumBitDepthValid && rawMaxBitDepth > 8U,
         rawBitDepthReadable,
         rawAvailable && rawOutputAllowed && rawBitDepthWritable && stopped,
         std::nullopt, std::nullopt, std::move(rawBitDepthValues),

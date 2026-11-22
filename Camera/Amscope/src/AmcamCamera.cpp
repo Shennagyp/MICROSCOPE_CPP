@@ -2086,6 +2086,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
         return fail(error, "Amcam_Open", -1,
                     "Amcam_Open failed. Re-enumerate devices and check that the camera is not in use.");
 
+    impl_->requestedRawStorageMode.store(-1, std::memory_order_release);
     impl_->modelName = selected->modelName;
     impl_->modelCode = selected->modelCode;
     impl_->modelFlags = selected->modelFlags;
@@ -2139,6 +2140,7 @@ bool AmcamCamera::close(CameraError* error) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
+        impl_->requestedRawStorageMode.store(-1, std::memory_order_release);
 
         impl_->activeTriggerMode.store(0, std::memory_order_release);
         impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
@@ -2380,7 +2382,8 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                     }
                     if (SUCCEEDED(hr))
                         hr = getRawStorageMode(
-                            impl_->handle, rawStorageMode, &failureOperation);
+                            impl_->handle, rawStorageMode, &failureOperation,
+                            impl_->requestedRawStorageMode.load(std::memory_order_acquire));
                 }
             } else if (modelAdvertisesRaw) {
                 hr = rawHr;
@@ -4236,7 +4239,8 @@ bool AmcamCamera::captureStill(
             }
             const char* storageModeFailureOperation = "Amcam_get_MaxBitDepth";
             const HRESULT storageModeResult = getRawStorageMode(
-                impl_->handle, rawStorageMode, &storageModeFailureOperation);
+                impl_->handle, rawStorageMode, &storageModeFailureOperation,
+                impl_->requestedRawStorageMode.load(std::memory_order_acquire));
             if (FAILED(storageModeResult)) {
                 return failHr(error, storageModeFailureOperation, storageModeResult);
             }

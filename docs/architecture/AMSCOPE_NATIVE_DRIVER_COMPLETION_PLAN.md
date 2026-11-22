@@ -220,6 +220,29 @@ A source comparison of `amscope-native-driver` with `minimal-amscope-gui-mac` fo
 
 Before changing acquisition semantics, establish the actual live width/height and distinguish SDK frame progression from UI presentation throughput. Preserve the callback-to-pull mechanism. Phase 0 remains OPEN until the complete physical regression is performed and recorded.
 
+### Diagnostic frame-rate telemetry added — 22 November 2026
+
+The preview application now polls the existing asynchronous `QtAmcamCamera::requestFrameRate` API once per second while Streaming. It displays:
+
+- **SDK FPS / SDK total:** values returned by the existing native `Amcam_get_FrameRate` telemetry call.
+- **Preview FPS:** the existing host-side estimate measured after GUI rendering.
+
+The poll uses the existing serialized Qt request worker and native session. It does not add a camera handle, acquisition worker, callback, or rate limiter. Polling is stopped and its displayed values are invalidated when the session leaves Streaming. SDK telemetry failure is displayed as unavailable rather than generating a repeated status-bar warning.
+
+Implementation commits:
+- `d47a6ea9191220154fa17c7d0f37218a14ba1b42` — add separate SDK frame-rate telemetry to the preview.
+- `ea74eb3bab5d8cae2601e1d44a137b2a4c5bdf1c` — make telemetry failure presentation non-repetitive.
+- `828dfce4a4dd19c333a69dfe2db00d8c925c9429` — document the two frame-rate measurements.
+
+No local build/test has been run for this change, and no physical-camera retest of this change has yet been reported. Workflow [#45054806232](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45054806232) for the latest documentation commit was pending at the time this note was written; do not treat it as green until completion.
+
+Interpret the next physical-camera observation as follows:
+- SDK FPS near the previous ~100 FPS while Preview FPS is much lower: acquisition is progressing and GUI presentation is the leading bottleneck candidate. Profile before changing frame ownership/rendering.
+- Both SDK FPS and Preview FPS low: investigate the configured live preview resolution, exposure, trigger configuration, and actual camera/transport conditions before changing the callback-to-pull acquisition path.
+- SDK FPS unavailable: use frame sequence progression and a timed observation; do not substitute the GUI estimate for SDK telemetry.
+
+The callback -> bounded event queue -> one `Amcam_PullImageV4` worker remains unchanged. Phase 0 remains OPEN pending the hardware retest and complete baseline record.
+
 ### Exit criteria
 
 - A selected baseline commit is recorded.

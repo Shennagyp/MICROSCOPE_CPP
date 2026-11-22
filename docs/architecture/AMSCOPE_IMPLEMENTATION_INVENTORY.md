@@ -24,6 +24,8 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Area | Main files | Current responsibility |
 |---|---|---|
 | Native AmScope API | `AmcamCamera.h`, `AmcamCamera.cpp` | Owns native SDK session, handle, lifecycle, feature access, commands, telemetry, still capture, and native acquisition |
+| Common camera models | `Camera/Common/include/camera/CameraModels.h` | Backend-neutral discovery identity, image resolution, and tri-state model capability data |
+| AmScope discovery extension | `AmcamCamera.h`, `CameraTypes.h` | Adds native model code/flags, speed/fan limits, and I/O line count without polluting common models |
 | Event queue | `AmcamEventQueue.h` | Bounded callback-to-worker event transfer |
 | Session primitives | `AmcamSessionPrimitives.h` | Production callback lease tracker, generation-based frame-cache flush obligation, and retained frame-slot selection |
 | Watchdog | `detail/FrameStallWatchdog.h` | Video frame-stall and trigger heartbeat timing logic |
@@ -177,9 +179,12 @@ Additional target-architecture gaps:
 | `amscope_frame_stall_watchdog_tests` | Video/heartbeat timeout calculations | Actual SDK timeout and heartbeat behavior |
 | `amscope_qt_request_tests` | Qt worker request ordering, callback affinity, typed closed-session outcomes, request supersession | Real camera SDK operations |
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
+| `camera_common_models_tests` | Optional camera identity fields, opaque-ID distinction, common resolution, and Unknown/Unsupported/Supported capability semantics | AmScope model-flag mapping on hardware or GenTL discovery |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
-All eight previous CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The initial hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). That CI run predates the sequence-independent paint and exposure/speed diagnostic corrections. The corrected source is being checked in workflow [#45063651610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063651610), which is in progress at this inventory refresh. The new `amscope_session_primitives_tests` target was added after those earlier CI runs; CI for the current branch head is pending. The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
+The previous eight-target CTest suite passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The initial hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). That CI run predates the sequence-independent paint and exposure/speed diagnostic corrections. The corrected source is being checked in workflow [#45063651610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063651610), which is in progress at this inventory refresh. The new `amscope_session_primitives_tests` target was added after those earlier CI runs; CI for the current branch head is pending. The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
+
+The nine-target suite at source revision `d2e5cb3` was subsequently built and run by the user on the local Mac: compilation completed and all 9/9 CTest tests passed, including `amscope_session_primitives_tests` (2.24 s total). The Phase 2.1 `camera_common_models_tests` target is a tenth CTest target and is pending validation on the current branch head.
 
 The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event/pull/callback FPS, host-revision-based frame submissions, preview timer ticks, Qt paint events, actually painted frames, actual dimensions, device sequence/timestamp metadata, exposure-auto state and exposure readbacks at multiple lifecycle points, per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop.
 
@@ -253,6 +258,7 @@ Do not change the acquisition mechanism or force a frame-rate value on the basis
 - Intel and Apple Silicon CI: **previous branch head `48be6c9` passed in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867); eight of eight registered CTest tests passed on both architectures. The hardware-test executable is added after that run; CI for `c98ab6b` is pending at this inventory refresh**.
 - Targeted physical-camera smoke observation: **user reports that live resolution switching now works after a clean rebuild; see Section 10.1**.
 - Phase 0/1 owner acceptance: **recorded in the completion plan; formal `Hardware verified` evidence remains absent because no exact-commit record has been saved under `docs/testing/hardware/`**.
+- Phase 2.1 common discovery-model slice: **implemented; CI and local validation pending**. Generic identity, resolution, and tri-state capabilities are common; AmScope model flags and hardware-specific limits remain in the AmScope extension.
 - Physical CTI-camera test: **not recorded**.
 
 ### 10.1 Targeted user-reported physical-camera smoke observation — 22 November 2026

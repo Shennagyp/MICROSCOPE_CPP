@@ -3,10 +3,10 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last verified branch head before this handoff refresh:** `e0bc94a3bcbb7c3c96de0a0580a3a0c3115234a5`  
-**Last implementation-bearing commit:** `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`  
+**Last verified branch head before this handoff refresh:** `c6833e8023b23c0e351740ee5cf4bb367752ca9c`  
+**Last implementation-bearing commit:** `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff`  
 **Current phase:** Phase 0 — baseline freeze and verification  
-**Phase status:** OPEN — the user reports that a clean local rebuild and live-resolution change now work on the physical camera. The FPS/throughput measurements and complete baseline hardware regression are still outstanding.
+**Phase status:** OPEN — the user reports that a clean local rebuild and live-resolution change now work. A dedicated physical-camera rate test has been added and the user can run it with one command; its macOS CI build is pending, and no throughput measurement or complete baseline regression has been recorded.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -29,7 +29,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The branch head before this handoff refresh is `e0bc94a3bcbb7c3c96de0a0580a3a0c3115234a5`. The latest implementation-bearing commit remains `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`; the source tree verified by the latest CI run is `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. Four subsequent commits (`06de96b`, `dcb41f2`, `5f686e2`, and `e0bc94a`) are documentation-only. They record the successful live-resolution smoke check, refresh the implementation/test inventory, extend the SDK seam design to cover discrete maximum-speed configuration, and synchronize the completion plan. No C++ source or acquisition behavior changed. The implementation still preserves the native callback -> bounded event queue -> single `Amcam_PullImageV4` worker.
+The branch head before this handoff refresh is `c6833e8023b23c0e351740ee5cf4bb367752ca9c`. The last implementation-bearing source change is `c98ab6bab7345d0f676ed9f25b0b507e6035e3ff`. The intervening work adds a standalone physical-camera performance test executable, a launcher mode, CMake wiring, architecture checks in CI, and documentation. The test uses the existing `AmcamCamera` public API and the same native callback -> bounded event queue -> single `Amcam_PullImageV4` acquisition pipeline; it does not modify driver acquisition or session behavior. The later inventory and completion-plan commits document its use.
 
 ### Relationship with `main`
 
@@ -43,12 +43,12 @@ Those two commits have no net file change to import. The comparison also shows t
 Relevant links:
 
 - [Active branch](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/amscope-native-driver)
-- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/e0bc94a3bcbb7c3c96de0a0580a3a0c3115234a5)
+- [Branch head before this handoff refresh](https://github.com/Shennagyp/MICROSCOPE_CPP/commit/c6833e8023b23c0e351740ee5cf4bb367752ca9c)
 - [Comparison with main](https://github.com/Shennagyp/MICROSCOPE_CPP/compare/main...amscope-native-driver)
 
 ## 3. CI and test evidence
 
-The latest code-verification workflow is [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), run against source/documentation head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. Both Intel x86_64 and Apple Silicon arm64 jobs completed successfully. The workflow includes configuration/build, CTest, artifact/architecture checks, launcher syntax, and launcher smoke checks. Four later commits changed documentation only, so they do not alter the C++ source validated by this run. Earlier path-filtered runs were cancelled by the workflow's `cancel-in-progress` rule; they are superseded by this successful run. The assistant did not run a local build or CTest. The user reports that deleting the stale `build/amscope` output and rebuilding with `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh` succeeded, the app launched, and changing live resolution now works.
+The last fully successful code-verification workflow is [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), for source head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. Both architectures passed and all eight then-registered CTest targets passed. The newly added hardware-test executable has a separate build/architecture verification in workflow [#45062547191](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062547191), currently in progress at the time of this handoff refresh. That workflow builds the new executable, verifies its architecture/linkage on Intel and Apple Silicon, and runs the existing CTest suite. The assistant did not run a local build or CTest. The user previously reported that the clean rebuild succeeded, the app launched, and live resolution switching worked.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -77,6 +77,19 @@ The original native acquisition and session-lifecycle implementation remains bas
 - The driver counts `AMCAM_EVENT_IMAGE` callbacks and successful `Amcam_PullImageV4` calls with independent atomics. The UI separately measures actual painted frame sequences. The one-second monitor does not call the SDK or acquire the SDK-call mutex. It displays event FPS, pull FPS, paint FPS, exposure time, dimensions/sequence, and pool drops.
 - Every Start clears the generic SDK FPS limit with `AMCAM_OPTION_FRAMERATE=0`. After `Amcam_StartPullModeWithCallback` succeeds, it sets the model-specific maximum: maximum precise FPS plus 100% bandwidth for precise-rate models, or maximum model `maxspeed` through `Amcam_put_Speed` otherwise. Low-noise mode is disabled when the model advertises it. This follows ToupTek's documented post-Start procedure; no arbitrary fixed FPS target is set.
 - Status-label formatting was removed from the per-frame path and throttled to the one-second diagnostics update.
+
+### Hardware performance test executable
+
+`Camera/Amscope/app/hardware_rate_test.cpp` builds as `amscope_hardware_rate_test`. It is a physical-camera-only utility and is intentionally not registered with CTest. It selects and verifies a requested live-resolution feature, then runs the existing native acquisition path while a small visible Qt widget renders the latest RGB24 frame. It reports image-event FPS, successful-pull FPS, frame-callback FPS, unique painted-frame FPS, actual frame dimensions, sequence range, exposure statistics, dropped frames, and Stop/resolution-restore/Close outcomes. It refuses to start when the camera reports RAW output enabled because the test renderer measures the RGB24 display path. The original preview resolution is restored after Stop where the camera state permits it.
+
+The launcher mode is:
+
+```sh
+AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh \\
+  --hardware-rate-test --resolution 640x480 --warmup 3 --duration 15 --target-fps 100
+```
+
+The preview window must remain visible. A `PASS` result means the operational checks passed and pull FPS met the target; `BELOW_TARGET` means the run completed but pull FPS was lower; `FAIL` means an operational check failed. Exit codes are 0, 10, and 8 respectively; setup failures use other non-zero codes. A short performance measurement is not a substitute for the Phase 0 15-minute baseline regression.
 
 ### Native driver
 
@@ -174,7 +187,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 | Phase | Current status |
 |---|---|
-| 0 — Baseline freeze and verification | OPEN. CI is green for source head `48be6c9`; the user reports a successful clean local rebuild and working live-resolution change. The exact dimensions/FPS and full physical-camera baseline record are still missing. |
+| 0 — Baseline freeze and verification | OPEN. User reports a successful clean build and live-resolution switching. A dedicated rate test is committed; its Intel/Apple Silicon CI build is pending. The physical rate measurement and full baseline record remain outstanding. |
 | 1 — Native driver stabilization | OPEN. Native implementation and eight tests exist; more deterministic failure-path tests and physical qualification are required. |
 | 2 — Backend-neutral models | OPEN. Feature types are common; other important camera models still reside in AmScope. |
 | 3 — Driver/control/Qt streaming separation | OPEN. Current Qt facade combines responsibilities. |
@@ -192,6 +205,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 - The user reports that the physical camera opens and produces live preview frames.
 - After removing the stale generated `build/amscope` tree and rebuilding with `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh`, the user reports that the build and application launch succeeded and the live `Resolution` feature successfully changed resolution. The earlier `Operation not permitted` failure while writing `AmcamCamera.cpp.o` is no longer blocking the clean build.
 - The user did not provide exact selected/reported dimensions or still-capture dimensions; do not infer that the 640×480 performance mode or toolbar still-capture path has been verified.
+- A dedicated physical rate test now automates the measurement. It is launched through `scripts/run-amscope.sh --hardware-rate-test`; it records event, pull, callback and paint rates, actual frame dimensions, exposure, sequence and pool drops. It restores the saved live resolution after Stop when the camera state permits. It is intentionally excluded from CTest because the physical camera is required.
 - The initial live preview was substantially below the approximately 100 FPS previously seen at 640p. No exact model, dimensions, numerical rate, or complete baseline test record has yet been provided.
 - The source has since been optimized for the reported objective: direct frame-pool rendering with a retained immutable frame lease; atomic latest-frame mailbox; no feature-queue lock on frame notifications; cached feature descriptor inventory; no full feature inventory refresh during Streaming; and no per-frame status-label formatting.
 - Maximum supported rate is now selected per model after `Amcam_StartPullModeWithCallback`, following the vendor SDK procedure. The generic SDK frame-rate cap is set to zero; no arbitrary FPS target is used.
@@ -202,7 +216,8 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 ### Phase 0 work still required
 
 - The latest branch-head CI run is green on Intel x86_64 and Apple Silicon arm64, with all eight registered CTest tests passing.
-- The user has built and launched the current branch locally after removing the stale generated build directory, and has confirmed that the live `Resolution` feature changes resolution. Record the exact resulting live frame dimensions before treating 640×480 as the measured mode.
+- The user has built and launched the branch locally after removing the stale generated build directory, and has confirmed that the live `Resolution` feature changes resolution. Record the exact resulting live frame dimensions before treating 640×480 as the measured mode.
+- Run the new physical rate-test command documented above. Review its JSON result, especially `event_fps`, `pull_fps`, `callback_fps`, `paint_fps`, actual dimensions, exposure and dropped frames.
 - Record event FPS, pull FPS, paint FPS, exposure microseconds, frame dimensions, sequence progression, and dropped count over a fixed interval.
 - Interpret the three rates: low event FPS is upstream of the pull worker; event-to-pull loss points to callback/queue/pull throughput; pull-to-paint loss points to UI rendering.
 - Record actual camera manufacturer/model, SDK model code, firmware, SDK version, OS, and architecture.
@@ -214,11 +229,11 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Required before Phase 1 refactoring
 
-1. The latest tested source is `48be6c9`; do not substitute an older local executable.
-2. Confirm the actual live frame dimensions after selecting 640×480 through the stopped-state `Resolution` feature. The user has verified that resolution switching works, but the exact selected/read-back dimensions were not reported.
-3. Run the preview for at least 15 seconds and record event FPS, pull FPS, paint FPS, exposure microseconds, frame dimensions, sequence progression, and dropped count. The top-toolbar selector remains still-capture-only.
-4. Compare the three stage rates before changing additional code. Low event FPS points upstream of the pull worker; event-to-pull loss points to callback/queue/pull; pull-to-paint loss points to presentation.
-5. Complete the Section 3.2 regression, including the required 15-minute continuous acquisition interval, Stop/Start, Close/reopen, safe reversible setting readback/restoration, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`; keep Phase 0 OPEN until it passes.
+1. Pull the latest `amscope-native-driver` branch and run the physical performance test:
+   `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh --hardware-rate-test --resolution 640x480 --warmup 3 --duration 15 --target-fps 100`.
+2. Keep the test preview window visible. The tool will print JSON when finished; record or paste that output. `BELOW_TARGET` is a measured result, not a setup failure.
+3. Compare event, pull, callback and paint rates. Low event FPS points upstream of the pull worker; event-to-pull loss points to callback/queue/pull; pull-to-paint loss points to presentation.
+4. Then complete the Section 3.2 baseline regression, including the required 15-minute continuous acquisition interval, Stop/Start, Close/reopen, safe reversible setting readback/restoration, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`; keep Phase 0 OPEN until it passes.
 
 ### Work that can proceed after/beside the physical baseline without altering behavior
 

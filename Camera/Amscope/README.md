@@ -10,10 +10,15 @@ integration and does not modify vendor sample code.
 - One AmcamCamera owns one HAmcam handle for the complete open session.
 - Enumeration copies SDK device data into CameraInfo; open uses the opaque
   device id returned by enumeration. Re-enumerate after a disconnect/replug.
-- Acquisition starts pull mode and calls Amcam_WaitImageV4 on a dedicated
-  C++ worker. The SDK event callback only records disconnect/error flags.
-- Stop and Close are never called from an SDK callback. Handle operations are
-  serialized; WaitImageV4 uses a 50 ms timeout to bound control/stop waiting.
+- Acquisition uses the vendor-documented WaitImage pairing: pull mode starts
+  with a null SDK event callback, and a dedicated C++ worker retrieves frames
+  through Amcam_WaitImageV4. It does not mix event-callback delivery with
+  WaitImage polling.
+- WaitImageV4 uses a 50 ms polling timeout. A frame-health watchdog faults a
+  continuous preview when no frame arrives for at least 5 seconds, or three
+  times the last known exposure plus a 1-second grace period, whichever is
+  longer. The exposure-aware threshold avoids treating long exposures as an
+  immediate transport failure.
 - Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
   sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every
@@ -149,7 +154,9 @@ must be implemented against the selected Qt rendering API.
 3. Configure exposure and, while stopped, resolution.
 4. Start acquisition with a frame callback.
 5. Stop before changing resolution or closing the session.
-6. Re-enumerate after disconnect/replug because a camera id can change.
+6. If continuous preview stops producing frames, the driver reports Faulted;
+   close the session before refreshing enumeration or attempting to reopen.
+7. Re-enumerate after disconnect/replug because a camera id can change.
 
 Do not call start, stop, or close from the acquisition callback. Queue lifecycle
 changes to the owning application/control thread. Destroy QtAmcamCamera on

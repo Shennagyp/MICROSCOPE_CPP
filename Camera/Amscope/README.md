@@ -187,17 +187,32 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   rejected, so the two execution models cannot interleave on one camera.
 - The Qt Widgets app builds its settings panel from common feature descriptors,
   including typed Boolean, integer, vector, floating-point and enumeration
-  editors. Readable values are fetched before writable controls are enabled;
-  descriptors and values are refreshed after writes and lifecycle transitions.
-- The preview renders the latest immutable frame lease through QImage/QPixmap;
-  the QImage is detached before the lease is released. A host-monotonic
-  30-interval moving-average estimate is shown as preview FPS; it is distinct
-  from configured fixed FPS and SDK-reported frame-rate telemetry.
-- While streaming, the preview UI polls the existing `Amcam_get_FrameRate`
-  telemetry API once per second and displays SDK FPS and total SDK frames
-  separately from the GUI presentation FPS. The telemetry request uses the
-  existing serialized Qt camera request worker; it does not add an acquisition
-  thread or another camera handle.
+  editors. The complete descriptor inventory is probed while the camera is
+  stopped. Individual feature reads reuse that cached per-state inventory
+  rather than rebuilding the full SDK probe set for every value.
+- The preview holds the immutable `FramePtr` lease and wraps its pool memory
+  in a non-owning `QImage`. A custom `FrameView` paints directly from that
+  memory with `QPainter`; it does not call `QImage::copy()`, create a
+  `QPixmap`, or allocate a per-frame presentation buffer. The lease remains
+  alive until a newer frame replaces it.
+- The latest-frame mailbox uses C++17 atomic `shared_ptr` operations and an
+  atomic notification flag. It replaces stale frames instead of accumulating
+  a queue. Frame notifications bypass the feature-request queue mutex. The
+  mailbox still preserves acquisition-generation invalidation.
+- The preview reports **pull FPS**, counted atomically after successful
+  `Amcam_PullImageV4` calls, separately from **paint FPS**, counted only when
+  `FrameView` paints a new frame sequence. Measuring throughput does not poll
+  the camera SDK or contend for the SDK-call mutex. Dropped pool frames are
+  displayed separately.
+- Every Start removes the generic SDK frame-rate cap (`AMCAM_OPTION_FRAMERATE=0`).
+  After callback acquisition has started, the driver selects the model's
+  documented maximum rate: maximum precise FPS plus 100% bandwidth for models
+  advertising `AMCAM_FLAG_PRECISE_FRAMERATE`, or maximum `Amcam_put_Speed`
+  level otherwise. The documented low-noise mode is disabled when supported
+  because it trades frame rate for SNR. No arbitrary FPS target is applied.
+- Full feature descriptor/value refresh is deliberately not performed while
+  streaming. Feature settings remain disabled until Stop; streaming commands
+  and accessory operations retain their distinct APIs.
 
 ### Model-specific feature policy
 

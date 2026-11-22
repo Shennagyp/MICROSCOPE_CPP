@@ -198,7 +198,7 @@ struct AmcamIoLineConfiguration {
     std::optional<std::uint32_t> strobeDurationMicroseconds;
 };
 
-enum class AmcamTriggerMode : std::uint8_t {enum class AmcamTriggerMode : std::uint8_t {
+enum class AmcamTriggerMode : std::uint8_t {
     Video = 0,
     SoftwareOrSimulated = 1,
     External = 2,

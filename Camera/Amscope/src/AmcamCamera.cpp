@@ -112,6 +112,76 @@ bool parseBinningFeatureSymbol(
     return true;
 }
 
+
+struct ModelFlagCapability {
+    const char* name;
+    const char* displayName;
+    std::uint64_t flag;
+    amscope::AmcamCameraFeature profileFeature;
+    camera::CameraFeatureGroup group;
+};
+
+constexpr ModelFlagCapability kModelFlagCapabilities[] = {
+    {"AmcamSensorCMOS", "CMOS Sensor", AMCAM_FLAG_CMOS,
+     amscope::AmcamCameraFeature::SensorCMOS, camera::CameraFeatureGroup::Sensor},
+    {"AmcamSensorCCDProgressive", "Progressive CCD Sensor", AMCAM_FLAG_CCD_PROGRESSIVE,
+     amscope::AmcamCameraFeature::SensorCCDProgressive, camera::CameraFeatureGroup::Sensor},
+    {"AmcamSensorCCDInterlaced", "Interlaced CCD Sensor", AMCAM_FLAG_CCD_INTERLACED,
+     amscope::AmcamCameraFeature::SensorCCDInterlaced, camera::CameraFeatureGroup::Sensor},
+    {"AmcamMonochromeSensor", "Monochrome Sensor", AMCAM_FLAG_MONO,
+     amscope::AmcamCameraFeature::MonochromeSensor, camera::CameraFeatureGroup::Sensor},
+    {"AmcamGlobalShutter", "Global Shutter", AMCAM_FLAG_GLOBALSHUTTER,
+     amscope::AmcamCameraFeature::GlobalShutter, camera::CameraFeatureGroup::Sensor},
+    {"AmcamGhoptoSensor", "GHOPTO Sensor", AMCAM_FLAG_GHOPTO,
+     amscope::AmcamCameraFeature::SensorGhopto, camera::CameraFeatureGroup::Sensor},
+    {"AmcamFrameBufferAvailable", "Camera Frame Buffer", AMCAM_FLAG_BUFFER,
+     amscope::AmcamCameraFeature::FrameBuffer, camera::CameraFeatureGroup::ImageFormat},
+    {"AmcamDDRFrameBufferAvailable", "DDR Frame Buffer", AMCAM_FLAG_DDR,
+     amscope::AmcamCameraFeature::DDRFrameBuffer, camera::CameraFeatureGroup::ImageFormat},
+    {"AmcamSoftwareTriggerAvailable", "Software Trigger Support", AMCAM_FLAG_TRIGGER_SOFTWARE,
+     amscope::AmcamCameraFeature::TriggerSoftware, camera::CameraFeatureGroup::Trigger},
+    {"AmcamExternalTriggerAvailable", "External Trigger Support", AMCAM_FLAG_TRIGGER_EXTERNAL,
+     amscope::AmcamCameraFeature::TriggerExternal, camera::CameraFeatureGroup::Trigger},
+    {"AmcamSingleTriggerAvailable", "Single Trigger Support", AMCAM_FLAG_TRIGGER_SINGLE,
+     amscope::AmcamCameraFeature::TriggerSingle, camera::CameraFeatureGroup::Trigger},
+    {"AmcamSelfTriggerAvailable", "Self Trigger Support", AMCAM_FLAG_SELFTRIGGER,
+     amscope::AmcamCameraFeature::SelfTrigger, camera::CameraFeatureGroup::Trigger},
+    {"AmcamHardwareEventsAvailable", "Hardware Event Support", AMCAM_FLAG_EVENT_HARDWARE,
+     amscope::AmcamCameraFeature::HardwareEvents, camera::CameraFeatureGroup::Trigger},
+    {"AmcamFocusMotorAvailable", "Focus Motor", AMCAM_FLAG_FOCUSMOTOR,
+     amscope::AmcamCameraFeature::FocusMotor, camera::CameraFeatureGroup::Hardware},
+    {"AmcamAutoFocusAvailable", "Auto Focus", AMCAM_FLAG_AUTO_FOCUS,
+     amscope::AmcamCameraFeature::AutoFocus, camera::CameraFeatureGroup::Hardware},
+    {"AmcamAstroAutoFocuserAvailable", "Astro Auto Focuser", AMCAM_FLAG_AUTOFOCUSER,
+     amscope::AmcamCameraFeature::AstroAutoFocuser, camera::CameraFeatureGroup::Hardware},
+    {"AmcamST4PortAvailable", "ST4 Guide Port", AMCAM_FLAG_ST4,
+     amscope::AmcamCameraFeature::ST4Port, camera::CameraFeatureGroup::Hardware},
+    {"AmcamFilterWheelAvailable", "Filter Wheel", AMCAM_FLAG_FILTERWHEEL,
+     amscope::AmcamCameraFeature::FilterWheel, camera::CameraFeatureGroup::Hardware},
+    {"AmcamEmbeddedLightSourceAvailable", "Embedded Light Source", AMCAM_FLAG_LIGHTSOURCE,
+     amscope::AmcamCameraFeature::EmbeddedLightSource, camera::CameraFeatureGroup::Hardware},
+    {"AmcamStandaloneLightSourceAvailable", "Standalone Light Source", AMCAM_FLAG_LIGHT_SOURCE,
+     amscope::AmcamCameraFeature::StandaloneLightSource, camera::CameraFeatureGroup::Hardware},
+    {"AmcamHardwareLevelRangeAvailable", "Hardware Level Range", AMCAM_FLAG_LEVELRANGE_HARDWARE,
+     amscope::AmcamCameraFeature::HardwareLevelRange, camera::CameraFeatureGroup::ImageProcessing},
+    {"AmcamTransportUSB3", "USB 3.0 Transport", AMCAM_FLAG_USB30,
+     amscope::AmcamCameraFeature::TransportUSB3, camera::CameraFeatureGroup::Transport},
+    {"AmcamTransportUSB3OverUSB2", "USB 3.0 Camera on USB 2.0", AMCAM_FLAG_USB30_OVER_USB20,
+     amscope::AmcamCameraFeature::TransportUSB3OverUSB2, camera::CameraFeatureGroup::Transport},
+    {"AmcamTransportGigE", "GigE Transport", AMCAM_FLAG_GIGE,
+     amscope::AmcamCameraFeature::TransportGigE, camera::CameraFeatureGroup::Transport},
+    {"AmcamTransport2Point5GigE", "2.5 GigE Transport", AMCAM_FLAG_25GIGE,
+     amscope::AmcamCameraFeature::Transport2Point5GigE, camera::CameraFeatureGroup::Transport},
+    {"AmcamTransport5GigE", "5 GigE Transport", AMCAM_FLAG_5GIGE,
+     amscope::AmcamCameraFeature::Transport5GigE, camera::CameraFeatureGroup::Transport},
+    {"AmcamTransport10GigE", "10 GigE Transport", AMCAM_FLAG_10GIGE,
+     amscope::AmcamCameraFeature::Transport10GigE, camera::CameraFeatureGroup::Transport},
+    {"AmcamTransportCameraLink", "Camera Link Transport", AMCAM_FLAG_CAMERALINK,
+     amscope::AmcamCameraFeature::TransportCameraLink, camera::CameraFeatureGroup::Transport},
+    {"AmcamTransportCoaXPress", "CoaXPress Transport", AMCAM_FLAG_CXP,
+     amscope::AmcamCameraFeature::TransportCoaXPress, camera::CameraFeatureGroup::Transport}
+};
+
 bool parseSignedInteger(const std::string& text, std::int32_t& value) {
     if (text.empty()) return false;
     const char* first = text.data();
@@ -495,7 +565,7 @@ buildAmcamFeatureDescriptors(
     const bool binningAllowed = allowed(amscope::AmcamCameraFeature::BinningAndSkipping);
 
     std::vector<CameraFeatureDescriptor> descriptors;
-    descriptors.reserve(36);
+    descriptors.reserve(72);
 
     descriptors.push_back({
         "ExposureAuto", "Automatic Exposure", CameraFeatureKind::Enumeration,
@@ -780,6 +850,24 @@ buildAmcamFeatureDescriptors(
         std::nullopt, std::size_t{4}, {},
         camera::CameraFeatureGroup::ImageFormat
     });
+
+    // Model flags are hardware facts, not mutable camera settings. Keep them
+    // read-only and apply the same exact-model allow/deny policy as controls.
+    for (const auto& capability : kModelFlagCapabilities) {
+        const bool supported = hasModelDescriptor &&
+            (modelFlags & capability.flag) != 0;
+        const bool profileAllows =
+            profileRegistry.allows(modelCode, capability.profileFeature);
+        descriptors.push_back({
+            capability.name, capability.displayName,
+            CameraFeatureKind::Boolean, std::nullopt,
+            supported && profileAllows,
+            supported,
+            false,
+            std::nullopt, std::nullopt, {},
+            capability.group
+        });
+    }
     return descriptors;
 }
 
@@ -2366,6 +2454,15 @@ AmcamCamera::readFeature(std::string_view name) {
     if (!descriptor->isReadable)
         return featureError(CameraFeatureAccessError::Code::FeatureNotReadable,
                             std::string(name), "Camera feature is not readable in the current state.");
+
+
+    for (const auto& capability : kModelFlagCapabilities) {
+        if (name == capability.name) {
+            return CameraFeatureValue{
+                impl_->hasModelDescriptor &&
+                (impl_->modelFlags & capability.flag) != 0};
+        }
+    }
 
     if (name == "ExposureAuto") {
         int mode = -1;

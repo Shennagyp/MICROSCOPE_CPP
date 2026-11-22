@@ -43,7 +43,36 @@ int main() {
         AmcamCameraFeature::CoolingFan,
         AmcamCameraFeature::HeatAntiFog,
         AmcamCameraFeature::HardwareROI,
-        AmcamCameraFeature::BinningAndSkipping
+        AmcamCameraFeature::BinningAndSkipping,
+        AmcamCameraFeature::SensorCMOS,
+        AmcamCameraFeature::SensorCCDProgressive,
+        AmcamCameraFeature::SensorCCDInterlaced,
+        AmcamCameraFeature::MonochromeSensor,
+        AmcamCameraFeature::GlobalShutter,
+        AmcamCameraFeature::SensorGhopto,
+        AmcamCameraFeature::FrameBuffer,
+        AmcamCameraFeature::DDRFrameBuffer,
+        AmcamCameraFeature::TriggerSoftware,
+        AmcamCameraFeature::TriggerExternal,
+        AmcamCameraFeature::TriggerSingle,
+        AmcamCameraFeature::SelfTrigger,
+        AmcamCameraFeature::HardwareEvents,
+        AmcamCameraFeature::FocusMotor,
+        AmcamCameraFeature::AutoFocus,
+        AmcamCameraFeature::AstroAutoFocuser,
+        AmcamCameraFeature::ST4Port,
+        AmcamCameraFeature::FilterWheel,
+        AmcamCameraFeature::EmbeddedLightSource,
+        AmcamCameraFeature::StandaloneLightSource,
+        AmcamCameraFeature::HardwareLevelRange,
+        AmcamCameraFeature::TransportUSB3,
+        AmcamCameraFeature::TransportUSB3OverUSB2,
+        AmcamCameraFeature::TransportGigE,
+        AmcamCameraFeature::Transport2Point5GigE,
+        AmcamCameraFeature::Transport5GigE,
+        AmcamCameraFeature::Transport10GigE,
+        AmcamCameraFeature::TransportCameraLink,
+        AmcamCameraFeature::TransportCoaXPress,
     };
     restricted.deniedFeatures = {AmcamCameraFeature::WhiteBalance};
 
@@ -62,6 +91,12 @@ int main() {
             "allow-list can explicitly permit hardware ROI");
     require(registry.allows("Model-A", AmcamCameraFeature::BinningAndSkipping),
             "allow-list can explicitly permit binning and skip modes");
+    require(registry.allows("Model-A", AmcamCameraFeature::MonochromeSensor),
+            "allow-list can explicitly permit sensor metadata");
+    require(registry.allows("Model-A", AmcamCameraFeature::TriggerExternal),
+            "allow-list can explicitly permit trigger capability metadata");
+    require(registry.allows("Model-A", AmcamCameraFeature::TransportGigE),
+            "allow-list can explicitly permit transport metadata");
     require(!registry.allows("Model-A", AmcamCameraFeature::WhiteBalance),
             "deny-list takes precedence over allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::PreciseFrameRate),

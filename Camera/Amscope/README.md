@@ -98,9 +98,13 @@ integration and does not modify vendor sample code.
 - An injectable exact-model allow/deny registry narrows the probed feature
   capabilities; a missing profile leaves SDK-probed capabilities unchanged.
   Profiles are available through AmcamCamera and QtAmcamCamera constructors.
-  The current registry covers the capability families used by the eleven
-  implemented feature descriptors; the wider sensor/trigger/accessory taxonomy
-  remains a separate extension.
+  The registry covers implemented settings and read-only model capability
+  facts. Model facts include sensor class, monochrome/global-shutter flags,
+  frame buffers, hardware trigger support, focus hardware, ST4, filter wheel,
+  embedded and standalone light sources, hardware level range, and transport
+  flags. These are metadata only: trigger execution, GPIO, focus movement, ST4
+  guiding, light-source control, and filter-wheel commands remain dedicated
+  command surfaces and are not implied by their read-only model flags.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
 - Still capture is independent of live-frame delivery. The complete SDK still-

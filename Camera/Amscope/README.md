@@ -193,6 +193,11 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   the QImage is detached before the lease is released. A host-monotonic
   30-interval moving-average estimate is shown as preview FPS; it is distinct
   from configured fixed FPS and SDK-reported frame-rate telemetry.
+- While streaming, the preview UI polls the existing `Amcam_get_FrameRate`
+  telemetry API once per second and displays SDK FPS and total SDK frames
+  separately from the GUI presentation FPS. The telemetry request uses the
+  existing serialized Qt camera request worker; it does not add an acquisition
+  thread or another camera handle.
 
 ### Model-specific feature policy
 

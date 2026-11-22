@@ -62,8 +62,8 @@ int main() {
             "profile denies features omitted from its allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::DiscreteFrameSpeed),
             "profile continues to restrict capabilities omitted from its allow-list");
-    require(!registry.allows("Model-B", AmcamCameraFeature::CoolingFan),
-            "configured profiles narrow feature access without affecting unprobed hardware support");
+    require(registry.allows("Model-B", AmcamCameraFeature::CoolingFan),
+            "a model without a configured profile is not restricted by the profile registry");
     require(registry.allows("Model-B", AmcamCameraFeature::PreciseFrameRate),
             "unprofiled model retains independently probed support");
 

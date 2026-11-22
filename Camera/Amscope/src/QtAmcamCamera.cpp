@@ -1997,11 +1997,12 @@ void QtAmcamCamera::publishLatestFrame(
     }
 
     if (notify) {
-        // Queue the signal emission onto the QObject's thread. A connected
-        // renderer on another thread should use Qt::QueuedConnection too.
-        dispatchToOwnerThread([this]() {
+        // Frame delivery must not acquire the feature-request queue mutex.
+        // The camera destructor joins the acquisition worker before QObject
+        // teardown, so this queued notification cannot outlive the receiver.
+        QMetaObject::invokeMethod(this, [this]() {
             emit frameAvailable();
-        });
+        }, Qt::QueuedConnection);
     }
 }
 

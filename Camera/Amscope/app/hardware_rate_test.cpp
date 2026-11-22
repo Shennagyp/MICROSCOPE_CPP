@@ -230,13 +230,23 @@ bool restoreResolution(
 }
 
 struct CaptureState {
+    struct FrameSnapshot {
+        amscope::FramePtr frame;
+        std::uint64_t revision = 0;
+    };
+
     std::mutex mutex;
     amscope::FramePtr latestFrame;
+    std::uint64_t latestFrameRevision = 0;
     bool measuring = false;
     std::uint64_t callbackFrames = 0;
     bool hasSequence = false;
     std::uint32_t firstSequence = 0;
     std::uint32_t lastSequence = 0;
+    bool hasTimestamp = false;
+    std::uint64_t firstTimestamp = 0;
+    std::uint64_t lastTimestamp = 0;
+    std::uint64_t timestampSamples = 0;
     std::uint32_t lastWidth = 0;
     std::uint32_t lastHeight = 0;
     std::uint64_t exposureSum = 0;
@@ -245,9 +255,9 @@ struct CaptureState {
     std::uint64_t exposureSamples = 0;
     std::string asynchronousError;
 
-    amscope::FramePtr takeLatestFrame() {
+    FrameSnapshot takeLatestFrame() {
         std::lock_guard<std::mutex> lock(mutex);
-        return latestFrame;
+        return {latestFrame, latestFrameRevision};
     }
 };
 
@@ -261,10 +271,11 @@ public:
         setAttribute(Qt::WA_OpaquePaintEvent, true);
     }
 
-    void setFrame(amscope::FramePtr frame) {
-        if (!frame) return;
-        if (frame_ && frame_->sequence == frame->sequence) return;
+    void setFrame(amscope::FramePtr frame, std::uint64_t revision) {
+        if (!frame || revision == 0 || revision == lastSubmittedRevision_)
+            return;
 
+        lastSubmittedRevision_ = revision;
         image_ = QImage{};
         frame_ = std::move(frame);
         message_.clear();
@@ -286,8 +297,13 @@ public:
         }
 
         if (image_.isNull()) {
+            hasUnpaintedFrame_ = false;
             message_ = QStringLiteral(
                 "Frame received, but this test renderer supports RGB24 only.");
+        } else {
+            // A host delivery revision identifies new frames independently of
+            // the device SDK's optional/stationary sequence metadata.
+            hasUnpaintedFrame_ = true;
         }
         update();
     }
@@ -321,10 +337,8 @@ protected:
             painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
             painter.drawImage(targetRect, image_);
 
-            if (!hasPaintedSequence_ ||
-                frame_->sequence != lastPaintedSequence_) {
-                lastPaintedSequence_ = frame_->sequence;
-                hasPaintedSequence_ = true;
+            if (hasUnpaintedFrame_) {
+                hasUnpaintedFrame_ = false;
                 paintedFrames_.fetch_add(1, std::memory_order_relaxed);
             }
         } else {
@@ -349,8 +363,8 @@ private:
     QString message_ = QStringLiteral("Waiting for camera frames...");
     QString status_ = QStringLiteral("Initializing camera...");
     std::atomic<std::uint64_t> paintedFrames_{0};
-    std::uint32_t lastPaintedSequence_ = 0;
-    bool hasPaintedSequence_ = false;
+    std::uint64_t lastSubmittedRevision_ = 0;
+    bool hasUnpaintedFrame_ = false;
 };
 
 struct Measurement {
@@ -363,6 +377,12 @@ struct Measurement {
     bool hasSequence = false;
     std::uint32_t firstSequence = 0;
     std::uint32_t lastSequence = 0;
+    bool hasTimestamp = false;
+    std::uint64_t firstTimestamp = 0;
+    std::uint64_t lastTimestamp = 0;
+    std::uint64_t timestampSamples = 0;
+    bool hasConfiguredExposure = false;
+    std::uint32_t configuredExposureMicroseconds = 0;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::uint32_t exposureMinimum = 0;
@@ -444,6 +464,21 @@ void printReport(
         << "  \"last_sequence\": "
         << (measurement.hasSequence
                 ? std::to_string(measurement.lastSequence) : "null") << ",\n"
+        << "  \"sequence_changed\": "
+        << (measurement.hasSequence &&
+            measurement.firstSequence != measurement.lastSequence
+                ? "true" : "false") << ",\n"
+        << "  \"first_timestamp_us\": "
+        << (measurement.hasTimestamp
+                ? std::to_string(measurement.firstTimestamp) : "null") << ",\n"
+        << "  \"last_timestamp_us\": "
+        << (measurement.hasTimestamp
+                ? std::to_string(measurement.lastTimestamp) : "null") << ",\n"
+        << "  \"timestamp_samples\": " << measurement.timestampSamples << ",\n"
+        << "  \"configured_exposure_us\": "
+        << (measurement.hasConfiguredExposure
+                ? std::to_string(measurement.configuredExposureMicroseconds) : "null") << ",\n"
+        << "  \"sdk_exposure_samples\": " << measurement.exposureSamples << ",\n"
         << "  \"exposure_us_min\": " << measurement.exposureMinimum << ",\n"
         << "  \"exposure_us_max\": " << measurement.exposureMaximum << ",\n"
         << "  \"exposure_us_average\": " << measurement.exposureAverage << ",\n"
@@ -623,6 +658,27 @@ int main(int argc, char** argv) {
         return 6;
     }
 
+    bool hasConfiguredExposure = false;
+    std::uint32_t configuredExposureMicroseconds = 0;
+    const auto exposureResult = camera.readFeature("ExposureTime");
+    if (const auto* exposureValue =
+            std::get_if<camera::CameraFeatureValue>(&exposureResult)) {
+        if (const auto* exposureInteger =
+                std::get_if<std::int64_t>(exposureValue)) {
+            if (*exposureInteger >= 0 &&
+                *exposureInteger <= std::numeric_limits<std::uint32_t>::max()) {
+                hasConfiguredExposure = true;
+                configuredExposureMicroseconds =
+                    static_cast<std::uint32_t>(*exposureInteger);
+            }
+        }
+    } else {
+        const auto& exposureError =
+            std::get<camera::CameraFeatureAccessError>(exposureResult);
+        std::cerr << "Exposure feature readback unavailable: "
+                  << exposureError.message << '\n';
+    }
+
     auto capture = std::make_shared<CaptureState>();
     HardwarePreview preview;
     preview.setStatus(QStringLiteral("Warming up | %1 | %2")
@@ -634,7 +690,8 @@ int main(int argc, char** argv) {
     framePoll.setTimerType(Qt::PreciseTimer);
     framePoll.setInterval(4);
     QObject::connect(&framePoll, &QTimer::timeout, [&]() {
-        preview.setFrame(capture->takeLatestFrame());
+        const auto snapshot = capture->takeLatestFrame();
+        preview.setFrame(snapshot.frame, snapshot.revision);
     });
     framePoll.start();
 
@@ -643,6 +700,7 @@ int main(int argc, char** argv) {
             if (!frame) return;
             std::lock_guard<std::mutex> lock(capture->mutex);
             capture->latestFrame = frame;
+            ++capture->latestFrameRevision;
             if (!capture->measuring) return;
 
             ++capture->callbackFrames;
@@ -651,6 +709,14 @@ int main(int argc, char** argv) {
                 capture->hasSequence = true;
             }
             capture->lastSequence = frame->sequence;
+            if (frame->timestampMicroseconds != 0) {
+                if (!capture->hasTimestamp) {
+                    capture->firstTimestamp = frame->timestampMicroseconds;
+                    capture->hasTimestamp = true;
+                }
+                capture->lastTimestamp = frame->timestampMicroseconds;
+                ++capture->timestampSamples;
+            }
             capture->lastWidth = frame->width;
             capture->lastHeight = frame->height;
             if (frame->exposureMicroseconds > 0) {
@@ -698,6 +764,10 @@ int main(int argc, char** argv) {
                 capture->measuring = true;
                 capture->callbackFrames = 0;
                 capture->hasSequence = false;
+                capture->hasTimestamp = false;
+                capture->firstTimestamp = 0;
+                capture->lastTimestamp = 0;
+                capture->timestampSamples = 0;
                 capture->exposureSum = 0;
                 capture->exposureSamples = 0;
                 capture->exposureMinimum =
@@ -744,6 +814,13 @@ int main(int argc, char** argv) {
                         measurement.hasSequence = capture->hasSequence;
                         measurement.firstSequence = capture->firstSequence;
                         measurement.lastSequence = capture->lastSequence;
+                        measurement.hasTimestamp = capture->hasTimestamp;
+                        measurement.firstTimestamp = capture->firstTimestamp;
+                        measurement.lastTimestamp = capture->lastTimestamp;
+                        measurement.timestampSamples = capture->timestampSamples;
+                        measurement.hasConfiguredExposure = hasConfiguredExposure;
+                        measurement.configuredExposureMicroseconds =
+                            configuredExposureMicroseconds;
                         measurement.width = capture->lastWidth;
                         measurement.height = capture->lastHeight;
                         measurement.asynchronousError =

@@ -198,7 +198,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 |---|---|
 | 0 — Baseline freeze and verification | ACCEPTED BY OWNER. Two MU503 640×480 physical runs measured 91.253 and 91.183 event/pull/callback FPS, zero drops, successful Stop/restore/Close. A 15-minute exact-commit hardware record remains follow-up coverage. |
 | 1 — Native driver stabilization | ACCEPTED BY OWNER. The single-session native acquisition path is accepted; deterministic callback/cache/lease tests are added as post-acceptance hardening. Full injected SDK failure coverage remains future work. |
-| 2 — Backend-neutral models | IN PROGRESS. Slice 2.1 common discovery/identity/resolution/capability models implemented; common frame and remaining shared value-model extraction pending. The tenth CTest target awaits current-revision validation. |
+| 2 — Backend-neutral models | IN PROGRESS. Slice 2.1 discovery models passed the user's clean 10/10 local suite and CI on Intel/arm64. Slice 2.2 common frame model and eleventh test are implemented; clean local build, 11/11 CTest, current CI, and real-camera/RAW-capable-camera regression remain pending. Slice 2.3 common errors/value models remains. |
 | 3 — Driver/control/Qt streaming separation | OPEN. Current Qt facade combines responsibilities. |
 | 4 — Reusable Qt UI library | OPEN. Preview exists; reusable UI library is not delivered. |
 | 5 — GenTL/GenApi integration | BLOCKED. Existing C++ dependency/runtime and a real CTI camera are not established in this branch. |
@@ -237,9 +237,9 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ## 8. Immediate next actions
 
-### Immediate local validation of Phase 2.1
+### Immediate local validation of Phase 2.2
 
-Pull the latest branch and run the ten-target CTest suite with testing enabled. The command is:
+Pull the latest branch and run the clean 11-target CTest suite with testing enabled. The command is:
 
 ```sh
 cd ~/Documents/GitHub/MICROSCOPE_CPP
@@ -257,16 +257,16 @@ cmake --build build/amscope --config Release --parallel
 ctest --test-dir build/amscope --output-on-failure
 ```
 
-The tenth test target must pass on the user's Mac before Phase 2.1 is considered locally validated. GitHub Actions must also pass on both Apple Silicon and Intel.
+Phase 2.1 has already passed locally (10/10) and on both CI architectures at `03f35bf`. The new eleventh target, `camera_common_frame_tests`, plus the migrated AmScope driver, Qt consumers, and hardware-rate executable must now pass this clean build. GitHub Actions must also pass on both Apple Silicon and Intel for the current Phase 2.2 source.
 
-The 15-minute acquisition, USB negotiation inspection, and safe setting/still-capture regression remain useful follow-up measurements. Do not infer an exposure limit from the earlier pre-Start 70,000 µs value.
+This remains compile/automated validation only. Afterward, run the Phase 2 physical regression on an AmScope camera and verify RAW format identity, significant depth, storage width, stride/payload, and optional metadata on at least one RAW-capable camera. The broader 15-minute acquisition, USB negotiation inspection, and safe setting/still-capture regression remain useful follow-up measurements. Do not infer an exposure limit from the earlier pre-Start 70,000 µs value.
 
 ### Next-phase and parallel work
 
 - Keep the source-to-test mapping current in [the implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md); the current inventory and targeted smoke observation are refreshed.
 - Continue the C++/Swift behavior comparison and identify untested native SDK call paths without changing runtime behavior before Phase 0 acceptance.
 - The Phase 1 internal SDK-call seam is documented in [the native-driver test seam design](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md), including both post-Start maximum-rate model branches. Implement it only after Phase 0 hardware acceptance; it must remain private to implementation/testing and must not change the public camera abstraction.
-- Continue Phase 2 with the common frame/image-layout contract. Preserve native Amcam FourCC values as opaque backend-qualified identifiers; do not map them to PFNC without a verified mapping. Keep significant sensor depth separate from storage-container width, and distinguish unavailable timestamps/metadata from numeric zero.
+- After Phase 2.2 passes local and cross-architecture validation and the required physical-camera/RAW checks, proceed to Phase 2.3: classify remaining common errors and value types. Preserve native error codes and operation context; move only semantics genuinely shared by the backends.
 - Identify the external GenTL/GenApi C++ runtime and its supply/version/licensing constraints. Do not create a replacement implementation.
 
 ### Phase 1 post-acceptance hardening

@@ -207,6 +207,19 @@ The latest reviewed branch head is `4de57806a898799173adb04af1272e00ff00fb24`. G
 
 Run the complete baseline regression in Section 3.2 against the designated AmScope camera. Save its actual model identity and observations. Record unsupported features rather than inferring support from another model.
 
+### Initial physical-camera smoke-test feedback — 22 November 2026
+
+The user reports that the camera successfully opens and produces a live preview. The observed preview FPS is much lower than the approximately 100 FPS previously obtained at 640p with the earlier minimal application. This is a real-device smoke-test observation, not a completed Phase 0 hardware record: the exact camera/model code, current live dimensions, numerical current FPS, acquisition duration, setting readbacks, Stop/Start cycles, and Close/reopen result have not yet been recorded here.
+
+A source comparison of `amscope-native-driver` with `minimal-amscope-gui-mac` found:
+
+- Both use the callback-driven `Amcam_StartPullModeWithCallback` path and a single worker calling `Amcam_PullImageV4`; no fixed acquisition FPS limiter was found in the current loop.
+- The old and current preview applications both copy each RGB frame into a detached `QImage`, convert it to a `QPixmap`, and scale it to the preview widget.
+- The current displayed `preview FPS` is sampled in `presentLatestFrame()` after those presentation operations. It is therefore a host-side presentation rate, not an independent measurement of sensor or SDK acquisition rate.
+- The current `start()` reads the already-configured preview dimensions; it does not select 640p. The toolbar resolution selector is for still capture, not live preview.
+
+Before changing acquisition semantics, establish the actual live width/height and distinguish SDK frame progression from UI presentation throughput. Preserve the callback-to-pull mechanism. Phase 0 remains OPEN until the complete physical regression is performed and recorded.
+
 ### Exit criteria
 
 - A selected baseline commit is recorded.
@@ -598,7 +611,7 @@ Update this table as implementation progresses. A phase is not complete until bo
 
 | Phase | Implementation status | Automated tests | Real-camera test | Acceptance |
 |---|---|---|---|---|
-| 0 — Baseline | Repository/source and branch review recorded; physical baseline pending | Baseline CI passed at reviewed revision | No physical-camera record yet | OPEN |
+| 0 — Baseline | Repository/source/branch review recorded; user reports successful camera open and live preview; low preview FPS versus the prior 100 FPS at 640p remains unresolved | Baseline CI passed at reviewed revision | Initial physical-camera smoke observation only; complete Section 3.2 regression and hardware record are not yet supplied; camera model, active preview dimensions, numeric FPS, and test duration remain unverified | OPEN |
 | 1 — Native driver | Existing implementation; further qualification required | Existing tests; additional failure-path tests required | Required | OPEN |
 | 2 — Common models | Partial; several models remain under AmScope | Common tests exist; extraction tests required | Required | OPEN |
 | 3 — Library separation | Target boundaries not yet delivered | Required | Required | OPEN |

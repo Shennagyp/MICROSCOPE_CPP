@@ -15,7 +15,8 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMetaObject>
-#include <QPixmap>
+#include <QPainter>
+#include <QPaintEvent>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QJsonDocument>
@@ -65,6 +66,79 @@ QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
         .arg(descriptor.numericRange->minimum, 0, 'g', 12)
         .arg(descriptor.numericRange->maximum, 0, 'g', 12);
 }
+
+// FrameView holds the immutable frame lease while QImage references its pixel
+// buffer. Rendering reads the pooled storage directly: no detached QImage,
+// per-frame pixel copy, or intermediate QPixmap.
+class FrameView final : public QWidget {
+public:
+    explicit FrameView(QWidget* parent = nullptr) : QWidget(parent) {
+        setMinimumSize(640, 480);
+        setAttribute(Qt::WA_OpaquePaintEvent, true);
+    }
+
+    void setMessage(QString message) {
+        image_ = QImage{};
+        frame_.reset();
+        message_ = std::move(message);
+        update();
+    }
+
+    void setFrame(amscope::FramePtr frame) {
+        image_ = QImage{};
+        frame_ = std::move(frame);
+        message_.clear();
+
+        if (frame_ && frame_->pixelFormat == amscope::PixelFormat::RGB24 &&
+            frame_->data() && frame_->width > 0 && frame_->height > 0 &&
+            frame_->width <= static_cast<std::uint32_t>(std::numeric_limits<int>::max()) &&
+            frame_->height <= static_cast<std::uint32_t>(std::numeric_limits<int>::max()) &&
+            frame_->strideBytes <= static_cast<std::uint32_t>(std::numeric_limits<int>::max())) {
+            image_ = QImage(
+                frame_->data(),
+                static_cast<int>(frame_->width),
+                static_cast<int>(frame_->height),
+                static_cast<int>(frame_->strideBytes),
+                QImage::Format_RGB888);
+        }
+
+        if (image_.isNull()) {
+            frame_.reset();
+            message_ = QStringLiteral("No renderable RGB frame");
+        }
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.fillRect(rect(), QColor(23, 25, 29));
+
+        if (image_.isNull()) {
+            painter.setPen(QColor(214, 217, 223));
+            painter.drawText(rect().adjusted(16, 16, -16, -16),
+                             Qt::AlignCenter | Qt::TextWordWrap,
+                             message_);
+            return;
+        }
+
+        QSize targetSize = image_.size();
+        targetSize.scale(size(), Qt::KeepAspectRatio);
+        const QRect targetRect(
+            (width() - targetSize.width()) / 2,
+            (height() - targetSize.height()) / 2,
+            targetSize.width(),
+            targetSize.height());
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+        painter.drawImage(targetRect, image_);
+    }
+
+private:
+    // frame_ owns external pixels for the lifetime of image_.
+    amscope::FramePtr frame_;
+    QImage image_;
+    QString message_ = QStringLiteral("Select a camera and press Open, then Start.");
+};
 
 int listCameras() {
     amscope::CameraError error;
@@ -126,10 +200,7 @@ public:
         toolbar->addWidget(stillCaptureModeSelector_);
         toolbar->addWidget(captureStillButton_);
 
-        preview_ = new QLabel("Select a camera and press Open, then Start.", central);
-        preview_->setAlignment(Qt::AlignCenter);
-        preview_->setMinimumSize(640, 480);
-        preview_->setStyleSheet("QLabel { background: #17191d; color: #d6d9df; }");
+        preview_ = new FrameView(central);
 
         featureStatus_ = new QLabel("Open a camera to inspect its available features.", central);
         featureStatus_->setWordWrap(true);
@@ -298,7 +369,7 @@ public:
         frameRateTimer_ = new QTimer(this);
         frameRateTimer_->setInterval(1000);
         connect(frameRateTimer_, &QTimer::timeout, this, [this]() {
-            pollFrameRate();
+            updatePulledFrameRate();
         });
 
         root->addLayout(toolbar);
@@ -375,29 +446,28 @@ public:
             }
             if (state == amscope::CameraState::Streaming) {
                 if (!frameRateTimer_->isActive()) {
-                    ++frameRatePollingGeneration_;
-                    frameRateRequestPending_ = false;
-                    sdkFramesPerSecond_.reset();
-                    sdkTotalFrames_.reset();
-                    sdkFrameRateUnavailable_ = false;
+                    lastPulledFrameCount_ = camera_.framesPulled();
+                    lastPullRateAt_ = std::chrono::steady_clock::now();
+                    pulledFramesPerSecond_.reset();
                     frameRateTimer_->start();
-                    pollFrameRate();
                 }
+                // Do not rebuild the full feature inventory while acquisition
+                // is active: feature probes share the SDK lock with PullImage.
+                setFeatureControlsEnabled(false);
+                featureStatus_->setText(
+                    "Acquisition active. Stop streaming to refresh or edit camera settings.");
             } else {
                 frameRateTimer_->stop();
-                ++frameRatePollingGeneration_;
-                frameRateRequestPending_ = false;
-                sdkFramesPerSecond_.reset();
-                sdkTotalFrames_.reset();
-                sdkFrameRateUnavailable_ = false;
+                lastPullRateAt_.reset();
+                pulledFramesPerSecond_.reset();
                 resetPreviewFrameRate();
                 updateFrameInfoLabel();
             }
             updateControls(state);
-            if (state == amscope::CameraState::Open ||
-                state == amscope::CameraState::Streaming) {
+            if (state == amscope::CameraState::Open) {
                 refreshFeatureDescriptors();
-            } else {
+            } else if (state == amscope::CameraState::Closed ||
+                       state == amscope::CameraState::Faulted) {
                 ++featureUiGeneration_;
                 pendingFeatureWrite_ = false;
                 clearFeatureControls();
@@ -512,7 +582,7 @@ private:
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
                     statusBar()->showMessage(QString::fromStdString(error->message));
                 } else {
-                    preview_->setText("Camera opened. Press Start to begin acquisition.");
+                    preview_->setMessage("Camera opened. Press Start to begin acquisition.");
                     statusBar()->showMessage("Camera session opened.");
                     refreshStillResolutions();
                 }
@@ -783,7 +853,7 @@ private:
         setFeatureControlsEnabled(false);
         clearFeatureControls();
         featureStatus_->setText("Closing camera session…");
-        preview_->setText("Closing camera session…");
+        preview_->setMessage("Closing camera session…");
         statusBar()->showMessage("Closing camera session…");
         updateControls(camera_.state());
 
@@ -797,7 +867,7 @@ private:
                     featureStatus_->setText(
                         "Camera feature controls are unavailable in the current state.");
                 } else {
-                    preview_->setText("Select a camera and press Open, then Start.");
+                    preview_->setMessage("Select a camera and press Open, then Start.");
                     frameInfo_->setText("No frames received");
                     statusBar()->showMessage("Camera session closed.");
                     featureStatus_->setText(
@@ -1296,7 +1366,8 @@ private:
     }
 
     void setFeatureControlsEnabled(bool enabled) {
-        const bool canEnable = enabled && !lifecycleRequestPending_;
+        const bool canEnable = enabled && !lifecycleRequestPending_ &&
+                                camera_.state() == amscope::CameraState::Open;
         for (auto& entry : featureControls_) {
             const auto& descriptor = entry.second.descriptor;
             const bool valueIsKnown =
@@ -1305,46 +1376,26 @@ private:
                 canEnable && descriptor.isWritable && valueIsKnown);
         }
         refreshFeaturesButton_->setEnabled(
-            canEnable &&
-            (camera_.state() == amscope::CameraState::Open ||
-             camera_.state() == amscope::CameraState::Streaming));
+            canEnable && camera_.state() == amscope::CameraState::Open);
     }
 
-    void pollFrameRate() {
-        if (camera_.state() != amscope::CameraState::Streaming ||
-            frameRateRequestPending_) {
+    void updatePulledFrameRate() {
+        if (camera_.state() != amscope::CameraState::Streaming)
             return;
+
+        const auto now = std::chrono::steady_clock::now();
+        const std::uint64_t total = camera_.framesPulled();
+        if (lastPullRateAt_) {
+            const double elapsed = std::chrono::duration<double>(
+                now - *lastPullRateAt_).count();
+            if (elapsed > 0.0 && total >= lastPulledFrameCount_) {
+                pulledFramesPerSecond_ =
+                    static_cast<double>(total - lastPulledFrameCount_) / elapsed;
+            }
         }
-
-        frameRateRequestPending_ = true;
-        const std::uint64_t generation = frameRatePollingGeneration_;
-        const auto requestId = camera_.requestFrameRate(
-            [this, generation](
-                amscope::QtAmcamCamera::FeatureRequestId,
-                amscope::QtAmcamCamera::FrameRateResult result) {
-                if (generation != frameRatePollingGeneration_)
-                    return;
-
-                frameRateRequestPending_ = false;
-                if (camera_.state() != amscope::CameraState::Streaming)
-                    return;
-
-                if (std::holds_alternative<amscope::CameraError>(result)) {
-                    sdkFramesPerSecond_.reset();
-                    sdkTotalFrames_.reset();
-                    sdkFrameRateUnavailable_ = true;
-                } else {
-                    const auto& statistics =
-                        std::get<amscope::FrameRateStatistics>(result);
-                    sdkFramesPerSecond_ = statistics.framesPerSecond;
-                    sdkTotalFrames_ = statistics.totalFrames;
-                    sdkFrameRateUnavailable_ = false;
-                }
-                updateFrameInfoLabel();
-            });
-
-        if (requestId == 0)
-            frameRateRequestPending_ = false;
+        lastPulledFrameCount_ = total;
+        lastPullRateAt_ = now;
+        updateFrameInfoLabel();
     }
 
     void updateFrameInfoLabel() {
@@ -1352,14 +1403,9 @@ private:
             ? QStringLiteral("No frames received")
             : frameSummary_;
 
-        if (sdkFramesPerSecond_) {
-            text += QString(" | SDK %1 FPS")
-                .arg(*sdkFramesPerSecond_, 0, 'f', 1);
-            if (sdkTotalFrames_)
-                text += QString(" | SDK total %1")
-                    .arg(static_cast<qulonglong>(*sdkTotalFrames_));
-        } else if (sdkFrameRateUnavailable_) {
-            text += QStringLiteral(" | SDK FPS unavailable");
+        if (pulledFramesPerSecond_) {
+            text += QString(" | pull %1 FPS")
+                .arg(*pulledFramesPerSecond_, 0, 'f', 1);
         }
         if (previewFramesPerSecond_) {
             text += QString(" | preview %1 FPS")
@@ -1369,7 +1415,7 @@ private:
     }
 
     void presentLatestFrame() {
-        const amscope::FramePtr frame = camera_.takeLatestFrame();
+        amscope::FramePtr frame = camera_.takeLatestFrame();
         if (!frame || frame->data() == nullptr ||
             frame->width == 0 || frame->height == 0) {
             return;
@@ -1382,8 +1428,7 @@ private:
             .arg(static_cast<qulonglong>(frame->byteSize()));
 
         if (frame->pixelFormat != amscope::PixelFormat::RGB24) {
-            preview_->setPixmap(QPixmap{});
-            preview_->setText(
+            preview_->setMessage(
                 QString("RAW sensor stream active | %1 x %2 | sensor %3-bit / container %4-bit | format 0x%5")
                     .arg(static_cast<qulonglong>(frame->width))
                     .arg(static_cast<qulonglong>(frame->height))
@@ -1394,20 +1439,9 @@ private:
             return;
         }
 
-        const QImage borrowed(
-            frame->data(),
-            static_cast<int>(frame->width),
-            static_cast<int>(frame->height),
-            static_cast<int>(frame->strideBytes),
-            QImage::Format_RGB888);
-
-        // Detach before releasing the immutable frame lease so the widget
-        // never retains pool memory after the callback returns.
-        const QPixmap pixmap = QPixmap::fromImage(borrowed.copy());
-        preview_->setPixmap(pixmap.scaled(
-            preview_->size(),
-            Qt::KeepAspectRatio,
-            Qt::FastTransformation));
+        // FrameView retains the frame lease and paints directly from pooled
+        // memory. No per-frame image copy or QPixmap conversion.
+        preview_->setFrame(std::move(frame));
 
         const double monotonicSeconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -2414,13 +2448,11 @@ private:
     std::vector<amscope::CameraInfo> cameras_;
     camera::FrameRateEstimator previewFrameRateEstimator_;
     std::optional<double> previewFramesPerSecond_;
-    std::optional<double> sdkFramesPerSecond_;
-    std::optional<std::uint32_t> sdkTotalFrames_;
-    bool sdkFrameRateUnavailable_ = false;
+    std::optional<double> pulledFramesPerSecond_;
+    std::optional<std::chrono::steady_clock::time_point> lastPullRateAt_;
+    std::uint64_t lastPulledFrameCount_ = 0;
     QString frameSummary_;
     QTimer* frameRateTimer_ = nullptr;
-    std::uint64_t frameRatePollingGeneration_ = 0;
-    bool frameRateRequestPending_ = false;
 
     std::uint64_t featureUiGeneration_ = 0;
     std::uint64_t lifecycleUiGeneration_ = 0;
@@ -2473,7 +2505,7 @@ private:
     QComboBox* stillCaptureModeSelector_ = nullptr;
     QPushButton* captureStillButton_ = nullptr;
     QPushButton* refreshFeaturesButton_ = nullptr;
-    QLabel* preview_ = nullptr;
+    FrameView* preview_ = nullptr;
     QLabel* frameInfo_ = nullptr;
     QLabel* featureStatus_ = nullptr;
     QGroupBox* accessoryGroup_ = nullptr;

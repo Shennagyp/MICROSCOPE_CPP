@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `aa7475666c1d126ce524e8ed8737aaf9b3b6e44d` (common discovery models, AmScope identity/capability mapping, and common-model CTest registration)  
-**Branch head reviewed for this inventory refresh:** `156052836ecc7f8ce962e8aab7242dfeced53154`  
+**Source snapshot:** `3da2a385508f1b639f98bbd34f5a6dabd9a3406a` (common discovery and frame models, AmScope adapters, frame metadata mapping, and common frame tests)  
+**Branch head reviewed for this inventory refresh:** `25e09ca9987bdabab240a193b0b168f8944bc847`  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---
@@ -24,14 +24,14 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Area | Main files | Current responsibility |
 |---|---|---|
 | Native AmScope API | `AmcamCamera.h`, `AmcamCamera.cpp` | Owns native SDK session, handle, lifecycle, feature access, commands, telemetry, still capture, and native acquisition |
-| Common camera models | `Camera/Common/include/camera/CameraModels.h` | Backend-neutral discovery identity, image resolution, and tri-state model capability data |
+| Common camera models | `Camera/Common/include/camera/CameraModels.h`, `CameraFrames.h` | Backend-neutral discovery identity, image resolution, tri-state model capabilities, and frame/image metadata |
 | AmScope discovery extension | `AmcamCamera.h`, `CameraTypes.h` | Adds native model code/flags, speed/fan limits, and I/O line count without polluting common models |
 | Event queue | `AmcamEventQueue.h` | Bounded callback-to-worker event transfer |
 | Session primitives | `AmcamSessionPrimitives.h` | Production callback lease tracker, generation-based frame-cache flush obligation, and retained frame-slot selection |
 | Watchdog | `detail/FrameStallWatchdog.h` | Video frame-stall and trigger heartbeat timing logic |
 | Frame gate | `detail/AcquisitionFrameGate.h` | Session/generation-aware publication gate |
 | Model policy | `AmcamCameraProfiles.h/.cpp` | Exact model allow/deny feature policy |
-| AmScope types | `CameraTypes.h` | CameraInfo, Frame, resolution, state, SDK enums, trigger/I/O/accessory models |
+| AmScope types | `CameraTypes.h` | AmScope CameraInfo extension, camera error/state, `AmcamFrame` native metadata extension, SDK enums, trigger/I/O/accessory models; common Frame/FramePtr and ImageResolution are aliases to Camera.Common |
 | Common feature contract | `Camera/Common/include/camera/CameraFeatureAccess.h` | Feature kinds, typed values, descriptors, typed errors/results, feature interface |
 | Common validation | `CameraFeatureValidation.h` | Shared type, range, increment, enum, vector, availability, and writability validation |
 | Common FPS estimator | `FrameRateEstimator.h` | Host frame-rate estimation |
@@ -69,7 +69,10 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Packed RGB24 live frames | Source implemented/documented | No camera payload integration test identified | Not recorded |
 | RAW8 and RAW16 live frame representation | Source implemented/documented | Camera type tests verify representation fields, not sensor payload bytes | Not recorded |
 | Sensor FourCC and significant depth separate from storage container width | Source implemented | Camera type tests cover representation distinction | Not recorded |
-| Sequence, timestamp, exposure, gain, black-level metadata | Source implemented/documented | No full live metadata hardware test | Not recorded |
+| Optional sequence/timestamp/exposure metadata | Source implemented; populated only when the corresponding Amcam `AMCAM_FRAMEINFO_FLAG_*` validity bit is set | Common frame tests cover optional-vs-zero semantics and timebases; no physical metadata regression for the new adapter yet | Not recorded |
+| Amcam SDK flags, exposure gain percent, and black level | Source implemented in `amscope::AmcamFrame` extension, not in common frame | AmScope type test checks extension and retained values | Not recorded |
+| Opaque pixel-format identity | Source implemented; Amcam RAW uses `amcam.fourcc`, with no automatic PFNC translation | Common and AmScope type tests cover scheme/value retention | Not recorded |
+| Significant source depth vs payload storage width | Source implemented as independent `significantBitsPerPixel` and `storageBitsPerPixel` | Common and AmScope type tests cover independent values | Not recorded |
 | Four immutable `FramePtr` leases | Source implemented/documented | No dedicated pool/retention stress test identified | Not recorded |
 | Private discard buffer when every lease is retained | Source implemented/documented | No direct pool exhaustion test identified | Not recorded |
 | Direct `QImage` wrapper over retained `FramePtr` and `QPainter` paint (no per-frame pixel copy or `QPixmap`) | Source implemented | No dedicated FrameView rendering test; branch-head CI passed on Intel x86_64 and Apple Silicon arm64 | Not recorded |
@@ -180,122 +183,13 @@ Additional target-architecture gaps:
 | `amscope_qt_request_tests` | Qt worker request ordering, callback affinity, typed closed-session outcomes, request supersession | Real camera SDK operations |
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_models_tests` | Optional camera identity fields, opaque-ID distinction, common resolution, and Unknown/Unsupported/Supported capability semantics | AmScope model-flag mapping on hardware or GenTL discovery |
+| `camera_common_frame_tests` | Common frame payload/layout, opaque pixel-format scheme/value, optional sequence/timestamp/exposure, explicit timebases, and backend extension support | Real SDK payload layout/metadata accuracy and physical RAW verification |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
 The previous eight-target CTest suite passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The initial hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). That CI run predates the sequence-independent paint and exposure/speed diagnostic corrections. The corrected source is being checked in workflow [#45063651610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063651610), which is in progress at this inventory refresh. The new `amscope_session_primitives_tests` target was added after those earlier CI runs; CI for the current branch head is pending. The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
 
-The nine-target suite at source revision `d2e5cb3` was subsequently built and run by the user on the local Mac: compilation completed and all 9/9 CTest tests passed, including `amscope_session_primitives_tests` (2.24 s total). The Phase 2.1 `camera_common_models_tests` target is a tenth CTest target and is pending validation on the current branch head.
+The user subsequently completed a clean build at Phase 2.1 source revision `03f35bf`: all 10/10 CTest targets passed locally, including the dedicated Qt request test. GitHub Actions run [#45067873506](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45067873506) passed on Intel x86_64 and Apple Silicon arm64 at the same revision. This validates the discovery-model slice only.
 
-The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event/pull/callback FPS, host-revision-based frame submissions, preview timer ticks, Qt paint events, actually painted frames, actual dimensions, device sequence/timestamp metadata, exposure-auto state and exposure readbacks at multiple lifecycle points, per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop.
+Phase 2.2 adds `camera_common_frame_tests`, making the current suite 11 CTest targets. The frame-model source snapshot recorded above includes that test, but this slice has not yet been built or tested by the user or completed by CI at this inventory refresh. The Phase 2.2 real-camera regression, including a RAW-capable physical camera, remains outstanding.
 
-### 9.1 First user-reported hardware rate run — 22 November 2026
-
-The user reports running the test with an AmScope MU503 identified by the SDK as `MU503(USB2.0)`, selecting live mode `2:640x480`, and measuring for 15.090 seconds:
-
-| Measurement | Observed |
-|---|---:|
-| SDK event rate | 91.253 FPS |
-| Successful pull rate | 91.253 FPS |
-| Driver frame callback rate | 91.253 FPS |
-| Actual dimensions | 640×480 |
-| Frame-pool drops | 0 |
-| SDK frame sequence | 0 for first and last observed frame |
-| Per-frame exposure metadata | 0 (no nonzero SDK exposure samples) |
-| Stop | Succeeded |
-| Original 1280×960 resolution restoration | Succeeded |
-| Close | Succeeded |
-
-The equal event, pull and callback counts show no measured loss between those three native stages during this run. The 91.253 FPS is the observed incoming camera rate; the requested 100 FPS target was not met. The first run's `paint_fps=0` and overall `FAIL` are not valid presentation evidence: the test rejected new frames when the SDK sequence value matched, and the preview/production telemetry also counted a frame as newly painted only when that SDK value changed. This MU503 run returned sequence zero for both first and last samples. The zero SDK per-frame exposure field also does not establish the configured exposure value.
-
-The test and production preview have since been corrected to count a newly delivered frame when it is actually painted, independently of SDK sequence metadata. The next test revision additionally reads the configured `ExposureTime` feature before starting acquisition and reports that separately from per-frame SDK exposure metadata; it also reports timestamp samples where available. This first run is retained as a valid 91.253 FPS acquisition observation, but its paint-rate result must not be used.
-
-Do not mark the physical camera performance target as met. The first and second runs show consistent native delivery near 91 FPS, but the 100 FPS target remains unmet and the active exposure/USB/presentation causes remain unresolved.
-
-
-### 9.2 Second user-reported hardware rate run — 22 November 2026
-
-The user rebuilt and ran the test after the missing `Measurement::exposureSamples` snapshot field was fixed (source revision `2da3f5d`). The run selected `2:640x480` on SDK device name `MU503(USB2.0)` and reported:
-
-| Measurement | Observed |
-|---|---:|
-| Measurement duration | 14.498 s |
-| SDK event rate | 91.183 FPS |
-| Successful pull rate | 91.183 FPS |
-| Driver callback rate | 91.183 FPS |
-| Paint rate | 14.140 FPS (205 frames) |
-| Pulled/delivered frames | 1,322 |
-| Dropped frames | 0 |
-| Applied speed level | 6 (model maximum 6) |
-| Reported pre-Start exposure | 70,000 µs |
-| Calculated pre-Start exposure rate | 14.286 FPS |
-| SDK per-frame exposure samples | 0 |
-| SDK sequence / timestamp samples | sequence unchanged at zero; timestamp samples unavailable |
-| Actual frame dimensions | 640×480 |
-| Stop / resolution restore / Close | All succeeded |
-
-The native event/pull/callback counts again match, so the user-observed pipeline did not lose frames between those stages in this interval. The requested 100 FPS target was not met. The applied model speed level was already at its advertised maximum (6/6), so a lower selected speed level is not the explanation.
-
-The `70,000 µs` value was read before Start. The test revision used for this run did not report `ExposureAuto` or sample exposure during the measurement. Therefore the derived `14.286 FPS` value is only arithmetic on a pre-Start readback; it is **not yet evidence that active exposure limited the stream**. The SDK's per-frame exposure metadata was zero, so it cannot resolve this. The 14.140 FPS paint rate is numerically close to the arithmetic value, but that coincidence does not establish a causal relationship. The run also did not count preview timer polls, frame submissions, or all paint events, so the location of the presentation-rate reduction is unresolved.
-
-The next diagnostic revision samples automatic-exposure mode and exposure readback before Start, after Start, and at the beginning/end of the timed interval. It only publishes an exposure-derived FPS limit if automatic exposure is Off at both measurement boundaries and the exposure value is stable. It also reports preview poll ticks, frame submissions, Qt paint events, and painted frames separately. This diagnostic revision is committed after source revision `2da3f5d`; its local build and hardware run are still pending.
-
-Do not change the acquisition mechanism or force a frame-rate value on the basis of this run. Also inspect the actual negotiated USB speed in macOS `system_profiler SPUSBDataType`; the SDK display name `MU503(USB2.0)` is a transport clue but is not a substitute for the operating system's negotiated-link report.
-
-## 10. Current evidence classification
-
-- Native AmScope source implementation: **present**.
-- Common feature model and validator: **present**.
-- Common camera identity/frame/capability model: **partial**.
-- Qt worker and frame mailbox: **present in broad Qt facade**.
-- Trigger/lens/accessory UI: **partial application implementation present**.
-- Hardware-I/O UI: **incomplete relative to API**.
-- Separate control and Qt streaming libraries: **not delivered**.
-- Reusable backend-neutral Qt UI library: **not delivered**.
-- Official GenApi 3.5.1 runtime and GenTL 1.6 ABI: **identified; package not yet integrated**.
-- Existing GenTL Consumer implementation: **present in Swift AMSCOPE_DRIVER/macos-version-0.4; no direct C++ interface**.
-- C++ GenTL Consumer/CTI adapter: **not delivered; integration choice pending**.
-- Exported CMake package: **not established**.
-- Intel and Apple Silicon CI: **previous branch head `48be6c9` passed in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867); eight of eight registered CTest tests passed on both architectures. The hardware-test executable is added after that run; CI for `c98ab6b` is pending at this inventory refresh**.
-- Targeted physical-camera smoke observation: **user reports that live resolution switching now works after a clean rebuild; see Section 10.1**.
-- Phase 0/1 owner acceptance: **recorded in the completion plan; formal `Hardware verified` evidence remains absent because no exact-commit record has been saved under `docs/testing/hardware/`**.
-- Phase 2.1 common discovery-model slice: **implemented; CI and local validation pending**. Generic identity, resolution, and tri-state capabilities are common; AmScope model flags and hardware-specific limits remain in the AmScope extension.
-- Physical CTI-camera test: **not recorded**.
-
-### 10.1 Targeted user-reported physical-camera smoke observation — 22 November 2026
-
-The user reports the following result after removing the stale generated `build/amscope` directory and running `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh`:
-
-- The clean rebuild completed and the preview application launched.
-- The live `Resolution` feature in the feature panel successfully changed the camera's live resolution.
-- The earlier filesystem error while writing `AmcamCamera.cpp.o` did not recur after the generated build tree was removed.
-
-The later performance run identifies the device as `MU503(USB2.0)` and confirms live `640×480` frame dimensions, successful Stop, restoration to the original `1280×960` live mode, and successful Close. The exact camera serial, firmware, physical USB negotiated speed, still-capture dimensions, and full lifecycle baseline were not supplied. The result is a targeted performance observation, not a complete `Hardware verified` baseline.
-
-Update this inventory when a source/API/test/UI change lands. Do not change a hardware-evidence cell from "Not recorded" without a completed record under `docs/testing/hardware/`.
-
-
-## 11. Phase 1 preparation — native SDK seam
-
-A static source scan of the current AmScope implementation identifies direct SDK entry points across enumeration/session lifecycle, callback-based acquisition and pulling, feature probes and writes, trigger/heartbeat setup, still capture, hardware I/O, and accessory operations. The native session currently has no injected SDK-call boundary, so the existing helper tests cannot force deterministic native Stop/Open/Start/Pull/Close failures.
-
-The Phase 1 test seam and the initial lifecycle/acquisition API subset are specified in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). The vendor header confirms the exact `PAMCAM_EVENT_CALLBACK` (`__stdcall`) and callback-based pull API, but its `Amcam_Close` comment does not explicitly state that no callback can begin after Close returns. The current driver waits for callbacks already counted as active after `Amcam_Close`; this is not by itself proof against a callback that begins after the counter reaches zero. Treat the post-Close callback-quiescence guarantee as an explicit SDK contract to establish with vendor documentation and controlled hardware observation. A smaller production-primitive test layer is now present in `AmcamSessionPrimitives.h`: `amscope_session_primitives_tests` verifies callback lease draining, retryable cache-flush obligations, and retained frame-pool slot selection. This is deliberately not described as the full SDK-call seam: forced native Open/Start/Stop/Pull/Close errors and the complete session state machine are not yet injectable. The project owner has accepted Phases 0 and 1; this remaining seam is post-acceptance hardening rather than a phase-entry blocker.
-
-
-## 12. GenTL/GenApi dependency discovery
-
-The dependency assessment is recorded in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md).
-
-| Area | Discovery | Current C++ repository status |
-|---|---|---|
-| Official GenApi | EMVA GenICam 2026.07 includes GenApi 3.5.1; macOS Runtime and SDK packages exist; release notes state CMake package config was added | Candidate official runtime; not downloaded, architecture-inspected, or linked |
-| Official GenTL | GenTL 1.6 standard and reference C ABI header are published | No C++ imported target/header in the branch |
-| CTI Producer | Supplied by the camera/transport vendor; required for real transport enumeration and acquisition | No actual Producer .cti in the repository |
-| GenTL Consumer | Existing GenTLNative implementation in AMSCOPE_DRIVER/macos-version-0.4; Swift API and dynamic CTI loader | No C++ interface or C ABI facade in the existing Swift branch |
-| AmScope GenTL adapter | Swift AmcamGenTL maps documented Amcam SDK capabilities to a GenTL-shaped contract but does not create an AmScope .cti Producer | Continue the existing native Amcam SDK backend; never fabricate GenApi XML or register-port access |
-| GenApi on AmScope | Swift conformance record says GenApi XML URL and physical port/register access are not implemented for Amcam | Not available through the inspected Amcam API path |
-
-The Swift implementation's latest reviewed workflow [#44892073579](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/44892073579) completed six CI jobs successfully, including the GenTLNative, GenTLAPI, GenTLRouter, Amcam adapter, and mock Producer test targets. This is software/mock evidence only; no real CTI camera test is recorded.
-
-The Swift GenTLABI header's repository provenance is Aravis 0.9.2. For a new C++ build, prefer the official EMVA GenTL 1.6 reference header or perform an explicit byte/provenance check before reusing the Swift copy.
-
-No GenTL/GenApi integration source change was made. Phase 5 remains blocked pending the Consumer integration choice, target CTI Producer, dependency distribution verification, and real CTI hardware.
+The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event/pull/callback FPS, host-revision-based frame submissions, preview timer ticks, Qt paint events, actually painted frames, actual dimensions, optional device sequence/timestamp metadata, exposure-auto state and exposure readbacks at multiple lifecycle points, optional per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop. Its frame-metadata reader now checks common optional values and their timebases; it does not infer metadata availability from a nonzero payload.

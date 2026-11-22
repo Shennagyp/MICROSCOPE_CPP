@@ -153,6 +153,64 @@ struct AmcamCamera::Impl {
         bool fatal = false;
         CameraError error;
         auto lastFrameAt = std::chrono::steady_clock::now();
+        auto lastTelemetryAt = lastFrameAt;
+
+        struct Metric {
+            bool available = false;
+            int value = 0;
+            bool hasDelta = false;
+            int delta = 0;
+        };
+        struct SdkTelemetry {
+            Metric packets;
+            Metric dropped;
+            Metric frontendQueue;
+            Metric backendQueue;
+        } telemetry;
+        Metric previousPackets;
+        Metric previousDropped;
+        Metric previousFrontendQueue;
+        Metric previousBackendQueue;
+
+        auto sampleTelemetry = [&]() {
+            std::lock_guard<std::mutex> lock(apiMutex);
+            if (!handle) return;
+
+            const auto readMetric = [this](unsigned option, Metric& previous) {
+                Metric current;
+                int value = 0;
+                if (SUCCEEDED(Amcam_get_Option(handle, option, &value))) {
+                    current.available = true;
+                    current.value = value;
+                    if (previous.available) {
+                        current.hasDelta = true;
+                        current.delta = value - previous.value;
+                    }
+                    previous = current;
+                }
+                return current;
+            };
+
+            telemetry.packets =
+                readMetric(AMCAM_OPTION_PACKET_NUMBER, previousPackets);
+            telemetry.dropped =
+                readMetric(AMCAM_OPTION_NUMBER_DROP_FRAME, previousDropped);
+            telemetry.frontendQueue =
+                readMetric(AMCAM_OPTION_FRONTEND_DEQUE_CURRENT, previousFrontendQueue);
+            telemetry.backendQueue =
+                readMetric(AMCAM_OPTION_BACKEND_DEQUE_CURRENT, previousBackendQueue);
+        };
+
+        const auto appendMetric = [](std::ostringstream& output,
+                                     const char* name, const Metric& metric) {
+            output << " " << name << "=";
+            if (!metric.available) {
+                output << "unavailable";
+                return;
+            }
+            output << metric.value;
+            if (metric.hasDelta) output << " (delta=" << metric.delta << ")";
+        };
 
         while (!stopRequested.load(std::memory_order_acquire)) {
             auto writable = activePool->tryAcquire();
@@ -174,8 +232,13 @@ struct AmcamCamera::Impl {
             }
             if (fatal || stopRequested.load(std::memory_order_acquire)) break;
 
+            const auto now = std::chrono::steady_clock::now();
+            if (now - lastTelemetryAt >= std::chrono::seconds(1)) {
+                sampleTelemetry();
+                lastTelemetryAt = now;
+            }
+
             if (hr == E_TIMEOUT) {
-                const auto now = std::chrono::steady_clock::now();
                 const auto timeout = frameStallTimeout(
                     expectedExposureMicroseconds.load(std::memory_order_acquire));
                 if (now - lastFrameAt >= timeout) {
@@ -184,15 +247,23 @@ struct AmcamCamera::Impl {
                             now - lastFrameAt).count();
                     const unsigned exposure =
                         expectedExposureMicroseconds.load(std::memory_order_acquire);
+                    // Capture transport and SDK queue counters at the failure
+                    // boundary to distinguish packet starvation from frame
+                    // assembly or internal queue problems.
+                    sampleTelemetry();
+                    std::ostringstream diagnostic;
+                    diagnostic << "No preview frame received for "
+                               << stalledMilliseconds
+                               << " ms (last exposure " << exposure
+                               << " us; watchdog threshold " << timeout.count()
+                               << " ms). SDK telemetry:";
+                    appendMetric(diagnostic, "packets", telemetry.packets);
+                    appendMetric(diagnostic, "sdk_dropped", telemetry.dropped);
+                    appendMetric(diagnostic, "frontend_q", telemetry.frontendQueue);
+                    appendMetric(diagnostic, "backend_q", telemetry.backendQueue);
                     fatal = true;
                     error = {static_cast<std::int32_t>(E_TIMEOUT),
-                             "Amcam_WaitImageV4",
-                             "No preview frame received for " +
-                                 std::to_string(stalledMilliseconds) +
-                                 " ms (last exposure " +
-                                 std::to_string(exposure) +
-                                 " us; watchdog threshold " +
-                                 std::to_string(timeout.count()) + " ms)."};
+                             "Amcam_WaitImageV4", diagnostic.str()};
                     break;
                 }
                 continue;

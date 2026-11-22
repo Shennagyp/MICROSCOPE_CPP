@@ -199,17 +199,29 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   atomic notification flag. It replaces stale frames instead of accumulating
   a queue. Frame notifications bypass the feature-request queue mutex. The
   mailbox still preserves acquisition-generation invalidation.
-- The preview reports **pull FPS**, counted atomically after successful
-  `Amcam_PullImageV4` calls, separately from **paint FPS**, counted only when
-  `FrameView` paints a new frame sequence. Measuring throughput does not poll
-  the camera SDK or contend for the SDK-call mutex. Dropped pool frames are
-  displayed separately.
+- The preview reports three separate rates, sampled at 1 Hz:
+  **event FPS** counts `AMCAM_EVENT_IMAGE` callbacks, **pull FPS** counts
+  successful `Amcam_PullImageV4` calls, and **paint FPS** counts unique frame
+  sequences actually painted by `FrameView`. The UI also reports the frame
+  exposure time and pool-exhaustion drops. All counters are atomic; no SDK
+  telemetry call is made from the FPS monitor and no per-frame status-label
+  formatting is performed.
 - Every Start removes the generic SDK frame-rate cap (`AMCAM_OPTION_FRAMERATE=0`).
   After callback acquisition has started, the driver selects the model's
   documented maximum rate: maximum precise FPS plus 100% bandwidth for models
   advertising `AMCAM_FLAG_PRECISE_FRAMERATE`, or maximum `Amcam_put_Speed`
-  level otherwise. The documented low-noise mode is disabled when supported
-  because it trades frame rate for SNR. No arbitrary FPS target is applied.
+  level (the model descriptor's `maxspeed`) otherwise. The documented
+  low-noise mode is disabled when supported because it trades frame rate for
+  SNR. No arbitrary FPS target is applied. See the vendor's
+  [frame-rate configuration procedure](https://touptekphotonics.com/FAQ/73).
+  This selects the device's maximum supported mode; it cannot override the
+  exposure-time, sensor-readout, bit-depth, or transport limits of a physical
+  camera.
+- The FPS monitor distinguishes camera callback delivery, successful SDK
+  pulling, and GUI painting. A low event rate points upstream to exposure,
+  configured preview dimensions, camera speed mode, bit depth, or transport;
+  a gap between event and pull rates points to the acquisition worker; a gap
+  between pull and paint rates points to UI presentation.
 - Full feature descriptor/value refresh is deliberately not performed while
   streaming. Feature settings remain disabled until Stop; streaming commands
   and accessory operations retain their distinct APIs.

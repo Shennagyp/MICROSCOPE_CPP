@@ -315,7 +315,8 @@ buildAmcamFeatureDescriptors(
     const std::optional<std::uint32_t>& maximumFanSpeed,
     const std::vector<amscope::Resolution>& previewResolutions,
     const amscope::AmcamCameraProfileRegistry& profileRegistry,
-    const std::string& modelCode) {
+    const std::string& modelCode,
+    int requestedRawBitDepthModeFallback) {
     using camera::CameraFeatureDescriptor;
     using camera::CameraFeatureKind;
     using camera::CameraFeatureNumericRange;
@@ -441,9 +442,12 @@ buildAmcamFeatureDescriptors(
     // the SDK's maximum; intermediate depths are not configurable through
     // AMCAM_OPTION_BITDEPTH and must not be advertised.
     const bool rawBitDepthReadable = rawModeReadable &&
-        SUCCEEDED(rawBitDepthHr) &&
-        (rawBitDepth == 0 ||
-         (rawBitDepth == 1 && rawMaximumBitDepthValid));
+        (SUCCEEDED(rawBitDepthHr)
+            ? (rawBitDepth == 0 ||
+               (rawBitDepth == 1 && rawMaximumBitDepthValid))
+            : (requestedRawBitDepthModeFallback == 0 ||
+               (requestedRawBitDepthModeFallback == 1 &&
+                rawMaximumBitDepthValid)));
     const bool rawBitDepthWritable = rawModeReadable && rawMode == 1;
     std::vector<std::int64_t> rawBitDepthValues{8};
     if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U) {
@@ -4486,7 +4490,8 @@ AmcamCamera::featureDescriptors() {
         impl_->maximumFanSpeed,
         impl_->previewResolutions,
         impl_->profileRegistry,
-        impl_->modelCode);
+        impl_->modelCode,
+        impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
 
     if (auto* descriptors =
             std::get_if<std::vector<camera::CameraFeatureDescriptor>>(&result)) {
@@ -4545,7 +4550,8 @@ AmcamCamera::readFeature(std::string_view name) {
             impl_->maximumFanSpeed,
             impl_->previewResolutions,
             impl_->profileRegistry,
-            impl_->modelCode);
+            impl_->modelCode,
+            impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
         if (const auto* error =
                 std::get_if<CameraFeatureAccessError>(&described)) {
             return *error;
@@ -4759,14 +4765,20 @@ AmcamCamera::readFeature(std::string_view name) {
         return CameraFeatureValue{value != 0};
     }
     if (name == camera::RawOutputBitDepthFeature) {
-        int mode = 0;
+        int mode = -1;
         const HRESULT hr = Amcam_get_Option(
             impl_->handle, AMCAM_OPTION_BITDEPTH, &mode);
-        if (FAILED(hr))
-            return featureBackendError(std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
-        if (mode != 0 && mode != 1)
-            return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                std::string(name), "The camera returned an unknown RAW bit-depth mode.");
+        if (SUCCEEDED(hr)) {
+            if (mode != 0 && mode != 1)
+                return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                    std::string(name), "The camera returned an unknown RAW bit-depth mode.");
+        } else {
+            mode = impl_->requestedRawBitDepthMode.load(
+                std::memory_order_acquire);
+            if (mode != 0 && mode != 1)
+                return featureBackendError(
+                    std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
+        }
 
         const unsigned maximumBitDepth =
             rawMaximumBitDepth(impl_->handle, impl_->modelFlags);
@@ -4896,7 +4908,8 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         impl_->maximumFanSpeed,
         impl_->previewResolutions,
         impl_->profileRegistry,
-        impl_->modelCode);
+        impl_->modelCode,
+        impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
     if (const auto* error = std::get_if<CameraFeatureAccessError>(&described))
         return *error;
 

@@ -268,8 +268,8 @@ struct CaptureState {
     bool measuring = false;
     std::uint64_t callbackFrames = 0;
     bool hasSequence = false;
-    std::uint32_t firstSequence = 0;
-    std::uint32_t lastSequence = 0;
+    std::uint64_t firstSequence = 0;
+    std::uint64_t lastSequence = 0;
     bool hasTimestamp = false;
     std::uint64_t firstTimestamp = 0;
     std::uint64_t lastTimestamp = 0;
@@ -417,8 +417,8 @@ struct Measurement {
     std::uint64_t paintEvents = 0;
     std::uint64_t droppedFrames = 0;
     bool hasSequence = false;
-    std::uint32_t firstSequence = 0;
-    std::uint32_t lastSequence = 0;
+    std::uint64_t firstSequence = 0;
+    std::uint64_t lastSequence = 0;
     bool hasTimestamp = false;
     std::uint64_t firstTimestamp = 0;
     std::uint64_t lastTimestamp = 0;
@@ -804,28 +804,37 @@ int main(int argc, char** argv) {
             if (!capture->measuring) return;
 
             ++capture->callbackFrames;
-            if (!capture->hasSequence) {
-                capture->firstSequence = frame->sequence;
-                capture->hasSequence = true;
+            if (frame->sequenceNumber) {
+                if (!capture->hasSequence) {
+                    capture->firstSequence = *frame->sequenceNumber;
+                    capture->hasSequence = true;
+                }
+                capture->lastSequence = *frame->sequenceNumber;
             }
-            capture->lastSequence = frame->sequence;
-            if (frame->timestampMicroseconds != 0) {
+            if (frame->timestamp &&
+                frame->timestamp->ticksPerSecond == 1000000ULL) {
+                const auto timestampMicroseconds = frame->timestamp->ticks;
                 if (!capture->hasTimestamp) {
-                    capture->firstTimestamp = frame->timestampMicroseconds;
+                    capture->firstTimestamp = timestampMicroseconds;
                     capture->hasTimestamp = true;
                 }
-                capture->lastTimestamp = frame->timestampMicroseconds;
+                capture->lastTimestamp = timestampMicroseconds;
                 ++capture->timestampSamples;
             }
             capture->lastWidth = frame->width;
             capture->lastHeight = frame->height;
-            if (frame->exposureMicroseconds > 0) {
-                capture->exposureSum += frame->exposureMicroseconds;
+            if (frame->exposure &&
+                frame->exposure->ticksPerSecond == 1000000ULL &&
+                frame->exposure->durationTicks <=
+                    std::numeric_limits<std::uint32_t>::max()) {
+                const auto exposureMicroseconds =
+                    static_cast<std::uint32_t>(frame->exposure->durationTicks);
+                capture->exposureSum += exposureMicroseconds;
                 ++capture->exposureSamples;
                 capture->exposureMinimum = std::min(
-                    capture->exposureMinimum, frame->exposureMicroseconds);
+                    capture->exposureMinimum, exposureMicroseconds);
                 capture->exposureMaximum = std::max(
-                    capture->exposureMaximum, frame->exposureMicroseconds);
+                    capture->exposureMaximum, exposureMicroseconds);
             }
         },
         [capture](const amscope::CameraError& error) {

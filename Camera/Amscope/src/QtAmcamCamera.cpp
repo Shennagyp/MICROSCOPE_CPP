@@ -457,6 +457,10 @@ std::uint64_t QtAmcamCamera::framesPulled() const noexcept {
     return camera_.framesPulled();
 }
 
+std::uint64_t QtAmcamCamera::imageEventsReceived() const noexcept {
+    return camera_.imageEventsReceived();
+}
+
 FramePtr QtAmcamCamera::takeLatestFrame() {
     FramePtr frame = std::atomic_exchange_explicit(
         &latestFrame_, FramePtr{}, std::memory_order_acq_rel);

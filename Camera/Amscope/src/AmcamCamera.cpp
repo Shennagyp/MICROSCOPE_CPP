@@ -89,8 +89,13 @@ HRESULT getRawBitDepthMode(
         *failureOperation = "Amcam_get_MaxBitDepth";
 
     const HRESULT maxBitDepthResult = Amcam_get_MaxBitDepth(handle);
-    const unsigned maxBitDepth =
-        rawMaximumBitDepth(handle, modelFlags);
+    const unsigned sdkMaximum =
+        SUCCEEDED(maxBitDepthResult) &&
+                maxBitDepthResult >= 8 && maxBitDepthResult <= 16
+            ? static_cast<unsigned>(maxBitDepthResult)
+            : 0U;
+    const unsigned maxBitDepth = std::max(
+        sdkMaximum, rawMaximumBitDepthFromModelFlags(modelFlags));
     if (maxBitDepth < 8U || maxBitDepth > 16U) {
         if (FAILED(maxBitDepthResult))
             return maxBitDepthResult;

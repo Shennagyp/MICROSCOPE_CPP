@@ -38,6 +38,10 @@ public:
     // Non-feature camera command and telemetry surfaces.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& statistics, CameraError* error = nullptr);
+    // Captures a still frame while live acquisition remains active.
+    bool captureStill(const StillCaptureRequest& request,
+                      FramePtr& frame,
+                      CameraError* error = nullptr);
 
     camera::CameraFeatureResult<std::vector<camera::CameraFeatureDescriptor>>
     featureDescriptors() override;

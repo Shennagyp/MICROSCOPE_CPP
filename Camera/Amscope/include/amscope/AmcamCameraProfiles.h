@@ -18,6 +18,7 @@ enum class AmcamCameraFeature : std::uint8_t {
     ColorCorrection,
     PixelFormatSelection,
     RawOutput,
+    StillCapture,
     PreciseFrameRate,
     DiscreteFrameSpeed
 };

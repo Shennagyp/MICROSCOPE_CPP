@@ -82,6 +82,13 @@ integration and does not modify vendor sample code.
   remains a separate extension.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
+- Still capture is independent of live-frame delivery. Processed capture uses
+  Amcam_SnapN; RAW capture uses Amcam_SnapR. AMCAM_EVENT_STILLIMAGE is routed
+  to a dedicated capture waiter and never enters the live event FIFO. The
+  result is pulled with Amcam_PullImageV4(bStill=1). A timed-out or failed
+  capture quarantines further still requests until a successful Stop/Start
+  callback-drain boundary; the live acquisition queue, worker and pull path are
+  unchanged.
 - Callback-to-pull execution now follows the Swift model and the vendor's
   documented callback/PullImage pairing. Auto-exposure convergence notifications
   (AUTOEXPO_CONV / AUTOEXPO_CONVFAIL) are not surfaced as completion events:

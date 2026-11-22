@@ -30,7 +30,8 @@ int main() {
         AmcamCameraFeature::ExposureAuto,
         AmcamCameraFeature::WhiteBalance,
         AmcamCameraFeature::AnalogGain,
-        AmcamCameraFeature::RawOutput
+        AmcamCameraFeature::RawOutput,
+        AmcamCameraFeature::StillCapture
     };
     restricted.deniedFeatures = {AmcamCameraFeature::WhiteBalance};
 
@@ -39,6 +40,8 @@ int main() {
             "allow-list permits an explicitly allowed feature");
     require(registry.allows("Model-A", AmcamCameraFeature::RawOutput),
             "allow-list can explicitly permit RAW sensor output");
+    require(registry.allows("Model-A", AmcamCameraFeature::StillCapture),
+            "allow-list can explicitly permit still capture");
     require(!registry.allows("Model-A", AmcamCameraFeature::WhiteBalance),
             "deny-list takes precedence over allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::PreciseFrameRate),

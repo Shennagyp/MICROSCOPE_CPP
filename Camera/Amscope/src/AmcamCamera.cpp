@@ -17,6 +17,7 @@
 #include <system_error>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <type_traits>
 #include <string>
@@ -446,6 +447,12 @@ struct AmcamCamera::Impl {
     std::atomic<std::uint64_t> dropped{0};
 
     detail::AmcamEventQueue eventQueue;
+    std::mutex stillCaptureMutex;
+    std::condition_variable stillCaptureCondition;
+    std::uint32_t pendingStillImages = 0;
+    unsigned stillCaptureFailureEvent = 0;
+    bool stillCapturePending = false;
+    bool stillCaptureDesynchronized = false;
     std::mutex callbackWaitMutex;
     std::condition_variable callbackWaitCondition;
     std::mutex lifecycleMutex;
@@ -503,6 +510,17 @@ struct AmcamCamera::Impl {
         });
     }
 
+    void resetStillCaptureStateAfterStop() noexcept {
+        {
+            std::lock_guard<std::mutex> lock(stillCaptureMutex);
+            pendingStillImages = 0;
+            stillCaptureFailureEvent = 0;
+            stillCapturePending = false;
+            stillCaptureDesynchronized = false;
+        }
+        stillCaptureCondition.notify_all();
+    }
+
     static void __stdcall sdkEvent(unsigned event, void* context) {
         auto* self = static_cast<Impl*>(context);
         if (!self) return;
@@ -519,18 +537,47 @@ struct AmcamCamera::Impl {
             }
         } callbackExit{self};
 
-        // Match the Swift event handler's relevant event set. The callback does
-        // not call the SDK, pull a frame, invoke observers, or touch Qt.
+        // Still-image events use an independent waiter, never the live FIFO.
+        if (event == AMCAM_EVENT_STILLIMAGE) {
+            try {
+                {
+                    std::lock_guard<std::mutex> lock(self->stillCaptureMutex);
+                    if (self->stillCapturePending &&
+                        self->pendingStillImages != std::numeric_limits<std::uint32_t>::max()) {
+                        ++self->pendingStillImages;
+                    }
+                }
+                self->stillCaptureCondition.notify_all();
+            } catch (...) {
+                // Never unwind through the vendor callback ABI.
+            }
+            return;
+        }
+
+        // Fatal SDK events also wake a still request, then follow their original
+        // route into the live acquisition queue.
         switch (event) {
-        case AMCAM_EVENT_IMAGE:
         case AMCAM_EVENT_DISCONNECTED:
         case AMCAM_EVENT_ERROR:
         case AMCAM_EVENT_NOFRAMETIMEOUT:
         case AMCAM_EVENT_NOPACKETTIMEOUT:
             try {
+                {
+                    std::lock_guard<std::mutex> lock(self->stillCaptureMutex);
+                    if (self->stillCapturePending &&
+                        self->stillCaptureFailureEvent == 0) {
+                        self->stillCaptureFailureEvent = event;
+                    }
+                }
+                self->stillCaptureCondition.notify_all();
+            } catch (...) {
+                // Never unwind through the vendor callback ABI.
+            }
+            [[fallthrough]];
+        case AMCAM_EVENT_IMAGE:
+            try {
                 (void)self->eventQueue.push(event);
             } catch (...) {
-                // Never let a C++ exception unwind through the vendor callback ABI.
                 self->eventQueue.stop();
             }
             break;
@@ -889,6 +936,7 @@ struct AmcamCamera::Impl {
         if (worker.joinable()) worker.join();
         waitForSdkCallbacks();
         eventQueue.clearPending();
+        resetStillCaptureStateAfterStop();
 
         pool.reset();
         onFrame = {};
@@ -1025,6 +1073,7 @@ bool AmcamCamera::close(CameraError* error) {
     // before Close returned before releasing any callback/session state.
     impl_->waitForSdkCallbacks();
     impl_->eventQueue.clearPending();
+    impl_->resetStillCaptureStateAfterStop();
     impl_->pool.reset();
     impl_->onFrame = {};
     impl_->onError = {};
@@ -1049,6 +1098,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
 
     impl_->state.store(CameraState::Starting, std::memory_order_release);
     impl_->eventQueue.reset();
+    impl_->resetStillCaptureStateAfterStop();
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
 
@@ -1422,7 +1472,298 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
         static_cast<double>(frames) * 1000.0 / static_cast<double>(milliseconds);
     stats.totalFrames = total;
     return true;
+} 
+
+bool AmcamCamera::captureStill(
+    const StillCaptureRequest& request,
+    FramePtr& frame,
+    CameraError* error) {
+    if (error) *error = {};
+    frame.reset();
+
+    if (impl_->onWorkerThread()) {
+        return fail(error, "captureStill", -1,
+                    "captureStill() cannot run from the live acquisition callback; submit it through the camera owner.");
+    }
+    if (request.timeoutMilliseconds == 0) {
+        return fail(error, "captureStill", -1,
+                    "A positive still-capture timeout is required.");
+    }
+    if (request.mode != StillCaptureMode::Processed &&
+        request.mode != StillCaptureMode::Raw) {
+        return fail(error, "captureStill", -1,
+                    "The requested still-capture mode is invalid.");
+    }
+
+    // This excludes Start/Stop/Close for the duration of the still request.
+    // The live acquisition worker continues consuming its normal event queue.
+    std::lock_guard<std::mutex> lifecycle(impl_->lifecycleMutex);
+    if (!impl_->handle ||
+        impl_->state.load(std::memory_order_acquire) != CameraState::Streaming ||
+        !impl_->sdkStarted.load(std::memory_order_acquire)) {
+        return fail(error, "captureStill", -1,
+                    "Still capture requires live acquisition to be running.");
+    }
+    if (!impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::StillCapture)) {
+        return fail(error, "captureStill", -1,
+                    "Still capture is disabled by the selected model profile.");
+    }
+    if (request.mode == StillCaptureMode::Raw &&
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::RawOutput)) {
+        return fail(error, "captureStill", -1,
+                    "RAW still capture is disabled by the selected model profile.");
+    }
+
+    constexpr std::uint32_t kCurrentPreviewResolution =
+        std::numeric_limits<std::uint32_t>::max();
+    unsigned stillResolutionCount = 0;
+    int expectedWidth = 0;
+    int expectedHeight = 0;
+    unsigned rawFourCC = 0;
+    unsigned rawBitsPerPixel = 0;
+    {
+        std::lock_guard<std::mutex> api(impl_->apiMutex);
+        if (!impl_->handle) {
+            return fail(error, "captureStill", -1,
+                        "Camera handle is no longer open.");
+        }
+
+        const HRESULT countResult =
+            Amcam_get_StillResolutionNumber(impl_->handle);
+        if (FAILED(countResult)) {
+            return failHr(error, "Amcam_get_StillResolutionNumber", countResult);
+        }
+        stillResolutionCount = static_cast<unsigned>(countResult);
+        if (stillResolutionCount == 0) {
+            return fail(error, "captureStill", -1,
+                        "The camera does not report still-image capture resolutions.");
+        }
+
+        if (request.resolutionIndex != kCurrentPreviewResolution) {
+            if (request.resolutionIndex >= stillResolutionCount) {
+                return fail(error, "captureStill", -1,
+                            "The requested still-resolution index is outside the camera-reported range.");
+            }
+            const HRESULT resolutionResult = Amcam_get_StillResolution(
+                impl_->handle, request.resolutionIndex,
+                &expectedWidth, &expectedHeight);
+            if (FAILED(resolutionResult)) {
+                return failHr(error, "Amcam_get_StillResolution", resolutionResult);
+            }
+            if (expectedWidth <= 0 || expectedHeight <= 0) {
+                return fail(error, "Amcam_get_StillResolution", -1,
+                            "The SDK returned invalid still-image dimensions.");
+            }
+        }
+
+        if (request.mode == StillCaptureMode::Raw) {
+            constexpr std::uint64_t rawCapabilityFlags =
+                AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
+                AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW14 | AMCAM_FLAG_RAW16 |
+                AMCAM_FLAG_RAW12PACK;
+            if (!impl_->hasModelDescriptor ||
+                (impl_->modelFlags & rawCapabilityFlags) == 0) {
+                return fail(error, "captureStill", -1,
+                            "The camera model does not advertise RAW sensor output.");
+            }
+            const HRESULT rawFormatResult =
+                Amcam_get_RawFormat(impl_->handle, &rawFourCC, &rawBitsPerPixel);
+            if (FAILED(rawFormatResult)) {
+                return failHr(error, "Amcam_get_RawFormat", rawFormatResult);
+            }
+            if (rawBitsPerPixel == 0 || rawBitsPerPixel > 16) {
+                return fail(error, "Amcam_get_RawFormat", -1,
+                            "The SDK returned an unsupported RAW sensor bit depth.");
+            }
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+        if (impl_->stillCaptureDesynchronized) {
+            return fail(error, "captureStill", -1,
+                        "A previous still capture timed out or failed. Stop and restart acquisition before capturing again.");
+        }
+        if (impl_->stillCapturePending) {
+            return fail(error, "captureStill", -1,
+                        "Another still-image request is already pending.");
+        }
+        impl_->pendingStillImages = 0;
+        impl_->stillCaptureFailureEvent = 0;
+        impl_->stillCapturePending = true;
+    }
+
+    HRESULT snapResult = E_FAIL;
+    {
+        std::lock_guard<std::mutex> api(impl_->apiMutex);
+        if (!impl_->handle ||
+            impl_->state.load(std::memory_order_acquire) != CameraState::Streaming) {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCapturePending = false;
+            impl_->stillCaptureDesynchronized = true;
+            return fail(error, "captureStill", -1,
+                        "The camera stopped before the still-image request could be submitted.");
+        }
+        snapResult = request.mode == StillCaptureMode::Raw
+            ? Amcam_SnapR(impl_->handle, request.resolutionIndex, 1)
+            : Amcam_SnapN(impl_->handle, request.resolutionIndex, 1);
+    }
+    if (FAILED(snapResult)) {
+        {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCapturePending = false;
+            impl_->pendingStillImages = 0;
+            impl_->stillCaptureDesynchronized = true;
+        }
+        impl_->stillCaptureCondition.notify_all();
+        return failHr(error,
+                      request.mode == StillCaptureMode::Raw
+                          ? "Amcam_SnapR" : "Amcam_SnapN",
+                      snapResult);
+    }
+
+    unsigned failureEvent = 0;
+    {
+        std::unique_lock<std::mutex> captureLock(impl_->stillCaptureMutex);
+        const bool signalled = impl_->stillCaptureCondition.wait_for(
+            captureLock,
+            std::chrono::milliseconds(request.timeoutMilliseconds),
+            [this]() {
+                return impl_->pendingStillImages != 0 ||
+                       impl_->stillCaptureFailureEvent != 0;
+            });
+        if (!signalled) {
+            impl_->stillCapturePending = false;
+            impl_->stillCaptureDesynchronized = true;
+            return fail(error, "captureStill", static_cast<std::int32_t>(E_TIMEOUT),
+                        "Timed out waiting for AMCAM_EVENT_STILLIMAGE. Stop and restart acquisition before retrying.");
+        }
+        failureEvent = impl_->stillCaptureFailureEvent;
+        if (failureEvent == 0 && impl_->pendingStillImages != 0) {
+            --impl_->pendingStillImages;
+        }
+        impl_->pendingStillImages = 0;
+        impl_->stillCapturePending = false;
+        if (failureEvent != 0) {
+            impl_->stillCaptureDesynchronized = true;
+        }
+    }
+
+    if (failureEvent != 0) {
+        switch (failureEvent) {
+        case AMCAM_EVENT_DISCONNECTED:
+            return fail(error, "AMCAM_EVENT_DISCONNECTED", static_cast<std::int32_t>(E_GEN_FAILURE),
+                        "The camera disconnected while a still image was being captured.");
+        case AMCAM_EVENT_NOFRAMETIMEOUT:
+            return fail(error, "AMCAM_EVENT_NOFRAMETIMEOUT", static_cast<std::int32_t>(E_TIMEOUT),
+                        "The camera reported a no-frame timeout during still capture.");
+        case AMCAM_EVENT_NOPACKETTIMEOUT:
+            return fail(error, "AMCAM_EVENT_NOPACKETTIMEOUT", static_cast<std::int32_t>(E_TIMEOUT),
+                        "The camera reported a no-packet timeout during still capture.");
+        default:
+            return fail(error, "AMCAM_EVENT_ERROR", static_cast<std::int32_t>(E_FAIL),
+                        "The camera SDK reported an error during still capture.");
+        }
+    }
+
+    const bool raw = request.mode == StillCaptureMode::Raw;
+    const int pullBits = raw ? 0 : kRgb24Bits;
+    AmcamFrameInfoV4 info{};
+    FramePtr completedFrame;
+    {
+        std::lock_guard<std::mutex> api(impl_->apiMutex);
+        if (!impl_->handle ||
+            impl_->state.load(std::memory_order_acquire) != CameraState::Streaming) {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCaptureDesynchronized = true;
+            return fail(error, "captureStill", -1,
+                        "The camera stopped before the still image could be pulled.");
+        }
+
+        // The vendor still-image examples query dimensions using a null buffer,
+        // then pull the image into a format-sized output buffer.
+        HRESULT pullResult = Amcam_PullImageV4(
+            impl_->handle, nullptr, 1, pullBits, 0, &info);
+        if (FAILED(pullResult)) {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCaptureDesynchronized = true;
+            return failHr(error, "Amcam_PullImageV4(still metadata)", pullResult);
+        }
+
+        if (info.v3.width == 0 || info.v3.height == 0 ||
+            (expectedWidth != 0 &&
+             (info.v3.width != static_cast<unsigned>(expectedWidth) ||
+              info.v3.height != static_cast<unsigned>(expectedHeight)))) {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCaptureDesynchronized = true;
+            return fail(error, "Amcam_PullImageV4(still metadata)", -1,
+                        "The still-image dimensions are invalid or differ from the selected still resolution.");
+        }
+
+        const std::uint64_t bytesPerPixel = raw
+            ? (rawBitsPerPixel <= 8U ? 1U : 2U) : 3U;
+        const std::uint64_t stride64 =
+            static_cast<std::uint64_t>(info.v3.width) * bytesPerPixel;
+        if (stride64 > std::numeric_limits<std::uint32_t>::max() ||
+            stride64 > std::numeric_limits<std::uint64_t>::max() / info.v3.height) {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCaptureDesynchronized = true;
+            return fail(error, "captureStill", -1,
+                        "The still-image layout overflows the supported frame representation.");
+        }
+        const std::uint64_t byteCount64 = stride64 * info.v3.height;
+        if (byteCount64 == 0 ||
+            byteCount64 > std::numeric_limits<std::size_t>::max() ||
+            byteCount64 > 512ULL * 1024ULL * 1024ULL) {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCaptureDesynchronized = true;
+            return fail(error, "captureStill", -1,
+                        "The still-image payload exceeds the supported allocation limit.");
+        }
+
+        try {
+            auto mutableFrame = std::make_shared<Frame>();
+            mutableFrame->width = info.v3.width;
+            mutableFrame->height = info.v3.height;
+            mutableFrame->strideBytes = static_cast<std::uint32_t>(stride64);
+            mutableFrame->pixelFormat = !raw ? PixelFormat::RGB24 :
+                (rawBitsPerPixel <= 8U ? PixelFormat::Raw8 : PixelFormat::Raw16);
+            mutableFrame->pixelFormatCode = raw ? rawFourCC : 0U;
+            mutableFrame->bitsPerPixel = static_cast<std::uint8_t>(
+                raw ? rawBitsPerPixel : 24U);
+            mutableFrame->isStill = true;
+            mutableFrame->pixels.resize(static_cast<std::size_t>(byteCount64));
+
+            pullResult = Amcam_PullImageV4(
+                impl_->handle, mutableFrame->pixels.data(),
+                1, pullBits, kPackedRows, &info);
+            if (FAILED(pullResult)) {
+                std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+                impl_->stillCaptureDesynchronized = true;
+                return failHr(error, "Amcam_PullImageV4(still image)", pullResult);
+            }
+
+            mutableFrame->sequence = info.v3.seq;
+            mutableFrame->timestampMicroseconds = info.v3.timestamp;
+            mutableFrame->sdkFlags = info.v3.flag;
+            mutableFrame->exposureMicroseconds = info.v3.expotime;
+            mutableFrame->exposureGainPercent = info.v3.expogain;
+            mutableFrame->blackLevel = info.v3.blacklevel;
+            completedFrame = std::move(mutableFrame);
+        } catch (const std::exception& exception) {
+            std::lock_guard<std::mutex> captureLock(impl_->stillCaptureMutex);
+            impl_->stillCaptureDesynchronized = true;
+            return fail(error, "captureStill", -1,
+                        std::string("Still-image buffer allocation failed: ") + exception.what());
+        }
+    }
+
+    frame = std::move(completedFrame);
+    return true;
 }
+
 
 
 camera::CameraFeatureResult<std::vector<camera::CameraFeatureDescriptor>>

@@ -22,6 +22,7 @@
 #include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -39,6 +40,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>

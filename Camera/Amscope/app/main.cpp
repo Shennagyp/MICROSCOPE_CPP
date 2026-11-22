@@ -379,6 +379,7 @@ public:
                     frameRateRequestPending_ = false;
                     sdkFramesPerSecond_.reset();
                     sdkTotalFrames_.reset();
+                    sdkFrameRateUnavailable_ = false;
                     frameRateTimer_->start();
                     pollFrameRate();
                 }
@@ -388,6 +389,7 @@ public:
                 frameRateRequestPending_ = false;
                 sdkFramesPerSecond_.reset();
                 sdkTotalFrames_.reset();
+                sdkFrameRateUnavailable_ = false;
                 resetPreviewFrameRate();
                 updateFrameInfoLabel();
             }
@@ -1327,17 +1329,16 @@ private:
                 if (camera_.state() != amscope::CameraState::Streaming)
                     return;
 
-                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                if (std::holds_alternative<amscope::CameraError>(result)) {
                     sdkFramesPerSecond_.reset();
                     sdkTotalFrames_.reset();
-                    statusBar()->showMessage(
-                        QString("Frame-rate telemetry unavailable: %1")
-                            .arg(QString::fromStdString(error->message)), 2500);
+                    sdkFrameRateUnavailable_ = true;
                 } else {
                     const auto& statistics =
                         std::get<amscope::FrameRateStatistics>(result);
                     sdkFramesPerSecond_ = statistics.framesPerSecond;
                     sdkTotalFrames_ = statistics.totalFrames;
+                    sdkFrameRateUnavailable_ = false;
                 }
                 updateFrameInfoLabel();
             });
@@ -1357,6 +1358,8 @@ private:
             if (sdkTotalFrames_)
                 text += QString(" | SDK total %1")
                     .arg(static_cast<qulonglong>(*sdkTotalFrames_));
+        } else if (sdkFrameRateUnavailable_) {
+            text += QStringLiteral(" | SDK FPS unavailable");
         }
         if (previewFramesPerSecond_) {
             text += QString(" | preview %1 FPS")
@@ -2413,6 +2416,7 @@ private:
     std::optional<double> previewFramesPerSecond_;
     std::optional<double> sdkFramesPerSecond_;
     std::optional<std::uint32_t> sdkTotalFrames_;
+    bool sdkFrameRateUnavailable_ = false;
     QString frameSummary_;
     QTimer* frameRateTimer_ = nullptr;
     std::uint64_t frameRatePollingGeneration_ = 0;

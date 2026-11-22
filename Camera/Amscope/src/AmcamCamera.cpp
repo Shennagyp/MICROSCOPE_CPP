@@ -2837,6 +2837,13 @@ bool AmcamCamera::readLensFocusState(
     result.minimumApertureIndex = lens.minAM;
     result.maximumApertureIndex = lens.maxAM;
     result.aperturePositionIndex = lens.posAM;
+    if (lens.sizeFN != 0 && lens.arrayFN != nullptr) {
+        result.apertureLabels.reserve(lens.sizeFN);
+        for (unsigned index = 0; index < lens.sizeFN; ++index) {
+            const char* label = lens.arrayFN[index];
+            result.apertureLabels.emplace_back(label != nullptr ? label : "");
+        }
+    }
 
     const bool autofocusSupported =
         (impl_->modelFlags & AMCAM_FLAG_AUTO_FOCUS) != 0 &&
@@ -2893,6 +2900,48 @@ bool AmcamCamera::setManualLensFocusPosition(
 }
 
 
+
+bool AmcamCamera::setLensAperturePosition(
+    std::uint32_t positionIndex,
+    CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "setLensAperturePosition", -1,
+                    "The camera must be open to set lens aperture position.");
+    if ((impl_->modelFlags & AMCAM_FLAG_AUTO_FOCUS) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::AutoFocus))
+        return fail(error, "setLensAperturePosition", -1,
+                    "The selected model/profile does not expose lens aperture control.");
+
+    AmcamLensInfo lens{};
+    HRESULT hr = Amcam_get_LensInfo(impl_->handle, &lens);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_LensInfo", hr);
+    if (lens.sizeFN == 0 || lens.arrayFN == nullptr)
+        return fail(error, "setLensAperturePosition", -1,
+                    "The SDK did not provide an aperture-position list for this lens.");
+    if (positionIndex >= lens.sizeFN)
+        return fail(error, "setLensAperturePosition", -1,
+                    "Requested aperture position is outside the SDK-provided aperture list.");
+
+    AmcamAFState autofocus{};
+    hr = Amcam_get_AFState(impl_->handle, &autofocus);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_AFState", hr);
+    if (autofocus.AF_LensAP_Update_Flag == 0)
+        return fail(error, "setLensAperturePosition", -1,
+                    "The lens aperture motor is not calibrated according to the SDK.");
+
+    hr = Amcam_put_AFAperture(impl_->handle, static_cast<int>(positionIndex));
+    if (FAILED(hr)) return failHr(error, "Amcam_put_AFAperture", hr);
+    // Command acceptance is distinct from mechanical completion. Refresh
+    // lens state to observe posAM after the aperture mechanism settles.
+    return true;
+}
+
+bool AmcamCamera::readTriggerConfiguration(
 bool AmcamCamera::readTriggerConfiguration(
     AmcamTriggerConfiguration& configuration,
     CameraError* error) {

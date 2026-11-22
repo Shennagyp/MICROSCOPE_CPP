@@ -213,6 +213,9 @@ int main(int argc, char** argv) {
             return camera.requestSetManualLensFocusPosition(0, std::move(callback));
         }) ||
         !runAccessoryRequest([&](auto callback) {
+            return camera.requestSetLensAperturePosition(0, std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
             return camera.requestTriggerConfiguration(std::move(callback));
         }) ||
         !runAccessoryRequest([&](auto callback) {

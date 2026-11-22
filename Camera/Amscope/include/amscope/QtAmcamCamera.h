@@ -165,9 +165,13 @@ public:
     bool readLensFocusState(LensFocusState& state, CameraError* error = nullptr);
     bool setManualLensFocusPosition(
         std::int32_t position, CameraError* error = nullptr);
+    bool setLensAperturePosition(
+        std::uint32_t positionIndex, CameraError* error = nullptr);
     FeatureRequestId requestLensFocusState(LensFocusStateCallback callback);
     FeatureRequestId requestSetManualLensFocusPosition(
         std::int32_t position, AccessoryCommandCallback callback);
+    FeatureRequestId requestSetLensAperturePosition(
+        std::uint32_t positionIndex, AccessoryCommandCallback callback);
     FeatureRequestId requestAstroAutoFocuserState(
         AstroAutoFocuserCallback callback);
     FeatureRequestId requestMoveAstroAutoFocuser(

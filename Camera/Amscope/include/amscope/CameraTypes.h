@@ -193,6 +193,8 @@ struct LensFocusState {
     std::uint8_t minimumApertureIndex = 0;
     std::uint8_t maximumApertureIndex = 0;
     std::uint8_t aperturePositionIndex = 0;
+    // Index-aligned labels copied from AmcamLensInfo::arrayFN.
+    std::vector<std::string> apertureLabels;
     // Preserve raw SDK enum values, including values added by later SDKs.
     std::optional<std::uint32_t> autofocusMode;
     std::optional<std::uint32_t> autofocusStatus;

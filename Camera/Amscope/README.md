@@ -121,9 +121,13 @@ integration and does not modify vendor sample code.
   optional focuser temperature (0.1 °C) and ambient telemetry in raw SDK units, plus separate absolute Move and Halt
   commands. It uses the SDK AAF actions and the AstroAutoFocuser model flag,
   not the lens AF/focus-motor APIs. Lens-mounted focus is a separate native
-  surface: it reads structured lens and AF state, and accepts manual focus
+  surface: it reads structured lens and AF state, accepts manual focus
   positions only when the lens reports physical MF mode and the target lies
-  within the SDK near/far motor range. AF mode switching remains unavailable
+  within the SDK near/far motor range, and exposes aperture selection by the
+  SDK's explicit posAM index into arrayFN labels only after aperture calibration.
+  The aperture command is asynchronous at device level; refresh reads the
+  current position rather than claiming immediate mechanical completion. AF
+  mode switching remains unavailable
   until its working-distance parameters are documented. These command
   surfaces do not alter preview
   acquisition or trigger mode and are not ordinary camera feature settings.

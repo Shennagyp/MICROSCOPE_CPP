@@ -604,6 +604,26 @@ bool QtAmcamCamera::setManualLensFocusPosition(
     return ok;
 }
 
+
+bool QtAmcamCamera::setLensAperturePosition(
+    std::uint32_t positionIndex, CameraError* error) {
+    if (!requireSynchronousExecutionMode("setLensAperturePosition", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.setLensAperturePosition(positionIndex, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::readStillResolutions(
 bool QtAmcamCamera::readStillResolutions(
     StillResolutionList& resolutions,
     CameraError* error) {
@@ -1429,6 +1449,41 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSetManualLensFocusPosition
         }, FeatureRequestSemantics::StateMutation);
 }
 
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSetLensAperturePosition(
+    std::uint32_t positionIndex,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, positionIndex, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.setLensAperturePosition(positionIndex, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "setLensAperturePosition", exception.what()};
+                } catch (...) {
+                    local = {0, "setLensAperturePosition",
+                             "Unknown exception while setting lens aperture position."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     FeatureDescriptorsCallback callback) {
     if (!callback) return 0;

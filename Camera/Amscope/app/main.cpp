@@ -2746,6 +2746,7 @@ private:
     QPushButton* closeButton_ = nullptr;
     QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
+    QLabel* stillPrecisionLabel_ = nullptr;
     QPushButton* captureStillButton_ = nullptr;
     QPushButton* refreshFeaturesButton_ = nullptr;
     FrameView* preview_ = nullptr;

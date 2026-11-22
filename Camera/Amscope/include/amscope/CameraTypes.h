@@ -153,4 +153,27 @@ struct AstroAutoFocuserState {
     std::optional<std::int32_t> temperatureTenthsC;
     std::optional<std::int32_t> ambientTemperatureSdkUnits;
 };
+
+struct LensFocusState {
+    std::uint16_t lensId = 0;
+    std::uint8_t lensType = 0;
+    std::uint8_t lensAfMfStatus = 0;
+    bool manualFocusSelected = false;
+    std::uint16_t minimumFocalLength = 0;
+    std::uint16_t currentFocalLength = 0;
+    std::uint16_t maximumFocalLength = 0;
+    std::int32_t nearFocusMotorPosition = 0;
+    std::int32_t currentFocusMotorPosition = 0;
+    std::int32_t farFocusMotorPosition = 0;
+    std::uint16_t minimumFocusDistance = 0;
+    std::uint16_t maximumFocusDistance = 0;
+    std::int32_t currentApertureValue = 0;
+    std::uint8_t minimumApertureIndex = 0;
+    std::uint8_t maximumApertureIndex = 0;
+    std::uint8_t aperturePositionIndex = 0;
+    // Preserve raw SDK enum values, including values added by later SDKs.
+    std::optional<std::uint32_t> autofocusMode;
+    std::optional<std::uint32_t> autofocusStatus;
+    std::optional<bool> apertureCalibrated;
+};
 } // namespace amscope

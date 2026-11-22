@@ -514,6 +514,42 @@ bool QtAmcamCamera::captureStill(
     return ok;
 }
 
+
+bool QtAmcamCamera::readLensFocusState(
+    LensFocusState& result, CameraError* error) {
+    if (!requireSynchronousExecutionMode("readLensFocusState", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readLensFocusState(result, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::setManualLensFocusPosition(
+    std::int32_t position, CameraError* error) {
+    if (!requireSynchronousExecutionMode("setManualLensFocusPosition", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.setManualLensFocusPosition(position, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
 bool QtAmcamCamera::readStillResolutions(
     StillResolutionList& resolutions,
     CameraError* error) {
@@ -1160,6 +1196,73 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestHaltAstroAutoFocuser(
                 } catch (...) {
                     local = {0, "haltAstroAutoFocuser",
                              "Unknown exception while halting the AAF."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestLensFocusState(
+    LensFocusStateCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<LensFocusStateResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                LensFocusState state;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readLensFocusState(state, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readLensFocusState", exception.what()};
+                } catch (...) {
+                    local = {0, "readLensFocusState",
+                             "Unknown exception while reading lens-focus state."};
+                }
+                if (ok) result.emplace(std::move(state));
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::FeatureSnapshot);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSetManualLensFocusPosition(
+    std::int32_t position,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, position, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.setManualLensFocusPosition(position, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "setManualLensFocusPosition", exception.what()};
+                } catch (...) {
+                    local = {0, "setManualLensFocusPosition",
+                             "Unknown exception while setting manual lens-focus position."};
                 }
                 if (ok) result.emplace(std::monostate{});
                 else result.emplace(std::move(local));

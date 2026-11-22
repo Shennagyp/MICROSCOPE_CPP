@@ -205,6 +205,12 @@ int main(int argc, char** argv) {
         }) ||
         !runAccessoryRequest([&](auto callback) {
             return camera.requestHaltAstroAutoFocuser(std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestLensFocusState(std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestSetManualLensFocusPosition(0, std::move(callback));
         })) {
         std::cerr << "Accessory requests lost their typed error or Qt affinity contract.\n";
         return EXIT_FAILURE;

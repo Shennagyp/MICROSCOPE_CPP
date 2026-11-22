@@ -64,6 +64,11 @@ public:
     bool moveAstroAutoFocuser(
         std::int32_t targetPosition, CameraError* error = nullptr);
     bool haltAstroAutoFocuser(CameraError* error = nullptr);
+    bool readLensFocusState(LensFocusState& state, CameraError* error = nullptr);
+    // Position is accepted only in physical manual-focus mode and inside the
+    // near/far limits reported by Amcam_get_LensInfo.
+    bool setManualLensFocusPosition(
+        std::int32_t position, CameraError* error = nullptr);
     bool readStillResolutions(std::vector<StillResolution>& resolutions,
                               CameraError* error = nullptr);
     // Captures a still frame while live acquisition remains active.

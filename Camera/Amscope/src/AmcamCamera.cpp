@@ -2494,6 +2494,98 @@ bool AmcamCamera::haltAstroAutoFocuser(CameraError* error) {
     return true;
 }
 
+
+bool AmcamCamera::readLensFocusState(
+    LensFocusState& result, CameraError* error) {
+    if (error) *error = {};
+    result = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "readLensFocusState", -1,
+                    "The camera must be open to read lens-focus state.");
+    if ((impl_->modelFlags & AMCAM_FLAG_FOCUSMOTOR) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::FocusMotor))
+        return fail(error, "readLensFocusState", -1,
+                    "The selected model does not expose a supported lens focus motor.");
+
+    AmcamLensInfo lens{};
+    HRESULT hr = Amcam_get_LensInfo(impl_->handle, &lens);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_LensInfo", hr);
+
+    result.lensId = lens.lensID;
+    result.lensType = lens.lensType;
+    result.lensAfMfStatus = lens.statusAfmf;
+    result.manualFocusSelected = lens.statusAfmf == 0x80;
+    result.minimumFocalLength = lens.minFocalLength;
+    result.currentFocalLength = lens.curFocalLength;
+    result.maximumFocalLength = lens.maxFocalLength;
+    result.nearFocusMotorPosition = lens.nearFM;
+    result.currentFocusMotorPosition = lens.curFM;
+    result.farFocusMotorPosition = lens.farFM;
+    result.minimumFocusDistance = lens.minFocusDistance;
+    result.maximumFocusDistance = lens.maxFocusDistance;
+    result.currentApertureValue = static_cast<std::int32_t>(lens.curAM);
+    result.minimumApertureIndex = lens.minAM;
+    result.maximumApertureIndex = lens.maxAM;
+    result.aperturePositionIndex = lens.posAM;
+
+    const bool autofocusSupported =
+        (impl_->modelFlags & AMCAM_FLAG_AUTO_FOCUS) != 0 &&
+        impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::AutoFocus);
+    if (autofocusSupported) {
+        AmcamAFState autofocus{};
+        hr = Amcam_get_AFState(impl_->handle, &autofocus);
+        if (FAILED(hr)) return failHr(error, "Amcam_get_AFState", hr);
+        result.autofocusMode = static_cast<std::uint32_t>(autofocus.AF_Mode);
+        result.autofocusStatus = static_cast<std::uint32_t>(autofocus.AF_Status);
+        result.apertureCalibrated = autofocus.AF_LensAP_Update_Flag != 0;
+    }
+    return true;
+}
+
+bool AmcamCamera::setManualLensFocusPosition(
+    std::int32_t position, CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming))
+        return fail(error, "setManualLensFocusPosition", -1,
+                    "The camera must be open to move the lens focus motor.");
+    if ((impl_->modelFlags & AMCAM_FLAG_FOCUSMOTOR) == 0 ||
+        !impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::FocusMotor))
+        return fail(error, "setManualLensFocusPosition", -1,
+                    "The selected model does not expose a supported lens focus motor.");
+
+    AmcamLensInfo lens{};
+    HRESULT hr = Amcam_get_LensInfo(impl_->handle, &lens);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_LensInfo", hr);
+
+    constexpr unsigned char kLensManualFocus = 0x80;
+    if (lens.statusAfmf != kLensManualFocus)
+        return fail(error, "setManualLensFocusPosition", -1,
+                    "The lens is not in physical manual-focus mode. Switch the lens to MF before moving its focus motor.");
+
+    const auto minimumPosition = std::min(
+        static_cast<std::int32_t>(lens.nearFM),
+        static_cast<std::int32_t>(lens.farFM));
+    const auto maximumPosition = std::max(
+        static_cast<std::int32_t>(lens.nearFM),
+        static_cast<std::int32_t>(lens.farFM));
+    if (position < minimumPosition || position > maximumPosition)
+        return fail(error, "setManualLensFocusPosition", -1,
+                    "Requested position is outside the lens-reported near/far focus-motor range.");
+
+    hr = Amcam_put_AFFMPos(impl_->handle, static_cast<int>(position));
+    if (FAILED(hr)) return failHr(error, "Amcam_put_AFFMPos", hr);
+    return true;
+}
+
 bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {

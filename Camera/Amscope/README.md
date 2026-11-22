@@ -116,7 +116,12 @@ integration and does not modify vendor sample code.
   accessory API: it exposes position, travel range, step size, moving state and
   optional focuser temperature (0.1 °C) and ambient telemetry in raw SDK units, plus separate absolute Move and Halt
   commands. It uses the SDK AAF actions and the AstroAutoFocuser model flag,
-  not the lens AF/focus-motor APIs. These command surfaces do not alter preview
+  not the lens AF/focus-motor APIs. Lens-mounted focus is a separate native
+  surface: it reads structured lens and AF state, and accepts manual focus
+  positions only when the lens reports physical MF mode and the target lies
+  within the SDK near/far motor range. AF mode switching remains unavailable
+  until its working-distance parameters are documented. These command
+  surfaces do not alter preview
   acquisition or trigger mode and are not ordinary camera feature settings.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.

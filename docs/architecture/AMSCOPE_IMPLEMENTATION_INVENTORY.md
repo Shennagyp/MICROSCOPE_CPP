@@ -56,7 +56,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Frame notifications bypass feature-request queue lock | Source implemented | No dedicated contention test | Not recorded |
 | SDK image-event, successful-pull, and actual paint counters | Source implemented | Counter wiring is compile/CI pending; no unit-level hardware-rate test | Not recorded |
 | Maximum supported frame rate selected on Start by model flags | Source implemented | No deterministic SDK-setting test yet | Not recorded |
-| Generic SDK FPS cap removed (`AMCAM_OPTION_FRAMERATE=0`) | Source implemented | No deterministic SDK-setting test yet | Not recorded |\n| Physical-camera rate measurement | Test executable implemented; manual run required | `amscope_hardware_rate_test` reports event/pull/callback/paint FPS, actual dimensions, sequence, exposure and drops | Not run on hardware yet |
+| Generic SDK FPS cap removed (`AMCAM_OPTION_FRAMERATE=0`) | Source implemented | No deterministic SDK-setting test yet | Not recorded |\n| Physical-camera rate measurement | Test executable implemented; manual run required | `amscope_hardware_rate_test` reports event/pull/callback/paint FPS, actual dimensions, SDK sequence/timestamp, configured exposure, per-frame exposure metadata and drops | First run recorded 91.253 event/pull/callback FPS at 640×480; paint metric invalid due sequence-based deduplication, now corrected; repeat required |
 | Frame-pool exhaustion and dropped-frame accounting | Source implemented/documented | No dedicated frame-pool behavior test identified | Not recorded |
 
 ## 4. Frame and image payload behavior
@@ -177,9 +177,32 @@ Additional target-architecture gaps:
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
-All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. This earlier run verifies the existing unit-test targets, not the later-added hardware rate executable. A new build is pending for `c98ab6b`; the new workflow also checks the hardware-test executable's architecture and linkage. The launcher found zero cameras in CI.
+All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The subsequent hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
 
-The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event FPS, successful-pull FPS, frame-callback FPS, unique painted-frame FPS, actual dimensions, sequence range, exposure, and frame-pool drops. It attempts to restore the original resolution after Stop. No physical run of this executable is recorded yet.
+The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event FPS, successful-pull FPS, frame-callback FPS, host-revision-based painted-frame FPS, actual dimensions, device sequence/timestamp metadata, configured exposure readback, per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop.
+
+### 9.1 First user-reported hardware rate run — 22 November 2026
+
+The user reports running the test with an AmScope MU503 identified by the SDK as `MU503(USB2.0)`, selecting live mode `2:640x480`, and measuring for 15.090 seconds:
+
+| Measurement | Observed |
+|---|---:|
+| SDK event rate | 91.253 FPS |
+| Successful pull rate | 91.253 FPS |
+| Driver frame callback rate | 91.253 FPS |
+| Actual dimensions | 640×480 |
+| Frame-pool drops | 0 |
+| SDK frame sequence | 0 for first and last observed frame |
+| Per-frame exposure metadata | 0 (no nonzero SDK exposure samples) |
+| Stop | Succeeded |
+| Original 1280×960 resolution restoration | Succeeded |
+| Close | Succeeded |
+
+The equal event, pull and callback counts show no measured loss between those three native stages during this run. The 91.253 FPS is the observed incoming camera rate; the requested 100 FPS target was not met. The first run's `paint_fps=0` and overall `FAIL` are not valid presentation evidence: the test rejected new frames when the SDK sequence value matched, and the preview/production telemetry also counted a frame as newly painted only when that SDK value changed. This MU503 run returned sequence zero for both first and last samples. The zero SDK per-frame exposure field also does not establish the configured exposure value.
+
+The test and production preview have since been corrected to count a newly delivered frame when it is actually painted, independently of SDK sequence metadata. The next test revision additionally reads the configured `ExposureTime` feature before starting acquisition and reports that separately from per-frame SDK exposure metadata; it also reports timestamp samples where available. This first run is retained as a valid 91.253 FPS acquisition observation, but its paint-rate result must not be used.
+
+Do not mark the physical camera performance target as met or infer the 100 FPS limit from this first run. Repeat the test against the corrected branch revision.
 
 ## 10. Current evidence classification
 
@@ -208,7 +231,7 @@ The user reports the following result after removing the stale generated `build/
 - The live `Resolution` feature in the feature panel successfully changed the camera's live resolution.
 - The earlier filesystem error while writing `AmcamCamera.cpp.o` did not recur after the generated build tree was removed.
 
-The exact camera identity/model code, selected resolution index, resulting live frame dimensions, still-capture dimensions, and FPS telemetry were not supplied. This observation confirms that the live resolution setting path is operational in the user's tested setup; it does not prove the 640×480 throughput target, still-resolution selector, other feature setters, or lifecycle/recovery behavior. It is a targeted smoke observation, not a `Hardware verified` result.
+The later performance run identifies the device as `MU503(USB2.0)` and confirms live `640×480` frame dimensions, successful Stop, restoration to the original `1280×960` live mode, and successful Close. The exact camera serial, firmware, physical USB negotiated speed, still-capture dimensions, and full lifecycle baseline were not supplied. The result is a targeted performance observation, not a complete `Hardware verified` baseline.
 
 Update this inventory when a source/API/test/UI change lands. Do not change a hardware-evidence cell from "Not recorded" without a completed record under `docs/testing/hardware/`.
 

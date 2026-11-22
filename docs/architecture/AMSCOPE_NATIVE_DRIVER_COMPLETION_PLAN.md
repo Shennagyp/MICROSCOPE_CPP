@@ -410,6 +410,31 @@ Additional deterministic tests are being added as post-acceptance hardening, not
 
 **Objective:** move genuinely shared camera semantics out of the AmScope namespace and establish the stable common contract used by all backends.
 
+### Delivery slices and current implementation
+
+Phase 2 is delivered incrementally so that common semantics are extracted without forcing vendor-specific settings, codes, or lifecycle rules into a false universal model.
+
+**2.1 — Common discovery and capability models**
+
+The first implementation slice adds `Camera/Common/include/camera/CameraModels.h`:
+
+- `ImageResolution` represents dimensions independently of a backend's resolution-table index.
+- `CameraIdentity` carries optional manufacturer, model, serial, firmware, and device-version facts. An opaque enumeration ID is not assumed to be a serial number.
+- `CameraDeviceInfo` holds the opaque device ID, display label, common identity, model capabilities, and common preview resolutions.
+- `CameraCapabilities` reports `Unknown`, `Unsupported`, or `Supported`. This avoids treating missing discovery metadata as proof that hardware lacks a capability.
+- The AmScope `CameraInfo` derives from `camera::CameraDeviceInfo`; its raw SDK model flags, model code, speed/fan levels, and I/O line count remain AmScope-specific.
+- AmScope model flags map to common capability names only where the semantic relationship is direct. The common capability snapshot describes model-advertised hardware support; it does not replace runtime feature probes, model profiles, or per-session feature availability.
+
+The first common model test target verifies these type and knowledge-state invariants. At this slice, local Phase 1 CTest validation is recorded as 9/9 passing at source revision `d2e5cb3`. The Phase 2.1 code and its new tenth CTest target are awaiting validation.
+
+**2.2 — Common frame and image-layout model (next)**
+
+Define a backend-neutral frame contract that preserves dimensions, byte stride, payload lifetime, significant pixel depth, storage-container width, and opaque native pixel-format identity without translating unknown Amcam FourCC values into PFNC or another backend's namespace. Sequence, timestamp, and exposure metadata must represent unknown/unavailable values explicitly and preserve units/clock semantics. Keep Amcam-only SDK flags, percent gain, and other vendor-specific telemetry outside the common frame contract.
+
+**2.3 — Common errors and remaining shared value types**
+
+Classify the remaining error, measured frame-rate, and image value models. Move only semantics that have matching meaning and units across backends. Preserve native error codes and operation context as backend details. Add round-trip tests only for types that actually cross a persistence or external API boundary; do not invent serialization solely to satisfy a generic checklist.
+
 ### Work
 
 1. Classify every current public type by semantic ownership.
@@ -739,7 +764,7 @@ Update this table as implementation progresses. A phase is not complete until bo
 |---|---|---|---|---|
 | 0 — Baseline | Accepted by project owner on 22 Nov 2026; repository/source review, camera open/preview, live 640×480 mode, resolution restoration, and two MU503 rate runs recorded | Existing CI baseline passed; current follow-up tests pending | Two 15-second-class physical runs: 91.253 and 91.183 event/pull/callback FPS, zero drops, Stop/restore/Close succeeded; full 15-minute regression and exact-commit hardware record remain unrecorded | ACCEPTED BY OWNER; residual regression checks non-blocking |
 | 1 — Native driver | Accepted by project owner on 22 Nov 2026; single-session lifecycle and callback/queue/worker/pull architecture retained | Existing suite plus new callback/cache-flush/frame-lease primitive tests; latest revision CI pending | MU503 640×480 runs delivered approximately 91 FPS with zero reported drops; Stop/restore/Close passed; extended 15-minute and failure-injection matrix remains recommended | ACCEPTED BY OWNER; deterministic SDK fault-injection is post-acceptance hardening |
-| 2 — Common models | Partial; several models remain under AmScope | Common tests exist; extraction tests required | Required | OPEN |
+| 2 — Common models | IN PROGRESS. Slice 2.1 common discovery/identity/resolution/capability models implemented; common frame and remaining value-model extraction pending | Existing feature tests plus new common model tests; Phase 2 CI pending | Full AmScope regression after all common model slices; RAW-capable camera required for frame-layout acceptance | OPEN |
 | 3 — Library separation | Target boundaries not yet delivered | Required | Required | OPEN |
 | 4 — Reusable UI | Preview exists; reusable UI library not yet delivered | Required | Required | OPEN |
 | 5 — GenTL/GenApi | Official GenApi 3.5.1 and GenTL 1.6 package identified; existing Consumer found in Swift, but no direct C++ interface; CTI adapter absent | Swift Consumer/mock Producer CI green; C++ integration tests pending | Real CTI camera and AmScope regression required | BLOCKED — Consumer integration choice and target Producer required |

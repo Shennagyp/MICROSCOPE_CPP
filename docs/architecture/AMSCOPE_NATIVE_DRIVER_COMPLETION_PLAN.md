@@ -342,6 +342,13 @@ After reviewing this short measurement, complete the full Section 3.2 baseline r
 
 **Do not start behavior-changing refactoring until the baseline hardware behavior is recorded.**
 
+
+### Owner acceptance — 22 November 2026
+
+**Phase 0 is ACCEPTED by the project owner.** The acceptance is based on successful real-camera open/preview, successful 640×480 live-resolution selection and restoration, two MU503 physical rate runs (15.090 s and 14.498 s), equal event/pull/callback rates of 91.253 FPS and 91.183 FPS respectively, zero reported frame-pool drops, and successful Stop/Close. The 100 FPS objective is a performance target, not a baseline-phase acceptance threshold.
+
+The complete 15-minute regression, a saved exact-commit hardware record, all safe-feature restoration cases, and still capture are not evidenced in the recorded run data. They remain useful regression coverage, but are not blockers to the owner's Phase 0 acceptance. The historical OPEN statements above describe the state before this explicit decision.
+
 ## 6. Phase 1 — Stabilize and qualify the native AmScope driver
 
 **Objective:** make the existing AmScope session and acquisition implementation dependable under both normal operation and failure.
@@ -391,6 +398,13 @@ Failure branches that cannot safely be induced on hardware must additionally pas
 - The physical-camera test record passes.
 - No unresolved data race, callback lifetime, deadlock, stale-frame, or resource-release defect remains in the tested paths.
 - Acquisition mechanism and the AmScope-native lifecycle exception are preserved.
+
+
+### Owner acceptance and post-acceptance hardening — 22 November 2026
+
+**Phase 1 is ACCEPTED by the project owner.** The existing native session and acquisition implementation is accepted as the working AmScope backend. The two physical MU503 runs demonstrate stable 640×480 delivery at approximately 91 FPS, zero reported pool drops, and successful Stop, resolution restoration, and Close. The callback → bounded event queue → single acquisition worker → `Amcam_PullImageV4` mechanism remains unchanged.
+
+Additional deterministic tests are being added as post-acceptance hardening, not as a reopening of Phase 1. The first set exercises the production callback-drain tracker, cache-flush obligation/retry semantics (including preservation of a newer obligation), and retained frame-pool leases. These tests do not yet constitute a full injected native-SDK test seam: forced native Open/Start/Stop/Pull/Close errors, still-capture timeout/quarantine, and watchdog-to-session fault-injection remain separate future test work. The full 15-minute and repeated lifecycle hardware regression was not included in the supplied run output and remains recommended regression coverage.
 
 ## 7. Phase 2 — Finalize backend-neutral camera models
 
@@ -723,8 +737,8 @@ Update this table as implementation progresses. A phase is not complete until bo
 
 | Phase | Implementation status | Automated tests | Real-camera test | Acceptance |
 |---|---|---|---|---|
-| 0 — Baseline | Repository/source/branch review recorded; user reports successful camera open and live preview; low preview FPS versus the prior 100 FPS at 640p remains unresolved | Baseline CI passed at reviewed revision | Initial physical-camera smoke observation only; complete Section 3.2 regression and hardware record are not yet supplied; camera model, active preview dimensions, numeric FPS, and test duration remain unverified | OPEN |
-| 1 — Native driver | Existing implementation; further qualification required | Existing tests; additional failure-path tests required | Required | OPEN |
+| 0 — Baseline | Accepted by project owner on 22 Nov 2026; repository/source review, camera open/preview, live 640×480 mode, resolution restoration, and two MU503 rate runs recorded | Existing CI baseline passed; current follow-up tests pending | Two 15-second-class physical runs: 91.253 and 91.183 event/pull/callback FPS, zero drops, Stop/restore/Close succeeded; full 15-minute regression and exact-commit hardware record remain unrecorded | ACCEPTED BY OWNER; residual regression checks non-blocking |
+| 1 — Native driver | Accepted by project owner on 22 Nov 2026; single-session lifecycle and callback/queue/worker/pull architecture retained | Existing suite plus new callback/cache-flush/frame-lease primitive tests; latest revision CI pending | MU503 640×480 runs delivered approximately 91 FPS with zero reported drops; Stop/restore/Close passed; extended 15-minute and failure-injection matrix remains recommended | ACCEPTED BY OWNER; deterministic SDK fault-injection is post-acceptance hardening |
 | 2 — Common models | Partial; several models remain under AmScope | Common tests exist; extraction tests required | Required | OPEN |
 | 3 — Library separation | Target boundaries not yet delivered | Required | Required | OPEN |
 | 4 — Reusable UI | Preview exists; reusable UI library not yet delivered | Required | Required | OPEN |

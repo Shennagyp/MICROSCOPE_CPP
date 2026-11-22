@@ -3,7 +3,7 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Exact branch head:** `3858c29a8e770901bc6baf414df9410e44d8fd57`  
+**Last inspected branch head before this handoff refresh:** `24ae88ec4752833c803aaf44147da04e874a2121`  
 **Last implementation-bearing commit:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
 **Current phase:** Phase 0 — baseline freeze and verification  
 **Phase status:** OPEN — real-camera baseline has not been recorded.
@@ -29,13 +29,9 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The branch currently points to:
+The last inspected branch head before this handoff refresh was `24ae88ec4752833c803aaf44147da04e874a2121` — `docs(amscope): link development handoff and inventory`. The follow-on commit that updates this handoff is also documentation-only.
 
-- `3858c29a8e770901bc6baf414df9410e44d8fd57` — `docs(amscope): link completion plan from driver README`
-- `5dc4c51285f100c525eeabd7eea3fd0666210ac8` — `docs(amscope): add native driver completion plan`
-- `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13` — `fix(amscope): remove duplicated trigger enum boundary`
-
-The last two commits before this handoff are documentation-only. No C++ source implementation commit was added after `a3a03fbd`.
+The documentation commits after the implementation baseline add the completion plan, its README links, this handoff, the source/test inventory, and the blank hardware-record template. No C++ source implementation commit was added after `a3a03fbd`.
 
 ### Relationship with `main`
 
@@ -54,7 +50,7 @@ Relevant links:
 
 ## 3. CI and test evidence
 
-The latest workflow run is [Amcam macOS build #45028702181](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45028702181), associated with the current documentation head `3858c29a`.
+The latest **completed successful** workflow run verified during this review is [Amcam macOS build #45028702181](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45028702181), associated with documentation head `3858c29a`. A newer run for `24ae88ec` was pending when this handoff was prepared. The handoff refresh itself changes documentation under the workflow path filter, so recheck the run associated with the final handoff commit before claiming that the current head's CI passed.
 
 Both jobs passed:
 
@@ -197,6 +193,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 - The two commits missing from `main` were inspected; they add and revert the same unintended file, with no net change to import.
 - Source tree and main architecture gaps reviewed.
 - The completion plan, implementation inventory, and hardware test-record template are now present in the repository.
+- The completion plan ledger now records that Phase 0 repository/source review is documented while the physical-camera baseline remains OPEN.
 
 ### Phase 0 work still required
 

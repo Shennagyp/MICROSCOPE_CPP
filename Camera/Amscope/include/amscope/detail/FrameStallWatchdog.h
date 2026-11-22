@@ -39,4 +39,31 @@ inline bool frameStalled(
            now - lastFrameAt >= frameStallTimeout(exposureMicroseconds);
 }
 
+
+inline std::chrono::milliseconds heartbeatStallTimeout(
+    std::uint32_t heartbeatIntervalMilliseconds) noexcept {
+    const std::uint64_t heartbeatBasedMilliseconds =
+        static_cast<std::uint64_t>(heartbeatIntervalMilliseconds) *
+            kExposureTimeoutMultiplier +
+        kExposureTimeoutGraceMilliseconds;
+    const std::uint64_t minimumMilliseconds =
+        static_cast<std::uint64_t>(kMinimumFrameStallTimeout.count());
+    const std::uint64_t timeoutMilliseconds =
+        std::max(minimumMilliseconds, heartbeatBasedMilliseconds);
+    using Rep = std::chrono::milliseconds::rep;
+    const auto maximum = static_cast<std::uint64_t>(
+        std::numeric_limits<Rep>::max());
+    return std::chrono::milliseconds(static_cast<Rep>(
+        std::min(timeoutMilliseconds, maximum)));
+}
+
+inline bool heartbeatStalled(
+    std::chrono::steady_clock::time_point now,
+    std::chrono::steady_clock::time_point lastHeartbeatAt,
+    std::uint32_t heartbeatIntervalMilliseconds) noexcept {
+    return now >= lastHeartbeatAt &&
+           now - lastHeartbeatAt >=
+               heartbeatStallTimeout(heartbeatIntervalMilliseconds);
+}
+
 } // namespace amscope::detail

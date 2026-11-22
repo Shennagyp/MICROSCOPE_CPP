@@ -84,12 +84,13 @@ bool parseResolution(const std::string& text,
            width > 0 && height > 0;
 }
 
-bool parseArguments(int argc, char** argv, Options& options) {
+bool parseArguments(int argc, char** argv, Options& options, bool& showHelp) {
     for (int i = 1; i < argc; ++i) {
         const std::string argument = argv[i];
         if (argument == "--help" || argument == "-h") {
             printUsage(argv[0]);
-            return false;
+            showHelp = true;
+            return true;
         }
         if (i + 1 >= argc) {
             std::cerr << "Missing value for " << argument << '\n';
@@ -192,6 +193,35 @@ bool writeFeature(
     if (const auto* error =
             std::get_if<camera::CameraFeatureAccessError>(&result)) {
         message = error->feature + ": " + error->message;
+        return false;
+    }
+    return true;
+}
+
+bool restoreResolution(
+    amscope::AmcamCamera& camera,
+    const std::string& originalSymbol,
+    std::string& message) {
+    if (camera.state() != amscope::CameraState::Open) {
+        message = "Camera is not in the stopped Open state; original resolution cannot be restored.";
+        return false;
+    }
+    if (!writeFeature(
+            camera, "AmcamResolutionIndex",
+            camera::FeatureEnumeration{originalSymbol}, message))
+        return false;
+
+    const auto readback = camera.readFeature("AmcamResolutionIndex");
+    if (const auto* error =
+            std::get_if<camera::CameraFeatureAccessError>(&readback)) {
+        message = error->feature + ": " + error->message;
+        return false;
+    }
+    const auto* enumeration =
+        std::get_if<camera::FeatureEnumeration>(
+            &std::get<camera::CameraFeatureValue>(readback));
+    if (!enumeration || enumeration->symbol != originalSymbol) {
+        message = "Original resolution readback did not match the saved value.";
         return false;
     }
     return true;
@@ -426,8 +456,11 @@ void printReport(
 
 int main(int argc, char** argv) {
     Options options;
-    if (!parseArguments(argc, argv, options))
+    bool showHelp = false;
+    if (!parseArguments(argc, argv, options, showHelp))
         return 2;
+    if (showHelp)
+        return 0;
 
     // Do not let QApplication consume the hardware-test command-line options.
     int qtArgc = 1;
@@ -551,6 +584,12 @@ int main(int argc, char** argv) {
                       featureMessage)) {
         std::cerr << "Could not select " << requestedLabel
                   << ": " << featureMessage << '\n';
+        if (resolutionChanged) {
+            std::string restoreMessage;
+            if (!restoreResolution(camera, originalSymbol, restoreMessage))
+                std::cerr << "Original resolution restore failed: "
+                          << restoreMessage << '\n';
+        }
         camera.close();
         return 6;
     }
@@ -558,10 +597,12 @@ int main(int argc, char** argv) {
     const auto selectedReadback = camera.readFeature(featureName);
     if (featureValueError(selectedReadback, featureMessage)) {
         std::cerr << "Resolution readback failed: " << featureMessage << '\n';
-        if (resolutionChanged)
-            writeFeature(camera, featureName,
-                         camera::FeatureEnumeration{originalSymbol},
-                         featureMessage);
+        if (resolutionChanged) {
+            std::string restoreMessage;
+            if (!restoreResolution(camera, originalSymbol, restoreMessage))
+                std::cerr << "Original resolution restore failed: "
+                          << restoreMessage << '\n';
+        }
         camera.close();
         return 6;
     }
@@ -570,10 +611,12 @@ int main(int argc, char** argv) {
             &std::get<camera::CameraFeatureValue>(selectedReadback));
     if (!selectedEnumeration || selectedEnumeration->symbol != selectedSymbol) {
         std::cerr << "Resolution readback did not match the requested mode.\n";
-        if (resolutionChanged)
-            writeFeature(camera, featureName,
-                         camera::FeatureEnumeration{originalSymbol},
-                         featureMessage);
+        if (resolutionChanged) {
+            std::string restoreMessage;
+            if (!restoreResolution(camera, originalSymbol, restoreMessage))
+                std::cerr << "Original resolution restore failed: "
+                          << restoreMessage << '\n';
+        }
         camera.close();
         return 6;
     }
@@ -628,9 +671,9 @@ int main(int argc, char** argv) {
         std::cerr << "Camera Start failed: " << cameraError.message << '\n';
         if (resolutionChanged) {
             std::string restoreMessage;
-            writeFeature(camera, featureName,
-                         camera::FeatureEnumeration{originalSymbol},
-                         restoreMessage);
+            if (!restoreResolution(camera, originalSymbol, restoreMessage))
+                std::cerr << "Original resolution restore failed: "
+                          << restoreMessage << '\n';
         }
         camera.close();
         return 7;
@@ -722,31 +765,13 @@ int main(int argc, char** argv) {
                     }
 
                     bool resolutionRestored = !resolutionChanged;
-                    if (resolutionChanged &&
-                        camera.state() == amscope::CameraState::Open) {
+                    if (resolutionChanged) {
                         std::string restoreMessage;
-                        resolutionRestored = writeFeature(
-                            camera, featureName,
-                            camera::FeatureEnumeration{originalSymbol},
-                            restoreMessage);
+                        resolutionRestored = restoreResolution(
+                            camera, originalSymbol, restoreMessage);
                         if (!resolutionRestored) {
                             std::cerr << "Resolution restore failed: "
                                       << restoreMessage << '\n';
-                        } else {
-                            const auto restored = camera.readFeature(featureName);
-                            std::string readbackMessage;
-                            if (featureValueError(restored, readbackMessage)) {
-                                resolutionRestored = false;
-                                std::cerr << "Resolution restore readback failed: "
-                                          << readbackMessage << '\n';
-                            } else {
-                                const auto* restoredEnumeration =
-                                    std::get_if<camera::FeatureEnumeration>(
-                                        &std::get<camera::CameraFeatureValue>(restored));
-                                resolutionRestored =
-                                    restoredEnumeration &&
-                                    restoredEnumeration->symbol == originalSymbol;
-                            }
                         }
                     }
 

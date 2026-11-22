@@ -543,8 +543,6 @@ buildAmcamFeatureDescriptors(
     const bool autoExposureThresholdProbe =
         SUCCEEDED(autoExposureThresholdHr) &&
         autoExposureThreshold >= 2 && autoExposureThreshold <= 15;
-    const bool tecVoltageProbe = (modelFlags & AMCAM_FLAG_TEC) != 0 &&
-        SUCCEEDED(tecVoltageHr);
 
 
     const bool roiModelSupported = hasModelDescriptor &&

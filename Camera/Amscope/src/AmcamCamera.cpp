@@ -52,13 +52,13 @@ bool failHr(amscope::CameraError* out, const char* operation, HRESULT hr) {
     return fail(out, operation, static_cast<std::int32_t>(hr), hrMessage(operation, hr));
 }
 
-// AMCAM_OPTION_BITDEPTH is model-specific. Fixed 8-bit sensors have no
-// selectable 8/16-bit mode, so the SDK may return E_NOTIMPL for that option.
-// Amcam_get_MaxBitDepth returns the camera's maximum sensor depth as its
-// HRESULT value; only cameras above 8 bits need the optional mode readback.
+// AMCAM_OPTION_BITDEPTH selects 8-bit output or the camera's maximum
+// significant bit depth. Fixed 8-bit sensors have no distinct maximum-depth
+// mode, so the SDK may return E_NOTIMPL for the option.
+// Amcam_get_MaxBitDepth returns the camera's maximum bit depth as its HRESULT.
 HRESULT getRawBitDepthMode(
     HAmcam handle,
-    int& storageMode,
+    int& bitDepthMode,
     const char** failureOperation,
     int requestedModeFallback = -1) {
     if (failureOperation)
@@ -77,26 +77,26 @@ HRESULT getRawBitDepthMode(
     // where BITDEPTH is writable but its getter is not implemented. Prefer a
     // readable SDK value; use the session's accepted request only as fallback.
     if (maxBitDepth == 8 && requestedModeFallback < 0) {
-        storageMode = 0;
+        bitDepthMode = 0;
         return S_OK;
     }
 
     if (failureOperation)
         *failureOperation = "Amcam_get_Option(BITDEPTH)";
     const HRESULT optionResult =
-        Amcam_get_Option(handle, AMCAM_OPTION_BITDEPTH, &storageMode);
+        Amcam_get_Option(handle, AMCAM_OPTION_BITDEPTH, &bitDepthMode);
     if (FAILED(optionResult)) {
         if (requestedModeFallback == 0 || requestedModeFallback == 1) {
-            storageMode = requestedModeFallback;
+            bitDepthMode = requestedModeFallback;
             return S_OK;
         }
         return optionResult;
     }
-    if (storageMode != 0 && storageMode != 1)
+    if (bitDepthMode != 0 && bitDepthMode != 1)
         return E_INVALIDARG;
     if (requestedModeFallback >= 0 &&
         requestedModeFallback <= 1 &&
-        storageMode != requestedModeFallback)
+        bitDepthMode != requestedModeFallback)
         return E_FAIL;
 
     return S_OK;

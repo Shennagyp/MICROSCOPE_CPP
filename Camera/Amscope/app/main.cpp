@@ -176,13 +176,16 @@ public:
         }
 
         if (image_.isNull()) {
+            const QString frameDescription = frame_
+                ? QStringLiteral("%1, %2x%3, stride: %4")
+                      .arg(pixelFormatName(frame_->pixelFormat))
+                      .arg(frame_->width)
+                      .arg(frame_->height)
+                      .arg(frame_->strideBytes)
+                : QStringLiteral("invalid frame");
             frame_.reset();
             hasUnpaintedFrame_ = false;
-            message_ = QStringLiteral("No renderable frame (format: %1, %2x%3, stride: %4)")
-                .arg(frame_ ? pixelFormatName(frame_->pixelFormat) : QStringLiteral("invalid"))
-                .arg(frame_ ? frame_->width : 0)
-                .arg(frame_ ? frame_->height : 0)
-                .arg(frame_ ? frame_->strideBytes : 0);
+            message_ = QStringLiteral("No renderable frame (%1)").arg(frameDescription);
         } else {
             // Count a frame when this newly submitted image is actually painted.
             // Do not use the SDK sequence field as a uniqueness token: some

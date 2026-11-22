@@ -2942,7 +2942,6 @@ bool AmcamCamera::setLensAperturePosition(
 }
 
 bool AmcamCamera::readTriggerConfiguration(
-bool AmcamCamera::readTriggerConfiguration(
     AmcamTriggerConfiguration& configuration,
     CameraError* error) {
     if (error) *error = {};

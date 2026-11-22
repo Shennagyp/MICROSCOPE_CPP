@@ -624,7 +624,6 @@ bool QtAmcamCamera::setLensAperturePosition(
 }
 
 bool QtAmcamCamera::readStillResolutions(
-bool QtAmcamCamera::readStillResolutions(
     StillResolutionList& resolutions,
     CameraError* error) {
     if (!requireSynchronousExecutionMode("readStillResolutions", error))
@@ -1483,7 +1482,6 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSetLensAperturePosition(
         }, FeatureRequestSemantics::StateMutation);
 }
 
-QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFeatureDescriptors(
     FeatureDescriptorsCallback callback) {
     if (!callback) return 0;

@@ -69,6 +69,38 @@ QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
         .arg(descriptor.numericRange->maximum, 0, 'g', 12);
 }
 
+QString pixelFormatName(camera::PixelFormat format) {
+    switch (format) {
+    case camera::PixelFormat::Unknown: return QStringLiteral("Unknown");
+    case camera::PixelFormat::RGB24: return QStringLiteral("RGB24");
+    case camera::PixelFormat::Raw8: return QStringLiteral("Raw8");
+    case camera::PixelFormat::Raw16: return QStringLiteral("Raw16");
+    }
+    return QStringLiteral("Unknown");
+}
+
+QString pixelFormatIdentifierText(const camera::Frame& frame) {
+    if (!frame.pixelFormatIdentifier)
+        return QStringLiteral("unavailable");
+    return QStringLiteral("%1:0x%2")
+        .arg(QString::fromStdString(frame.pixelFormatIdentifier->scheme))
+        .arg(static_cast<qulonglong>(frame.pixelFormatIdentifier->value), 0, 16);
+}
+
+QJsonValue optionalUnsignedJson(
+    const std::optional<std::uint64_t>& value) {
+    if (!value)
+        return QJsonValue(QJsonValue::Null);
+    // Store unsigned 64-bit values as decimal strings to avoid JSON double
+    // precision loss and signed qint64 overflow.
+    return QJsonValue(QString::number(static_cast<qulonglong>(*value)));
+}
+
+QJsonValue optionalStringJson(const std::optional<std::string>& value) {
+    return value ? QJsonValue(QString::fromStdString(*value))
+                 : QJsonValue(QJsonValue::Null);
+}
+
 // FrameView holds the immutable frame lease while QImage references its pixel
 // buffer. Rendering reads the pooled storage directly: no detached QImage,
 // per-frame pixel copy, or intermediate QPixmap.
@@ -797,12 +829,19 @@ private:
                     return;
                 }
 
-                const bool raw = frame->pixelFormat != amscope::PixelFormat::RGB24;
+                const bool raw =
+                    frame->pixelFormat == camera::PixelFormat::Raw8 ||
+                    frame->pixelFormat == camera::PixelFormat::Raw16;
+                if (!raw && frame->pixelFormat != camera::PixelFormat::RGB24) {
+                    statusBar()->showMessage(
+                        "Still capture returned an unknown image-buffer layout.");
+                    return;
+                }
                 const QString suggested = raw
-                    ? QString("amscope_%1x%2_sensor%3_container%4.raw")
+                    ? QString("amscope_%1x%2_sensor%3_storage%4.raw")
                           .arg(frame->width).arg(frame->height)
-                          .arg(static_cast<unsigned>(frame->bitsPerPixel))
-                          .arg(static_cast<unsigned>(frame->containerBitsPerPixel))
+                          .arg(static_cast<unsigned>(frame->significantBitsPerPixel))
+                          .arg(static_cast<unsigned>(frame->storageBitsPerPixel))
                     : QString("amscope_%1x%2.png")
                           .arg(frame->width).arg(frame->height);
                 const QString path = QFileDialog::getSaveFileName(
@@ -840,19 +879,66 @@ private:
                     return;
                 }
 
-                const QJsonObject metadata{
+                const auto amcamFrame =
+                    std::dynamic_pointer_cast<const amscope::AmcamFrame>(frame);
+                QJsonObject metadata{
                     {"width", static_cast<qint64>(frame->width)},
                     {"height", static_cast<qint64>(frame->height)},
                     {"strideBytes", static_cast<qint64>(frame->strideBytes)},
-                    {"sensorBitsPerPixel", static_cast<int>(frame->bitsPerPixel)},
-                    {"containerBitsPerPixel", static_cast<int>(frame->containerBitsPerPixel)},
-                    {"pixelFormatFourCC", static_cast<qint64>(frame->pixelFormatCode)},
-                    {"sequence", static_cast<qint64>(frame->sequence)},
-                    {"timestampMicroseconds",
-                     static_cast<qint64>(frame->timestampMicroseconds)},
-                    {"exposureMicroseconds",
-                     static_cast<qint64>(frame->exposureMicroseconds)}
+                    {"pixelFormat", pixelFormatName(frame->pixelFormat)},
+                    {"significantBitsPerPixel",
+                     static_cast<int>(frame->significantBitsPerPixel)},
+                    {"storageBitsPerPixel",
+                     static_cast<int>(frame->storageBitsPerPixel)},
+                    {"pixelFormatIdentifierScheme",
+                     frame->pixelFormatIdentifier
+                         ? QJsonValue(QString::fromStdString(
+                               frame->pixelFormatIdentifier->scheme))
+                         : QJsonValue(QJsonValue::Null)},
+                    {"pixelFormatIdentifierValue",
+                     frame->pixelFormatIdentifier
+                         ? optionalUnsignedJson(frame->pixelFormatIdentifier->value)
+                         : QJsonValue(QJsonValue::Null)},
+                    {"sequenceNumber", optionalUnsignedJson(frame->sequenceNumber)}
                 };
+
+                if (frame->timestamp) {
+                    metadata.insert("timestamp", QJsonObject{
+                        {"ticks", optionalUnsignedJson(frame->timestamp->ticks)},
+                        {"ticksPerSecond",
+                         optionalUnsignedJson(frame->timestamp->ticksPerSecond)},
+                        {"clockDomain",
+                         optionalStringJson(frame->timestamp->clockDomain)}
+                    });
+                } else {
+                    metadata.insert("timestamp", QJsonValue(QJsonValue::Null));
+                }
+
+                if (frame->exposure) {
+                    metadata.insert("exposure", QJsonObject{
+                        {"durationTicks",
+                         optionalUnsignedJson(frame->exposure->durationTicks)},
+                        {"ticksPerSecond",
+                         optionalUnsignedJson(frame->exposure->ticksPerSecond)}
+                    });
+                } else {
+                    metadata.insert("exposure", QJsonValue(QJsonValue::Null));
+                }
+
+                if (amcamFrame) {
+                    metadata.insert("amcam", QJsonObject{
+                        {"sdkFlags", static_cast<qint64>(amcamFrame->sdkFlags)},
+                        {"exposureGainPercent",
+                         amcamFrame->exposureGainPercent
+                             ? QJsonValue(static_cast<int>(
+                                   *amcamFrame->exposureGainPercent))
+                             : QJsonValue(QJsonValue::Null)},
+                        {"blackLevel",
+                         amcamFrame->blackLevel
+                             ? QJsonValue(static_cast<int>(*amcamFrame->blackLevel))
+                             : QJsonValue(QJsonValue::Null)}
+                    });
+                }
                 QSaveFile metadataFile(path + ".json");
                 const QByteArray json =
                     QJsonDocument(metadata).toJson(QJsonDocument::Indented);
@@ -1438,11 +1524,15 @@ private:
     }
 
     void updateFrameInfoLabel() {
+        const QString sequenceText = lastFrameSequence_
+            ? QString("sequence %1")
+                  .arg(static_cast<qulonglong>(*lastFrameSequence_))
+            : QStringLiteral("sequence unavailable");
         QString text = hasReceivedFrame_
-            ? QString("%1 x %2 | frame %3 | %4 bytes")
+            ? QString("%1 x %2 | %3 | %4 bytes")
                   .arg(static_cast<qulonglong>(lastFrameWidth_))
                   .arg(static_cast<qulonglong>(lastFrameHeight_))
-                  .arg(static_cast<qulonglong>(lastFrameSequence_))
+                  .arg(sequenceText)
                   .arg(static_cast<qulonglong>(lastFrameBytes_))
             : QStringLiteral("No frames received");
 
@@ -1454,9 +1544,9 @@ private:
             text += QString(" | pull %1 FPS")
                 .arg(*pulledFramesPerSecond_, 0, 'f', 1);
         }
-        if (lastExposureMicroseconds_ != 0) {
+        if (lastExposureMicroseconds_) {
             text += QString(" | exposure %1 us")
-                .arg(static_cast<qulonglong>(lastExposureMicroseconds_));
+                .arg(static_cast<qulonglong>(*lastExposureMicroseconds_));
         }
         if (previewFramesPerSecond_) {
             text += QString(" | paint %1 FPS")
@@ -1479,19 +1569,32 @@ private:
 
         lastFrameWidth_ = frame->width;
         lastFrameHeight_ = frame->height;
-        lastFrameSequence_ = frame->sequence;
+        lastFrameSequence_ = frame->sequenceNumber;
         lastFrameBytes_ = frame->byteSize();
-        lastExposureMicroseconds_ = frame->exposureMicroseconds;
+        lastExposureMicroseconds_.reset();
+        if (frame->exposure &&
+            frame->exposure->ticksPerSecond == 1000000ULL) {
+            lastExposureMicroseconds_ = frame->exposure->durationTicks;
+        }
         hasReceivedFrame_ = true;
 
-        if (frame->pixelFormat != amscope::PixelFormat::RGB24) {
+        if (frame->pixelFormat == camera::PixelFormat::Raw8 ||
+            frame->pixelFormat == camera::PixelFormat::Raw16) {
             preview_->setMessage(
-                QString("RAW sensor stream active | %1 x %2 | sensor %3-bit / container %4-bit | format 0x%5")
+                QString("RAW sensor stream active | %1 x %2 | source %3-bit / storage %4-bit | %5")
                     .arg(static_cast<qulonglong>(frame->width))
                     .arg(static_cast<qulonglong>(frame->height))
-                    .arg(static_cast<unsigned>(frame->bitsPerPixel))
-                    .arg(static_cast<unsigned>(frame->containerBitsPerPixel))
-                    .arg(frame->pixelFormatCode, 8, 16, QChar('0')));
+                    .arg(static_cast<unsigned>(frame->significantBitsPerPixel))
+                    .arg(static_cast<unsigned>(frame->storageBitsPerPixel))
+                    .arg(pixelFormatIdentifierText(*frame)));
+            return;
+        }
+        if (frame->pixelFormat != camera::PixelFormat::RGB24) {
+            preview_->setMessage(
+                QString("Unknown frame layout | %1 x %2 | %3")
+                    .arg(static_cast<qulonglong>(frame->width))
+                    .arg(static_cast<qulonglong>(frame->height))
+                    .arg(pixelFormatIdentifierText(*frame)));
             return;
         }
 
@@ -2502,10 +2605,10 @@ private:
     std::optional<std::chrono::steady_clock::time_point> lastPullRateAt_;
     std::uint64_t lastImageEventCount_ = 0;
     std::uint64_t lastPulledFrameCount_ = 0;
-    std::uint64_t lastExposureMicroseconds_ = 0;
+    std::optional<std::uint64_t> lastExposureMicroseconds_;
     std::uint32_t lastFrameWidth_ = 0;
     std::uint32_t lastFrameHeight_ = 0;
-    std::uint32_t lastFrameSequence_ = 0;
+    std::optional<std::uint64_t> lastFrameSequence_;
     std::size_t lastFrameBytes_ = 0;
     bool hasReceivedFrame_ = false;
     QTimer* frameRateTimer_ = nullptr;

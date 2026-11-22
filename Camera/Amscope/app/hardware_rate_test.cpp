@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <algorithm>
 #include <atomic>
 #include <charconv>
 #include <chrono>
@@ -269,6 +270,10 @@ public:
     }
 
 protected:
+    void closeEvent(QCloseEvent* event) override {
+        event->ignore();
+    }
+
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
         painter.fillRect(rect(), QColor(23, 25, 29));
@@ -363,10 +368,14 @@ void printReport(
         closeSucceeded &&
         measurement.asynchronousError.empty();
 
+    const char* result = !operationalPass
+        ? "FAIL"
+        : (pullFps >= options.targetFps ? "PASS" : "BELOW_TARGET");
+
     std::cout << std::fixed << std::setprecision(3);
     std::cout
         << "{\n"
-        << "  \"result\": \"" << (operationalPass ? "PASS" : "FAIL") << "\",\n"
+        << "  \"result\": \"" << result << "\",\n"
         << "  \"device_name\": \"" << jsonEscape(info.displayName) << "\",\n"
         << "  \"model_name\": \"" << jsonEscape(info.modelName) << "\",\n"
         << "  \"model_code\": \"" << jsonEscape(info.modelCode) << "\",\n"
@@ -466,6 +475,26 @@ int main(int argc, char** argv) {
         std::cerr << "Feature discovery failed: " << error.message << '\n';
         camera.close();
         return 5;
+    }
+
+
+    const auto* rawDescriptor = findFeature(*descriptors, "AmcamRawOutputEnabled");
+    if (rawDescriptor && rawDescriptor->isAvailable && rawDescriptor->isReadable) {
+        const auto rawResult = camera.readFeature("AmcamRawOutputEnabled");
+        if (const auto* rawError =
+                std::get_if<camera::CameraFeatureAccessError>(&rawResult)) {
+            std::cerr << "Could not read RAW state: " << rawError->message << '\n';
+            camera.close();
+            return 5;
+        }
+        const auto* rawEnabled =
+            std::get_if<bool>(&std::get<camera::CameraFeatureValue>(rawResult));
+        if (rawEnabled && *rawEnabled) {
+            std::cerr << "This performance test measures the RGB24 preview path. "
+                      << "Disable RAW Sensor Output in the preview first, then rerun.\n";
+            camera.close();
+            return 5;
+        }
     }
 
     const auto* resolutionDescriptor = findFeature(*descriptors, featureName);
@@ -722,8 +751,7 @@ int main(int argc, char** argv) {
                     }
 
                     std::string closeMessage;
-                    const bool closeSucceeded = camera.close(
-                        reinterpret_cast<amscope::CameraError*>(&cameraError));
+                    const bool closeSucceeded = camera.close(&cameraError);
                     if (!closeSucceeded) {
                         closeMessage = cameraError.message;
                         std::cerr << "Camera Close failed: "

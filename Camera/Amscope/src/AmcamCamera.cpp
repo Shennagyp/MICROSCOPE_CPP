@@ -1123,6 +1123,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
 
     int width = 0, height = 0;
     bool rawOutput = false;
+    bool rawPolicyDenied = false;
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
     int rawStorageMode = 0;
@@ -1167,7 +1168,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                     if (SUCCEEDED(hr) &&
                         !impl_->profileRegistry.allows(
                             impl_->modelCode, AmcamCameraFeature::RawOutput)) {
-                        hr = E_ACCESSDENIED;
+                        rawPolicyDenied = true;
                     }
                     if (SUCCEEDED(hr)) {
                         hr = Amcam_get_Option(
@@ -1182,6 +1183,11 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                 hr = rawHr;
             }
         }
+    }
+    if (rawPolicyDenied) {
+        impl_->state.store(CameraState::Open, std::memory_order_release);
+        return fail(error, "start", -1,
+                    "RAW output is disabled by the selected model profile.");
     }
     if (FAILED(hr)) {
         impl_->state.store(CameraState::Open, std::memory_order_release);
@@ -1617,6 +1623,8 @@ bool AmcamCamera::captureStill(
     int expectedHeight = 0;
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
+    std::uint32_t selectedStillResolutionIndex = request.resolutionIndex;
+    int rawStorageMode = 0;
     {
         std::lock_guard<std::mutex> api(impl_->apiMutex);
         if (!impl_->handle) {

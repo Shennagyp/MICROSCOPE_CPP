@@ -10,19 +10,14 @@ integration and does not modify vendor sample code.
 - One AmcamCamera owns one HAmcam handle for the complete open session.
 - Enumeration copies SDK device data into CameraInfo; open uses the opaque
   device id returned by enumeration. Re-enumerate after a disconnect/replug.
-- Acquisition uses the vendor-documented WaitImage pairing: pull mode starts
-  with a null SDK event callback, and a dedicated C++ worker retrieves frames
-  through Amcam_WaitImageV4. It does not mix event-callback delivery with
-  WaitImage polling.
-- WaitImageV4 uses a 50 ms polling timeout. A frame-health watchdog faults a
-  continuous preview when no frame arrives for at least 5 seconds, or three
-  times the last known exposure plus a 1-second grace period, whichever is
-  longer. The exposure-aware threshold avoids treating long exposures as an
-  immediate transport failure.
-- At a detected stall, the driver samples the SDK's received-packet counter,
-  USB-received/software-dropped frame counter, and frontend/backend queue
-  depths. The fault message includes the latest values and one-second deltas
-  where available; preserve the complete message when reporting a failure.
+- Acquisition follows the vendor's working `demowait` pattern: pull mode
+  starts with a null SDK event callback, and a dedicated C++ worker retrieves
+  frames through `Amcam_WaitImageV3`. The worker uses the vendor sample's
+  1,000 ms wait interval and does not mix callback delivery with WaitImage.
+- RGB24 uses zero row padding (`rowPitch = -1`), so each frame has a tightly
+  packed `width * 3` stride. A frame-health watchdog faults continuous preview
+  when no frame arrives for at least 5 seconds, or three times the last known
+  exposure plus a 1-second grace period, whichever is longer.
 - Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
   sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every
@@ -97,7 +92,7 @@ own the camera.
 
 The vendor-only baseline bypasses `AmcamCamera`, the Qt adapter, and the
 preview application. It reproduces the bundled vendor `demowait` sample:
-a null event callback, `Amcam_WaitImageV3`, and the vendor-default row pitch.
+a null event callback and `Amcam_WaitImageV3`.
 
 Run from the repository root:
 
@@ -113,20 +108,9 @@ bash scripts/run-amscope-vendor-wait-probe.sh --device-id "CAMERA_ID" --seconds 
 
 Run only one camera-owning process at a time.
 
-The direct vendor probe also records read-only SDK telemetry once per second:
-received packet count and delta, SDK-dropped frame count and delta, and the
-current frontend/backend queue depths. It reports the configured no-frame and
-no-packet timeout thresholds (zero means disabled). These measurements do not
-change camera settings or the vendor `demowait` acquisition path.
-
-Interpret the telemetry at the point frames stop:
-
-- If packet count stops increasing with frame count, investigate the camera,
-  USB cable/port, power, and transport path.
-- If packets continue increasing but frames stop, transport is still delivering
-  data; investigate SDK frame assembly, internal queues, and camera settings.
-- If SDK-dropped frames or queue depths grow, preserve those values when
-  reporting the failure; they identify a different boundary from USB packet loss.
+Use the direct vendor probe as the reference when comparing acquisition
+behavior. Its output records successful frames and timeout counts without
+adding extra SDK option reads inside the production acquisition worker.
 
 Interpret the comparison with `run-amscope-native-probe.sh`:
 

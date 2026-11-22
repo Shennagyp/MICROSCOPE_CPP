@@ -56,7 +56,7 @@ bool failHr(amscope::CameraError* out, const char* operation, HRESULT hr) {
 // selectable 8/16-bit mode, so the SDK may return E_NOTIMPL for that option.
 // Amcam_get_MaxBitDepth returns the camera's maximum sensor depth as its
 // HRESULT value; only cameras above 8 bits need the optional mode readback.
-HRESULT getRawStorageMode(
+HRESULT getRawBitDepthMode(
     HAmcam handle,
     int& storageMode,
     const char** failureOperation,
@@ -401,17 +401,19 @@ buildAmcamFeatureDescriptors(
     const bool rawAvailable = rawModelSupported && rawModeReadable;
     const bool rawFormatReadable = rawModeReadable && rawMode == 1 &&
         SUCCEEDED(rawFormatHr) && rawBitsPerPixel > 0 && rawBitsPerPixel <= 16;
-    const bool rawBitDepthReadable = rawModeReadable && rawMode == 1 &&
-        SUCCEEDED(rawBitDepthHr) && (rawBitDepth == 0 || rawBitDepth == 1);
     const HRESULT rawMaxBitDepthHr = Amcam_get_MaxBitDepth(handle);
     const unsigned rawMaxBitDepth = SUCCEEDED(rawMaxBitDepthHr)
         ? static_cast<unsigned>(rawMaxBitDepthHr) : 0U;
-    const bool rawHighDepthAdvertised =
-        (modelFlags & (AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
-                       AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW14 |
-                       AMCAM_FLAG_RAW16 | AMCAM_FLAG_RAW12PACK)) != 0;
+    const bool rawMaximumBitDepthValid =
+        rawMaxBitDepth >= 8U && rawMaxBitDepth <= 16U;
+    const bool rawBitDepthReadable = rawModeReadable && rawMode == 1 &&
+        SUCCEEDED(rawBitDepthHr) && (rawBitDepth == 0 || rawBitDepth == 1) &&
+        rawMaximumBitDepthValid;
     const bool rawBitDepthWritable = rawModeReadable && rawMode == 1 &&
-        (rawMaxBitDepth > 8U || rawHighDepthAdvertised);
+        rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
+    std::vector<std::string> rawBitDepthValues{"8-bit"};
+    if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U)
+        rawBitDepthValues.push_back(std::to_string(rawMaxBitDepth) + "-bit");
 
 
     const bool hasColorRawSensor =
@@ -798,13 +800,13 @@ buildAmcamFeatureDescriptors(
         camera::CameraFeatureGroup::ImageFormat
     });
     descriptors.push_back({
-        std::string(camera::RawStorageBitDepthFeature),
-        "RAW Storage Bit Depth", CameraFeatureKind::Enumeration,
-        std::string("storage bits"),
+        std::string(camera::RawOutputBitDepthFeature),
+        "RAW Output Bit Depth", CameraFeatureKind::Enumeration,
+        std::string("significant bits"),
         rawAvailable && rawOutputAllowed && rawBitDepthWritable,
         rawBitDepthReadable,
         rawAvailable && rawOutputAllowed && rawBitDepthWritable && stopped,
-        std::nullopt, std::nullopt, {"8-bit", "16-bit"},
+        std::nullopt, std::nullopt, std::move(rawBitDepthValues),
         camera::CameraFeatureGroup::ImageFormat
     });
     descriptors.push_back({
@@ -1173,7 +1175,7 @@ struct AmcamCamera::Impl {
     std::atomic<std::uint32_t> expectedExposureMicroseconds{0};
     // Last BITDEPTH value accepted by put_Option when the SDK getter is absent.
     // -1 means no successful explicit request has been made in this session.
-    std::atomic<int> requestedRawStorageMode{-1};
+    std::atomic<int> requestedRawBitDepthMode{-1};
     std::atomic<std::uint32_t> activeTriggerMode{0};
     std::atomic<std::uint32_t> heartbeatIntervalMilliseconds{0};
     detail::AmcamFrameCacheFlushObligation frameCacheFlush;
@@ -2086,7 +2088,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
         return fail(error, "Amcam_Open", -1,
                     "Amcam_Open failed. Re-enumerate devices and check that the camera is not in use.");
 
-    impl_->requestedRawStorageMode.store(-1, std::memory_order_release);
+    impl_->requestedRawBitDepthMode.store(-1, std::memory_order_release);
     impl_->modelName = selected->modelName;
     impl_->modelCode = selected->modelCode;
     impl_->modelFlags = selected->modelFlags;
@@ -2140,7 +2142,7 @@ bool AmcamCamera::close(CameraError* error) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
-        impl_->requestedRawStorageMode.store(-1, std::memory_order_release);
+        impl_->requestedRawBitDepthMode.store(-1, std::memory_order_release);
 
         impl_->activeTriggerMode.store(0, std::memory_order_release);
         impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
@@ -2332,7 +2334,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     bool rawPolicyDenied = false;
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
-    int rawStorageMode = 0;
+    int rawBitDepthMode = 0;
     const char* failureOperation = "Amcam_get_FinalSize";
     HRESULT hr = S_OK;
     {
@@ -2381,9 +2383,9 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                         rawPolicyDenied = true;
                     }
                     if (SUCCEEDED(hr))
-                        hr = getRawStorageMode(
-                            impl_->handle, rawStorageMode, &failureOperation,
-                            impl_->requestedRawStorageMode.load(std::memory_order_acquire));
+                        hr = getRawBitDepthMode(
+                            impl_->handle, rawBitDepthMode, &failureOperation,
+                            impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
                 }
             } else if (modelAdvertisesRaw) {
                 hr = rawHr;
@@ -2406,7 +2408,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     }
 
     const std::uint8_t containerBitsPerPixel =
-        !rawOutput ? 24U : (rawStorageMode == 0 ? 8U : 16U);
+        !rawOutput ? 24U : (rawBitDepthMode == 0 ? 8U : 16U);
     const std::size_t bytesPerPixel = containerBitsPerPixel / 8U;
     const std::uint64_t stride64 =
         static_cast<std::uint64_t>(width) * bytesPerPixel;
@@ -4143,7 +4145,7 @@ bool AmcamCamera::captureStill(
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
     std::uint32_t selectedStillResolutionIndex = request.resolutionIndex;
-    int rawStorageMode = 0;
+    int rawBitDepthMode = 0;
     {
         std::lock_guard<std::mutex> api(impl_->apiMutex);
         if (!impl_->handle) {
@@ -4238,9 +4240,9 @@ bool AmcamCamera::captureStill(
                             "The SDK returned an unsupported RAW sensor bit depth.");
             }
             const char* storageModeFailureOperation = "Amcam_get_MaxBitDepth";
-            const HRESULT storageModeResult = getRawStorageMode(
-                impl_->handle, rawStorageMode, &storageModeFailureOperation,
-                impl_->requestedRawStorageMode.load(std::memory_order_acquire));
+            const HRESULT storageModeResult = getRawBitDepthMode(
+                impl_->handle, rawBitDepthMode, &storageModeFailureOperation,
+                impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
             if (FAILED(storageModeResult)) {
                 return failHr(error, storageModeFailureOperation, storageModeResult);
             }
@@ -4370,7 +4372,7 @@ bool AmcamCamera::captureStill(
         }
 
         const std::uint8_t containerBitsPerPixel =
-            !raw ? 24U : (rawStorageMode == 0 ? 8U : 16U);
+            !raw ? 24U : (rawBitDepthMode == 0 ? 8U : 16U);
         const std::uint64_t bytesPerPixel = containerBitsPerPixel / 8U;
         const std::uint64_t stride64 =
             static_cast<std::uint64_t>(info.v3.width) * bytesPerPixel;
@@ -4719,15 +4721,25 @@ AmcamCamera::readFeature(std::string_view name) {
         if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(RAW)", hr);
         return CameraFeatureValue{value != 0};
     }
-    if (name == camera::RawStorageBitDepthFeature) {
-        int value = 0;
-        const HRESULT hr = Amcam_get_Option(
-            impl_->handle, AMCAM_OPTION_BITDEPTH, &value);
-        if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
-        if (value != 0 && value != 1)
+    if (name == camera::RawOutputBitDepthFeature) {
+        int mode = 0;
+        HRESULT hr = Amcam_get_Option(
+            impl_->handle, AMCAM_OPTION_BITDEPTH, &mode);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(BITDEPTH)", hr);
+        if (mode != 0 && mode != 1)
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "The camera returned an unknown RAW bit-depth mode.");
-        return CameraFeatureValue{FeatureEnumeration{value == 0 ? "8-bit" : "16-bit"}};
+        const HRESULT maximumResult = Amcam_get_MaxBitDepth(impl_->handle);
+        if (FAILED(maximumResult))
+            return featureBackendError(std::string(name), "Amcam_get_MaxBitDepth", maximumResult);
+        const unsigned maximum = static_cast<unsigned>(maximumResult);
+        if (maximum < 8U || maximum > 16U)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an invalid maximum RAW bit depth.");
+        const unsigned selected = mode == 0 ? 8U : maximum;
+        return CameraFeatureValue{FeatureEnumeration{
+            std::to_string(selected) + "-bit"}};
     }
     if (name == "AmcamRawSensorFormat") {
         unsigned fourCC = 0, bitsPerPixel = 0;
@@ -4988,10 +5000,10 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         return std::monostate{};
     }
 
-    if (name == camera::RawStorageBitDepthFeature) {
+    if (name == camera::RawOutputBitDepthFeature) {
         if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
             return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
-                                std::string(name), "RAW bit depth can only be changed while acquisition is stopped.");
+                                std::string(name), "RAW output bit depth can only be changed while acquisition is stopped.");
         int rawMode = 0;
         HRESULT hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_RAW, &rawMode);
         if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(RAW)", hr);
@@ -4999,10 +5011,19 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
             return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
                                 std::string(name), "Enable RAW sensor output before selecting its bit-depth mode.");
         const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
-        const int requested = symbol == "8-bit" ? 0 : symbol == "16-bit" ? 1 : -1;
+        const HRESULT maximumResult = Amcam_get_MaxBitDepth(impl_->handle);
+        if (FAILED(maximumResult))
+            return featureBackendError(std::string(name), "Amcam_get_MaxBitDepth", maximumResult);
+        const unsigned maximum = static_cast<unsigned>(maximumResult);
+        if (maximum < 8U || maximum > 16U)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an invalid maximum RAW bit depth.");
+        const int requested =
+            symbol == "8-bit" ? 0 :
+            (maximum > 8U && symbol == std::to_string(maximum) + "-bit") ? 1 : -1;
         if (requested < 0)
             return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name), "RAW bit depth accepts 8-bit or 16-bit.");
+                                std::string(name), "RAW output bit depth must be 8-bit or the camera's maximum supported bit depth.");
         hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_BITDEPTH, requested);
         if (FAILED(hr))
             return featureBackendError(std::string(name), "Amcam_put_Option(BITDEPTH)", hr);
@@ -5013,13 +5034,13 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (SUCCEEDED(readbackHr)) {
             if (readback != requested)
                 return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                    std::string(name), "RAW bit-depth readback did not match the requested mode.");
+                                    std::string(name), "RAW output bit-depth readback did not match the requested mode.");
         } else {
             // Some models implement the setter but not the getter. A successful
             // put is accepted as the session's requested mode; acquisition will
             // use it only when subsequent readback remains unavailable.
         }
-        impl_->requestedRawStorageMode.store(requested, std::memory_order_release);
+        impl_->requestedRawBitDepthMode.store(requested, std::memory_order_release);
         return std::monostate{};
     }
 

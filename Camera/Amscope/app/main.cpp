@@ -472,8 +472,10 @@ public:
             if (state == amscope::CameraState::Streaming) {
                 if (!frameRateTimer_->isActive()) {
                     lastPulledFrameCount_ = camera_.framesPulled();
+                    lastImageEventCount_ = camera_.imageEventsReceived();
                     lastPullRateAt_ = std::chrono::steady_clock::now();
                     pulledFramesPerSecond_.reset();
+                    imageEventsPerSecond_.reset();
                     frameRateTimer_->start();
                 }
                 // Do not rebuild the full feature inventory while acquisition
@@ -484,6 +486,7 @@ public:
             } else {
                 frameRateTimer_->stop();
                 lastPullRateAt_.reset();
+                imageEventsPerSecond_.reset();
                 pulledFramesPerSecond_.reset();
                 resetPreviewFrameRate();
                 updateFrameInfoLabel();
@@ -1409,16 +1412,23 @@ private:
             return;
 
         const auto now = std::chrono::steady_clock::now();
-        const std::uint64_t total = camera_.framesPulled();
-        if (lastPullRateAt_) {
-            const double elapsed = std::chrono::duration<double>(
-                now - *lastPullRateAt_).count();
-            if (elapsed > 0.0 && total >= lastPulledFrameCount_) {
+        const double elapsed = lastPullRateAt_
+            ? std::chrono::duration<double>(now - *lastPullRateAt_).count()
+            : 0.0;
+        const std::uint64_t pulledTotal = camera_.framesPulled();
+        const std::uint64_t eventTotal = camera_.imageEventsReceived();
+        if (elapsed > 0.0) {
+            if (pulledTotal >= lastPulledFrameCount_) {
                 pulledFramesPerSecond_ =
-                    static_cast<double>(total - lastPulledFrameCount_) / elapsed;
+                    static_cast<double>(pulledTotal - lastPulledFrameCount_) / elapsed;
+            }
+            if (eventTotal >= lastImageEventCount_) {
+                imageEventsPerSecond_ =
+                    static_cast<double>(eventTotal - lastImageEventCount_) / elapsed;
             }
         }
-        lastPulledFrameCount_ = total;
+        lastPulledFrameCount_ = pulledTotal;
+        lastImageEventCount_ = eventTotal;
         lastPullRateAt_ = now;
         updateFrameInfoLabel();
     }
@@ -1432,9 +1442,17 @@ private:
                   .arg(static_cast<qulonglong>(lastFrameBytes_))
             : QStringLiteral("No frames received");
 
+        if (imageEventsPerSecond_) {
+            text += QString(" | event %1 FPS")
+                .arg(*imageEventsPerSecond_, 0, 'f', 1);
+        }
         if (pulledFramesPerSecond_) {
             text += QString(" | pull %1 FPS")
                 .arg(*pulledFramesPerSecond_, 0, 'f', 1);
+        }
+        if (lastExposureMicroseconds_ != 0) {
+            text += QString(" | exposure %1 us")
+                .arg(static_cast<qulonglong>(lastExposureMicroseconds_));
         }
         if (previewFramesPerSecond_) {
             text += QString(" | paint %1 FPS")
@@ -1459,6 +1477,7 @@ private:
         lastFrameHeight_ = frame->height;
         lastFrameSequence_ = frame->sequence;
         lastFrameBytes_ = frame->byteSize();
+        lastExposureMicroseconds_ = frame->exposureMicroseconds;
         hasReceivedFrame_ = true;
 
         if (frame->pixelFormat != amscope::PixelFormat::RGB24) {
@@ -2474,9 +2493,12 @@ private:
     std::vector<amscope::CameraInfo> cameras_;
     camera::FrameRateEstimator previewFrameRateEstimator_;
     std::optional<double> previewFramesPerSecond_;
+    std::optional<double> imageEventsPerSecond_;
     std::optional<double> pulledFramesPerSecond_;
     std::optional<std::chrono::steady_clock::time_point> lastPullRateAt_;
+    std::uint64_t lastImageEventCount_ = 0;
     std::uint64_t lastPulledFrameCount_ = 0;
+    std::uint64_t lastExposureMicroseconds_ = 0;
     std::uint32_t lastFrameWidth_ = 0;
     std::uint32_t lastFrameHeight_ = 0;
     std::uint32_t lastFrameSequence_ = 0;

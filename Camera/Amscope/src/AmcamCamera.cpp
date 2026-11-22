@@ -2,6 +2,7 @@
 #include "amcam.h"
 #include "amscope/AmcamCamera.h"
 #include "AmcamEventQueue.h"
+#include "AmcamSessionPrimitives.h"
 #include "amscope/detail/FrameStallWatchdog.h"
 #include "camera/CameraFeatureValidation.h"
 
@@ -1052,9 +1053,7 @@ struct AmcamCamera::Impl {
         }
         // Only the acquisition worker calls this; consumer leases are shared_ptrs.
         std::shared_ptr<Frame> tryAcquire() noexcept {
-            for (const auto& slot : slots)
-                if (slot.use_count() == 1) return slot;
-            return {};
+            return detail::tryAcquireUnleasedFrameSlot(slots);
         }
         std::vector<std::shared_ptr<Frame>> slots;
         std::vector<std::uint8_t> discard;
@@ -1071,8 +1070,8 @@ struct AmcamCamera::Impl {
     std::atomic<std::uint32_t> expectedExposureMicroseconds{0};
     std::atomic<std::uint32_t> activeTriggerMode{0};
     std::atomic<std::uint32_t> heartbeatIntervalMilliseconds{0};
-    std::atomic<bool> frameCacheFlushPending{false};
-    std::atomic<std::uint32_t> activeSdkCallbacks{0};
+    detail::AmcamFrameCacheFlushObligation frameCacheFlush;
+    detail::AmcamCallbackTracker sdkCallbacks;
     std::atomic<std::uint64_t> dropped{0};
     std::atomic<std::uint64_t> pulledFrames{0};
     std::atomic<std::uint64_t> imageEvents{0};
@@ -1084,8 +1083,6 @@ struct AmcamCamera::Impl {
     unsigned stillCaptureFailureEvent = 0;
     bool stillCapturePending = false;
     bool stillCaptureDesynchronized = false;
-    std::mutex callbackWaitMutex;
-    std::condition_variable callbackWaitCondition;
     std::mutex lifecycleMutex;
     std::mutex apiMutex;
     struct HeartbeatOptionSnapshot {
@@ -1349,30 +1346,30 @@ struct AmcamCamera::Impl {
     // frame caches to be flushed before pull mode is started again.
     // Keep the obligation pending if the SDK rejects the flush.
     bool flushStoppedFrameCaches(CameraError* error) {
-        if (!frameCacheFlushPending.load(std::memory_order_acquire))
-            return true;
-
         HRESULT hr = E_FAIL;
+        bool missingHandle = false;
+        bool flushed = false;
         {
             std::lock_guard<std::mutex> lock(apiMutex);
-            if (!handle) {
-                return fail(error, "Amcam_OPTION_FLUSH", -1,
-                            "Cannot flush stopped-frame caches without an open camera handle.");
-            }
-            hr = Amcam_put_Option(handle, AMCAM_OPTION_FLUSH, 3);
-            if (SUCCEEDED(hr))
-                frameCacheFlushPending.store(false, std::memory_order_release);
+            flushed = frameCacheFlush.retry([this, &hr, &missingHandle]() {
+                if (!handle) {
+                    missingHandle = true;
+                    return false;
+                }
+                hr = Amcam_put_Option(handle, AMCAM_OPTION_FLUSH, 3);
+                return SUCCEEDED(hr);
+            });
         }
-        return FAILED(hr)
-            ? failHr(error, "Amcam_put_Option(AMCAM_OPTION_FLUSH, 3)", hr)
-            : true;
+        if (flushed) return true;
+        if (missingHandle) {
+            return fail(error, "Amcam_OPTION_FLUSH", -1,
+                        "Cannot flush stopped-frame caches without an open camera handle.");
+        }
+        return failHr(error, "Amcam_put_Option(AMCAM_OPTION_FLUSH, 3)", hr);
     }
 
     void waitForSdkCallbacks() {
-        std::unique_lock<std::mutex> lock(callbackWaitMutex);
-        callbackWaitCondition.wait(lock, [this]() {
-            return activeSdkCallbacks.load(std::memory_order_acquire) == 0;
-        });
+        sdkCallbacks.wait();
     }
 
     void resetStillCaptureStateAfterStop() noexcept {
@@ -1390,17 +1387,7 @@ struct AmcamCamera::Impl {
         auto* self = static_cast<Impl*>(context);
         if (!self) return;
 
-        self->activeSdkCallbacks.fetch_add(1, std::memory_order_acq_rel);
-        struct CallbackExit final {
-            Impl* owner;
-            ~CallbackExit() {
-                {
-                    std::lock_guard<std::mutex> lock(owner->callbackWaitMutex);
-                    owner->activeSdkCallbacks.fetch_sub(1, std::memory_order_acq_rel);
-                }
-                owner->callbackWaitCondition.notify_all();
-            }
-        } callbackExit{self};
+        auto callbackLease = self->sdkCallbacks.enter();
 
         // Still-image events use an independent waiter, never the live FIFO.
         if (event == AMCAM_EVENT_STILLIMAGE) {
@@ -1489,7 +1476,7 @@ struct AmcamCamera::Impl {
                 const HRESULT hr = Amcam_Stop(handle);
                 if (SUCCEEDED(hr)) {
                     sdkStarted.store(false, std::memory_order_release);
-                    frameCacheFlushPending.store(true, std::memory_order_release);
+                    frameCacheFlush.markPending();
                     stoppedSuccessfully = true;
                 } else {
                     error.message += " " + hrMessage("Amcam_Stop", hr);
@@ -1824,7 +1811,7 @@ struct AmcamCamera::Impl {
                 hr = Amcam_Stop(handle);
                 if (SUCCEEDED(hr)) {
                     sdkStarted.store(false, std::memory_order_release);
-                    frameCacheFlushPending.store(true, std::memory_order_release);
+                    frameCacheFlush.markPending();
                 }
             }
         }
@@ -1948,7 +1935,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
     impl_->stopRequested.store(true, std::memory_order_release);
     impl_->eventQueue.stop();
     impl_->sdkStarted.store(false, std::memory_order_release);
-    impl_->frameCacheFlushPending.store(false, std::memory_order_release);
+    impl_->frameCacheFlush.reset();
     impl_->activeTriggerMode.store(0, std::memory_order_release);
     impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
     impl_->heartbeatSnapshot = {};
@@ -1991,7 +1978,7 @@ bool AmcamCamera::close(CameraError* error) {
         impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
         impl_->heartbeatSnapshot = {};
         impl_->sdkStarted.store(false, std::memory_order_release);
-        impl_->frameCacheFlushPending.store(false, std::memory_order_release);
+        impl_->frameCacheFlush.reset();
 
         // Model metadata is read by feature access under apiMutex.
         impl_->modelName.clear();
@@ -2354,7 +2341,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                 stopHr = Amcam_Stop(impl_->handle);
                 if (SUCCEEDED(stopHr)) {
                     impl_->sdkStarted.store(false, std::memory_order_release);
-                    impl_->frameCacheFlushPending.store(true, std::memory_order_release);
+                    impl_->frameCacheFlush.markPending();
                 }
             }
         }
@@ -2395,7 +2382,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                 stopHr = Amcam_Stop(impl_->handle);
                 if (SUCCEEDED(stopHr)) {
                     impl_->sdkStarted.store(false, std::memory_order_release);
-                    impl_->frameCacheFlushPending.store(true, std::memory_order_release);
+                    impl_->frameCacheFlush.markPending();
                 }
             }
         }

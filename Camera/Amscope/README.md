@@ -5,6 +5,10 @@ headers, libraries, documentation, and original samples remain under
 Camera/VendorSDK/AmscopeVendorSDK. This directory contains the application
 integration and does not modify vendor sample code.
 
+## Development roadmap
+
+The authoritative phase-by-phase completion plan, including the mandatory real-camera test gate for every phase, is maintained in [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md).
+
 ## Implemented
 
 - One AmcamCamera owns one HAmcam handle for the complete open session.

@@ -623,6 +623,44 @@ bool QtAmcamCamera::setLensAperturePosition(
     return ok;
 }
 
+
+bool QtAmcamCamera::readIoLines(
+    IoLineList& lines,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("readIoLines", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readIoLines(lines, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::configureIoLine(
+    const AmcamIoLineConfiguration& configuration,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("configureIoLine", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.configureIoLine(configuration, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
 bool QtAmcamCamera::readStillResolutions(
     StillResolutionList& resolutions,
     CameraError* error) {
@@ -1475,6 +1513,76 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSetLensAperturePosition(
                 else result.emplace(std::move(local));
             }
             dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestIoLines(
+    IoLineListCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<IoLineListResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                IoLineList lines;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readIoLines(lines, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readIoLines", exception.what()};
+                } catch (...) {
+                    local = {0, "readIoLines",
+                             "Unknown exception while reading hardware I/O lines."};
+                }
+                if (ok) result.emplace(std::move(lines));
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(
+                requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::FeatureSnapshot);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestConfigureIoLine(
+    AmcamIoLineConfiguration configuration,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, configuration = std::move(configuration),
+         callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.configureIoLine(configuration, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "configureIoLine", exception.what()};
+                } catch (...) {
+                    local = {0, "configureIoLine",
+                             "Unknown exception while configuring a hardware I/O line."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(
+                requestContext,
                 [callback = std::move(callback), requestId,
                  result = std::move(*result)]() mutable {
                     callback(requestId, std::move(result));

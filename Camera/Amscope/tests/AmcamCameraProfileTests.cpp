@@ -73,6 +73,7 @@ int main() {
         AmcamCameraFeature::Transport10GigE,
         AmcamCameraFeature::TransportCameraLink,
         AmcamCameraFeature::TransportCoaXPress,
+        AmcamCameraFeature::IoControl,
     };
     restricted.deniedFeatures = {AmcamCameraFeature::WhiteBalance};
 
@@ -97,6 +98,8 @@ int main() {
             "allow-list can explicitly permit trigger capability metadata");
     require(registry.allows("Model-A", AmcamCameraFeature::TransportGigE),
             "allow-list can explicitly permit transport metadata");
+    require(registry.allows("Model-A", AmcamCameraFeature::IoControl),
+            "allow-list can explicitly permit hardware I/O line access");
     require(!registry.allows("Model-A", AmcamCameraFeature::WhiteBalance),
             "deny-list takes precedence over allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::PreciseFrameRate),

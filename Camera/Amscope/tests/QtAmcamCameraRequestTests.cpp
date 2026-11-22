@@ -225,6 +225,16 @@ int main(int argc, char** argv) {
         }) ||
         !runAccessoryRequest([&](auto callback) {
             return camera.requestSoftwareTrigger(1, std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            return camera.requestIoLines(std::move(callback));
+        }) ||
+        !runAccessoryRequest([&](auto callback) {
+            amscope::AmcamIoLineConfiguration configuration;
+            configuration.line = amscope::AmcamIoLine::GPIO0;
+            configuration.direction = amscope::AmcamIoDirection::Output;
+            return camera.requestConfigureIoLine(
+                std::move(configuration), std::move(callback));
         })) {
         std::cerr << "Accessory requests lost their typed error or Qt affinity contract.\n";
         return EXIT_FAILURE;

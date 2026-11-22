@@ -334,7 +334,10 @@ stops and closes the session.
 
 ## Not included yet
 
-GPIO direction/output programming, self-trigger parameterization,
-synchronized multi-camera acquisition, GenTL routing, ImageProcessing
-integration, RAW demosaicing for visible preview, and a concrete GPU renderer
-remain separate capabilities.
+The first hardware-I/O surface reads the model-reported opto/GPIO lines and
+supports stopped-state configuration of direction, signal format, output
+inversion, input activation/debounce, output mode and strobe timing, with
+readback verification and rollback. Output-level writes, UART, counter/PWM
+programming, self-trigger parameterization, synchronized multi-camera
+acquisition, GenTL routing, RAW demosaicing for visible preview, and a concrete
+GPU renderer remain separate capabilities.

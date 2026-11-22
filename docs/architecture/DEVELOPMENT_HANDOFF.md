@@ -3,10 +3,10 @@
 **Last reviewed:** 22 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
-**Last verified branch head before this handoff refresh:** `58017979ad7d16c119e5a5a98ccac4a2fc59e932`  
-**Last implementation-bearing commit:** `15be30850ea573dd06ffe3128befcdb27ce2e974`  
+**Last verified branch head before this handoff refresh:** `52fe60c47cd78d51bb215c13a14894053a3da6e0`  
+**Last implementation-bearing commit:** `52fe60c47cd78d51bb215c13a14894053a3da6e0`  
 **Current phase:** Phase 0 — baseline freeze and verification  
-**Phase status:** OPEN — the MU503 physical run measured 91.253 event/pull/callback FPS at 640×480 with zero drops and successful Stop/resolution restore/Close. The first paint result was invalid because the SDK sequence stayed at zero; production and test paint counting are corrected. Rerun the corrected test and diagnose exposure/USB link before changing acquisition behavior.
+**Phase status:** OPEN — the MU503 run measured 91.253 event/pull/callback FPS at 640×480 with zero drops and successful Stop/resolution restore/Close. The first paint result was invalid because the SDK sequence stayed at zero; production and test paint counting are corrected. The first local rebuild of the corrected test then exposed a compile error: `Measurement::exposureSamples` was printed but not included/copied into the measurement snapshot. Commit `52fe60c` fixes that missing field. The fix's GitHub Actions build is pending; rerun only after pulling this commit.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -29,7 +29,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ### Branch head and recent work
 
-The branch head before this handoff refresh is `58017979ad7d16c119e5a5a98ccac4a2fc59e932`. The latest implementation-bearing changes are the physical-camera rate test and its instrumentation correction. The standalone test uses the existing `AmcamCamera` public API and the same native callback -> bounded event queue -> single `Amcam_PullImageV4` acquisition pipeline; it does not modify driver acquisition or session behavior. Production `FrameView` paint telemetry and test preview paint accounting now count a newly submitted frame when it is actually painted, without requiring `AmcamFrameInfoV3::seq` to advance. The test also reports configured exposure, SDK timestamp samples and applied model speed level. Subsequent commits record the first physical result and analysis.
+The branch head before this handoff refresh is `52fe60c47cd78d51bb215c13a14894053a3da6e0`. The standalone hardware test uses the existing `AmcamCamera` API and preserves the native callback -> bounded event queue -> single `Amcam_PullImageV4` worker. Paint counting uses host-delivery revisions, not SDK sequence values. The test reports configured exposure, SDK timestamp samples, applied model speed level and per-frame exposure sample counts. The user's first local build at `b37006e` failed because the `Measurement` snapshot omitted `exposureSamples` while JSON output referenced it. Commit `52fe60c` adds and copies this field. No driver/acquisition code changed for this fix.
 
 ### Relationship with `main`
 
@@ -48,7 +48,7 @@ Relevant links:
 
 ## 3. CI and test evidence
 
-The first version of the hardware-test executable and launcher passed both-architecture build, CTest, artifact/linkage and launcher checks in [workflow #45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602), on branch head `1d77002`. The latest instrumentation corrections are being checked by [workflow #45063596770](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063596770) on the current head; it is in progress at this handoff update. The assistant did not run a local C++ build or CTest. The user has locally compiled and run the earlier version of the test successfully.
+The first version of the hardware-test executable and launcher passed both-architecture build, CTest, artifact/linkage and launcher checks in [workflow #45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602), on branch head `1d77002`. The later paint/exposure instrumentation changes had a local compile defect at `b37006e`; commit `52fe60c` adds the missing measurement snapshot field and copy. CI for `52fe60c` is pending at [workflow #45064078862](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45064078862). The assistant did not run a local C++ build or CTest.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
@@ -230,7 +230,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Required before Phase 1 refactoring
 
-1. Pull the latest `amscope-native-driver` branch, build and run the corrected test:
+1. After the compile-fix workflow [#45064078862](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45064078862) passes, pull the latest `amscope-native-driver` branch, build and run the corrected test:
    `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh --hardware-rate-test --resolution 640x480 --warmup 3 --duration 15 --target-fps 100`.
 2. Keep the test preview window visible. Send the JSON output, including `configured_exposure_us`, `exposure_fps_limit`, `applied_speed_level`, timestamp range and corrected `paint_fps`.
 3. In a second terminal, inspect the USB device tree with `system_profiler SPUSBDataType` and identify the MU503's reported connection speed. Do not infer this solely from the SDK display name.

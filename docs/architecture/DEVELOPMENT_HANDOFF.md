@@ -8,10 +8,10 @@
 **Phase 2.1 local/CI validation revision:** `03f35bf07d8236e5aab33aea0cde987155cf0425`  
 **Phase 2.2 frame-model source snapshot:** `3da2a385508f1b639f98bbd34f5a6dabd9a3406a`  
 **Preview migration fix:** `609174c3ad56b50b25465e5688672627ce315a3f`  
-**Latest branch head before this handoff correction:** `0952952a32d084b4f29f860c07c472aedeb023a5`  
+**Latest branch head reviewed and software-validated:** `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`  
 **Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
 **Current phase:** Phase 2.2 — common frame and image-layout model  
-**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 was validated locally by the user with a clean build and 10/10 CTest tests, and by GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2 has been implemented in the source snapshot above: common frame/payload/layout and optional timing metadata, an opaque format identifier, and an Amcam-specific typed extension. It adds an eleventh CTest target. The user's first clean build at `c13101ce` exposed stale legacy `Frame` field references in `app/main.cpp`; compilation stopped at `amscope_preview`, so CTest did not run. Those preview references are migrated to the common optional metadata contract in `609174c`, with explicit `QJsonValue` and `<memory>` includes in `0952952`. The fixed revision still awaits a clean local build, 11/11 CTest result, cross-architecture CI, and real-camera/RAW-capable-camera regression. The two MU503 physical runs and residual 15-minute/fault-injection follow-ups remain recorded below.
+**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 passed the user's clean local build and 10/10 CTest suite, plus GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2's common frame/payload/layout model, optional timing metadata, opaque pixel-format identifier, Amcam-specific frame extension, and preview migration are implemented. The user then pulled branch head `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`, completed a clean Release build of the driver, Qt adapter, hardware-rate executable, preview app, and test targets, and passed all 11/11 CTest tests. GitHub Actions run [#45070941692](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45070941692) passed on Intel x86_64 and Apple Silicon arm64 for that exact head. Phase 2.2 remains open only for physical-camera validation of frame layout/payload, optional metadata, and RAW format identity/depth on a RAW-capable camera. The two earlier MU503 performance runs and residual 15-minute/fault-injection follow-ups remain recorded below.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -19,7 +19,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ## 1. First actions for the next session
 
-1. Verify that `amscope-native-driver` still points to the exact head recorded above. If it has moved, inspect the new commits and update this handoff before relying on the state below.
+1. Verify that `amscope-native-driver` still points to `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b` or a reviewed descendant. Inspect any newer commits before relying on this state.
 2. Read this file, then:
    - [AmScope Native Driver Completion Plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
    - [Implementation Inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md)
@@ -27,7 +27,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
    - [AmScope Driver README](../../Camera/Amscope/README.md)
    - The authoritative Camera Module and UI Libraries architecture paper agreed in the project discussion.
 3. Phases 0 and 1 are accepted by the project owner. Do not reopen them solely because the requested 100 FPS target was not reached; that target is a performance objective, not a lifecycle correctness threshold.
-4. Phase 2 is in progress. Slice 2.1 discovery models are locally and cross-architecture CI validated. Slice 2.2 common frames are implemented and await validation; after that, slice 2.3 classifies remaining common errors and value types.
+4. Phase 2 is in progress. Slices 2.1 and 2.2 have passed local clean builds/CTest and cross-architecture CI. Slice 2.2 still requires physical-camera frame/metadata/RAW regression; after that, slice 2.3 classifies remaining common errors and value types.
 5. Keep the remaining 15-minute hardware run, repeated lifecycle cycles, still-capture test where supported, and full SDK fault injection as explicit follow-up coverage. Formal `Hardware verified` status still requires an exact-commit record under `docs/testing/hardware/`.
 
 ## 2. Current Git state
@@ -55,11 +55,11 @@ Relevant links:
 
 The user locally built the Phase 2.1 revision `03f35bf` with a clean build; the driver, Qt adapter, preview, hardware-rate executable, and tests all compiled, and all 10/10 CTest targets passed. The Qt request test also passed separately with verbose output. This is user-reported local evidence. GitHub Actions run [#45067873506](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45067873506) passed on both Intel x86_64 and Apple Silicon arm64 for the same revision. This validates Phase 2.1's discovery models, not Phase 2.2.
 
-Phase 2.2 adds `CameraFrames.h`, the Amcam frame adapter, optional-metadata mapping using the SDK's validity flags, hardware-rate report adaptation, `camera_common_frame_tests`, and preview-side migration of RAW export, frame diagnostics, and metadata sidecar serialization. The current suite has 11 CTest targets. The user's build at `c13101ce` compiled the driver, Qt adapter, hardware-rate test, and all test executables but failed compiling `amscope_preview` because `app/main.cpp` still referenced removed fields. The clean-build command used `&&`, so CTest did not execute. The preview migration fix is now committed in `0952952`; local build/CTest and CI at that revision remain pending. No physical-camera regression has been performed against this frame-model extraction.
+Phase 2.2 adds `CameraFrames.h`, the Amcam frame adapter, optional-metadata mapping using the SDK's validity flags, hardware-rate report adaptation, `camera_common_frame_tests`, and preview-side migration of RAW export, frame diagnostics, and metadata sidecar serialization. The user's clean Release build at branch head `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b` compiled the native driver, Qt adapter, hardware-rate executable, preview application, and all test targets. All 11/11 CTest tests passed locally. GitHub Actions run [#45070941692](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45070941692) passed for the same branch head on Intel x86_64 and Apple Silicon arm64. The earlier `c13101ce` preview compile failure was caused by stale `Frame` field references and is closed by the preview migration in `609174c` plus explicit includes in `0952952`. Physical-camera regression against the extracted common frame model has not yet been performed.
 
 The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
-The earlier eight-target suite passed on both architectures in [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867). The ninth target, `amscope_session_primitives_tests`, was then locally built and passed as part of the user's 9/9 run at `d2e5cb3`. The current phase-2 branch adds the tenth target, `camera_common_models_tests`, for optional discovery identity, common dimensions, and tri-state capabilities; its current branch-head CI is pending.
+The earlier eight-target suite passed on both architectures in [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867). The ninth target, `amscope_session_primitives_tests`, was then locally built and passed as part of the user's 9/9 run at `d2e5cb3`. The Phase 2.1 discovery-model slice added `camera_common_models_tests` and passed local and cross-architecture CI at `03f35bf`. Phase 2.2 subsequently added `camera_common_frame_tests`, bringing the suite to eleven; current-head local and cross-architecture CI evidence is recorded above.
 
 The eight targets in the earlier completed suite were:
 
@@ -200,7 +200,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 |---|---|
 | 0 — Baseline freeze and verification | ACCEPTED BY OWNER. Two MU503 640×480 physical runs measured 91.253 and 91.183 event/pull/callback FPS, zero drops, successful Stop/restore/Close. A 15-minute exact-commit hardware record remains follow-up coverage. |
 | 1 — Native driver stabilization | ACCEPTED BY OWNER. The single-session native acquisition path is accepted; deterministic callback/cache/lease tests are added as post-acceptance hardening. Full injected SDK failure coverage remains future work. |
-| 2 — Backend-neutral models | IN PROGRESS. Slice 2.1 discovery models passed the user's clean 10/10 local suite and CI on Intel/arm64. Slice 2.2 common frame model and eleventh test are implemented; clean local build, 11/11 CTest, current CI, and real-camera/RAW-capable-camera regression remain pending. Slice 2.3 common errors/value models remains. |
+| 2 — Backend-neutral models | IN PROGRESS. Slices 2.1 and 2.2 passed clean local builds/CTest (10/10 and 11/11 respectively) and cross-architecture CI. Slice 2.2 physical-camera frame-layout/payload/metadata and RAW-capable-camera regression remains open. Slice 2.3 common errors/value models has not started. |
 | 3 — Driver/control/Qt streaming separation | OPEN. Current Qt facade combines responsibilities. |
 | 4 — Reusable Qt UI library | OPEN. Preview exists; reusable UI library is not delivered. |
 | 5 — GenTL/GenApi integration | BLOCKED. Existing C++ dependency/runtime and a real CTI camera are not established in this branch. |
@@ -226,7 +226,7 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ### Phase 0 residual follow-up coverage
 
-- Phase 1's nine-target suite passed locally at `d2e5cb3`. Phase 2.1 subsequently passed a clean full build and 10/10 CTest locally at `03f35bf`, plus CI on Intel x86_64 and Apple Silicon arm64. Phase 2.2 adds `camera_common_frame_tests`, bringing the suite to eleven targets; this new source migration is awaiting local and current-head CI validation.
+- Phase 1's nine-target suite passed locally at `d2e5cb3`. Phase 2.1 passed a clean full build and 10/10 CTest locally at `03f35bf`, plus CI on Intel x86_64 and Apple Silicon arm64. Phase 2.2 passed the user's clean full Release build and 11/11 CTest suite at `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`; GitHub Actions run [#45070941692](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45070941692) passed on Intel x86_64 and Apple Silicon arm64 for the same head. Real-camera frame/metadata and RAW-format checks remain outstanding.
 - The user has built and launched the branch locally after removing the stale generated build directory, and has confirmed that the live `Resolution` feature changes resolution. Record the exact resulting live frame dimensions before treating 640×480 as the measured mode.
 - Rebuild and rerun the newest diagnostic revision. Review `event_fps`, `pull_fps`, `callback_fps`, `paint_fps`, `frame_poll_ticks`, `preview_frame_submissions`, `paint_events`, all four exposure readback points and `exposure_fps_limit_basis`, `applied_speed_level`, timestamps, actual dimensions and dropped frames.
 - Check the negotiated macOS USB connection speed for the MU503 using `system_profiler SPUSBDataType` and record whether the connected device is actually running at USB 2.0 (up to 480 Mb/s) or USB 3.x (typically 5 Gb/s or higher). The SDK's `MU503(USB2.0)` device string is a transport lead, not by itself proof of the physical negotiated speed.
@@ -239,36 +239,26 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 ## 8. Immediate next actions
 
-### Immediate local validation of Phase 2.2
+### Physical-camera validation for Phase 2.2
 
-Pull the latest preview-migration fix and run a clean rebuild followed by the 11-target CTest suite. The user's previous build stopped before CTest because the preview still used legacy frame fields; the fix migrates those consumers to common optional metadata and retains Amcam-only fields through `AmcamFrame`. The command is:
+The software validation gate is closed at branch head 9daf193c7a107ae93984f5bf00f56d0dfbd66b3b: the user's clean Release build completed, all 11/11 CTest targets passed, and GitHub Actions passed on Intel x86_64 and Apple Silicon arm64. Do not repeat the clean build solely for Phase 2.2 unless source changes invalidate this evidence.
 
-```sh
-cd ~/Documents/GitHub/MICROSCOPE_CPP
-git switch amscope-native-driver
-git pull --ff-only origin amscope-native-driver
+The remaining required Phase 2.2 regression must use a physical AmScope camera:
 
-cmake -S Camera/Amscope -B build/amscope \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
-  -DAMSCOPE_BUILD_QT_ADAPTER=ON \
-  -DAMSCOPE_BUILD_PREVIEW_APP=ON \
-  -DBUILD_TESTING=ON
+1. Open the camera and verify normal live RGB24 preview, including correct dimensions and stable image rendering.
+2. Capture a processed still. Verify actual width, height, strideBytes, payload byte count, and that the saved image is readable. Inspect the adjacent JSON sidecar: format name, significant/storage bit depths, format identifier fields, optional sequence, timestamp/timebase/clock domain, exposure/timebase, and Amcam extension fields.
+3. Verify optional metadata semantics against the device. A missing SDK validity flag must remain unavailable/null; a valid zero value must remain present as zero. Do not infer availability from a nonzero payload.
+4. Attempt RAW still capture only if the physical camera/SDK reports it as supported. For a returned RAW frame, verify the opaque amcam.fourcc identifier, significant source depth, storage-container width, stride, and payload size independently. Do not assume the identifier is PFNC or that the sensor's significant depth equals its storage width.
+5. Verify still capture leaves the live acquisition lifecycle intact, then exercise Stop, restart, and Close/reopen where practical. The still event waiter/pull path must remain separate from the live callback/event-queue/pull-worker path.
 
-cmake --build build/amscope --config Release --clean-first --parallel && \
-ctest --test-dir build/amscope --output-on-failure
-```
-
-Phase 2.1 has already passed locally (10/10) and on both CI architectures at `03f35bf`. The new eleventh target, `camera_common_frame_tests`, plus the migrated AmScope driver, Qt consumers, and hardware-rate executable must now pass this clean build. GitHub Actions must also pass on both Apple Silicon and Intel for the current Phase 2.2 source.
-
-This remains compile/automated validation only. Afterward, run the Phase 2 physical regression on an AmScope camera and verify RAW format identity, significant depth, storage width, stride/payload, and optional metadata on at least one RAW-capable camera. The broader 15-minute acquisition, USB negotiation inspection, and safe setting/still-capture regression remain useful follow-up measurements. Do not infer an exposure limit from the earlier pre-Start 70,000 µs value.
+The broader 15-minute continuous run, repeated lifecycle cycles, negotiated USB-speed inspection, and full SDK fault injection remain follow-up coverage. They are not reasons to reopen the accepted Phase 0/1 gates. Do not infer an exposure limit from the earlier pre-Start 70,000 µs value.
 
 ### Next-phase and parallel work
 
 - Keep the source-to-test mapping current in [the implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md); the current inventory and targeted smoke observation are refreshed.
 - Continue the C++/Swift behavior comparison and identify untested native SDK call paths without changing runtime behavior before Phase 0 acceptance.
 - The Phase 1 internal SDK-call seam is documented in [the native-driver test seam design](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md), including both post-Start maximum-rate model branches. Implement it only after Phase 0 hardware acceptance; it must remain private to implementation/testing and must not change the public camera abstraction.
-- After Phase 2.2 passes local and cross-architecture validation and the required physical-camera/RAW checks, proceed to Phase 2.3: classify remaining common errors and value types. Preserve native error codes and operation context; move only semantics genuinely shared by the backends.
+- After the Phase 2.2 physical-camera frame/metadata and RAW-capable-camera checks pass, proceed to Phase 2.3: classify remaining common errors and value types. Preserve native error codes and operation context; move only semantics genuinely shared by the backends.
 - Identify the external GenTL/GenApi C++ runtime and its supply/version/licensing constraints. Do not create a replacement implementation.
 
 ### Phase 1 post-acceptance hardening

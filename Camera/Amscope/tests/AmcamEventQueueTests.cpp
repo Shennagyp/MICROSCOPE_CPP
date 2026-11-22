@@ -66,6 +66,7 @@ int main() {
                 std::chrono::steady_clock::now() + std::chrono::seconds(1), event) ==
                 AmcamEventQueue::WaitResult::Signalled,
             "reconfiguration wake remains observable after queued SDK events");
+    queue.stop();
     require(queue.push(0x0004) == AmcamEventQueue::PushResult::Ignored,
             "stopped queue rejects late SDK callbacks");
 

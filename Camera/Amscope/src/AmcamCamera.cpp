@@ -1102,6 +1102,7 @@ struct AmcamCamera::Impl {
     bool hasModelDescriptor = false;
     std::optional<std::uint32_t> maximumSpeedLevel;
     std::optional<std::uint32_t> maximumFanSpeed;
+    std::uint32_t ioControlLineCount = 0;
     std::vector<Resolution> previewResolutions;
     std::thread worker;
     std::shared_ptr<FramePool> pool;
@@ -1790,6 +1791,8 @@ std::vector<CameraInfo> AmcamCamera::enumerate(CameraError* error) {
             info.maximumSpeedLevel = device.model->maxspeed;
             if ((device.model->flag & AMCAM_FLAG_FAN) != 0)
                 info.maximumFanSpeed = device.model->maxfanspeed;
+            info.ioControlLineCount =
+                std::min<std::uint32_t>(device.model->ioctrol, 4U);
             const unsigned n = std::min<unsigned>(device.model->preview, 16U);
             for (unsigned r = 0; r < n; ++r)
                 info.previewResolutions.push_back(
@@ -1832,6 +1835,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
     impl_->hasModelDescriptor = selected->hasModelDescriptor;
     impl_->maximumSpeedLevel = selected->maximumSpeedLevel;
     impl_->maximumFanSpeed = selected->maximumFanSpeed;
+    impl_->ioControlLineCount = selected->ioControlLineCount;
     impl_->previewResolutions = selected->previewResolutions;
 
     impl_->stopRequested.store(true, std::memory_order_release);
@@ -1889,6 +1893,7 @@ bool AmcamCamera::close(CameraError* error) {
         impl_->hasModelDescriptor = false;
         impl_->maximumSpeedLevel.reset();
         impl_->maximumFanSpeed.reset();
+        impl_->ioControlLineCount = 0;
         impl_->previewResolutions.clear();
     }
 
@@ -3256,6 +3261,428 @@ bool AmcamCamera::sendSoftwareTrigger(
 
     hr = Amcam_Trigger(impl_->handle, imageCount);
     return FAILED(hr) ? failHr(error, "Amcam_Trigger", hr) : true;
+}
+
+
+bool AmcamCamera::readIoLines(
+    std::vector<AmcamIoLineState>& result,
+    CameraError* error) {
+    if (error) *error = {};
+    result.clear();
+
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const CameraState currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming)) {
+        return fail(error, "readIoLines", -1,
+                    "The camera must be open to read hardware I/O lines.");
+    }
+    if (!impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::IoControl)) {
+        return fail(error, "readIoLines", -1,
+                    "The model profile denies hardware I/O control.");
+    }
+
+    const std::uint32_t count = std::min(impl_->ioControlLineCount, 4U);
+    result.reserve(count);
+
+    // The SDK uses optional per-line controls. A failed optional getter means
+    // that property is unavailable for this physical line; required line
+    // discovery (supported-mode mask) remains a hard error.
+    const auto readOptional = [&](unsigned line, unsigned type, int& value) {
+        value = 0;
+        return SUCCEEDED(Amcam_IoControl(impl_->handle, line, type, 0, &value));
+    };
+
+    for (std::uint32_t index = 0; index < count; ++index) {
+        AmcamIoLineState lineState;
+        lineState.line = static_cast<AmcamIoLine>(index);
+
+        int supportedModes = 0;
+        HRESULT hr = Amcam_IoControl(
+            impl_->handle, index, AMCAM_IOCONTROLTYPE_GET_SUPPORTEDMODE,
+            0, &supportedModes);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_IoControl(GET_SUPPORTEDMODE)", hr);
+        if (supportedModes < 0 || supportedModes > 3) {
+            return fail(error, "Amcam_IoControl(GET_SUPPORTEDMODE)", -1,
+                        "The SDK returned an invalid I/O supported-mode mask.");
+        }
+        lineState.supportedModes = static_cast<std::uint8_t>(supportedModes);
+
+        if (supportedModes == 0) {
+            result.push_back(std::move(lineState));
+            continue;
+        }
+
+        if (supportedModes == 1) {
+            lineState.direction = AmcamIoDirection::Input;
+        } else if (supportedModes == 2) {
+            lineState.direction = AmcamIoDirection::Output;
+        } else {
+            int direction = -1;
+            hr = Amcam_IoControl(
+                impl_->handle, index, AMCAM_IOCONTROLTYPE_GET_GPIODIR,
+                0, &direction);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_IoControl(GET_GPIODIR)", hr);
+            if (direction != 0 && direction != 1) {
+                return fail(error, "Amcam_IoControl(GET_GPIODIR)", -1,
+                            "The SDK returned an invalid GPIO direction.");
+            }
+            lineState.direction = static_cast<AmcamIoDirection>(direction);
+        }
+
+        int value = 0;
+        if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_FORMAT, value)) {
+            if (value < 0 || value > 5) {
+                return fail(error, "Amcam_IoControl(GET_FORMAT)", -1,
+                            "The SDK returned an unknown I/O signal format.");
+            }
+            lineState.signalFormat = static_cast<AmcamIoSignalFormat>(value);
+        }
+
+        if (*lineState.direction == AmcamIoDirection::Input) {
+            if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_INPUTACTIVATION, value)) {
+                if (value < 0 || value > 3) {
+                    return fail(error, "Amcam_IoControl(GET_INPUTACTIVATION)", -1,
+                                "The SDK returned an unknown input activation mode.");
+                }
+                lineState.inputActivation =
+                    static_cast<AmcamIoInputActivation>(value);
+            }
+            if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_DEBOUNCERTIME, value)) {
+                if (value < 0 || value > 20000) {
+                    return fail(error, "Amcam_IoControl(GET_DEBOUNCERTIME)", -1,
+                                "The SDK returned a debounce time outside [0, 20000] microseconds.");
+                }
+                lineState.debounceTimeMicroseconds =
+                    static_cast<std::uint32_t>(value);
+            }
+            if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_INPUT_STATE, value)) {
+                if (value != 0 && value != 1) {
+                    return fail(error, "Amcam_IoControl(GET_INPUT_STATE)", -1,
+                                "The SDK returned an invalid digital input level.");
+                }
+                lineState.inputHigh = value != 0;
+            }
+        } else {
+            if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_OUTPUTINVERTER, value)) {
+                if (value != 0 && value != 1) {
+                    return fail(error, "Amcam_IoControl(GET_OUTPUTINVERTER)", -1,
+                                "The SDK returned an invalid output-inverter state.");
+                }
+                lineState.outputInverted = value != 0;
+            }
+            if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_OUTPUTMODE, value)) {
+                if (value < 0 || value > 5) {
+                    return fail(error, "Amcam_IoControl(GET_OUTPUTMODE)", -1,
+                                "The SDK returned an unknown output mode.");
+                }
+                lineState.outputMode = static_cast<AmcamIoOutputMode>(value);
+                if (*lineState.outputMode == AmcamIoOutputMode::Strobe) {
+                    if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_STROBEDELAYMODE, value)) {
+                        if (value != 0 && value != 1) {
+                            return fail(error, "Amcam_IoControl(GET_STROBEDELAYMODE)", -1,
+                                        "The SDK returned an invalid strobe delay mode.");
+                        }
+                        lineState.strobeDelayMode = value != 0;
+                    }
+                    if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_STROBEDELAYTIME, value)) {
+                        if (value < 0 || value > AMCAM_IOCONTROL_DELAYTIME_MAX) {
+                            return fail(error, "Amcam_IoControl(GET_STROBEDELAYTIME)", -1,
+                                        "The SDK returned a strobe delay outside the documented range.");
+                        }
+                        lineState.strobeDelayMicroseconds =
+                            static_cast<std::uint32_t>(value);
+                    }
+                    if (readOptional(index, AMCAM_IOCONTROLTYPE_GET_STROBEDURATION, value)) {
+                        if (value < 0 || value > AMCAM_IOCONTROL_DELAYTIME_MAX) {
+                            return fail(error, "Amcam_IoControl(GET_STROBEDURATION)", -1,
+                                        "The SDK returned a strobe duration outside the documented range.");
+                        }
+                        lineState.strobeDurationMicroseconds =
+                            static_cast<std::uint32_t>(value);
+                    }
+                }
+            }
+        }
+
+        result.push_back(std::move(lineState));
+    }
+    return true;
+}
+
+bool AmcamCamera::configureIoLine(
+    const AmcamIoLineConfiguration& configuration,
+    CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+
+    if (!impl_->handle ||
+        impl_->state.load(std::memory_order_acquire) != CameraState::Open) {
+        return fail(error, "configureIoLine", -1,
+                    "Hardware I/O configuration can only change while the camera is open and stopped.");
+    }
+    if (!impl_->profileRegistry.allows(
+            impl_->modelCode, AmcamCameraFeature::IoControl)) {
+        return fail(error, "configureIoLine", -1,
+                    "The model profile denies hardware I/O control.");
+    }
+
+    const auto lineIndex = static_cast<std::uint32_t>(configuration.line);
+    if (lineIndex >= impl_->ioControlLineCount || lineIndex >= 4U) {
+        return fail(error, "configureIoLine", -1,
+                    "The requested I/O line is not reported by this model.");
+    }
+    if (!configuration.direction && !configuration.signalFormat &&
+        !configuration.outputInverted && !configuration.inputActivation &&
+        !configuration.debounceTimeMicroseconds && !configuration.outputMode &&
+        !configuration.strobeDelayMode && !configuration.strobeDelayMicroseconds &&
+        !configuration.strobeDurationMicroseconds) {
+        return fail(error, "configureIoLine", -1,
+                    "The I/O configuration contains no requested changes.");
+    }
+
+    int supportedModes = 0;
+    HRESULT hr = Amcam_IoControl(
+        impl_->handle, lineIndex, AMCAM_IOCONTROLTYPE_GET_SUPPORTEDMODE,
+        0, &supportedModes);
+    if (FAILED(hr))
+        return failHr(error, "Amcam_IoControl(GET_SUPPORTEDMODE)", hr);
+    if (supportedModes < 1 || supportedModes > 3) {
+        return fail(error, "configureIoLine", -1,
+                    "The selected I/O line has no configurable direction.");
+    }
+
+    int currentDirection = supportedModes == 1 ? 0 : 1;
+    if (supportedModes == 3) {
+        hr = Amcam_IoControl(
+            impl_->handle, lineIndex, AMCAM_IOCONTROLTYPE_GET_GPIODIR,
+            0, &currentDirection);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_IoControl(GET_GPIODIR)", hr);
+        if (currentDirection != 0 && currentDirection != 1) {
+            return fail(error, "Amcam_IoControl(GET_GPIODIR)", -1,
+                        "The SDK returned an invalid current GPIO direction.");
+        }
+    }
+
+    const int targetDirection = configuration.direction
+        ? static_cast<int>(*configuration.direction) : currentDirection;
+    if (targetDirection < 0 || targetDirection > 1 ||
+        (targetDirection == 0 && (supportedModes & 1) == 0) ||
+        (targetDirection == 1 && (supportedModes & 2) == 0)) {
+        return fail(error, "configureIoLine", -1,
+                    "The requested direction is not supported by this I/O line.");
+    }
+
+    if (targetDirection == 1 &&
+        (configuration.line == AmcamIoLine::GPIO0 ||
+         configuration.line == AmcamIoLine::GPIO1)) {
+        int triggerMode = 0;
+        hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_TRIGGER, &triggerMode);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_get_Option(TRIGGER)", hr);
+        if (triggerMode == static_cast<int>(AmcamTriggerMode::External) ||
+            triggerMode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware)) {
+            int triggerSource = -1;
+            hr = Amcam_IoControl(
+                impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE,
+                0, &triggerSource);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_IoControl(GET_TRIGGERSOURCE)", hr);
+            const int thisLineSource =
+                configuration.line == AmcamIoLine::GPIO0 ? 1 : 2;
+            if (triggerSource == thisLineSource) {
+                return fail(error, "configureIoLine", -1,
+                            "The selected GPIO is the active external-trigger input and cannot be configured as output.");
+            }
+        }
+    }
+
+    if (configuration.signalFormat &&
+        static_cast<unsigned>(*configuration.signalFormat) > 5U) {
+        return fail(error, "configureIoLine", -1,
+                    "The requested signal format is outside the documented enum.");
+    }
+    if (configuration.outputInverted && targetDirection != 1) {
+        return fail(error, "configureIoLine", -1,
+                    "Output inversion requires an output line.");
+    }
+    if ((configuration.inputActivation || configuration.debounceTimeMicroseconds) &&
+        targetDirection != 0) {
+        return fail(error, "configureIoLine", -1,
+                    "Input activation and debounce require an input line.");
+    }
+    if (configuration.inputActivation &&
+        static_cast<unsigned>(*configuration.inputActivation) > 3U) {
+        return fail(error, "configureIoLine", -1,
+                    "The requested input activation is outside the documented enum.");
+    }
+    if (configuration.debounceTimeMicroseconds &&
+        *configuration.debounceTimeMicroseconds > 20000U) {
+        return fail(error, "configureIoLine", -1,
+                    "Debounce time must be within [0, 20000] microseconds.");
+    }
+    if (configuration.outputMode &&
+        (targetDirection != 1 ||
+         static_cast<unsigned>(*configuration.outputMode) > 5U)) {
+        return fail(error, "configureIoLine", -1,
+                    "The requested output mode requires an output line and a documented mode.");
+    }
+    if ((configuration.strobeDelayMode || configuration.strobeDelayMicroseconds ||
+         configuration.strobeDurationMicroseconds) && targetDirection != 1) {
+        return fail(error, "configureIoLine", -1,
+                    "Strobe timing requires an output line.");
+    }
+    if ((configuration.strobeDelayMicroseconds &&
+         *configuration.strobeDelayMicroseconds > AMCAM_IOCONTROL_DELAYTIME_MAX) ||
+        (configuration.strobeDurationMicroseconds &&
+         *configuration.strobeDurationMicroseconds > AMCAM_IOCONTROL_DELAYTIME_MAX)) {
+        return fail(error, "configureIoLine", -1,
+                    "Strobe delay and duration must be within [0, 5000000] microseconds.");
+    }
+
+    int effectiveOutputMode = configuration.outputMode
+        ? static_cast<int>(*configuration.outputMode) : -1;
+    if (!configuration.outputMode &&
+        (configuration.strobeDelayMode || configuration.strobeDelayMicroseconds ||
+         configuration.strobeDurationMicroseconds)) {
+        hr = Amcam_IoControl(
+            impl_->handle, lineIndex, AMCAM_IOCONTROLTYPE_GET_OUTPUTMODE,
+            0, &effectiveOutputMode);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_IoControl(GET_OUTPUTMODE)", hr);
+    }
+    if ((configuration.strobeDelayMode || configuration.strobeDelayMicroseconds ||
+         configuration.strobeDurationMicroseconds) &&
+        effectiveOutputMode != static_cast<int>(AmcamIoOutputMode::Strobe)) {
+        return fail(error, "configureIoLine", -1,
+                    "Strobe timing can only be changed when the resulting output mode is Strobe.");
+    }
+
+    struct Change {
+        unsigned getType;
+        unsigned setType;
+        int oldValue;
+        int newValue;
+        const char* name;
+    };
+    std::vector<Change> changes;
+    const auto prepareChange = [&](unsigned getType, unsigned setType,
+                                   int newValue, const char* name) -> bool {
+        int oldValue = 0;
+        const HRESULT getHr = Amcam_IoControl(
+            impl_->handle, lineIndex, getType, 0, &oldValue);
+        if (FAILED(getHr)) {
+            failHr(error, name, getHr);
+            return false;
+        }
+        if (oldValue != newValue)
+            changes.push_back({getType, setType, oldValue, newValue, name});
+        return true;
+    };
+
+    // Direction first: subsequent input/output-specific settings apply to the
+    // requested resulting direction. The old value was captured before writes.
+    if (configuration.direction && supportedModes == 3 &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_GPIODIR,
+                       AMCAM_IOCONTROLTYPE_SET_GPIODIR,
+                       targetDirection, "Amcam_IoControl(SET_GPIODIR)"))
+        return false;
+    if (configuration.signalFormat &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_FORMAT,
+                       AMCAM_IOCONTROLTYPE_SET_FORMAT,
+                       static_cast<int>(*configuration.signalFormat),
+                       "Amcam_IoControl(SET_FORMAT)"))
+        return false;
+    if (configuration.inputActivation &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_INPUTACTIVATION,
+                       AMCAM_IOCONTROLTYPE_SET_INPUTACTIVATION,
+                       static_cast<int>(*configuration.inputActivation),
+                       "Amcam_IoControl(SET_INPUTACTIVATION)"))
+        return false;
+    if (configuration.debounceTimeMicroseconds &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_DEBOUNCERTIME,
+                       AMCAM_IOCONTROLTYPE_SET_DEBOUNCERTIME,
+                       static_cast<int>(*configuration.debounceTimeMicroseconds),
+                       "Amcam_IoControl(SET_DEBOUNCERTIME)"))
+        return false;
+    if (configuration.outputInverted &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_OUTPUTINVERTER,
+                       AMCAM_IOCONTROLTYPE_SET_OUTPUTINVERTER,
+                       *configuration.outputInverted ? 1 : 0,
+                       "Amcam_IoControl(SET_OUTPUTINVERTER)"))
+        return false;
+    if (configuration.outputMode &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_OUTPUTMODE,
+                       AMCAM_IOCONTROLTYPE_SET_OUTPUTMODE,
+                       effectiveOutputMode, "Amcam_IoControl(SET_OUTPUTMODE)"))
+        return false;
+    if (configuration.strobeDelayMode &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_STROBEDELAYMODE,
+                       AMCAM_IOCONTROLTYPE_SET_STROBEDELAYMODE,
+                       *configuration.strobeDelayMode ? 1 : 0,
+                       "Amcam_IoControl(SET_STROBEDELAYMODE)"))
+        return false;
+    if (configuration.strobeDelayMicroseconds &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_STROBEDELAYTIME,
+                       AMCAM_IOCONTROLTYPE_SET_STROBEDELAYTIME,
+                       static_cast<int>(*configuration.strobeDelayMicroseconds),
+                       "Amcam_IoControl(SET_STROBEDELAYTIME)"))
+        return false;
+    if (configuration.strobeDurationMicroseconds &&
+        !prepareChange(AMCAM_IOCONTROLTYPE_GET_STROBEDURATION,
+                       AMCAM_IOCONTROLTYPE_SET_STROBEDURATION,
+                       static_cast<int>(*configuration.strobeDurationMicroseconds),
+                       "Amcam_IoControl(SET_STROBEDURATION)"))
+        return false;
+
+    const auto rollback = [&](std::size_t attempted, CameraError& original) {
+        while (attempted > 0) {
+            const auto& change = changes[--attempted];
+            const HRESULT setHr = Amcam_IoControl(
+                impl_->handle, lineIndex, change.setType, change.oldValue, nullptr);
+            int readback = 0;
+            const HRESULT getHr = SUCCEEDED(setHr)
+                ? Amcam_IoControl(impl_->handle, lineIndex,
+                                  change.getType, 0, &readback)
+                : setHr;
+            if (FAILED(setHr) || FAILED(getHr) || readback != change.oldValue) {
+                original.message += std::string(" Rollback failed for ") +
+                    change.name + ".";
+            }
+        }
+    };
+
+    for (std::size_t index = 0; index < changes.size(); ++index) {
+        const auto& change = changes[index];
+        const HRESULT setHr = Amcam_IoControl(
+            impl_->handle, lineIndex, change.setType, change.newValue, nullptr);
+        int readback = 0;
+        const HRESULT getHr = SUCCEEDED(setHr)
+            ? Amcam_IoControl(impl_->handle, lineIndex,
+                              change.getType, 0, &readback)
+            : setHr;
+        if (FAILED(setHr) || FAILED(getHr) || readback != change.newValue) {
+            CameraError original;
+            if (FAILED(setHr)) {
+                original = {static_cast<std::int32_t>(setHr), change.name,
+                            "The SDK rejected an I/O-line configuration write."};
+            } else if (FAILED(getHr)) {
+                original = {static_cast<std::int32_t>(getHr), change.name,
+                            "The SDK could not read back an I/O-line configuration write."};
+            } else {
+                original = {-1, change.name,
+                            "I/O-line configuration readback did not match the request."};
+            }
+            rollback(index + 1, original);
+            if (error) *error = std::move(original);
+            return false;
+        }
+    }
+    return true;
 }
 
 bool AmcamCamera::readStillResolutions(

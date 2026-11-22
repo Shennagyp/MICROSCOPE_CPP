@@ -1075,6 +1075,7 @@ struct AmcamCamera::Impl {
     std::atomic<std::uint32_t> activeSdkCallbacks{0};
     std::atomic<std::uint64_t> dropped{0};
     std::atomic<std::uint64_t> pulledFrames{0};
+    std::atomic<std::uint64_t> imageEvents{0};
 
     detail::AmcamEventQueue eventQueue;
     std::mutex stillCaptureMutex;
@@ -1439,6 +1440,8 @@ struct AmcamCamera::Impl {
             [[fallthrough]];
         case AMCAM_EVENT_IMAGE:
         case AMCAM_EVENT_HEARTBEAT:
+            if (event == AMCAM_EVENT_IMAGE)
+                self->imageEvents.fetch_add(1, std::memory_order_relaxed);
             try {
                 (void)self->eventQueue.push(event);
             } catch (...) {
@@ -2040,6 +2043,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
     impl_->pulledFrames.store(0, std::memory_order_relaxed);
+    impl_->imageEvents.store(0, std::memory_order_relaxed);
 
     int configuredTriggerMode = 0;
     CameraError triggerHealthError;
@@ -2431,6 +2435,9 @@ std::uint64_t AmcamCamera::droppedFrames() const noexcept {
 }
 std::uint64_t AmcamCamera::framesPulled() const noexcept {
     return impl_->pulledFrames.load(std::memory_order_relaxed);
+}
+std::uint64_t AmcamCamera::imageEventsReceived() const noexcept {
+    return impl_->imageEvents.load(std::memory_order_relaxed);
 }
 
 bool AmcamCamera::setResolution(std::uint32_t index, CameraError* error) {

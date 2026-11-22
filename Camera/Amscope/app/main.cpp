@@ -203,8 +203,6 @@ public:
 
         accessoryGroup_->hide();
 
-        auto* settingsColumn = new QVBoxLayout();        accessoryGroup_->hide();
-
         auto* settingsColumn = new QVBoxLayout();
         settingsColumn->addWidget(featureStatus_);
         settingsColumn->addWidget(refreshFeaturesButton_);

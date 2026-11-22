@@ -151,6 +151,6 @@ struct AstroAutoFocuserState {
     std::int32_t stepSize = 0;
     bool moving = false;
     std::optional<std::int32_t> temperatureTenthsC;
-    std::optional<std::int32_t> ambientTemperatureTenthsC;
+    std::optional<std::int32_t> ambientTemperatureSdkUnits;
 };
 } // namespace amscope

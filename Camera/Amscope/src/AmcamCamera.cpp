@@ -2428,7 +2428,7 @@ bool AmcamCamera::readAstroAutoFocuserState(
     int ambientTemperature = 0;
     if (query(AMCAM_AAF_GETAMBIENTTEMP, ambientTemperature,
               "Amcam_AAF(GETAMBIENTTEMP)", false))
-        result.ambientTemperatureTenthsC = ambientTemperature;
+        result.ambientTemperatureSdkUnits = ambientTemperature;
     return true;
 }
 

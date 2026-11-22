@@ -114,7 +114,7 @@ integration and does not modify vendor sample code.
   millisecond durations; guide-state reads preserve the SDK's S_OK (guiding)
   versus S_FALSE (idle) distinction. Astronomy auto-focus is a third independent
   accessory API: it exposes position, travel range, step size, moving state and
-  optional temperature telemetry, plus separate absolute Move and Halt
+  optional focuser temperature (0.1 °C) and ambient telemetry in raw SDK units, plus separate absolute Move and Halt
   commands. It uses the SDK AAF actions and the AstroAutoFocuser model flag,
   not the lens AF/focus-motor APIs. These command surfaces do not alter preview
   acquisition or trigger mode and are not ordinary camera feature settings.

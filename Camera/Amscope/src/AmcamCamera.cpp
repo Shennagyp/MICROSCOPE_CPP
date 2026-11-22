@@ -115,23 +115,36 @@ struct AmcamCamera::Impl {
     void reportFatal(CameraError error) noexcept {
         if (stopRequested.load(std::memory_order_acquire)) return;
 
-        {
-            std::lock_guard<std::mutex> lock(apiMutex);
-            if (handle && sdkStarted.load(std::memory_order_acquire)) {
-                const HRESULT hr = Amcam_Stop(handle);
-                if (SUCCEEDED(hr))
-                    sdkStarted.store(false, std::memory_order_release);
-                else
-                    error.message += " " + hrMessage("Amcam_Stop", hr);
-            }
-        }
-
-        if (stopRequested.load(std::memory_order_acquire)) return;
+        // Publish the fault before attempting SDK cleanup. If the vendor Stop
+        // call is slow, the application must still learn that frames have
+        // stopped and that this session is no longer healthy.
         state.store(CameraState::Faulted, std::memory_order_release);
         try {
             if (onError) onError(error);
         } catch (...) {
             // Observer exceptions must not unwind through the acquisition thread.
+        }
+
+        bool stopFailed = false;
+        {
+            std::lock_guard<std::mutex> lock(apiMutex);
+            if (handle && sdkStarted.load(std::memory_order_acquire)) {
+                const HRESULT hr = Amcam_Stop(handle);
+                if (SUCCEEDED(hr)) {
+                    sdkStarted.store(false, std::memory_order_release);
+                } else {
+                    error.message += " " + hrMessage("Amcam_Stop", hr);
+                    stopFailed = true;
+                }
+            }
+        }
+
+        if (stopFailed && !stopRequested.load(std::memory_order_acquire)) {
+            try {
+                if (onError) onError(error);
+            } catch (...) {
+                // Observer exceptions must not unwind through the acquisition thread.
+            }
         }
     }
 

@@ -186,7 +186,7 @@ The above status is an evidence snapshot, not a claim that the branch cannot hav
 
 ### Latest branch-head CI evidence (documentation-only revision)
 
-The latest reviewed branch head is `4de57806a898799173adb04af1272e00ff00fb24`. GitHub Actions workflow [#45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740) completed successfully on Intel x86_64 and Apple Silicon arm64. All eight registered CTest tests passed on both architectures. The launcher reported zero cameras in the hosted runner. This updates the CI evidence only; it does not close the Phase 0 physical-camera gate.
+The latest reviewed source/documentation branch head is `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. GitHub Actions workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867) completed successfully on Intel x86_64 and Apple Silicon arm64. All eight registered CTest tests passed on both architectures. The launcher reported zero cameras in the hosted runner. The run verifies the code at that branch head; it does not close the Phase 0 physical-camera gate.
 
 
 ## 5. Phase 0 — Freeze and verify the baseline
@@ -253,9 +253,11 @@ Implementation commits include:
 - `ee700a1016e4bf108255daab67cedb93b96bee83` — separate SDK image events, pulls, and paints; display exposure.
 - `41d74718fa9a0be37060889b5d2bfcdbd6892e0f` — retain the SDK error code if maximum-rate setup fails.
 
-No local build/test or physical-camera retest has yet been performed for these changes. GitHub Actions for the current source revisions was still running at the time of this update; the latest result must be checked before requesting the user's build.
+No assistant-side local build or CTest run was performed for these changes. The user subsequently reported a successful clean local rebuild after deleting the stale `build/amscope` generated tree and rerunning `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh`. The application launched, and the live `Resolution` feature in the feature panel successfully changed camera resolution. The earlier `Operation not permitted` failure while replacing `AmcamCamera.cpp.o` did not recur after the clean build.
 
-Phase 0 remains OPEN until the user rebuilds, confirms actual live dimensions are 640×480, records event/pull/paint FPS and exposure, and completes the full hardware baseline including the 15-minute continuous run.
+This targeted physical-camera smoke result establishes that the live resolution setting path works in the user's setup. The exact tested local commit, camera/model identity, selected resolution index, resulting frame dimensions, still-capture dimensions, and event/pull/paint FPS values were not supplied. It does not establish the 640×480 throughput target, the still-resolution toolbar path, other feature setters, or lifecycle/recovery behavior.
+
+Phase 0 remains OPEN. The next hardware step is to record the actual 640×480 live frame dimensions and event/pull/paint FPS, exposure, sequence progression, and pool drops over a measured interval. Then complete Section 3.2, including the 15-minute continuous acquisition run, safe setting readback/restoration, Stop/Start, Close/reopen, and still capture where supported. Save the exact-commit hardware record under `docs/testing/hardware/`.
 
 ### Exit criteria
 

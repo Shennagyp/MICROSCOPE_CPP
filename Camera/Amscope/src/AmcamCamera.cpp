@@ -1119,8 +1119,9 @@ struct AmcamCamera::Impl {
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
 
 
-    // Must be called after Amcam_StartPullModeWithCallback, as required
-    // by the vendor's frame-rate configuration procedure.
+    // Implements the vendor's maximum-rate procedure:
+    // https://touptekphotonics.com/FAQ/73
+    // This must run after Amcam_StartPullModeWithCallback.
     bool configureMaximumFrameRateLocked(CameraError* error) {
         if (!handle)
             return fail(error, "configureMaximumFrameRate", -1,
@@ -2374,7 +2375,9 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             if (!impl_->flushStoppedFrameCaches(&flushError))
                 message += " " + flushError.message;
         }
-        return fail(error, "configure maximum frame rate", -1, std::move(message));
+        return fail(
+            error, "configure maximum frame rate",
+            frameRateConfigurationError.vendorCode, std::move(message));
     }
 
     try {

@@ -303,6 +303,43 @@ To run only the SDK camera-enumeration smoke check after building:
 ./scripts/run-amscope.sh --list-cameras
 ```
 
+### Physical-camera performance test
+
+Run the dedicated test from the repository root:
+
+```sh
+AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh \
+  --hardware-rate-test \
+  --resolution 640x480 \
+  --warmup 3 \
+  --duration 15 \
+  --target-fps 100
+```
+
+The launcher builds the test executable and opens a small live preview window.
+Keep that window visible and do not minimize it during the measurement. The
+test selects the requested mode through the native `AmcamResolutionIndex`
+feature, verifies the feature readback, and restores the original resolution
+after Stop. It reports JSON to stdout with:
+
+- SDK image-event FPS.
+- Successful `Amcam_PullImageV4` FPS.
+- Frame callback/delivery FPS.
+- Unique frame paint FPS from the test preview widget.
+- Actual frame dimensions, sequence range, exposure statistics, and dropped frames.
+- Stop, resolution-restoration, and Close results.
+
+The test expects RGB24 live preview; it refuses to start when RAW sensor output
+is enabled because this test specifically measures the RGB preview/render path.
+The default device is index 0; use `--device-index N` when more than one camera
+is connected. The default target is 100 pulled frames per second. Exit code 0
+means the operational checks passed and the pull-rate target was met; exit code
+10 means the test ran and reported measurements but the target was not met;
+other non-zero codes indicate setup or operational failure.
+
+This is a physical-camera test executable, deliberately not registered with
+CTest and not run by hosted CI (which has no camera attached).
+
 The preview UI lets you refresh the device list, open a selected camera, start
 or stop acquisition, close the session, and inspect/edit the currently available
 camera features through descriptor-generated controls. Settings use the common

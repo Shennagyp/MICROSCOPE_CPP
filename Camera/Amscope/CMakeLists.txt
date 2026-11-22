@@ -58,6 +58,7 @@ add_library(amscope_driver SHARED
     src/AmcamCamera.cpp
     src/AmcamCameraProfiles.cpp
     src/AmcamEventQueue.h
+    include/amscope/detail/FrameStallWatchdog.h
     include/amscope/AmcamCamera.h
     include/amscope/AmcamCameraProfiles.h
     include/amscope/CameraTypes.h)
@@ -116,6 +117,14 @@ if(BUILD_TESTING)
     target_compile_features(amscope_event_queue_tests PRIVATE cxx_std_17)
     target_include_directories(amscope_event_queue_tests PRIVATE src)
     add_test(NAME amscope_event_queue_tests COMMAND amscope_event_queue_tests)
+
+    add_executable(amscope_frame_stall_watchdog_tests
+        tests/AmcamFrameStallWatchdogTests.cpp
+        include/amscope/detail/FrameStallWatchdog.h)
+    target_compile_features(amscope_frame_stall_watchdog_tests PRIVATE cxx_std_17)
+    target_include_directories(amscope_frame_stall_watchdog_tests PRIVATE include)
+    add_test(NAME amscope_frame_stall_watchdog_tests
+        COMMAND amscope_frame_stall_watchdog_tests)
 endif()
 
 if(AMSCOPE_BUILD_QT_ADAPTER OR AMSCOPE_BUILD_PREVIEW_APP)

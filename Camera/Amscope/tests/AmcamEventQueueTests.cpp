@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <thread>
@@ -40,6 +41,31 @@ int main() {
     queue.stop();
     require(queue.waitNext(event) == AmcamEventQueue::WaitResult::Stopped,
             "stopped queue wakes and terminates the consumer");
+
+    queue.reset();
+    const auto timeoutStart = std::chrono::steady_clock::now();
+    require(queue.waitNextUntil(
+                timeoutStart + std::chrono::milliseconds(2), event) ==
+                AmcamEventQueue::WaitResult::Timeout,
+            "timed wait returns Timeout when no event or wake signal arrives");
+
+    queue.signal();
+    require(queue.waitNextUntil(
+                std::chrono::steady_clock::now() + std::chrono::seconds(1), event) ==
+                AmcamEventQueue::WaitResult::Signalled,
+            "signal wakes the timed waiter so watchdog inputs can be recalculated");
+
+    queue.signal();
+    require(queue.push(0x0004) == AmcamEventQueue::PushResult::Queued,
+            "SDK event is accepted while a reconfiguration wake is pending");
+    require(queue.waitNextUntil(
+                std::chrono::steady_clock::now() + std::chrono::seconds(1), event) ==
+                AmcamEventQueue::WaitResult::Event && event == 0x0004,
+            "queued SDK events take priority over a reconfiguration wake");
+    require(queue.waitNextUntil(
+                std::chrono::steady_clock::now() + std::chrono::seconds(1), event) ==
+                AmcamEventQueue::WaitResult::Signalled,
+            "reconfiguration wake remains observable after queued SDK events");
     require(queue.push(0x0004) == AmcamEventQueue::PushResult::Ignored,
             "stopped queue rejects late SDK callbacks");
 

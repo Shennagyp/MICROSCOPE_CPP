@@ -16,6 +16,12 @@ integration and does not modify vendor sample code.
 - E_PENDING is a transient callback/frame-readiness race. Disconnect, generic
   SDK error, no-frame timeout, no-packet timeout and event-queue overflow are
   fatal acquisition conditions.
+- A frame-health watchdog faults a silent stream even when the SDK stops
+  delivering callbacks without a fatal event. It uses the larger of five
+  seconds or three times the last known exposure plus a one-second grace
+  period. Only a successfully pulled frame resets the health deadline;
+  E_PENDING and image notifications alone do not. A verified exposure change
+  wakes the timed event wait so its deadline is recalculated immediately.
 - Stop and Close are never called from the vendor callback. A failed user Stop
   while Streaming restores the previous stream and retains callback/frame state.
   The Qt frame-delivery gate is reactivated for that same acquisition after a

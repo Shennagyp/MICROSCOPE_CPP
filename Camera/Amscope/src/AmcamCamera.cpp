@@ -2,6 +2,7 @@
 #include "amcam.h"
 #include "amscope/AmcamCamera.h"
 #include "AmcamEventQueue.h"
+#include "amscope/detail/FrameStallWatchdog.h"
 #include "camera/CameraFeatureValidation.h"
 
 #include <algorithm>
@@ -371,6 +372,7 @@ struct AmcamCamera::Impl {
     std::atomic<CameraState> state{CameraState::Closed};
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> sdkStarted{false};
+    std::atomic<std::uint32_t> expectedExposureMicroseconds{0};
     std::atomic<bool> frameCacheFlushPending{false};
     std::atomic<std::uint32_t> activeSdkCallbacks{0};
     std::atomic<std::uint64_t> dropped{0};
@@ -394,6 +396,14 @@ struct AmcamCamera::Impl {
     ErrorCallback onError;
 
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
+
+    void updateExpectedExposure(unsigned exposureMicroseconds) noexcept {
+        if (exposureMicroseconds == 0) return;
+        const auto previous = expectedExposureMicroseconds.exchange(
+            exposureMicroseconds, std::memory_order_acq_rel);
+        if (previous != exposureMicroseconds)
+            eventQueue.signal();
+    }
 
     // A successful Amcam_Stop requires both the camera-DDR and SDK-DLL
     // frame caches to be flushed before pull mode is started again.
@@ -512,6 +522,7 @@ struct AmcamCamera::Impl {
 
     void acquisitionLoop(const std::shared_ptr<FramePool>& activePool) noexcept {
         g_acquisitionOwner = this;
+        auto lastFrameAt = std::chrono::steady_clock::now();
 
         // The outer loop is important: a fatal event can race a user Stop.
         // If Stop owns the transition, reportFatal declines ownership and the
@@ -522,7 +533,42 @@ struct AmcamCamera::Impl {
 
             for (;;) {
                 std::uint32_t event = 0;
-                const auto waitResult = eventQueue.waitNext(event);
+                auto waitResult = eventQueue.waitNextUntil(
+                    lastFrameAt + detail::frameStallTimeout(
+                        expectedExposureMicroseconds.load(std::memory_order_acquire)),
+                    event);
+                if (waitResult == detail::AmcamEventQueue::WaitResult::Timeout) {
+                    // During a user-owned Stop, keep consuming/suppressing SDK
+                    // events until Stop either succeeds or restores Streaming.
+                    if (stopRequested.load(std::memory_order_acquire) &&
+                        state.load(std::memory_order_acquire) == CameraState::Stopping) {
+                        waitResult = eventQueue.waitNext(event);
+                    } else {
+                        const auto now = std::chrono::steady_clock::now();
+                        const auto exposure =
+                            expectedExposureMicroseconds.load(std::memory_order_acquire);
+                        if (detail::frameStalled(now, lastFrameAt, exposure)) {
+                            const auto stalledMilliseconds =
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    now - lastFrameAt).count();
+                            fatal = true;
+                            error = {static_cast<std::int32_t>(E_TIMEOUT),
+                                     "Amcam frame watchdog",
+                                     "No preview frame event received for " +
+                                         std::to_string(stalledMilliseconds) +
+                                         " ms (last exposure " +
+                                         std::to_string(exposure) +
+                                         " us; watchdog threshold " +
+                                         std::to_string(
+                                             detail::frameStallTimeout(exposure).count()) +
+                                         " ms)."};
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if (waitResult == detail::AmcamEventQueue::WaitResult::Signalled)
+                    continue;
                 if (waitResult == detail::AmcamEventQueue::WaitResult::Stopped) {
                     if (!stopRequested.load(std::memory_order_acquire)) {
                         fatal = true;
@@ -620,6 +666,13 @@ struct AmcamCamera::Impl {
                              "Amcam_PullImageV4", hrMessage("Amcam_PullImageV4", hr)};
                     break;
                 }
+
+                // Only a successfully pulled frame proves acquisition progress.
+                // An IMAGE callback or E_PENDING result alone does not reset health.
+                lastFrameAt = std::chrono::steady_clock::now();
+                if (info.v3.expotime != 0)
+                    expectedExposureMicroseconds.store(
+                        info.v3.expotime, std::memory_order_release);
 
                 // Keep draining the SDK even when all frame leases are retained.
                 // Pull into the private discard buffer and account for the drop.
@@ -919,6 +972,17 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             return fail(error, "start", -1, "Camera handle is not open.");
         }
         hr = Amcam_get_FinalSize(impl_->handle, &width, &height);
+        if (SUCCEEDED(hr)) {
+            unsigned exposureMicroseconds = 0;
+            if (SUCCEEDED(Amcam_get_ExpoTime(
+                    impl_->handle, &exposureMicroseconds))) {
+                impl_->expectedExposureMicroseconds.store(
+                    exposureMicroseconds, std::memory_order_release);
+            } else {
+                impl_->expectedExposureMicroseconds.store(
+                    0, std::memory_order_release);
+            }
+        }
     }
     if (FAILED(hr)) {
         impl_->state.store(CameraState::Open, std::memory_order_release);
@@ -1066,6 +1130,9 @@ bool AmcamCamera::setAutoExposureMode(AmcamAutoExposureMode mode, CameraError* e
     if (readback != rawMode)
         return fail(error, "setAutoExposureMode", -1,
                     "Auto-exposure readback did not match the requested mode.");
+    unsigned exposureMicroseconds = 0;
+    if (SUCCEEDED(Amcam_get_ExpoTime(impl_->handle, &exposureMicroseconds)))
+        impl_->updateExpectedExposure(exposureMicroseconds);
     return true;
 }
 
@@ -1098,6 +1165,7 @@ bool AmcamCamera::setExposureTime(std::uint32_t time, CameraError* error) {
     if (readback != time)
         return fail(error, "setExposureTime", -1,
                     "Exposure-time readback did not match the requested value.");
+    impl_->updateExpectedExposure(readback);
     return true;
 }
 
@@ -1160,6 +1228,7 @@ bool AmcamCamera::readExposure(ExposureSettings& settings, CameraError* error) {
     settings.minimumGainPercent = minGain;
     settings.maximumGainPercent = maxGain;
     settings.defaultGainPercent = defaultGain;
+    impl_->updateExpectedExposure(time);
     return true;
 }
 
@@ -1277,6 +1346,7 @@ AmcamCamera::readFeature(std::string_view name) {
         unsigned value = 0;
         const HRESULT hr = Amcam_get_ExpoTime(impl_->handle, &value);
         if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_ExpoTime", hr);
+        impl_->updateExpectedExposure(value);
         return CameraFeatureValue{static_cast<std::int64_t>(value)};
     }
     if (name == "AmcamAnalogGainPercent") {
@@ -1392,6 +1462,9 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (readback != raw)
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "Auto-exposure readback did not match the requested mode.");
+        unsigned exposureMicroseconds = 0;
+        if (SUCCEEDED(Amcam_get_ExpoTime(impl_->handle, &exposureMicroseconds)))
+            impl_->updateExpectedExposure(exposureMicroseconds);
         return std::monostate{};
     }
 
@@ -1421,6 +1494,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (readback != static_cast<unsigned>(requested))
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "Exposure-time readback did not match the requested value.");
+        impl_->updateExpectedExposure(readback);
         return std::monostate{};
     }
 

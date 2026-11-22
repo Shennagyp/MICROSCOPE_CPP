@@ -10,6 +10,13 @@
 
 namespace camera {
 
+// Backend-neutral feature identifier for selecting the RAW output storage
+// container. Enumeration values are "8-bit" and "16-bit"; this describes
+// storage mode, not the sensor's significant ADC precision.
+inline constexpr std::string_view RawStorageBitDepthFeature =
+    "RawStorageBitDepth";
+
+
 enum class CameraFeatureKind : std::uint8_t {
     Boolean,
     Integer,

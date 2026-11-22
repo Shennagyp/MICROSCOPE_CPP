@@ -10,14 +10,15 @@ integration and does not modify vendor sample code.
 - One AmcamCamera owns one HAmcam handle for the complete open session.
 - Enumeration copies SDK device data into CameraInfo; open uses the opaque
   device id returned by enumeration. Re-enumerate after a disconnect/replug.
-- Acquisition follows the vendor's working `demowait` pattern: pull mode
-  starts with a null SDK event callback, and a dedicated C++ worker retrieves
-  frames through `Amcam_WaitImageV3`. The worker uses the vendor sample's
-  1,000 ms wait interval and does not mix callback delivery with WaitImage.
+- Acquisition follows the vendor's callback-based pull pattern:
+  `Amcam_StartPullModeWithCallback` receives an SDK event callback. The
+  callback only queues image/error notifications; a dedicated C++ worker
+  retrieves each notified frame using `Amcam_PullImageV4`. No WaitImage call
+  is mixed into this acquisition path.
 - RGB24 uses zero row padding (`rowPitch = -1`), so each frame has a tightly
   packed `width * 3` stride. A frame-health watchdog faults continuous preview
-  when no frame arrives for at least 5 seconds, or three times the last known
-  exposure plus a 1-second grace period, whichever is longer.
+  when no frame event/frame arrives for at least 5 seconds, or three times the
+  last known exposure plus a 1-second grace period, whichever is longer.
 - Frames are packed RGB24 (rowPitch = -1, stride = width * 3) and include
   sequence, timestamp, exposure, gain, and black-level metadata.
 - Four reusable buffers are exposed as immutable FramePtr leases. If every
@@ -92,7 +93,9 @@ own the camera.
 
 The vendor-only baseline bypasses `AmcamCamera`, the Qt adapter, and the
 preview application. It reproduces the bundled vendor `demowait` sample:
-a null event callback and `Amcam_WaitImageV3`.
+a null event callback and `Amcam_WaitImageV3`. This deliberately provides a
+separate reference path against the production callback-based `PullImageV4`
+implementation.
 
 Run from the repository root:
 

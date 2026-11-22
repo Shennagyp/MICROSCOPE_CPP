@@ -858,8 +858,7 @@ private:
 
         const auto requestId = camera_.requestStillCapture(
             request,
-            [this, captureMode = request.mode](
-                   amscope::QtAmcamCamera::FeatureRequestId,
+            [this](amscope::QtAmcamCamera::FeatureRequestId,
                    amscope::QtAmcamCamera::StillCaptureResult result) {
                 stillCapturePending_ = false;
                 updateControls(camera_.state());

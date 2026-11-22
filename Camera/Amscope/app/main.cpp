@@ -82,7 +82,7 @@ public:
     void setMessage(QString message) {
         image_ = QImage{};
         frame_.reset();
-        hasPaintedSequence_ = false;
+        hasUnpaintedFrame_ = false;
         message_ = std::move(message);
         update();
     }
@@ -111,7 +111,13 @@ public:
 
         if (image_.isNull()) {
             frame_.reset();
+            hasUnpaintedFrame_ = false;
             message_ = QStringLiteral("No renderable RGB frame");
+        } else {
+            // Count a frame when this newly submitted image is actually painted.
+            // Do not use the SDK sequence field as a uniqueness token: some
+            // supported devices leave AmcamFrameInfoV3::seq at zero.
+            hasUnpaintedFrame_ = true;
         }
         update();
     }
@@ -139,9 +145,8 @@ protected:
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
         painter.drawImage(targetRect, image_);
 
-        if (!hasPaintedSequence_ || frame_->sequence != lastPaintedSequence_) {
-            lastPaintedSequence_ = frame_->sequence;
-            hasPaintedSequence_ = true;
+        if (hasUnpaintedFrame_) {
+            hasUnpaintedFrame_ = false;
             if (framePresentedCallback_)
                 framePresentedCallback_();
         }
@@ -153,8 +158,7 @@ private:
     QImage image_;
     QString message_ = QStringLiteral("Select a camera and press Open, then Start.");
     std::function<void()> framePresentedCallback_;
-    std::uint32_t lastPaintedSequence_ = 0;
-    bool hasPaintedSequence_ = false;
+    bool hasUnpaintedFrame_ = false;
 };
 
 int listCameras() {

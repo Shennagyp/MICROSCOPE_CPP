@@ -2,7 +2,7 @@
 
 **Source snapshot:** `15be30850ea573dd06ffe3128befcdb27ce2e974` (latest implementation-bearing source: host-revision paint measurement, configured-exposure/speed diagnostics)  
 **Branch head reviewed for this inventory refresh:** `c98be94d115a752638b4ca6153caf4c638aa55c7`  
-**Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations; it does not claim full physical-camera qualification.
+**Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---
 
@@ -40,7 +40,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 
 | Behavior | Source state | Automated test evidence | Real-camera evidence |
 |---|---|---|---|
-| Device enumeration and opaque ID open | Source implemented | No driver-level hardware enumeration test in the eight-test suite | Not recorded |
+| Device enumeration and opaque ID open | Source implemented | No driver-level hardware enumeration test in the previous CTest suite | Not recorded |
 | Single `HAmcam` per opened session | Source/documented invariant | No direct one-handle hardware test identified | Not recorded |
 | Open/Close/Start/Stop | Source implemented | No dedicated native session lifecycle integration test target | Not recorded |
 | SDK callback -> bounded FIFO -> one pull worker -> `Amcam_PullImageV4` | Source implemented | Event queue unit test covers queue behavior, not the complete physical path | Not recorded |
@@ -172,12 +172,13 @@ Additional target-architecture gaps:
 | `amscope_acquisition_frame_gate_tests` | Frame gate reactivation/invalidation helper behavior | Native SDK callback drain or physical Stop behavior |
 | `amscope_profile_tests` | Exact-model profile allow/deny, precedence, duplicate/missing profile rules | Actual model capability probes |
 | `amscope_event_queue_tests` | Event queue helper behavior | Full callback and PullImage acquisition |
+| `amscope_session_primitives_tests` | Production callback-drain tracker, retryable frame-cache flush obligation (including newer-generation preservation), and retained frame-slot lease selection | Full AmcamCamera Open/Start/Stop/Close fault injection, SDK callback ABI races, and hardware behavior |
 | `amscope_frame_stall_watchdog_tests` | Video/heartbeat timeout calculations | Actual SDK timeout and heartbeat behavior |
 | `amscope_qt_request_tests` | Qt worker request ordering, callback affinity, typed closed-session outcomes, request supersession | Real camera SDK operations |
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
-All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The initial hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). That CI run predates the sequence-independent paint and exposure/speed diagnostic corrections. The corrected source is being checked in workflow [#45063651610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063651610), which is in progress at this inventory refresh. The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
+All eight previous CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The initial hardware-test executable was compiled and architecture/linkage-checked successfully on both architectures in workflow [#45062683602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45062683602). That CI run predates the sequence-independent paint and exposure/speed diagnostic corrections. The corrected source is being checked in workflow [#45063651610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45063651610), which is in progress at this inventory refresh. The new `amscope_session_primitives_tests` target was added after those earlier CI runs; CI for the current branch head is pending. The launcher found zero cameras in CI; physical-camera behavior remains a manual test.
 
 The physical-camera performance executable is deliberately separate from CTest. It is built as `amscope_hardware_rate_test`, launched through `scripts/run-amscope.sh --hardware-rate-test`, and must be run manually with a physical camera. It selects and verifies the requested `AmcamResolutionIndex`, captures the original resolution, runs a visible RGB24 Qt preview, and reports event/pull/callback FPS, host-revision-based frame submissions, preview timer ticks, Qt paint events, actually painted frames, actual dimensions, device sequence/timestamp metadata, exposure-auto state and exposure readbacks at multiple lifecycle points, per-frame exposure metadata and frame-pool drops. It attempts to restore the original resolution after Stop.
 
@@ -270,7 +271,7 @@ Update this inventory when a source/API/test/UI change lands. Do not change a ha
 
 A static source scan of the current AmScope implementation identifies direct SDK entry points across enumeration/session lifecycle, callback-based acquisition and pulling, feature probes and writes, trigger/heartbeat setup, still capture, hardware I/O, and accessory operations. The native session currently has no injected SDK-call boundary, so the existing helper tests cannot force deterministic native Stop/Open/Start/Pull/Close failures.
 
-The Phase 1 test seam and the initial lifecycle/acquisition API subset are specified in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). The vendor header confirms the exact `PAMCAM_EVENT_CALLBACK` (`__stdcall`) and callback-based pull API, but its `Amcam_Close` comment does not explicitly state that no callback can begin after Close returns. The current driver waits for callbacks already counted as active after `Amcam_Close`; this is not by itself proof against a callback that begins after the counter reaches zero. Treat the post-Close callback-quiescence guarantee as an explicit SDK contract to establish with vendor documentation and controlled hardware observation. No source seam or native-session mock test has been implemented yet. Phase 0 physical-camera acceptance remains the prerequisite for behavior-changing Phase 1 work.
+The Phase 1 test seam and the initial lifecycle/acquisition API subset are specified in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). The vendor header confirms the exact `PAMCAM_EVENT_CALLBACK` (`__stdcall`) and callback-based pull API, but its `Amcam_Close` comment does not explicitly state that no callback can begin after Close returns. The current driver waits for callbacks already counted as active after `Amcam_Close`; this is not by itself proof against a callback that begins after the counter reaches zero. Treat the post-Close callback-quiescence guarantee as an explicit SDK contract to establish with vendor documentation and controlled hardware observation. A smaller production-primitive test layer is now present in `AmcamSessionPrimitives.h`: `amscope_session_primitives_tests` verifies callback lease draining, retryable cache-flush obligations, and retained frame-pool slot selection. This is deliberately not described as the full SDK-call seam: forced native Open/Start/Stop/Pull/Close errors and the complete session state machine are not yet injectable. The project owner has accepted Phases 0 and 1; this remaining seam is post-acceptance hardening rather than a phase-entry blocker.
 
 
 ## 12. GenTL/GenApi dependency discovery

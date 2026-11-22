@@ -467,7 +467,7 @@ buildAmcamFeatureDescriptors(
         std::find(supportedBinningModes.begin(), supportedBinningModes.end(),
                   currentBinningSymbol) != supportedBinningModes.end();
 
-    const bool stopped = state == amscope::CameraState::Open;    const bool stopped = state == amscope::CameraState::Open;
+    const bool stopped = state == amscope::CameraState::Open;
     const auto allowed = [&profileRegistry, &modelCode](amscope::AmcamCameraFeature feature) {
         return profileRegistry.allows(modelCode, feature);
     };
@@ -781,7 +781,6 @@ buildAmcamFeatureDescriptors(
         camera::CameraFeatureGroup::ImageFormat
     });
     return descriptors;
-}    return descriptors;
 }
 
 camera::CameraFeatureAccessError featureBackendError(

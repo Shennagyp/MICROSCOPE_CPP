@@ -131,7 +131,11 @@ integration and does not modify vendor sample code.
   until its working-distance parameters are documented. These command
   surfaces do not alter preview
   acquisition or trigger mode and are not ordinary camera feature settings.
-- Trigger configuration is a separate stopped-state command. Video,
+- The preview application exposes trigger configuration separately from camera
+  feature settings: mode/source/heartbeat changes are available while stopped,
+  and finite software-trigger bursts are available only when the applied mode
+  and model/profile permit them. Trigger configuration is a separate
+  stopped-state command. Video,
   software/simulated, external and mixed external+software modes are exposed;
   external modes require an explicit source (opto-isolated input, GPIO0, GPIO1,
   counter, PWM or software). Software trigger commands submit finite image

@@ -224,7 +224,57 @@ public:
         lensFocusStatusLabel_ = new QLabel("Lens state unknown", lensFocusGroup_);
         lensFocusStatusLabel_->setWordWrap(true);
         lensFocusForm->addRow("Lens / AF state", lensFocusStatusLabel_);
+
+        triggerGroup_ = new QGroupBox("Trigger configuration", central);
+        auto* triggerForm = new QFormLayout(triggerGroup_);
+        triggerModeSelector_ = new QComboBox(triggerGroup_);
+        triggerForm->addRow("Acquisition mode", triggerModeSelector_);
+
+        triggerSourceRow_ = new QWidget(triggerGroup_);
+        auto* triggerSourceLayout = new QHBoxLayout(triggerSourceRow_);
+        triggerSourceLayout->setContentsMargins(0, 0, 0, 0);
+        triggerSourceSelector_ = new QComboBox(triggerSourceRow_);
+        triggerSourceLayout->addWidget(triggerSourceSelector_, 1);
+        triggerForm->addRow("External trigger source", triggerSourceRow_);
+
+        triggerHeartbeatRow_ = new QWidget(triggerGroup_);
+        auto* heartbeatLayout = new QHBoxLayout(triggerHeartbeatRow_);
+        heartbeatLayout->setContentsMargins(0, 0, 0, 0);
+        triggerHeartbeatInterval_ = new QSpinBox(triggerHeartbeatRow_);
+        triggerHeartbeatInterval_->setRange(100, 10000);
+        triggerHeartbeatInterval_->setSingleStep(100);
+        triggerHeartbeatInterval_->setSuffix(" ms");
+        heartbeatLayout->addWidget(triggerHeartbeatInterval_);
+        triggerForm->addRow("Heartbeat interval", triggerHeartbeatRow_);
+
+        auto* triggerConfigurationRow = new QWidget(triggerGroup_);
+        auto* triggerConfigurationLayout = new QHBoxLayout(triggerConfigurationRow);
+        triggerConfigurationLayout->setContentsMargins(0, 0, 0, 0);
+        triggerApplyButton_ = new QPushButton("Apply while stopped", triggerConfigurationRow);
+        triggerRefreshButton_ = new QPushButton("Refresh", triggerConfigurationRow);
+        triggerConfigurationLayout->addWidget(triggerApplyButton_);
+        triggerConfigurationLayout->addWidget(triggerRefreshButton_);
+        triggerForm->addRow("Configuration", triggerConfigurationRow);
+
+        auto* softwareTriggerRow = new QWidget(triggerGroup_);
+        auto* softwareTriggerLayout = new QHBoxLayout(softwareTriggerRow);
+        softwareTriggerLayout->setContentsMargins(0, 0, 0, 0);
+        softwareTriggerCount_ = new QSpinBox(softwareTriggerRow);
+        softwareTriggerCount_->setRange(1, 65534);
+        softwareTriggerCount_->setValue(1);
+        softwareTriggerButton_ = new QPushButton("Send software trigger", softwareTriggerRow);
+        softwareTriggerLayout->addWidget(softwareTriggerCount_);
+        softwareTriggerLayout->addWidget(softwareTriggerButton_);
+        triggerForm->addRow("Finite image burst", softwareTriggerRow);
+
+        triggerStatusLabel_ = new QLabel("Trigger configuration not loaded.", triggerGroup_);
+        triggerStatusLabel_->setWordWrap(true);
+        triggerForm->addRow("Status", triggerStatusLabel_);
+        triggerGroup_->hide();
+
         lensFocusGroup_->hide();
+
+        astroAutoFocuserGroup_->hide();        lensFocusGroup_->hide();
 
         astroAutoFocuserGroup_->hide();
 
@@ -233,6 +283,7 @@ public:
         auto* settingsColumn = new QVBoxLayout();
         settingsColumn->addWidget(featureStatus_);
         settingsColumn->addWidget(refreshFeaturesButton_);
+        settingsColumn->addWidget(triggerGroup_);
         settingsColumn->addWidget(accessoryGroup_);
         settingsColumn->addWidget(astroAutoFocuserGroup_);
         settingsColumn->addWidget(lensFocusGroup_);
@@ -291,6 +342,17 @@ public:
                 this, [this]() { moveLensFocus(); });
         connect(lensFocusRefreshButton_, &QPushButton::clicked,
                 this, [this]() { refreshLensFocusState(); });
+        connect(lensApertureSetButton_, &QPushButton::clicked,
+                this, [this]() { setLensAperturePosition(); });
+
+        connect(triggerModeSelector_, &QComboBox::currentIndexChanged,
+                this, [this](int) { updateTriggerModeWidgets(); });
+        connect(triggerApplyButton_, &QPushButton::clicked,
+                this, [this]() { applyTriggerConfiguration(); });
+        connect(triggerRefreshButton_, &QPushButton::clicked,
+                this, [this]() { refreshTriggerConfiguration(); });
+        connect(softwareTriggerButton_, &QPushButton::clicked,
+                this, [this]() { sendSoftwareTrigger(); });
         connect(lensApertureSetButton_, &QPushButton::clicked,
                 this, [this]() { setLensAperturePosition(); });
 
@@ -755,6 +817,15 @@ private:
         lensApertureCalibrated_ = false;
         lensApertureChoicesAvailable_ = false;
         lensApertureSelector_->clear();
+        triggerConfigurationReadPending_ = false;
+        triggerConfigurationKnown_ = false;
+        triggerOperationPending_ = false;
+        currentTriggerConfiguration_.reset();
+        triggerGroup_->hide();
+        triggerConfigurationReadPending_ = false;
+        triggerConfigurationKnown_ = false;
+        triggerOperationPending_ = false;
+        currentTriggerConfiguration_.reset();
         accessoryOperationPending_ = false;
         accessoryGroup_->hide();
         astroAutoFocuserGroup_->hide();
@@ -1274,6 +1345,21 @@ private:
 
 
     void clearAccessoryControls() {
+        triggerPanelAvailable_ = false;
+        triggerExternalSupported_ = false;
+        triggerExternalAllowed_ = false;
+        triggerSoftwareSupported_ = false;
+        triggerSoftwareAllowed_ = false;
+        triggerHardwareEventsAllowed_ = false;
+        triggerSingleImage_ = false;
+        triggerConfigurationReadPending_ = false;
+        triggerConfigurationKnown_ = false;
+        triggerOperationPending_ = false;
+        currentTriggerConfiguration_.reset();
+        triggerGroup_->hide();
+        triggerModeSelector_->clear();
+        triggerSourceSelector_->clear();
+        triggerStatusLabel_->setText("Trigger configuration not loaded.");
         embeddedLightSourceAvailable_ = false;
         filterWheelAvailable_ = false;
         embeddedLightSourceReadPending_ = false;
@@ -1313,12 +1399,31 @@ private:
     void rebuildAccessoryControls(
         const std::vector<camera::CameraFeatureDescriptor>& descriptors,
         std::uint64_t generation) {
-        const auto available = [&descriptors](const char* name) {
+        const auto descriptorFor = [&descriptors](const char* name)
+            -> const camera::CameraFeatureDescriptor* {
             const auto item = std::find_if(
                 descriptors.begin(), descriptors.end(),
                 [name](const auto& descriptor) { return descriptor.name == name; });
-            return item != descriptors.end() && item->isAvailable;
+            return item == descriptors.end() ? nullptr : &*item;
         };
+        const auto available = [&descriptorFor](const char* name) {
+            const auto* descriptor = descriptorFor(name);
+            return descriptor != nullptr && descriptor->isAvailable;
+        };
+        const auto supported = [&descriptorFor](const char* name) {
+            const auto* descriptor = descriptorFor(name);
+            return descriptor != nullptr && descriptor->isReadable;
+        };
+        triggerExternalSupported_ = supported("AmcamExternalTriggerAvailable");
+        triggerExternalAllowed_ = available("AmcamExternalTriggerAvailable");
+        triggerSoftwareSupported_ = supported("AmcamSoftwareTriggerAvailable");
+        triggerSoftwareAllowed_ = available("AmcamSoftwareTriggerAvailable");
+        triggerHardwareEventsAllowed_ = available("AmcamHardwareEventsAvailable");
+        triggerSingleImage_ = supported("AmcamSingleTriggerAvailable");
+        triggerPanelAvailable_ = triggerExternalSupported_ ||
+            triggerSoftwareSupported_ || supported("AmcamHardwareEventsAvailable");
+        rebuildTriggerModeChoices();
+        triggerGroup_->setVisible(triggerPanelAvailable_);
         embeddedLightSourceAvailable_ =
             available("AmcamEmbeddedLightSourceAvailable");
         filterWheelAvailable_ = available("AmcamFilterWheelAvailable");
@@ -1343,6 +1448,8 @@ private:
             refreshAccessoryState(generation);
         if (astroAutoFocuserAvailable_)
             refreshAstroAutoFocuserState(generation);
+        if (triggerPanelAvailable_)
+            refreshTriggerConfiguration(generation);
     }
 
     void refreshAccessoryState(std::uint64_t generation) {
@@ -1669,7 +1776,287 @@ private:
     }
 
 
-    void setLensAperturePosition() {
+
+    void rebuildTriggerModeChoices() {
+        const QSignalBlocker blocker(triggerModeSelector_);
+        triggerModeSelector_->clear();
+        triggerModeSelector_->addItem(
+            "Video", static_cast<int>(amscope::AmcamTriggerMode::Video));
+
+        if (triggerHardwareEventsAllowed_ &&
+            (!triggerSoftwareSupported_ || triggerSoftwareAllowed_)) {
+            triggerModeSelector_->addItem(
+                "Software / simulated",
+                static_cast<int>(amscope::AmcamTriggerMode::SoftwareOrSimulated));
+        }
+        if (triggerHardwareEventsAllowed_ && triggerExternalAllowed_) {
+            triggerModeSelector_->addItem(
+                "External", static_cast<int>(amscope::AmcamTriggerMode::External));
+        }
+        if (triggerHardwareEventsAllowed_ && triggerExternalAllowed_ &&
+            triggerSoftwareAllowed_) {
+            triggerModeSelector_->addItem(
+                "External + software",
+                static_cast<int>(amscope::AmcamTriggerMode::ExternalAndSoftware));
+        }
+
+        const QSignalBlocker sourceBlocker(triggerSourceSelector_);
+        triggerSourceSelector_->clear();
+        triggerSourceSelector_->addItem(
+            "Opto-isolated input",
+            static_cast<int>(amscope::AmcamTriggerSource::OptoIsolatedInput));
+        triggerSourceSelector_->addItem(
+            "GPIO 0", static_cast<int>(amscope::AmcamTriggerSource::GPIO0));
+        triggerSourceSelector_->addItem(
+            "GPIO 1", static_cast<int>(amscope::AmcamTriggerSource::GPIO1));
+        triggerSourceSelector_->addItem(
+            "Counter", static_cast<int>(amscope::AmcamTriggerSource::Counter));
+        triggerSourceSelector_->addItem(
+            "PWM", static_cast<int>(amscope::AmcamTriggerSource::PWM));
+        if (triggerSoftwareAllowed_) {
+            triggerSourceSelector_->addItem(
+                "Software", static_cast<int>(amscope::AmcamTriggerSource::Software));
+        }
+
+        softwareTriggerCount_->setRange(1, triggerSingleImage_ ? 1 : 65534);
+        updateTriggerModeWidgets();
+    }
+
+    bool selectedTriggerModeUsesExternalSource() const {
+        if (triggerModeSelector_->currentIndex() < 0) return false;
+        const auto mode = static_cast<amscope::AmcamTriggerMode>(
+            triggerModeSelector_->currentData().toInt());
+        return mode == amscope::AmcamTriggerMode::External ||
+               mode == amscope::AmcamTriggerMode::ExternalAndSoftware;
+    }
+
+    void updateTriggerModeWidgets() {
+        const bool externalMode = selectedTriggerModeUsesExternalSource();
+        const bool videoMode = triggerModeSelector_->currentIndex() >= 0 &&
+            triggerModeSelector_->currentData().toInt() ==
+                static_cast<int>(amscope::AmcamTriggerMode::Video);
+        triggerSourceRow_->setVisible(externalMode);
+        if (QWidget* label = triggerGroup_->layout()
+                ? qobject_cast<QFormLayout*>(triggerGroup_->layout())
+                      ->labelForField(triggerSourceRow_)
+                : nullptr) {
+            label->setVisible(externalMode);
+        }
+        triggerHeartbeatRow_->setVisible(!videoMode);
+        if (QWidget* label = triggerGroup_->layout()
+                ? qobject_cast<QFormLayout*>(triggerGroup_->layout())
+                      ->labelForField(triggerHeartbeatRow_)
+                : nullptr) {
+            label->setVisible(!videoMode);
+        }
+    }
+
+    bool configurationAllowsSoftwareTrigger(
+        const amscope::AmcamTriggerConfiguration& configuration) const {
+        switch (configuration.mode) {
+        case amscope::AmcamTriggerMode::SoftwareOrSimulated:
+            return !triggerSoftwareSupported_ || triggerSoftwareAllowed_;
+        case amscope::AmcamTriggerMode::ExternalAndSoftware:
+            return triggerSoftwareAllowed_;
+        case amscope::AmcamTriggerMode::External:
+            return configuration.externalSource ==
+                       amscope::AmcamTriggerSource::Software &&
+                   triggerSoftwareSupported_ && triggerSoftwareAllowed_;
+        case amscope::AmcamTriggerMode::Video:
+            return false;
+        }
+        return false;
+    }
+
+    void refreshTriggerConfiguration(std::uint64_t generation) {
+        if (!triggerPanelAvailable_ || triggerConfigurationReadPending_ ||
+            triggerOperationPending_)
+            return;
+        triggerConfigurationReadPending_ = true;
+        updateControls(camera_.state());
+
+        const auto requestId = camera_.requestTriggerConfiguration(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::TriggerConfigurationResult result) {
+                if (generation != featureUiGeneration_) return;
+                triggerConfigurationReadPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    triggerConfigurationKnown_ = false;
+                    currentTriggerConfiguration_.reset();
+                    triggerStatusLabel_->setText(
+                        QString("Trigger configuration read failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                } else {
+                    const auto& configuration =
+                        std::get<amscope::AmcamTriggerConfiguration>(result);
+                    currentTriggerConfiguration_ = configuration;
+                    triggerConfigurationKnown_ = true;
+
+                    int modeIndex = triggerModeSelector_->findData(
+                        static_cast<int>(configuration.mode));
+                    if (modeIndex < 0) {
+                        triggerModeSelector_->addItem(
+                            "Current mode (not enabled by this model/profile)",
+                            static_cast<int>(configuration.mode));
+                        modeIndex = triggerModeSelector_->count() - 1;
+                    }
+                    {
+                        const QSignalBlocker blocker(triggerModeSelector_);
+                        triggerModeSelector_->setCurrentIndex(modeIndex);
+                    }
+
+                    if (configuration.externalSource) {
+                        int sourceIndex = triggerSourceSelector_->findData(
+                            static_cast<int>(*configuration.externalSource));
+                        if (sourceIndex < 0) {
+                            triggerSourceSelector_->addItem(
+                                "Current source (not enabled by this model/profile)",
+                                static_cast<int>(*configuration.externalSource));
+                            sourceIndex = triggerSourceSelector_->count() - 1;
+                        }
+                        const QSignalBlocker blocker(triggerSourceSelector_);
+                        triggerSourceSelector_->setCurrentIndex(sourceIndex);
+                    }
+                    if (configuration.heartbeatIntervalMilliseconds >= 100 &&
+                        configuration.heartbeatIntervalMilliseconds <= 10000) {
+                        triggerHeartbeatInterval_->setValue(
+                            static_cast<int>(configuration.heartbeatIntervalMilliseconds));
+                    } else {
+                        triggerHeartbeatInterval_->setValue(1000);
+                    }
+
+                    QString status;
+                    switch (configuration.mode) {
+                    case amscope::AmcamTriggerMode::Video:
+                        status = "Video acquisition";
+                        break;
+                    case amscope::AmcamTriggerMode::SoftwareOrSimulated:
+                        status = "Software / simulated trigger mode";
+                        break;
+                    case amscope::AmcamTriggerMode::External:
+                        status = "External trigger mode";
+                        break;
+                    case amscope::AmcamTriggerMode::ExternalAndSoftware:
+                        status = "External + software trigger mode";
+                        break;
+                    }
+                    if (configuration.externalSource) {
+                        status += QString(" | source %1")
+                            .arg(triggerSourceSelector_->currentText());
+                    }
+                    if (configuration.mode != amscope::AmcamTriggerMode::Video) {
+                        status += QString(" | heartbeat %1 ms")
+                            .arg(configuration.heartbeatIntervalMilliseconds);
+                    }
+                    if (!triggerHardwareEventsAllowed_ &&
+                        configuration.mode != amscope::AmcamTriggerMode::Video) {
+                        status += " | hardware-event capability/profile unavailable";
+                    }
+                    triggerStatusLabel_->setText(status);
+                    updateTriggerModeWidgets();
+                }
+                updateControls(camera_.state());
+            });
+        if (requestId == 0) {
+            triggerConfigurationReadPending_ = false;
+            triggerConfigurationKnown_ = false;
+            triggerStatusLabel_->setText("Trigger configuration request was rejected.");
+            updateControls(camera_.state());
+        }
+    }
+
+    void refreshTriggerConfiguration() {
+        refreshTriggerConfiguration(featureUiGeneration_);
+    }
+
+    void applyTriggerConfiguration() {
+        if (!triggerPanelAvailable_ || triggerConfigurationReadPending_ ||
+            triggerOperationPending_ ||
+            camera_.state() != amscope::CameraState::Open ||
+            triggerModeSelector_->currentIndex() < 0)
+            return;
+
+        amscope::AmcamTriggerConfiguration configuration;
+        configuration.mode = static_cast<amscope::AmcamTriggerMode>(
+            triggerModeSelector_->currentData().toInt());
+        if (configuration.mode == amscope::AmcamTriggerMode::External ||
+            configuration.mode == amscope::AmcamTriggerMode::ExternalAndSoftware) {
+            if (triggerSourceSelector_->currentIndex() < 0) return;
+            configuration.externalSource =
+                static_cast<amscope::AmcamTriggerSource>(
+                    triggerSourceSelector_->currentData().toInt());
+        }
+        configuration.heartbeatIntervalMilliseconds =
+            static_cast<std::uint32_t>(triggerHeartbeatInterval_->value());
+
+        triggerOperationPending_ = true;
+        updateControls(camera_.state());
+        const auto generation = featureUiGeneration_;
+        const auto requestId = camera_.requestConfigureTrigger(
+            configuration,
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AccessoryCommandResult result) {
+                if (generation != featureUiGeneration_) return;
+                triggerOperationPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    triggerStatusLabel_->setText(
+                        QString("Trigger configuration failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                    updateControls(camera_.state());
+                } else {
+                    triggerConfigurationKnown_ = false;
+                    currentTriggerConfiguration_.reset();
+                    triggerStatusLabel_->setText(
+                        "Configuration accepted; reading back the applied trigger mode…");
+                    refreshTriggerConfiguration(generation);
+                }
+            });
+        if (requestId == 0) {
+            triggerOperationPending_ = false;
+            triggerStatusLabel_->setText("Trigger configuration command could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
+    void sendSoftwareTrigger() {
+        if (!triggerConfigurationKnown_ || !currentTriggerConfiguration_ ||
+            !configurationAllowsSoftwareTrigger(*currentTriggerConfiguration_) ||
+            triggerOperationPending_ || triggerConfigurationReadPending_ ||
+            camera_.state() != amscope::CameraState::Streaming)
+            return;
+
+        const auto count = static_cast<std::uint16_t>(softwareTriggerCount_->value());
+        triggerOperationPending_ = true;
+        updateControls(camera_.state());
+        const auto generation = featureUiGeneration_;
+        const auto requestId = camera_.requestSoftwareTrigger(
+            count,
+            [this, generation, count](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AccessoryCommandResult result) {
+                if (generation != featureUiGeneration_) return;
+                triggerOperationPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    triggerStatusLabel_->setText(
+                        QString("Software trigger failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                } else {
+                    triggerStatusLabel_->setText(
+                        QString("Software trigger command accepted for %1 image(s).")
+                            .arg(count));
+                }
+                updateControls(camera_.state());
+            });
+        if (requestId == 0) {
+            triggerOperationPending_ = false;
+            triggerStatusLabel_->setText("Software trigger command could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
+    void setLensAperturePosition() {    void setLensAperturePosition() {
         if (!lensFocusAvailable_ || accessoryOperationPending_ ||
             lensFocusReadPending_ || !lensFocusStateKnown_ ||
             !lensApertureChoicesAvailable_ || !lensApertureCalibrated_ ||
@@ -1861,7 +2248,8 @@ private:
         const bool accessoriesIdle =
             idle && !accessoryOperationPending_ &&
             !embeddedLightSourceReadPending_ && !filterWheelReadPending_ &&
-            !astroAutoFocuserReadPending_ && !lensFocusReadPending_;
+            !astroAutoFocuserReadPending_ && !lensFocusReadPending_ &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_;
         const bool accessoryControlsIdle = (open || streaming) && accessoriesIdle;
         accessoryGroup_->setEnabled(accessoryControlsIdle);
         astroAutoFocuserGroup_->setEnabled((open || streaming) && accessoriesIdle);
@@ -1911,6 +2299,36 @@ private:
             filterWheelStateKnown_ && !filterWheelMoving_);
         filterWheelRefreshButton_->setEnabled(
             accessoryControlsIdle && filterWheelAvailable_);
+
+        triggerGroup_->setEnabled(
+            (open || streaming) && !triggerConfigurationReadPending_ &&
+            !triggerOperationPending_);
+        triggerModeSelector_->setEnabled(open && triggerPanelAvailable_ &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerSourceSelector_->setEnabled(open && triggerPanelAvailable_ &&
+            selectedTriggerModeUsesExternalSource() &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerHeartbeatInterval_->setEnabled(open && triggerPanelAvailable_ &&
+            triggerModeSelector_->currentIndex() >= 0 &&
+            triggerModeSelector_->currentData().toInt() !=
+                static_cast<int>(amscope::AmcamTriggerMode::Video) &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerApplyButton_->setEnabled(open && triggerPanelAvailable_ &&
+            triggerModeSelector_->currentIndex() >= 0 &&
+            (!selectedTriggerModeUsesExternalSource() ||
+             triggerSourceSelector_->currentIndex() >= 0) &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerRefreshButton_->setEnabled(
+            (open || streaming) && triggerPanelAvailable_ &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        softwareTriggerCount_->setEnabled(streaming &&
+            triggerConfigurationKnown_ && currentTriggerConfiguration_.has_value() &&
+            configurationAllowsSoftwareTrigger(*currentTriggerConfiguration_) &&
+            !triggerOperationPending_ && !triggerConfigurationReadPending_);
+        softwareTriggerButton_->setEnabled(streaming &&
+            triggerConfigurationKnown_ && currentTriggerConfiguration_.has_value() &&
+            configurationAllowsSoftwareTrigger(*currentTriggerConfiguration_) &&
+            !triggerOperationPending_ && !triggerConfigurationReadPending_);
     }
 
     amscope::QtAmcamCamera camera_;
@@ -1945,6 +2363,17 @@ private:
     bool lensFocusManual_ = false;
     bool lensApertureCalibrated_ = false;
     bool lensApertureChoicesAvailable_ = false;
+    bool triggerPanelAvailable_ = false;
+    bool triggerExternalSupported_ = false;
+    bool triggerExternalAllowed_ = false;
+    bool triggerSoftwareSupported_ = false;
+    bool triggerSoftwareAllowed_ = false;
+    bool triggerHardwareEventsAllowed_ = false;
+    bool triggerSingleImage_ = false;
+    bool triggerConfigurationReadPending_ = false;
+    bool triggerConfigurationKnown_ = false;
+    bool triggerOperationPending_ = false;
+    std::optional<amscope::AmcamTriggerConfiguration> currentTriggerConfiguration_;
     bool accessoryOperationPending_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
 
@@ -1989,6 +2418,17 @@ private:
     QComboBox* lensApertureSelector_ = nullptr;
     QPushButton* lensApertureSetButton_ = nullptr;
     QLabel* lensFocusStatusLabel_ = nullptr;
+    QGroupBox* triggerGroup_ = nullptr;
+    QComboBox* triggerModeSelector_ = nullptr;
+    QWidget* triggerSourceRow_ = nullptr;
+    QComboBox* triggerSourceSelector_ = nullptr;
+    QWidget* triggerHeartbeatRow_ = nullptr;
+    QSpinBox* triggerHeartbeatInterval_ = nullptr;
+    QPushButton* triggerApplyButton_ = nullptr;
+    QPushButton* triggerRefreshButton_ = nullptr;
+    QSpinBox* softwareTriggerCount_ = nullptr;
+    QPushButton* softwareTriggerButton_ = nullptr;
+    QLabel* triggerStatusLabel_ = nullptr;
     QScrollArea* featureScroll_ = nullptr;
     QWidget* featureContent_ = nullptr;
     QFormLayout* featureForm_ = nullptr;

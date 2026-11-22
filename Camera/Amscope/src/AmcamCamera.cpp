@@ -4518,6 +4518,9 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
     using camera::FeatureEnumeration;
 
     std::lock_guard<std::mutex> api(impl_->apiMutex);
+    // A successful setting mutation can change descriptor ranges or
+    // availability; force one fresh inventory before the next feature read.
+    impl_->featureDescriptorCacheValid = false;
     auto described = buildAmcamFeatureDescriptors(
         impl_->handle,
         impl_->state.load(std::memory_order_acquire),

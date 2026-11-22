@@ -38,6 +38,17 @@ public:
     // Non-feature camera command and telemetry surfaces.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& statistics, CameraError* error = nullptr);
+    bool readTriggerConfiguration(
+        AmcamTriggerConfiguration& configuration, CameraError* error = nullptr);
+    // Trigger configuration is stopped-state-only. Triggered modes require
+    // the SDK hardware heartbeat capability for reliable idle-period health.
+    bool configureTrigger(
+        const AmcamTriggerConfiguration& configuration,
+        CameraError* error = nullptr);
+    // Requests a finite burst; zero and 0xffff (continuous) are intentionally
+    // excluded. The existing callback/worker/PullImage path delivers frames.
+    bool sendSoftwareTrigger(std::uint16_t imageCount = 1,
+                             CameraError* error = nullptr);
     bool readEmbeddedLightSource(
         EmbeddedLightSourceState& state, CameraError* error = nullptr);
     bool setEmbeddedLightSourceLevel(

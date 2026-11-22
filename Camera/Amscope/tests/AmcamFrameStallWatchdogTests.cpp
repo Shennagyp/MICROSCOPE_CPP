@@ -39,6 +39,8 @@ int main() {
 
     using amscope::detail::heartbeatStallTimeout;
     using amscope::detail::heartbeatStalled;
+    using amscope::detail::acquisitionStallTimeout;
+    using amscope::detail::acquisitionStalled;
 
     require(heartbeatStallTimeout(0) == 5000ms,
             "disabled or unknown heartbeat interval keeps a bounded five-second deadline");
@@ -55,6 +57,17 @@ int main() {
             "heartbeat stream is stalled at its deadline");
     require(!heartbeatStalled(origin - 1ms, origin, 2000),
             "a clock value before the last heartbeat cannot be treated as stalled");
+
+    require(acquisitionStallTimeout(false, 2'000'000, 1000) == 7000ms,
+            "video acquisition continues to use exposure-based frame health");
+    require(acquisitionStallTimeout(true, 0, 2000) == 7000ms,
+            "triggered acquisition uses heartbeat health instead of requiring a frame");
+    require(!acquisitionStalled(true, origin + 6999ms, origin, origin,
+                                2'000'000, 2000),
+            "a live heartbeat keeps an idle triggered camera healthy without frames");
+    require(acquisitionStalled(true, origin + 7000ms, origin, origin,
+                               2'000'000, 2000),
+            "triggered health fails when heartbeat stops even if no frames arrived");
 
     std::cout << "All frame-stall watchdog tests passed.\n";
     return EXIT_SUCCESS;

@@ -16,12 +16,16 @@ integration and does not modify vendor sample code.
 - E_PENDING is a transient callback/frame-readiness race. Disconnect, generic
   SDK error, no-frame timeout, no-packet timeout and event-queue overflow are
   fatal acquisition conditions.
-- A frame-health watchdog faults a silent stream even when the SDK stops
-  delivering callbacks without a fatal event. It uses the larger of five
-  seconds or three times the last known exposure plus a one-second grace
-  period. Only a successfully pulled frame resets the health deadline;
-  E_PENDING and image notifications alone do not. A verified exposure change
-  wakes the timed event wait so its deadline is recalculated immediately.
+- Video mode uses the frame-health watchdog: the larger of five seconds or
+  three times the last known exposure plus a one-second grace period. Only a
+  successfully pulled frame resets that deadline; E_PENDING and image
+  notifications alone do not. Triggered modes use the SDK hardware-heartbeat
+  event instead, so an idle interval with no external/software trigger is not
+  mistaken for a stalled camera. In trigger mode the driver temporarily saves
+  and suppresses the SDK no-frame/no-packet timeouts, enables the heartbeat
+  subscription, and restores the prior SDK values on return to video mode or
+  Close. Heartbeat loss remains fatal. A verified exposure change wakes the
+  timed event wait so its video deadline is recalculated immediately.
 - Stop and Close are never called from the vendor callback. A failed user Stop
   while Streaming restores the previous stream and retains callback/frame state.
   The Qt frame-delivery gate is reactivated for that same acquisition after a
@@ -123,6 +127,14 @@ integration and does not modify vendor sample code.
   until its working-distance parameters are documented. These command
   surfaces do not alter preview
   acquisition or trigger mode and are not ordinary camera feature settings.
+- Trigger configuration is a separate stopped-state command. Video,
+  software/simulated, external and mixed external+software modes are exposed;
+  external modes require an explicit source (opto-isolated input, GPIO0, GPIO1,
+  counter, PWM or software). Software trigger commands submit finite image
+  bursts only; continuous trigger mode and cancellation are not exposed.
+  Triggered Start requires the model's hardware-event capability/profile so
+  heartbeat health is available. Self-trigger parameters and GPIO direction/
+  output programming remain separate follow-ups.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
 - Still capture is independent of live-frame delivery. The complete SDK still-
@@ -314,6 +326,7 @@ stops and closes the session.
 
 ## Not included yet
 
-Trigger/GPIO control, synchronized multi-camera acquisition, GenTL routing,
-ImageProcessing integration, RAW demosaicing for visible preview, and a
-concrete GPU renderer remain separate capabilities.
+GPIO direction/output programming, self-trigger parameterization,
+synchronized multi-camera acquisition, GenTL routing, ImageProcessing
+integration, RAW demosaicing for visible preview, and a concrete GPU renderer
+remain separate capabilities.

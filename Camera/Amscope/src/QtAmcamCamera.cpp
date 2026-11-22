@@ -460,7 +460,61 @@ FramePtr QtAmcamCamera::takeLatestFrame() {
     return frame;
 }
 
-bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
+
+bool QtAmcamCamera::readTriggerConfiguration(
+    AmcamTriggerConfiguration& configuration, CameraError* error) {
+    if (!requireSynchronousExecutionMode("readTriggerConfiguration", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.readTriggerConfiguration(configuration, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::configureTrigger(
+    const AmcamTriggerConfiguration& configuration, CameraError* error) {
+    if (!requireSynchronousExecutionMode("configureTrigger", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.configureTrigger(configuration, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::sendSoftwareTrigger(
+    std::uint16_t imageCount, CameraError* error) {
+    if (!requireSynchronousExecutionMode("sendSoftwareTrigger", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        advanceFeatureStateGeneration();
+        ok = camera_.sendSoftwareTrigger(imageCount, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
+bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {bool QtAmcamCamera::autoWhiteBalance(CameraError* error) {
     if (!requireSynchronousExecutionMode("autoWhiteBalance", error))
         return false;
     CameraError local;
@@ -738,6 +792,107 @@ bool QtAmcamCamera::haltAstroAutoFocuser(CameraError* error) {
     return ok;
 }
 
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestTriggerConfiguration(
+    TriggerConfigurationCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<TriggerConfigurationResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                AmcamTriggerConfiguration configuration;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.readTriggerConfiguration(configuration, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "readTriggerConfiguration", exception.what()};
+                } catch (...) {
+                    local = {0, "readTriggerConfiguration",
+                             "Unknown exception while reading trigger configuration."};
+                }
+                if (ok) result.emplace(std::move(configuration));
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::FeatureSnapshot);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestConfigureTrigger(
+    AmcamTriggerConfiguration configuration,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, configuration, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.configureTrigger(configuration, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "configureTrigger", exception.what()};
+                } catch (...) {
+                    local = {0, "configureTrigger",
+                             "Unknown exception while configuring trigger mode."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSoftwareTrigger(
+    std::uint16_t imageCount,
+    AccessoryCommandCallback callback) {
+    if (!callback) return 0;
+    return enqueueFeatureRequest(
+        [this, imageCount, callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<AccessoryCommandResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) return;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.sendSoftwareTrigger(imageCount, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "sendSoftwareTrigger", exception.what()};
+                } catch (...) {
+                    local = {0, "sendSoftwareTrigger",
+                             "Unknown exception while submitting software trigger."};
+                }
+                if (ok) result.emplace(std::monostate{});
+                else result.emplace(std::move(local));
+            }
+            dispatchFeatureCallback(requestContext,
+                [callback = std::move(callback), requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        }, FeatureRequestSemantics::StateMutation);
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;

@@ -154,6 +154,28 @@ struct AstroAutoFocuserState {
     std::optional<std::int32_t> ambientTemperatureSdkUnits;
 };
 
+enum class AmcamTriggerMode : std::uint8_t {
+    Video = 0,
+    SoftwareOrSimulated = 1,
+    External = 2,
+    ExternalAndSoftware = 3
+};
+
+enum class AmcamTriggerSource : std::uint8_t {
+    OptoIsolatedInput = 0,
+    GPIO0 = 1,
+    GPIO1 = 2,
+    Counter = 3,
+    PWM = 4,
+    Software = 5
+};
+
+struct AmcamTriggerConfiguration {
+    AmcamTriggerMode mode = AmcamTriggerMode::Video;
+    std::optional<AmcamTriggerSource> externalSource;
+    std::uint32_t heartbeatIntervalMilliseconds = 1000;
+};
+
 struct LensFocusState {
     std::uint16_t lensId = 0;
     std::uint8_t lensType = 0;

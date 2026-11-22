@@ -86,6 +86,32 @@ std::string rawFormatFeatureSymbol(unsigned fourCC, unsigned bitsPerPixel) {
     return text + ":" + std::to_string(bitsPerPixel);
 }
 
+std::string binningFeatureSymbol(const char* value, const char* method) {
+    if (!value || !method || *value == '\0' || *method == '\0')
+        return {};
+    const std::string v(value);
+    const std::string m(method);
+    if (v.find('|') != std::string::npos ||
+        m.find('|') != std::string::npos)
+        return {};
+    return v + "|" + m;
+}
+
+bool parseBinningFeatureSymbol(
+    const std::string& symbol,
+    std::string& value,
+    std::string& method) {
+    const auto separator = symbol.find('|');
+    if (separator == std::string::npos || separator == 0 ||
+        separator + 1 >= symbol.size() ||
+        symbol.find('|', separator + 1) != std::string::npos)
+        return false;
+    value.assign(symbol.data(), separator);
+    method.assign(symbol.data() + separator + 1,
+                  symbol.size() - separator - 1);
+    return true;
+}
+
 bool parseSignedInteger(const std::string& text, std::int32_t& value) {
     if (text.empty()) return false;
     const char* first = text.data();
@@ -358,8 +384,9 @@ buildAmcamFeatureDescriptors(
         Amcam_get_Option(handle, AMCAM_OPTION_FAN, &fanSpeed);
     const bool fanProbe = (modelFlags & AMCAM_FLAG_FAN) != 0 &&
         maximumFanSpeed.has_value() && SUCCEEDED(fanHr) &&
-        fanSpeed >= 0 &&
-        static_cast<std::uint32_t>(fanSpeed) <= *maximumFanSpeed;
+        fanSpeed >= -1 &&
+        (fanSpeed == -1 ||
+         static_cast<std::uint32_t>(fanSpeed) <= *maximumFanSpeed);
 
     int heatLevel = -1;
     int heatMaximum = -1;
@@ -377,7 +404,70 @@ buildAmcamFeatureDescriptors(
     const bool tecVoltageProbe = (modelFlags & AMCAM_FLAG_TEC) != 0 &&
         SUCCEEDED(tecVoltageHr);
 
-    const bool stopped = state == amscope::CameraState::Open;
+
+    const bool roiModelSupported = hasModelDescriptor &&
+        (modelFlags & AMCAM_FLAG_ROI_HARDWARE) != 0;
+    unsigned roiX = 0, roiY = 0, roiWidth = 0, roiHeight = 0;
+    const HRESULT roiHr = Amcam_get_Roi(
+        handle, &roiX, &roiY, &roiWidth, &roiHeight);
+    unsigned roiPreviewIndex = std::numeric_limits<unsigned>::max();
+    const HRESULT roiPreviewIndexHr = Amcam_get_eSize(handle, &roiPreviewIndex);
+    const bool roiPreviewIndexValid = SUCCEEDED(roiPreviewIndexHr) &&
+        roiPreviewIndex < previewResolutions.size();
+    bool roiGeometryValid = false;
+    if (roiPreviewIndexValid && roiWidth != 0 && roiHeight != 0 &&
+        ((roiX | roiY | roiWidth | roiHeight) & 1U) == 0) {
+        const auto& base = previewResolutions[roiPreviewIndex];
+        const std::uint64_t right =
+            static_cast<std::uint64_t>(roiX) + roiWidth;
+        const std::uint64_t bottom =
+            static_cast<std::uint64_t>(roiY) + roiHeight;
+        roiGeometryValid = base.width != 0 && base.height != 0 &&
+            right <= base.width && bottom <= base.height;
+    }
+    const bool roiProbe = roiModelSupported && SUCCEEDED(roiHr) &&
+        roiGeometryValid;
+
+    const bool binningModelSupported = hasModelDescriptor &&
+        (modelFlags & AMCAM_FLAG_BINSKIP_SUPPORTED) != 0;
+    const HRESULT binningCountResult = Amcam_get_BinningNumber(handle);
+    std::vector<std::string> supportedBinningModes;
+    if (binningModelSupported && SUCCEEDED(binningCountResult) &&
+        binningCountResult > 0 && binningCountResult <= 128) {
+        const auto count = static_cast<unsigned>(binningCountResult);
+        supportedBinningModes.reserve(count);
+        for (unsigned index = 0; index < count; ++index) {
+            const char* valueText = nullptr;
+            const char* methodText = nullptr;
+            const HRESULT valueHr =
+                Amcam_get_BinningValue(handle, index, &valueText);
+            const HRESULT methodHr =
+                Amcam_get_BinningMethod(handle, index, &methodText);
+            if (FAILED(valueHr) || FAILED(methodHr)) {
+                supportedBinningModes.clear();
+                break;
+            }
+            auto symbol = binningFeatureSymbol(valueText, methodText);
+            if (symbol.empty()) {
+                supportedBinningModes.clear();
+                break;
+            }
+            supportedBinningModes.push_back(std::move(symbol));
+        }
+    }
+    const char* currentBinningValue = nullptr;
+    const char* currentBinningMethod = nullptr;
+    const HRESULT currentBinningHr = Amcam_get_Binning(
+        handle, &currentBinningValue, &currentBinningMethod);
+    const std::string currentBinningSymbol = SUCCEEDED(currentBinningHr)
+        ? binningFeatureSymbol(currentBinningValue, currentBinningMethod)
+        : std::string{};
+    const bool binningProbe = binningModelSupported &&
+        !supportedBinningModes.empty() && !currentBinningSymbol.empty() &&
+        std::find(supportedBinningModes.begin(), supportedBinningModes.end(),
+                  currentBinningSymbol) != supportedBinningModes.end();
+
+    const bool stopped = state == amscope::CameraState::Open;    const bool stopped = state == amscope::CameraState::Open;
     const auto allowed = [&profileRegistry, &modelCode](amscope::AmcamCameraFeature feature) {
         return profileRegistry.allows(modelCode, feature);
     };
@@ -401,9 +491,11 @@ buildAmcamFeatureDescriptors(
     const bool sensorTemperatureAllowed = allowed(amscope::AmcamCameraFeature::SensorTemperature);
     const bool fanAllowed = allowed(amscope::AmcamCameraFeature::CoolingFan);
     const bool heatAllowed = allowed(amscope::AmcamCameraFeature::HeatAntiFog);
+    const bool roiAllowed = allowed(amscope::AmcamCameraFeature::HardwareROI);
+    const bool binningAllowed = allowed(amscope::AmcamCameraFeature::BinningAndSkipping);
 
     std::vector<CameraFeatureDescriptor> descriptors;
-    descriptors.reserve(32);
+    descriptors.reserve(36);
 
     descriptors.push_back({
         "ExposureAuto", "Automatic Exposure", CameraFeatureKind::Enumeration,
@@ -652,7 +744,7 @@ buildAmcamFeatureDescriptors(
         fanProbe && fanAllowed && stopped,
         fanProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  0.0, static_cast<double>(*maximumFanSpeed), 1.0})
+                  -1.0, static_cast<double>(*maximumFanSpeed), 1.0})
             : std::nullopt,
         std::nullopt, {},
         camera::CameraFeatureGroup::Hardware
@@ -669,7 +761,27 @@ buildAmcamFeatureDescriptors(
         std::nullopt, {},
         camera::CameraFeatureGroup::Hardware
     });
+
+    descriptors.push_back({
+        "AmcamBinning", "Binning / Skip Mode",
+        CameraFeatureKind::Enumeration, std::nullopt,
+        binningProbe && binningAllowed,
+        binningProbe,
+        binningProbe && binningAllowed && stopped,
+        std::nullopt, std::nullopt, std::move(supportedBinningModes),
+        camera::CameraFeatureGroup::ImageFormat
+    });
+    descriptors.push_back({
+        "AmcamHardwareROI", "Hardware ROI",
+        CameraFeatureKind::IntegerVector, std::string("pixels"),
+        roiProbe && roiAllowed,
+        roiProbe,
+        roiProbe && roiAllowed && stopped,
+        std::nullopt, std::size_t{4}, {},
+        camera::CameraFeatureGroup::ImageFormat
+    });
     return descriptors;
+}    return descriptors;
 }
 
 camera::CameraFeatureAccessError featureBackendError(
@@ -2321,6 +2433,32 @@ AmcamCamera::readFeature(std::string_view name) {
         if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Speed", hr);
         return CameraFeatureValue{static_cast<std::int64_t>(value)};
     }
+
+    if (name == "AmcamBinning") {
+        const char* valueText = nullptr;
+        const char* methodText = nullptr;
+        const HRESULT hr = Amcam_get_Binning(
+            impl_->handle, &valueText, &methodText);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Binning", hr);
+        const auto symbol = binningFeatureSymbol(valueText, methodText);
+        if (symbol.empty())
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an invalid binning value/method pair.");
+        return CameraFeatureValue{FeatureEnumeration{symbol}};
+    }
+    if (name == "AmcamHardwareROI") {
+        unsigned x = 0, y = 0, width = 0, height = 0;
+        const HRESULT hr = Amcam_get_Roi(
+            impl_->handle, &x, &y, &width, &height);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Roi", hr);
+        return CameraFeatureValue{std::vector<std::int64_t>{
+            static_cast<std::int64_t>(x),
+            static_cast<std::int64_t>(y),
+            static_cast<std::int64_t>(width),
+            static_cast<std::int64_t>(height)}};
+    }
     if (name == "AmcamResolutionIndex") {
         unsigned index = 0;
         const HRESULT hr = Amcam_get_eSize(impl_->handle, &index);
@@ -2724,6 +2862,85 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (readback != target)
             return featureError(CameraFeatureAccessError::Code::BackendFailure,
                                 std::string(name), "The numeric option readback did not match the request.");
+        return std::monostate{};
+    }
+
+    if (name == "AmcamBinning") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "Binning can only be changed while acquisition is stopped.");
+        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        std::string requestedValue;
+        std::string requestedMethod;
+        if (!parseBinningFeatureSymbol(symbol, requestedValue, requestedMethod))
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "Binning value must identify an advertised value/method pair.");
+        const HRESULT hr = Amcam_put_Binning(
+            impl_->handle, requestedValue.c_str(), requestedMethod.c_str());
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Binning", hr);
+        const char* readbackValue = nullptr;
+        const char* readbackMethod = nullptr;
+        const HRESULT readHr = Amcam_get_Binning(
+            impl_->handle, &readbackValue, &readbackMethod);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Binning(readback)", readHr);
+        if (binningFeatureSymbol(readbackValue, readbackMethod) != symbol)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "Binning readback did not match the requested value/method pair.");
+        return std::monostate{};
+    }
+    if (name == "AmcamHardwareROI") {
+        if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
+            return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
+                                std::string(name), "Hardware ROI can only be changed while acquisition is stopped.");
+
+        const auto& requested = std::get<std::vector<std::int64_t>>(value);
+        if (requested.size() != 4)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "Hardware ROI requires x, y, width and height.");
+        for (const auto component : requested) {
+            if (component < 0 ||
+                component > std::numeric_limits<std::uint32_t>::max() ||
+                (component & 1) != 0) {
+                return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                    std::string(name), "ROI offsets and dimensions must be non-negative even 32-bit values.");
+            }
+        }
+        const auto x = static_cast<std::uint32_t>(requested[0]);
+        const auto y = static_cast<std::uint32_t>(requested[1]);
+        const auto width = static_cast<std::uint32_t>(requested[2]);
+        const auto height = static_cast<std::uint32_t>(requested[3]);
+        if (width == 0 || height == 0)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "ROI width and height must be positive.");
+
+        unsigned previewIndex = std::numeric_limits<unsigned>::max();
+        HRESULT hr = Amcam_get_eSize(impl_->handle, &previewIndex);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_eSize", hr);
+        if (previewIndex >= impl_->previewResolutions.size())
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The selected preview-resolution index is unknown.");
+        const auto& base = impl_->previewResolutions[previewIndex];
+        const std::uint64_t right = static_cast<std::uint64_t>(x) + width;
+        const std::uint64_t bottom = static_cast<std::uint64_t>(y) + height;
+        if (base.width == 0 || base.height == 0 ||
+            right > base.width || bottom > base.height) {
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "ROI rectangle exceeds the selected preview-resolution bounds.");
+        }
+
+        hr = Amcam_put_Roi(impl_->handle, x, y, width, height);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Roi", hr);
+        unsigned readX = 0, readY = 0, readWidth = 0, readHeight = 0;
+        hr = Amcam_get_Roi(impl_->handle, &readX, &readY, &readWidth, &readHeight);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Roi(readback)", hr);
+        if (readX != x || readY != y || readWidth != width || readHeight != height)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "ROI readback did not match the requested rectangle.");
         return std::monostate{};
     }
     if (name == "AmcamWhiteBalanceTemperature" ||

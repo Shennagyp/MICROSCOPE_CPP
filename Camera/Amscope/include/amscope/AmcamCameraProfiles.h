@@ -30,7 +30,9 @@ enum class AmcamCameraFeature : std::uint8_t {
     ThermoelectricCoolingOnOff,
     SensorTemperature,
     CoolingFan,
-    HeatAntiFog
+    HeatAntiFog,
+    HardwareROI,
+    BinningAndSkipping
 };
 
 struct AmcamCameraModelProfile {

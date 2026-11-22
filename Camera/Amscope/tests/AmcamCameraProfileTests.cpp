@@ -41,7 +41,9 @@ int main() {
         AmcamCameraFeature::ThermoelectricCoolingOnOff,
         AmcamCameraFeature::SensorTemperature,
         AmcamCameraFeature::CoolingFan,
-        AmcamCameraFeature::HeatAntiFog
+        AmcamCameraFeature::HeatAntiFog,
+        AmcamCameraFeature::HardwareROI,
+        AmcamCameraFeature::BinningAndSkipping
     };
     restricted.deniedFeatures = {AmcamCameraFeature::WhiteBalance};
 
@@ -56,6 +58,10 @@ int main() {
             "allow-list can explicitly permit a model's cooling fan");
     require(registry.allows("Model-A", AmcamCameraFeature::ImageProcessing),
             "allow-list can explicitly permit image processing controls");
+    require(registry.allows("Model-A", AmcamCameraFeature::HardwareROI),
+            "allow-list can explicitly permit hardware ROI");
+    require(registry.allows("Model-A", AmcamCameraFeature::BinningAndSkipping),
+            "allow-list can explicitly permit binning and skip modes");
     require(!registry.allows("Model-A", AmcamCameraFeature::WhiteBalance),
             "deny-list takes precedence over allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::PreciseFrameRate),

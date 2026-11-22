@@ -86,6 +86,15 @@ integration and does not modify vendor sample code.
   configuration. Sensor temperature and TEC voltage are read-only telemetry.
   Fan and TEC ranges are derived from the model descriptor or SDK range query,
   not assumed constants.
+- Hardware ROI and binning/skip modes are exposed when model flags and
+  non-mutating SDK probes confirm support. ROI uses a typed
+  [x, y, width, height] vector; even coordinates and the selected preview-mode
+  bounds are validated before write. Binning is an enumeration built from the
+  SDK's supported value/method pairs. Both settings are stopped-state-only;
+  the next Start obtains final frame dimensions from the SDK and sizes the
+  existing frame pool for the selected configuration.
+- The cooling fan also accepts the SDK's documented -1 value to restore the
+  model default speed.
 - An injectable exact-model allow/deny registry narrows the probed feature
   capabilities; a missing profile leaves SDK-probed capabilities unchanged.
   Profiles are available through AmcamCamera and QtAmcamCamera constructors.

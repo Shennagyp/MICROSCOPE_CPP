@@ -74,6 +74,18 @@ integration and does not modify vendor sample code.
   AmcamFrameSpeedLevel, and AmcamResolutionIndex.
 - The AmScope descriptors use model metadata and non-mutating SDK probes.
   One-shot auto white balance remains a command, not a Boolean feature.
+- The shared typed feature contract also exposes the probed ISP controls
+  (linear tone mapping, curve mode, video/still demosaic and denoise strength),
+  sensor controls (black level, conversion gain, low-noise and high-full-well
+  modes), and hardware controls (sensor temperature, TEC enabled/target/voltage,
+  fan speed and anti-fog heater level). Every control is hidden unless its
+  model flag/profile policy and non-mutating runtime probe agree.
+- Image-pipeline and sensor-mode writes are stopped-state-only to avoid changing
+  sensor readout or output interpretation underneath a live stream. TEC, fan
+  and anti-fog settings are also stopped-state-only for conservative thermal
+  configuration. Sensor temperature and TEC voltage are read-only telemetry.
+  Fan and TEC ranges are derived from the model descriptor or SDK range query,
+  not assumed constants.
 - An injectable exact-model allow/deny registry narrows the probed feature
   capabilities; a missing profile leaves SDK-probed capabilities unchanged.
   Profiles are available through AmcamCamera and QtAmcamCamera constructors.

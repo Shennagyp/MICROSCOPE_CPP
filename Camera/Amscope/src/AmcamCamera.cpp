@@ -126,6 +126,7 @@ buildAmcamFeatureDescriptors(
     std::uint64_t modelFlags,
     bool hasModelDescriptor,
     const std::optional<std::uint32_t>& maximumSpeedLevel,
+    const std::optional<std::uint32_t>& maximumFanSpeed,
     const std::vector<amscope::Resolution>& previewResolutions,
     const amscope::AmcamCameraProfileRegistry& profileRegistry,
     const std::string& modelCode) {
@@ -248,6 +249,134 @@ buildAmcamFeatureDescriptors(
     const bool rawBitDepthReadable = rawModeReadable && rawMode == 1 &&
         SUCCEEDED(rawBitDepthHr) && (rawBitDepth == 0 || rawBitDepth == 1);
 
+
+    const bool hasColorRawSensor =
+        (modelFlags & (AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
+                       AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW14 | AMCAM_FLAG_RAW16 |
+                       AMCAM_FLAG_RAW12PACK)) != 0 &&
+        (modelFlags & AMCAM_FLAG_MONO) == 0;
+
+    int linearMode = -1;
+    const HRESULT linearHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_LINEAR, &linearMode);
+    const bool linearProbe = SUCCEEDED(linearHr) &&
+        (linearMode == 0 || linearMode == 1);
+
+    int curveMode = -1;
+    const HRESULT curveHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_CURVE, &curveMode);
+    const bool curveProbe = SUCCEEDED(curveHr) &&
+        curveMode >= 0 && curveMode <= 2;
+
+    int videoDemosaic = -1;
+    const HRESULT videoDemosaicHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_DEMOSAIC_VIDEO, &videoDemosaic);
+    const bool videoDemosaicProbe = hasColorRawSensor &&
+        SUCCEEDED(videoDemosaicHr) && videoDemosaic >= 0 && videoDemosaic <= 4;
+
+    int stillDemosaic = -1;
+    const HRESULT stillDemosaicHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_DEMOSAIC_STILL, &stillDemosaic);
+    const bool stillDemosaicProbe = hasColorRawSensor &&
+        SUCCEEDED(stillDemosaicHr) && stillDemosaic >= 0 && stillDemosaic <= 4;
+
+    int denoiseStrength = -1;
+    const HRESULT denoiseHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_DENOISE, &denoiseStrength);
+    const bool denoiseProbe = (modelFlags & AMCAM_FLAG_ISP) != 0 &&
+        SUCCEEDED(denoiseHr) && denoiseStrength >= 0 && denoiseStrength <= 100;
+
+    int blackLevel = -1;
+    const HRESULT blackLevelHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_BLACKLEVEL, &blackLevel);
+    const bool blackLevelProbe = (modelFlags & AMCAM_FLAG_BLACKLEVEL) != 0 &&
+        SUCCEEDED(blackLevelHr);
+
+    int conversionGain = -1;
+    const HRESULT conversionGainHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_CG, &conversionGain);
+    const bool conversionGainAdvertised =
+        (modelFlags & (AMCAM_FLAG_CG | AMCAM_FLAG_CGHDR | AMCAM_FLAG_GHOPTO)) != 0;
+    const bool conversionGainProbe = conversionGainAdvertised &&
+        SUCCEEDED(conversionGainHr) && conversionGain >= 0 &&
+        conversionGain <= 2 &&
+        (conversionGain != 2 ||
+         (modelFlags & (AMCAM_FLAG_CGHDR | AMCAM_FLAG_GHOPTO)) != 0);
+
+    int lowNoise = -1;
+    const HRESULT lowNoiseHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_LOW_NOISE, &lowNoise);
+    const bool lowNoiseProbe = (modelFlags & AMCAM_FLAG_LOW_NOISE) != 0 &&
+        SUCCEEDED(lowNoiseHr) && (lowNoise == 0 || lowNoise == 1);
+
+    int highFullWell = -1;
+    const HRESULT highFullWellHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_HIGH_FULLWELL, &highFullWell);
+    const bool highFullWellProbe =
+        (modelFlags & AMCAM_FLAG_HIGH_FULLWELL) != 0 &&
+        SUCCEEDED(highFullWellHr) &&
+        (highFullWell == 0 || highFullWell == 1);
+
+    short sensorTemperature = 0;
+    const HRESULT sensorTemperatureHr =
+        Amcam_get_Temperature(handle, &sensorTemperature);
+    const bool sensorTemperatureProbe =
+        (modelFlags & AMCAM_FLAG_GETTEMPERATURE) != 0 &&
+        SUCCEEDED(sensorTemperatureHr);
+
+    int tecEnabled = -1;
+    const HRESULT tecEnabledHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_TEC, &tecEnabled);
+    const bool tecToggleProbe =
+        (modelFlags & AMCAM_FLAG_TEC_ONOFF) != 0 &&
+        SUCCEEDED(tecEnabledHr) && (tecEnabled == 0 || tecEnabled == 1);
+
+    int tecTarget = 0;
+    const HRESULT tecTargetHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_TECTARGET, &tecTarget);
+    int tecTargetRangePacked = 0;
+    const HRESULT tecTargetRangeHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_TECTARGET_RANGE, &tecTargetRangePacked);
+    const auto signed16 = [](std::uint16_t value) -> std::int32_t {
+        return (value & 0x8000U) != 0
+            ? static_cast<std::int32_t>(value) - 65536
+            : static_cast<std::int32_t>(value);
+    };
+    const auto tecRangeBits = static_cast<std::uint32_t>(tecTargetRangePacked);
+    const std::int32_t tecTargetMinimum = signed16(
+        static_cast<std::uint16_t>(tecRangeBits & 0xffffU));
+    const std::int32_t tecTargetMaximum = signed16(
+        static_cast<std::uint16_t>((tecRangeBits >> 16U) & 0xffffU));
+    const bool tecTargetProbe =
+        (modelFlags & AMCAM_FLAG_TEC_ONOFF) != 0 &&
+        SUCCEEDED(tecTargetHr) && SUCCEEDED(tecTargetRangeHr) &&
+        tecTargetMaximum >= tecTargetMinimum &&
+        tecTarget >= tecTargetMinimum && tecTarget <= tecTargetMaximum;
+
+    int fanSpeed = -1;
+    const HRESULT fanHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_FAN, &fanSpeed);
+    const bool fanProbe = (modelFlags & AMCAM_FLAG_FAN) != 0 &&
+        maximumFanSpeed.has_value() && SUCCEEDED(fanHr) &&
+        fanSpeed >= 0 &&
+        static_cast<std::uint32_t>(fanSpeed) <= *maximumFanSpeed;
+
+    int heatLevel = -1;
+    int heatMaximum = -1;
+    const HRESULT heatHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_HEAT, &heatLevel);
+    const HRESULT heatMaximumHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_HEAT_MAX, &heatMaximum);
+    const bool heatProbe = (modelFlags & AMCAM_FLAG_HEAT) != 0 &&
+        SUCCEEDED(heatHr) && SUCCEEDED(heatMaximumHr) &&
+        heatMaximum >= 0 && heatLevel >= 0 && heatLevel <= heatMaximum;
+
+    int tecVoltage = 0;
+    const HRESULT tecVoltageHr =
+        Amcam_get_Option(handle, AMCAM_OPTION_TEC_VOLTAGE, &tecVoltage);
+    const bool tecVoltageProbe = (modelFlags & AMCAM_FLAG_TEC) != 0 &&
+        SUCCEEDED(tecVoltageHr);
+
     const bool stopped = state == amscope::CameraState::Open;
     const auto allowed = [&profileRegistry, &modelCode](amscope::AmcamCameraFeature feature) {
         return profileRegistry.allows(modelCode, feature);
@@ -262,9 +391,19 @@ buildAmcamFeatureDescriptors(
     const bool speedLevelAllowed = allowed(amscope::AmcamCameraFeature::DiscreteFrameSpeed);
     const bool resolutionAllowed = allowed(amscope::AmcamCameraFeature::Resolution);
     const bool rawOutputAllowed = allowed(amscope::AmcamCameraFeature::RawOutput);
+    const bool imageProcessingAllowed = allowed(amscope::AmcamCameraFeature::ImageProcessing);
+    const bool blackLevelAllowed = allowed(amscope::AmcamCameraFeature::BlackLevel);
+    const bool conversionGainAllowed = allowed(amscope::AmcamCameraFeature::ConversionGain);
+    const bool lowNoiseAllowed = allowed(amscope::AmcamCameraFeature::LowNoiseMode);
+    const bool highFullWellAllowed = allowed(amscope::AmcamCameraFeature::HighFullWell);
+    const bool tecAllowed = allowed(amscope::AmcamCameraFeature::ThermoelectricCooling);
+    const bool tecOnOffAllowed = allowed(amscope::AmcamCameraFeature::ThermoelectricCoolingOnOff);
+    const bool sensorTemperatureAllowed = allowed(amscope::AmcamCameraFeature::SensorTemperature);
+    const bool fanAllowed = allowed(amscope::AmcamCameraFeature::CoolingFan);
+    const bool heatAllowed = allowed(amscope::AmcamCameraFeature::HeatAntiFog);
 
     std::vector<CameraFeatureDescriptor> descriptors;
-    descriptors.reserve(14);
+    descriptors.reserve(32);
 
     descriptors.push_back({
         "ExposureAuto", "Automatic Exposure", CameraFeatureKind::Enumeration,
@@ -385,6 +524,151 @@ buildAmcamFeatureDescriptors(
             : std::vector<std::string>{},
         camera::CameraFeatureGroup::ImageFormat
     });
+
+    descriptors.push_back({
+        "AmcamLinearToneMappingEnabled", "Linear Tone Mapping",
+        CameraFeatureKind::Boolean, std::nullopt,
+        linearProbe && imageProcessingAllowed, linearProbe,
+        linearProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamCurveMode", "Tone Curve",
+        CameraFeatureKind::Enumeration, std::nullopt,
+        curveProbe && imageProcessingAllowed, curveProbe,
+        curveProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt,
+        {"Off", "Polynomial", "Logarithmic"},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamDemosaicVideo", "Video Demosaic",
+        CameraFeatureKind::Enumeration, std::nullopt,
+        videoDemosaicProbe && imageProcessingAllowed, videoDemosaicProbe,
+        videoDemosaicProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt,
+        {"Bilinear", "VNG", "PPG", "AHD", "EdgeAware"},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamDemosaicStill", "Still Demosaic",
+        CameraFeatureKind::Enumeration, std::nullopt,
+        stillDemosaicProbe && imageProcessingAllowed, stillDemosaicProbe,
+        stillDemosaicProbe && imageProcessingAllowed && stopped,
+        std::nullopt, std::nullopt,
+        {"Bilinear", "VNG", "PPG", "AHD", "EdgeAware"},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamDenoiseStrength", "Denoise Strength",
+        CameraFeatureKind::Integer, std::string("0-100"),
+        denoiseProbe && imageProcessingAllowed, denoiseProbe,
+        denoiseProbe && imageProcessingAllowed && stopped,
+        CameraFeatureNumericRange{0.0, 100.0, 1.0},
+        std::nullopt, {},
+        camera::CameraFeatureGroup::ImageProcessing
+    });
+    descriptors.push_back({
+        "AmcamBlackLevel", "Sensor Black Level",
+        CameraFeatureKind::Integer, std::string("SDK units"),
+        blackLevelProbe && blackLevelAllowed, blackLevelProbe,
+        blackLevelProbe && blackLevelAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::Sensor
+    });
+    std::vector<std::string> conversionGainModes;
+    if (conversionGainProbe) {
+        conversionGainModes = {"LCG", "HCG"};
+        if ((modelFlags & AMCAM_FLAG_CGHDR) != 0)
+            conversionGainModes.push_back("HDR");
+        else if ((modelFlags & AMCAM_FLAG_GHOPTO) != 0)
+            conversionGainModes.push_back("MCG");
+    }
+    descriptors.push_back({
+        "AmcamConversionGainMode", "Conversion Gain",
+        CameraFeatureKind::Enumeration, std::nullopt,
+        conversionGainProbe && conversionGainAllowed, conversionGainProbe,
+        conversionGainProbe && conversionGainAllowed && stopped,
+        std::nullopt, std::nullopt, std::move(conversionGainModes),
+        camera::CameraFeatureGroup::Sensor
+    });
+    descriptors.push_back({
+        "AmcamLowNoiseModeEnabled", "Low Noise Mode",
+        CameraFeatureKind::Boolean, std::nullopt,
+        lowNoiseProbe && lowNoiseAllowed, lowNoiseProbe,
+        lowNoiseProbe && lowNoiseAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::Sensor
+    });
+    descriptors.push_back({
+        "AmcamHighFullWellEnabled", "High Full Well",
+        CameraFeatureKind::Boolean, std::nullopt,
+        highFullWellProbe && highFullWellAllowed, highFullWellProbe,
+        highFullWellProbe && highFullWellAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::Sensor
+    });
+    descriptors.push_back({
+        "AmcamSensorTemperature", "Sensor Temperature",
+        CameraFeatureKind::Integer, std::string("0.1 °C"),
+        sensorTemperatureProbe && sensorTemperatureAllowed,
+        sensorTemperatureProbe, false,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::Hardware
+    });
+    descriptors.push_back({
+        "AmcamTecEnabled", "Thermoelectric Cooler",
+        CameraFeatureKind::Boolean, std::nullopt,
+        tecToggleProbe && tecOnOffAllowed, tecToggleProbe,
+        tecToggleProbe && tecOnOffAllowed && stopped,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::Hardware
+    });
+    descriptors.push_back({
+        "AmcamTecTargetTemperature", "TEC Target Temperature",
+        CameraFeatureKind::Integer, std::string("0.1 °C"),
+        tecTargetProbe && tecOnOffAllowed, tecTargetProbe,
+        tecTargetProbe && tecOnOffAllowed && stopped,
+        tecTargetProbe
+            ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
+                  static_cast<double>(tecTargetMinimum),
+                  static_cast<double>(tecTargetMaximum), 1.0})
+            : std::nullopt,
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Hardware
+    });
+    descriptors.push_back({
+        "AmcamTecVoltage", "TEC Voltage",
+        CameraFeatureKind::Integer, std::string("0.1 V"),
+        tecVoltageProbe && tecAllowed, tecVoltageProbe, false,
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::Hardware
+    });
+    descriptors.push_back({
+        "AmcamFanSpeed", "Cooling Fan Speed",
+        CameraFeatureKind::Integer, std::string("SDK level"),
+        fanProbe && fanAllowed, fanProbe,
+        fanProbe && fanAllowed && stopped,
+        fanProbe
+            ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
+                  0.0, static_cast<double>(*maximumFanSpeed), 1.0})
+            : std::nullopt,
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Hardware
+    });
+    descriptors.push_back({
+        "AmcamHeatAntiFogLevel", "Anti-Fog Heater",
+        CameraFeatureKind::Integer, std::string("SDK level"),
+        heatProbe && heatAllowed, heatProbe,
+        heatProbe && heatAllowed && stopped,
+        heatProbe
+            ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
+                  0.0, static_cast<double>(heatMaximum), 1.0})
+            : std::nullopt,
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Hardware
+    });
     return descriptors;
 }
 
@@ -468,6 +752,7 @@ struct AmcamCamera::Impl {
     std::uint64_t modelFlags = 0;
     bool hasModelDescriptor = false;
     std::optional<std::uint32_t> maximumSpeedLevel;
+    std::optional<std::uint32_t> maximumFanSpeed;
     std::vector<Resolution> previewResolutions;
     std::thread worker;
     std::shared_ptr<FramePool> pool;
@@ -998,6 +1283,8 @@ std::vector<CameraInfo> AmcamCamera::enumerate(CameraError* error) {
             }
             info.modelFlags = device.model->flag;
             info.maximumSpeedLevel = device.model->maxspeed;
+            if ((device.model->flag & AMCAM_FLAG_FAN) != 0)
+                info.maximumFanSpeed = device.model->maxfanspeed;
             const unsigned n = std::min<unsigned>(device.model->preview, 16U);
             for (unsigned r = 0; r < n; ++r)
                 info.previewResolutions.push_back(
@@ -1039,6 +1326,7 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
     impl_->modelFlags = selected->modelFlags;
     impl_->hasModelDescriptor = selected->hasModelDescriptor;
     impl_->maximumSpeedLevel = selected->maximumSpeedLevel;
+    impl_->maximumFanSpeed = selected->maximumFanSpeed;
     impl_->previewResolutions = selected->previewResolutions;
 
     impl_->stopRequested.store(true, std::memory_order_release);
@@ -1085,6 +1373,7 @@ bool AmcamCamera::close(CameraError* error) {
         impl_->modelFlags = 0;
         impl_->hasModelDescriptor = false;
         impl_->maximumSpeedLevel.reset();
+        impl_->maximumFanSpeed.reset();
         impl_->previewResolutions.clear();
     }
 
@@ -1927,6 +2216,7 @@ AmcamCamera::featureDescriptors() {
         impl_->modelFlags,
         impl_->hasModelDescriptor,
         impl_->maximumSpeedLevel,
+        impl_->maximumFanSpeed,
         impl_->previewResolutions,
         impl_->profileRegistry,
         impl_->modelCode);
@@ -1945,6 +2235,7 @@ AmcamCamera::readFeature(std::string_view name) {
         impl_->modelFlags,
         impl_->hasModelDescriptor,
         impl_->maximumSpeedLevel,
+        impl_->maximumFanSpeed,
         impl_->previewResolutions,
         impl_->profileRegistry,
         impl_->modelCode);
@@ -2000,6 +2291,103 @@ AmcamCamera::readFeature(std::string_view name) {
         const HRESULT hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, &value);
         if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_get_Option(PIXEL_FORMAT)", hr);
         return CameraFeatureValue{FeatureEnumeration{std::to_string(value)}};
+    }
+
+    if (name == "AmcamLinearToneMappingEnabled" ||
+        name == "AmcamLowNoiseModeEnabled" ||
+        name == "AmcamHighFullWellEnabled" ||
+        name == "AmcamTecEnabled") {
+        const unsigned option =
+            name == "AmcamLinearToneMappingEnabled" ? AMCAM_OPTION_LINEAR :
+            name == "AmcamLowNoiseModeEnabled" ? AMCAM_OPTION_LOW_NOISE :
+            name == "AmcamHighFullWellEnabled" ? AMCAM_OPTION_HIGH_FULLWELL :
+                                                  AMCAM_OPTION_TEC;
+        const int requested = std::get<bool>(value) ? 1 : 0;
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The Boolean option readback did not match the request.");
+        return std::monostate{};
+    }
+    if (name == "AmcamCurveMode" ||
+        name == "AmcamDemosaicVideo" ||
+        name == "AmcamDemosaicStill" ||
+        name == "AmcamConversionGainMode") {
+        const auto& symbol = std::get<FeatureEnumeration>(value).symbol;
+        int requested = -1;
+        unsigned option = 0;
+        if (name == "AmcamCurveMode") {
+            option = AMCAM_OPTION_CURVE;
+            if (symbol == "Off") requested = 0;
+            else if (symbol == "Polynomial") requested = 1;
+            else if (symbol == "Logarithmic") requested = 2;
+        } else if (name == "AmcamConversionGainMode") {
+            option = AMCAM_OPTION_CG;
+            if (symbol == "LCG") requested = 0;
+            else if (symbol == "HCG") requested = 1;
+            else if (symbol == "HDR" &&
+                     (impl_->modelFlags & AMCAM_FLAG_CGHDR) != 0) requested = 2;
+            else if (symbol == "MCG" &&
+                     (impl_->modelFlags & AMCAM_FLAG_GHOPTO) != 0) requested = 2;
+        } else {
+            option = name == "AmcamDemosaicVideo"
+                ? AMCAM_OPTION_DEMOSAIC_VIDEO : AMCAM_OPTION_DEMOSAIC_STILL;
+            if (symbol == "Bilinear") requested = 0;
+            else if (symbol == "VNG") requested = 1;
+            else if (symbol == "PPG") requested = 2;
+            else if (symbol == "AHD") requested = 3;
+            else if (symbol == "EdgeAware") requested = 4;
+        }
+        if (requested < 0)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "The requested enumeration symbol is not supported by this camera.");
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, requested);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = -1;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != requested)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The enumeration readback did not match the request.");
+        return std::monostate{};
+    }
+    if (name == "AmcamDenoiseStrength" ||
+        name == "AmcamBlackLevel" ||
+        name == "AmcamTecTargetTemperature" ||
+        name == "AmcamFanSpeed" ||
+        name == "AmcamHeatAntiFogLevel") {
+        const auto requested = std::get<std::int64_t>(value);
+        if (requested < std::numeric_limits<int>::min() ||
+            requested > std::numeric_limits<int>::max())
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name), "The requested value does not fit the SDK signed integer.");
+        const int target = static_cast<int>(requested);
+        unsigned option = 0;
+        if (name == "AmcamDenoiseStrength") option = AMCAM_OPTION_DENOISE;
+        else if (name == "AmcamBlackLevel") option = AMCAM_OPTION_BLACKLEVEL;
+        else if (name == "AmcamTecTargetTemperature") option = AMCAM_OPTION_TECTARGET;
+        else if (name == "AmcamFanSpeed") option = AMCAM_OPTION_FAN;
+        else option = AMCAM_OPTION_HEAT;
+
+        const HRESULT hr = Amcam_put_Option(impl_->handle, option, target);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_put_Option", hr);
+        int readback = 0;
+        const HRESULT readHr = Amcam_get_Option(impl_->handle, option, &readback);
+        if (FAILED(readHr))
+            return featureBackendError(std::string(name), "Amcam_get_Option(readback)", readHr);
+        if (readback != target)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The numeric option readback did not match the request.");
+        return std::monostate{};
     }
     if (name == "AmcamWhiteBalanceTemperature" ||
         name == "AmcamWhiteBalanceTint") {
@@ -2065,6 +2453,90 @@ AmcamCamera::readFeature(std::string_view name) {
             rawFormatFeatureSymbol(fourCC, bitsPerPixel)}};
     }
 
+    if (name == "AmcamLinearToneMappingEnabled" ||
+        name == "AmcamLowNoiseModeEnabled" ||
+        name == "AmcamHighFullWellEnabled" ||
+        name == "AmcamTecEnabled") {
+        const unsigned option =
+            name == "AmcamLinearToneMappingEnabled" ? AMCAM_OPTION_LINEAR :
+            name == "AmcamLowNoiseModeEnabled" ? AMCAM_OPTION_LOW_NOISE :
+            name == "AmcamHighFullWellEnabled" ? AMCAM_OPTION_HIGH_FULLWELL :
+                                                  AMCAM_OPTION_TEC;
+        int value = -1;
+        const HRESULT hr = Amcam_get_Option(impl_->handle, option, &value);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option", hr);
+        if (value != 0 && value != 1)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name), "The SDK returned an invalid Boolean option value.");
+        return CameraFeatureValue{value != 0};
+    }
+    if (name == "AmcamCurveMode" ||
+        name == "AmcamDemosaicVideo" ||
+        name == "AmcamDemosaicStill" ||
+        name == "AmcamConversionGainMode") {
+        const unsigned option =
+            name == "AmcamCurveMode" ? AMCAM_OPTION_CURVE :
+            name == "AmcamDemosaicVideo" ? AMCAM_OPTION_DEMOSAIC_VIDEO :
+            name == "AmcamDemosaicStill" ? AMCAM_OPTION_DEMOSAIC_STILL :
+                                           AMCAM_OPTION_CG;
+        int value = -1;
+        const HRESULT hr = Amcam_get_Option(impl_->handle, option, &value);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option", hr);
+        std::string symbol;
+        if (name == "AmcamCurveMode") {
+            static const char* modes[] = {"Off", "Polynomial", "Logarithmic"};
+            if (value < 0 || value > 2)
+                return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                    std::string(name), "The SDK returned an unknown curve mode.");
+            symbol = modes[value];
+        } else if (name == "AmcamConversionGainMode") {
+            if (value == 0) symbol = "LCG";
+            else if (value == 1) symbol = "HCG";
+            else if (value == 2 && (impl_->modelFlags & AMCAM_FLAG_CGHDR) != 0)
+                symbol = "HDR";
+            else if (value == 2 && (impl_->modelFlags & AMCAM_FLAG_GHOPTO) != 0)
+                symbol = "MCG";
+            else
+                return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                    std::string(name), "The SDK returned an unsupported conversion-gain mode.");
+        } else {
+            static const char* methods[] = {"Bilinear", "VNG", "PPG", "AHD", "EdgeAware"};
+            if (value < 0 || value > 4)
+                return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                    std::string(name), "The SDK returned an unknown demosaic method.");
+            symbol = methods[value];
+        }
+        return CameraFeatureValue{FeatureEnumeration{std::move(symbol)}};
+    }
+    if (name == "AmcamDenoiseStrength" ||
+        name == "AmcamBlackLevel" ||
+        name == "AmcamTecTargetTemperature" ||
+        name == "AmcamFanSpeed" ||
+        name == "AmcamHeatAntiFogLevel" ||
+        name == "AmcamTecVoltage") {
+        const unsigned option =
+            name == "AmcamDenoiseStrength" ? AMCAM_OPTION_DENOISE :
+            name == "AmcamBlackLevel" ? AMCAM_OPTION_BLACKLEVEL :
+            name == "AmcamTecTargetTemperature" ? AMCAM_OPTION_TECTARGET :
+            name == "AmcamFanSpeed" ? AMCAM_OPTION_FAN :
+            name == "AmcamHeatAntiFogLevel" ? AMCAM_OPTION_HEAT :
+                                               AMCAM_OPTION_TEC_VOLTAGE;
+        int value = 0;
+        const HRESULT hr = Amcam_get_Option(impl_->handle, option, &value);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Option", hr);
+        return CameraFeatureValue{static_cast<std::int64_t>(value)};
+    }
+    if (name == "AmcamSensorTemperature") {
+        short value = 0;
+        const HRESULT hr = Amcam_get_Temperature(impl_->handle, &value);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name), "Amcam_get_Temperature", hr);
+        return CameraFeatureValue{static_cast<std::int64_t>(value)};
+    }
+
     return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
                         std::string(name), "Camera feature was not found.");
 }
@@ -2082,6 +2554,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         impl_->modelFlags,
         impl_->hasModelDescriptor,
         impl_->maximumSpeedLevel,
+        impl_->maximumFanSpeed,
         impl_->previewResolutions,
         impl_->profileRegistry,
         impl_->modelCode);

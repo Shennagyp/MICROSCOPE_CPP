@@ -31,7 +31,17 @@ int main() {
         AmcamCameraFeature::WhiteBalance,
         AmcamCameraFeature::AnalogGain,
         AmcamCameraFeature::RawOutput,
-        AmcamCameraFeature::StillCapture
+        AmcamCameraFeature::StillCapture,
+        AmcamCameraFeature::ImageProcessing,
+        AmcamCameraFeature::BlackLevel,
+        AmcamCameraFeature::ConversionGain,
+        AmcamCameraFeature::LowNoiseMode,
+        AmcamCameraFeature::HighFullWell,
+        AmcamCameraFeature::ThermoelectricCooling,
+        AmcamCameraFeature::ThermoelectricCoolingOnOff,
+        AmcamCameraFeature::SensorTemperature,
+        AmcamCameraFeature::CoolingFan,
+        AmcamCameraFeature::HeatAntiFog
     };
     restricted.deniedFeatures = {AmcamCameraFeature::WhiteBalance};
 
@@ -42,12 +52,18 @@ int main() {
             "allow-list can explicitly permit RAW sensor output");
     require(registry.allows("Model-A", AmcamCameraFeature::StillCapture),
             "allow-list can explicitly permit still capture");
+    require(registry.allows("Model-A", AmcamCameraFeature::CoolingFan),
+            "allow-list can explicitly permit a model's cooling fan");
+    require(registry.allows("Model-A", AmcamCameraFeature::ImageProcessing),
+            "allow-list can explicitly permit image processing controls");
     require(!registry.allows("Model-A", AmcamCameraFeature::WhiteBalance),
             "deny-list takes precedence over allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::PreciseFrameRate),
             "profile denies features omitted from its allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::DiscreteFrameSpeed),
             "profile continues to restrict capabilities omitted from its allow-list");
+    require(!registry.allows("Model-B", AmcamCameraFeature::CoolingFan),
+            "configured profiles narrow feature access without affecting unprobed hardware support");
     require(registry.allows("Model-B", AmcamCameraFeature::PreciseFrameRate),
             "unprofiled model retains independently probed support");
 

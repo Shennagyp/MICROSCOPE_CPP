@@ -20,7 +20,17 @@ enum class AmcamCameraFeature : std::uint8_t {
     RawOutput,
     StillCapture,
     PreciseFrameRate,
-    DiscreteFrameSpeed
+    DiscreteFrameSpeed,
+    ImageProcessing,
+    BlackLevel,
+    ConversionGain,
+    LowNoiseMode,
+    HighFullWell,
+    ThermoelectricCooling,
+    ThermoelectricCoolingOnOff,
+    SensorTemperature,
+    CoolingFan,
+    HeatAntiFog
 };
 
 struct AmcamCameraModelProfile {

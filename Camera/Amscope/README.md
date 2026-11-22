@@ -15,6 +15,14 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
 - One AmcamCamera owns one HAmcam handle for the complete open session.
 - Enumeration copies SDK device data into CameraInfo; open uses the opaque
   device id returned by enumeration. Re-enumerate after a disconnect/replug.
+- Common discovery fields use `camera::CameraDeviceInfo`: optional
+  manufacturer/model/serial/firmware identity, common preview dimensions, and
+  a tri-state model capability set. An opaque SDK device id is not assumed to
+  be a serial number. Amcam model flags, model code, speed/fan limits, and I/O
+  line counts remain in the AmScope-specific `CameraInfo` extension.
+- Model-advertised capabilities are distinct from runtime feature access.
+  Missing model metadata is `Unknown`; a known absent capability is
+  `Unsupported`; neither is inferred from the availability of a UI editor.
 - Acquisition starts pull mode with the SDK event callback. The callback only
   enqueues relevant event codes into a fixed-capacity (256) allocation-free
   FIFO; one C++ worker handles events and calls Amcam_PullImageV4.
@@ -317,6 +325,10 @@ production callback-drain tracker, cache-flush obligation/retry behavior,
 and retained frame-pool leases. These are deterministic helper-level tests;
 they do not replace physical-camera regression or a complete injected SDK
 failure test seam.
+
+The shared common layer also includes `camera_common_models_tests`, which
+tests backend-neutral discovery identity, resolution values, and the
+Unknown/Unsupported/Supported capability distinction.
 
 To run only the SDK camera-enumeration smoke check after building:
 

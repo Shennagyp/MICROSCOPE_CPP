@@ -26,6 +26,7 @@
 #include <QSpinBox>
 #include <QStringList>
 #include <QStatusBar>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -294,6 +295,12 @@ public:
         workspace->addLayout(settingsColumn);
 
         frameInfo_ = new QLabel("No frames received", central);
+        frameRateTimer_ = new QTimer(this);
+        frameRateTimer_->setInterval(1000);
+        connect(frameRateTimer_, &QTimer::timeout, this, [this]() {
+            pollFrameRate();
+        });
+
         root->addLayout(toolbar);
         root->addLayout(workspace, 1);
         root->addWidget(frameInfo_);
@@ -366,8 +373,24 @@ public:
                 ++cameraEnumerationGeneration_;
                 cameraEnumerationPending_ = false;
             }
-            if (state != amscope::CameraState::Streaming)
+            if (state == amscope::CameraState::Streaming) {
+                if (!frameRateTimer_->isActive()) {
+                    ++frameRatePollingGeneration_;
+                    frameRateRequestPending_ = false;
+                    sdkFramesPerSecond_.reset();
+                    sdkTotalFrames_.reset();
+                    frameRateTimer_->start();
+                    pollFrameRate();
+                }
+            } else {
+                frameRateTimer_->stop();
+                ++frameRatePollingGeneration_;
+                frameRateRequestPending_ = false;
+                sdkFramesPerSecond_.reset();
+                sdkTotalFrames_.reset();
                 resetPreviewFrameRate();
+                updateFrameInfoLabel();
+            }
             updateControls(state);
             if (state == amscope::CameraState::Open ||
                 state == amscope::CameraState::Streaming) {
@@ -1285,12 +1308,75 @@ private:
              camera_.state() == amscope::CameraState::Streaming));
     }
 
+    void pollFrameRate() {
+        if (camera_.state() != amscope::CameraState::Streaming ||
+            frameRateRequestPending_) {
+            return;
+        }
+
+        frameRateRequestPending_ = true;
+        const std::uint64_t generation = frameRatePollingGeneration_;
+        const auto requestId = camera_.requestFrameRate(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::FrameRateResult result) {
+                if (generation != frameRatePollingGeneration_)
+                    return;
+
+                frameRateRequestPending_ = false;
+                if (camera_.state() != amscope::CameraState::Streaming)
+                    return;
+
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    sdkFramesPerSecond_.reset();
+                    sdkTotalFrames_.reset();
+                    statusBar()->showMessage(
+                        QString("Frame-rate telemetry unavailable: %1")
+                            .arg(QString::fromStdString(error->message)), 2500);
+                } else {
+                    const auto& statistics =
+                        std::get<amscope::FrameRateStatistics>(result);
+                    sdkFramesPerSecond_ = statistics.framesPerSecond;
+                    sdkTotalFrames_ = statistics.totalFrames;
+                }
+                updateFrameInfoLabel();
+            });
+
+        if (requestId == 0)
+            frameRateRequestPending_ = false;
+    }
+
+    void updateFrameInfoLabel() {
+        QString text = frameSummary_.isEmpty()
+            ? QStringLiteral("No frames received")
+            : frameSummary_;
+
+        if (sdkFramesPerSecond_) {
+            text += QString(" | SDK %1 FPS")
+                .arg(*sdkFramesPerSecond_, 0, 'f', 1);
+            if (sdkTotalFrames_)
+                text += QString(" | SDK total %1")
+                    .arg(static_cast<qulonglong>(*sdkTotalFrames_));
+        }
+        if (previewFramesPerSecond_) {
+            text += QString(" | preview %1 FPS")
+                .arg(*previewFramesPerSecond_, 0, 'f', 1);
+        }
+        frameInfo_->setText(text);
+    }
+
     void presentLatestFrame() {
         const amscope::FramePtr frame = camera_.takeLatestFrame();
         if (!frame || frame->data() == nullptr ||
             frame->width == 0 || frame->height == 0) {
             return;
         }
+
+        frameSummary_ = QString("%1 x %2 | frame %3 | %4 bytes")
+            .arg(static_cast<qulonglong>(frame->width))
+            .arg(static_cast<qulonglong>(frame->height))
+            .arg(static_cast<qulonglong>(frame->sequence))
+            .arg(static_cast<qulonglong>(frame->byteSize()));
 
         if (frame->pixelFormat != amscope::PixelFormat::RGB24) {
             preview_->setPixmap(QPixmap{});
@@ -1301,6 +1387,7 @@ private:
                     .arg(static_cast<unsigned>(frame->bitsPerPixel))
                     .arg(static_cast<unsigned>(frame->containerBitsPerPixel))
                     .arg(frame->pixelFormatCode, 8, 16, QChar('0')));
+            updateFrameInfoLabel();
             return;
         }
 
@@ -1324,16 +1411,7 @@ private:
         if (const auto estimate = previewFrameRateEstimator_.record(monotonicSeconds))
             previewFramesPerSecond_ = *estimate;
 
-        QString frameInfo = QString("%1 x %2 | frame %3 | %4 bytes")
-            .arg(static_cast<qulonglong>(frame->width))
-            .arg(static_cast<qulonglong>(frame->height))
-            .arg(static_cast<qulonglong>(frame->sequence))
-            .arg(static_cast<qulonglong>(frame->byteSize()));
-        if (previewFramesPerSecond_) {
-            frameInfo += QString(" | preview %1 FPS")
-                .arg(*previewFramesPerSecond_, 0, 'f', 1);
-        }
-        frameInfo_->setText(frameInfo);
+        updateFrameInfoLabel();
     }
 
     void resetPreviewFrameRate() {
@@ -2333,6 +2411,12 @@ private:
     std::vector<amscope::CameraInfo> cameras_;
     camera::FrameRateEstimator previewFrameRateEstimator_;
     std::optional<double> previewFramesPerSecond_;
+    std::optional<double> sdkFramesPerSecond_;
+    std::optional<std::uint32_t> sdkTotalFrames_;
+    QString frameSummary_;
+    QTimer* frameRateTimer_ = nullptr;
+    std::uint64_t frameRatePollingGeneration_ = 0;
+    bool frameRateRequestPending_ = false;
 
     std::uint64_t featureUiGeneration_ = 0;
     std::uint64_t lifecycleUiGeneration_ = 0;

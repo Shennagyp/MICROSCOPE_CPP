@@ -431,9 +431,10 @@ private:
 
                 const bool raw = frame->pixelFormat != amscope::PixelFormat::RGB24;
                 const QString suggested = raw
-                    ? QString("amscope_%1x%2_%3bit.raw")
+                    ? QString("amscope_%1x%2_sensor%3_container%4.raw")
                           .arg(frame->width).arg(frame->height)
                           .arg(static_cast<unsigned>(frame->bitsPerPixel))
+                          .arg(static_cast<unsigned>(frame->containerBitsPerPixel))
                     : QString("amscope_%1x%2.png")
                           .arg(frame->width).arg(frame->height);
                 const QString path = QFileDialog::getSaveFileName(
@@ -475,7 +476,8 @@ private:
                     {"width", static_cast<qint64>(frame->width)},
                     {"height", static_cast<qint64>(frame->height)},
                     {"strideBytes", static_cast<qint64>(frame->strideBytes)},
-                    {"bitsPerPixel", static_cast<int>(frame->bitsPerPixel)},
+                    {"sensorBitsPerPixel", static_cast<int>(frame->bitsPerPixel)},
+                    {"containerBitsPerPixel", static_cast<int>(frame->containerBitsPerPixel)},
                     {"pixelFormatFourCC", static_cast<qint64>(frame->pixelFormatCode)},
                     {"sequence", static_cast<qint64>(frame->sequence)},
                     {"timestampMicroseconds",
@@ -1020,10 +1022,11 @@ private:
         if (frame->pixelFormat != amscope::PixelFormat::RGB24) {
             preview_->setPixmap(QPixmap{});
             preview_->setText(
-                QString("RAW sensor stream active | %1 x %2 | %3-bit | format 0x%4")
+                QString("RAW sensor stream active | %1 x %2 | sensor %3-bit / container %4-bit | format 0x%5")
                     .arg(static_cast<qulonglong>(frame->width))
                     .arg(static_cast<qulonglong>(frame->height))
                     .arg(static_cast<unsigned>(frame->bitsPerPixel))
+                    .arg(static_cast<unsigned>(frame->containerBitsPerPixel))
                     .arg(frame->pixelFormatCode, 8, 16, QChar('0')));
             return;
         }

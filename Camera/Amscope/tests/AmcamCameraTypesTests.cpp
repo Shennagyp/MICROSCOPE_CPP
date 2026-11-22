@@ -43,18 +43,25 @@ int main() {
     amscope::Frame raw8;
     raw8.pixelFormat = amscope::PixelFormat::Raw8;
     raw8.pixelFormatCode = 0x42474752U; // RGGB FourCC
-    raw8.bitsPerPixel = 8;
+    raw8.bitsPerPixel = 10;
+    raw8.containerBitsPerPixel = 8;
+    raw8.strideBytes = 1280;
     require(raw8.pixelFormat != amscope::PixelFormat::RGB24,
-            "RAW8 is not misidentified as RGB24");
-    require(raw8.bitsPerPixel == 8 && raw8.pixelFormatCode != 0,
-            "RAW8 retains sensor format identity");
+            "RAW8 storage is not misidentified as RGB24");
+    require(raw8.bitsPerPixel == 10 && raw8.containerBitsPerPixel == 8 &&
+                raw8.pixelFormatCode != 0 && raw8.strideBytes == 1280,
+            "RAW frame retains sensor depth separately from its 8-bit storage container");
 
     amscope::Frame raw16;
     raw16.pixelFormat = amscope::PixelFormat::Raw16;
     raw16.bitsPerPixel = 12;
+    raw16.containerBitsPerPixel = 16;
+    raw16.strideBytes = 2560;
     require(raw16.pixelFormat != amscope::PixelFormat::RGB24 &&
-                raw16.bitsPerPixel > 8,
-            "higher-bit-depth RAW is represented separately from RGB24");
+                raw16.bitsPerPixel > 8 &&
+                raw16.containerBitsPerPixel == 16 &&
+                raw16.strideBytes == 2560,
+            "12-bit sensor samples can be represented in a 16-bit storage container");
 
     AmcamAutoExposureMode mode = AmcamAutoExposureMode::Off;
     require(amscope::parseAmcamAutoExposureMode("Continuous", mode) &&

@@ -44,10 +44,10 @@ integration and does not modify vendor sample code.
   payload representation from the stopped-state stream configuration; it does
   not introduce another callback, polling loop, or acquisition worker.
 - Processed live frames remain packed RGB24 (rowPitch = -1, stride = width * 3).
-  RAW live mode uses the SDK's Amcam_get_RawFormat metadata and PullImageV4's
-  documented RAW representation: one byte per pixel at 8 bits, two bytes per
-  pixel above 8 bits, with no row padding. Frames retain the RAW FourCC and
-  significant sensor bit depth instead of being mislabeled RGB24.
+  RAW live mode uses Amcam_get_RawFormat for sensor FourCC/significant bit
+  depth and AMCAM_OPTION_BITDEPTH for the returned storage container: one byte
+  per pixel in 8-bit mode or two bytes per pixel in 16-bit mode, with no row
+  padding. Frame metadata keeps both values distinct.
 - AmcamRawOutputEnabled and AmcamRawBitDepth are exposed through the same
   typed feature interface and are writable only while the camera is stopped.
   Model RAW flags, SDK option probes, and the exact-model RawOutput profile
@@ -83,12 +83,15 @@ integration and does not modify vendor sample code.
 - Auto white-balance-once remains a separate native command; device-measured
   frame rate remains telemetry, not a configurable FPS feature.
 - Still capture is independent of live-frame delivery. Processed capture uses
-  Amcam_SnapN; RAW capture uses Amcam_SnapR. AMCAM_EVENT_STILLIMAGE is routed
-  to a dedicated capture waiter and never enters the live event FIFO. The
-  result is pulled with Amcam_PullImageV4(bStill=1). A timed-out or failed
-  capture quarantines further still requests until a successful Stop/Start
-  callback-drain boundary; the live acquisition queue, worker and pull path are
-  unchanged.
+  Amcam_SnapN; RAW capture uses Amcam_SnapR. Both commands require a still-table
+  resolution index; UINT32_MAX is mapped to the still entry matching current
+  preview dimensions. No sentinel is passed directly to the SDK.
+  AMCAM_EVENT_STILLIMAGE is routed to a dedicated waiter and never enters the
+  live event FIFO. The result is pulled with Amcam_PullImageV4(bStill=1).
+  RAW stills preserve sensor significant depth separately from the BITDEPTH-
+  selected 8/16-bit storage container. A timed-out or failed capture quarantines
+  further still requests until a successful Stop/Start callback-drain boundary;
+  the live acquisition queue, worker and pull path are unchanged.
 - Callback-to-pull execution now follows the Swift model and the vendor's
   documented callback/PullImage pairing. Auto-exposure convergence notifications
   (AUTOEXPO_CONV / AUTOEXPO_CONVFAIL) are not surfaced as completion events:
@@ -267,6 +270,6 @@ stops and closes the session.
 
 ## Not included yet
 
-Still-image capture (processed SnapN and RAW SnapR), trigger/GPIO control,
-synchronized multi-camera acquisition, GenTL routing, ImageProcessing
-integration, and a concrete GPU renderer remain separate capabilities.
+Trigger/GPIO control, synchronized multi-camera acquisition, GenTL routing,
+ImageProcessing integration, RAW demosaicing for visible preview, and a
+concrete GPU renderer remain separate capabilities.

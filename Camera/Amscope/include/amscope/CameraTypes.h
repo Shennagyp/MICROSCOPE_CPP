@@ -30,7 +30,7 @@ enum class StillCaptureMode : std::uint8_t { Processed, Raw };
 
 struct StillCaptureRequest {
     StillCaptureMode mode = StillCaptureMode::Processed;
-    // UINT32_MAX selects the current preview resolution.
+    // UINT32_MAX selects the still-resolution entry matching live preview dimensions.
     std::uint32_t resolutionIndex = 0xffffffffU;
     std::uint32_t timeoutMilliseconds = 30000;
 };
@@ -42,8 +42,11 @@ struct Frame {
     PixelFormat pixelFormat = PixelFormat::RGB24;
     // Amcam RAW frames retain the SDK FourCC and significant sensor bit depth.
     // RGB24 uses pixelFormatCode=0 and bitsPerPixel=24.
+    // Significant pixel depth reported by the sensor/RAW format.
     std::uint32_t pixelFormatCode = 0;
     std::uint8_t bitsPerPixel = 24;
+    // Actual payload storage container width (8/16 for Amcam RAW).
+    std::uint8_t containerBitsPerPixel = 24;
     bool isStill = false;
     std::uint32_t sequence = 0;
     std::uint64_t timestampMicroseconds = 0;

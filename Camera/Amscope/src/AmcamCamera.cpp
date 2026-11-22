@@ -408,9 +408,11 @@ struct AmcamCamera::Impl {
         FramePool(std::uint32_t w, std::uint32_t h,
                   std::uint32_t stride, std::size_t bytes,
                   PixelFormat format, std::uint32_t formatCode,
-                  std::uint8_t bitsPerPixel, std::size_t bytesPerPixel)
+                  std::uint8_t bitsPerPixel, std::uint8_t containerBitsPerPixel,
+                  std::size_t bytesPerPixel)
             : discard(bytes), pixelFormat(format), pixelFormatCode(formatCode),
-              bitsPerPixel(bitsPerPixel), bytesPerPixel(bytesPerPixel) {
+              bitsPerPixel(bitsPerPixel), containerBitsPerPixel(containerBitsPerPixel),
+              bytesPerPixel(bytesPerPixel) {
             slots.reserve(kPoolSize);
             for (std::size_t i = 0; i < kPoolSize; ++i) {
                 auto frame = std::make_shared<Frame>();
@@ -420,6 +422,7 @@ struct AmcamCamera::Impl {
                 frame->pixelFormat = format;
                 frame->pixelFormatCode = formatCode;
                 frame->bitsPerPixel = bitsPerPixel;
+                frame->containerBitsPerPixel = containerBitsPerPixel;
                 frame->pixels.resize(bytes);
                 slots.push_back(std::move(frame));
             }
@@ -435,6 +438,7 @@ struct AmcamCamera::Impl {
         const PixelFormat pixelFormat;
         const std::uint32_t pixelFormatCode;
         const std::uint8_t bitsPerPixel;
+        const std::uint8_t containerBitsPerPixel;
         const std::size_t bytesPerPixel;
     };
 
@@ -845,6 +849,7 @@ struct AmcamCamera::Impl {
                 writable->pixelFormat = activePool->pixelFormat;
                 writable->pixelFormatCode = activePool->pixelFormatCode;
                 writable->bitsPerPixel = activePool->bitsPerPixel;
+                writable->containerBitsPerPixel = activePool->containerBitsPerPixel;
                 writable->sequence = info.v3.seq;
                 writable->timestampMicroseconds = info.v3.timestamp;
                 writable->sdkFlags = info.v3.flag;
@@ -1120,6 +1125,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     bool rawOutput = false;
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
+    int rawStorageMode = 0;
     HRESULT hr = S_OK;
     {
         std::lock_guard<std::mutex> api(impl_->apiMutex);
@@ -1158,6 +1164,19 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                         (rawBitsPerPixel == 0 || rawBitsPerPixel > 16)) {
                         hr = E_INVALIDARG;
                     }
+                    if (SUCCEEDED(hr) &&
+                        !impl_->profileRegistry.allows(
+                            impl_->modelCode, AmcamCameraFeature::RawOutput)) {
+                        hr = E_ACCESSDENIED;
+                    }
+                    if (SUCCEEDED(hr)) {
+                        hr = Amcam_get_Option(
+                            impl_->handle, AMCAM_OPTION_BITDEPTH, &rawStorageMode);
+                        if (SUCCEEDED(hr) &&
+                            rawStorageMode != 0 && rawStorageMode != 1) {
+                            hr = E_INVALIDARG;
+                        }
+                    }
                 }
             } else if (modelAdvertisesRaw) {
                 hr = rawHr;
@@ -1174,8 +1193,9 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
         return fail(error, "start", -1, "The SDK returned invalid final image dimensions.");
     }
 
-    const std::size_t bytesPerPixel = !rawOutput ? 3U :
-        (rawBitsPerPixel <= 8U ? 1U : 2U);
+    const std::uint8_t containerBitsPerPixel =
+        !rawOutput ? 24U : (rawStorageMode == 0 ? 8U : 16U);
+    const std::size_t bytesPerPixel = containerBitsPerPixel / 8U;
     const std::uint64_t stride64 =
         static_cast<std::uint64_t>(width) * bytesPerPixel;
     if (stride64 > std::numeric_limits<std::uint32_t>::max() ||
@@ -1195,7 +1215,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     const auto strideBytes = static_cast<std::uint32_t>(stride64);
     const auto bytes = static_cast<std::size_t>(bytes64);
     const PixelFormat pixelFormat = !rawOutput ? PixelFormat::RGB24 :
-        (rawBitsPerPixel <= 8U ? PixelFormat::Raw8 : PixelFormat::Raw16);
+        (containerBitsPerPixel == 8U ? PixelFormat::Raw8 : PixelFormat::Raw16);
     const auto frameBitsPerPixel = static_cast<std::uint8_t>(
         rawOutput ? rawBitsPerPixel : 24U);
 
@@ -1205,7 +1225,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
             static_cast<std::uint32_t>(height),
             strideBytes, bytes, pixelFormat,
             rawOutput ? rawFourCC : 0U,
-            frameBitsPerPixel, bytesPerPixel);
+            frameBitsPerPixel, containerBitsPerPixel, bytesPerPixel);
     } catch (const std::exception& ex) {
         impl_->pool.reset();
         impl_->state.store(CameraState::Open, std::memory_order_release);
@@ -1555,7 +1575,46 @@ bool AmcamCamera::captureStill(
                         "The camera does not report still-image capture resolutions.");
         }
 
-        if (request.resolutionIndex != kCurrentPreviewResolution) {
+        if (request.resolutionIndex == kCurrentPreviewResolution) {
+            int previewWidth = 0;
+            int previewHeight = 0;
+            const HRESULT previewSizeResult =
+                Amcam_get_FinalSize(impl_->handle, &previewWidth, &previewHeight);
+            if (FAILED(previewSizeResult)) {
+                return failHr(error, "Amcam_get_FinalSize", previewSizeResult);
+            }
+            if (previewWidth <= 0 || previewHeight <= 0) {
+                return fail(error, "captureStill", -1,
+                            "The SDK returned invalid live-preview dimensions.");
+            }
+
+            bool matched = false;
+            for (unsigned index = 0; index < stillResolutionCount; ++index) {
+                int candidateWidth = 0;
+                int candidateHeight = 0;
+                const HRESULT candidateResult = Amcam_get_StillResolution(
+                    impl_->handle, index, &candidateWidth, &candidateHeight);
+                if (FAILED(candidateResult)) {
+                    return failHr(error, "Amcam_get_StillResolution", candidateResult);
+                }
+                if (candidateWidth <= 0 || candidateHeight <= 0) {
+                    return fail(error, "Amcam_get_StillResolution", -1,
+                                "The SDK returned an invalid still-resolution entry.");
+                }
+                if (candidateWidth == previewWidth &&
+                    candidateHeight == previewHeight) {
+                    selectedStillResolutionIndex = index;
+                    expectedWidth = candidateWidth;
+                    expectedHeight = candidateHeight;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                return fail(error, "captureStill", -1,
+                            "No still-resolution entry matches the current preview dimensions. Select an explicit still-resolution index.");
+            }
+        } else {
             if (request.resolutionIndex >= stillResolutionCount) {
                 return fail(error, "captureStill", -1,
                             "The requested still-resolution index is outside the camera-reported range.");
@@ -1591,6 +1650,15 @@ bool AmcamCamera::captureStill(
                 return fail(error, "Amcam_get_RawFormat", -1,
                             "The SDK returned an unsupported RAW sensor bit depth.");
             }
+            const HRESULT bitDepthResult = Amcam_get_Option(
+                impl_->handle, AMCAM_OPTION_BITDEPTH, &rawStorageMode);
+            if (FAILED(bitDepthResult)) {
+                return failHr(error, "Amcam_get_Option(BITDEPTH)", bitDepthResult);
+            }
+            if (rawStorageMode != 0 && rawStorageMode != 1) {
+                return fail(error, "Amcam_get_Option(BITDEPTH)", -1,
+                            "The SDK returned an unknown RAW storage bit-depth mode.");
+            }
         }
     }
 
@@ -1621,8 +1689,8 @@ bool AmcamCamera::captureStill(
                         "The camera stopped before the still-image request could be submitted.");
         }
         snapResult = request.mode == StillCaptureMode::Raw
-            ? Amcam_SnapR(impl_->handle, request.resolutionIndex, 1)
-            : Amcam_SnapN(impl_->handle, request.resolutionIndex, 1);
+            ? Amcam_SnapR(impl_->handle, selectedStillResolutionIndex, 1)
+            : Amcam_SnapN(impl_->handle, selectedStillResolutionIndex, 1);
     }
     if (FAILED(snapResult)) {
         {
@@ -1716,8 +1784,9 @@ bool AmcamCamera::captureStill(
                         "The still-image dimensions are invalid or differ from the selected still resolution.");
         }
 
-        const std::uint64_t bytesPerPixel = raw
-            ? (rawBitsPerPixel <= 8U ? 1U : 2U) : 3U;
+        const std::uint8_t containerBitsPerPixel =
+            !raw ? 24U : (rawStorageMode == 0 ? 8U : 16U);
+        const std::uint64_t bytesPerPixel = containerBitsPerPixel / 8U;
         const std::uint64_t stride64 =
             static_cast<std::uint64_t>(info.v3.width) * bytesPerPixel;
         if (stride64 > std::numeric_limits<std::uint32_t>::max() ||
@@ -1743,10 +1812,11 @@ bool AmcamCamera::captureStill(
             mutableFrame->height = info.v3.height;
             mutableFrame->strideBytes = static_cast<std::uint32_t>(stride64);
             mutableFrame->pixelFormat = !raw ? PixelFormat::RGB24 :
-                (rawBitsPerPixel <= 8U ? PixelFormat::Raw8 : PixelFormat::Raw16);
+                (containerBitsPerPixel == 8U ? PixelFormat::Raw8 : PixelFormat::Raw16);
             mutableFrame->pixelFormatCode = raw ? rawFourCC : 0U;
             mutableFrame->bitsPerPixel = static_cast<std::uint8_t>(
                 raw ? rawBitsPerPixel : 24U);
+            mutableFrame->containerBitsPerPixel = containerBitsPerPixel;
             mutableFrame->isStill = true;
             mutableFrame->pixels.resize(static_cast<std::size_t>(byteCount64));
 

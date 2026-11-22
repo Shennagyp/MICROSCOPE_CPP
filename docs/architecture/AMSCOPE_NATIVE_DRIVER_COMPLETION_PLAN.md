@@ -415,14 +415,15 @@ The missing dependency is an integration blocker, not permission to recreate:
 
 ### Work
 
-1. Identify the exact existing GenTL and GenApi C++ implementation, source/version, public headers, binary libraries, and build requirements.
-2. Document how the dependency is supplied and redistributed: package, source dependency, submodule, or external installation.
-3. Verify platform/architecture support and ABI compatibility with this project.
-4. Add CMake integration using the existing dependency's supported targets or documented interfaces.
+1. Use the official EMVA GenApi 3.5.1 Runtime/SDK package and official GenTL 1.6 header as the primary C++ GenICam dependency candidates. Verify the macOS package binaries, CMake config, dependency closure, license files, and both required architecture slices.
+2. Resolve the Consumer implementation choice in AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md: Swift GenTLNative behind a C ABI, an explicitly approved C++ port of its Consumer behavior, or an identified existing external C++ Consumer.
+3. Acquire the actual camera-vendor CTI Producer and verify its version, ABI, license, architecture, device support, GenApi XML, and port-access behavior.
+4. Add CMake integration using the official GenApi package configuration and the selected existing Consumer interface; do not write a GenApi implementation or a CTI Producer.
 5. Implement the CTI backend adapter against the common camera identity, capability, feature, value, error, and frame models.
 6. Preserve actual Producer, interface, device, and stream ownership in the existing GenTL implementation.
 7. Bind every discovered device candidate to the backend/Producer context that discovered it. Never cross-route an open request to another Producer.
-8. Preserve opened sessions across discovery refresh.
+8. Keep GenApi feature access conditional on an actual supported GenApi XML description and usable GenTL port interface. Keep AmScope's native Amcam SDK feature access separate; do not fabricate XML, registers, or a CTI Producer.
+9. Preserve opened sessions across discovery refresh.
 9. Route common feature access through the common contract while retaining the CTI/GenApi backend's native device and feature semantics.
 10. Keep CTI acquisition and lifecycle on the existing GenTL device/acquisition path. Do not force it into AmScope's callback/pull mechanism.
 11. Integrate both backend discovery paths through one Camera Module selection/routing surface.
@@ -587,7 +588,7 @@ The intended sequence is:
 | 7 | Exported packages and clean external consumers | Phases 3–6 |
 | 8 | Final hardware qualification and release | Phases 0–7 |
 
-The GenTL dependency discovery (Phase 5, steps 1–3) can proceed in parallel with Phases 1–3. Its adapter and hardware acceptance still depend on the finalized common model and a real CTI camera.
+The GenTL/GenApi dependency discovery (Phase 5, steps 1–3) can proceed in parallel with Phases 1–3. The official GenApi 3.5.1 runtime and GenTL 1.6 ABI are identified; the remaining C++ Consumer integration choice is recorded in AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md. The adapter and hardware acceptance still depend on the finalized common model, a target vendor CTI Producer, and a real CTI camera.
 
 Do not begin by splitting `QtAmcamCamera` into independent classes that each own a worker or SDK handle. First preserve and test the current session semantics; then extract interfaces around the single session owner.
 
@@ -602,7 +603,7 @@ Update this table as implementation progresses. A phase is not complete until bo
 | 2 — Common models | Partial; several models remain under AmScope | Common tests exist; extraction tests required | Required | OPEN |
 | 3 — Library separation | Target boundaries not yet delivered | Required | Required | OPEN |
 | 4 — Reusable UI | Preview exists; reusable UI library not yet delivered | Required | Required | OPEN |
-| 5 — GenTL/GenApi | Missing dependency and adapter | Required | Real CTI camera and AmScope regression required | BLOCKED |
+| 5 — GenTL/GenApi | Official GenApi 3.5.1 and GenTL 1.6 package identified; existing Consumer found in Swift, but no direct C++ interface; CTI adapter absent | Swift Consumer/mock Producer CI green; C++ integration tests pending | Real CTI camera and AmScope regression required | BLOCKED — Consumer integration choice and target Producer required |
 | 6 — Capability coverage | Broad implementation; inventory reconciliation required | Required | Physical model matrix required | OPEN |
 | 7 — Packaging | Initial install rules exist; exported package/consumer qualification required | Required | Installed artifacts on physical camera required | OPEN |
 | 8 — Release | Not started | Required | Complete hardware matrix required | OPEN |

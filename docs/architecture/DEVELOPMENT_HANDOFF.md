@@ -33,7 +33,7 @@ The last verified head before this handoff refresh is `1e44fa8bab23f26587adffe8c
 
 ### Relationship with `main`
 
-The current GitHub comparison reports `amscope-native-driver` as 200 commits ahead and 2 commits behind `main`, with merge base `a11bec3a1fe6e7ec481ec00de775e69a98f8e1aa`. The two commits on `main` after that merge base are:
+The current GitHub comparison reports `amscope-native-driver` as 202 commits ahead and 2 commits behind `main`, with merge base `a11bec3a1fe6e7ec481ec00de775e69a98f8e1aa`. The two commits on `main` after that merge base are:
 
 1. `f364b7b458f752f4bc0b340e61127ece32124a9c` — adds an unintended 66-line `Camera/Amscope/include/amscope/CameraTypes.h`.
 2. `0edf623c4227b15a3d97a55b59ef4cccead8ba58` — reverts that exact file addition.
@@ -50,14 +50,13 @@ Relevant links:
 
 The latest completed successful workflow verified is [Amcam macOS build #45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740), associated with commit `4de57806a898799173adb04af1272e00ff00fb24`. The newer run [#45051829571](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051829571), associated with `1e44fa8bab23f26587adffe8c5e06471956d9e54`, was still in progress on both architectures at the last status check. This handoff-only refresh also triggers the same path-filtered workflow, so the next session must verify its resulting run before reporting current-head CI.
 
-Both jobs passed:
+Workflow [#45051829571](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051829571) completed successfully on both architectures on the prior documentation-only commit.
 
-- Intel x86_64.
-- Apple Silicon arm64.
+On the last reviewed head e1f2e65, workflow [#45052203962](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45052203962) had Intel x86_64 completed successfully; Apple Silicon arm64 was still queued at the last status check. Check the run before reporting complete current-head CI.
 
-Each job completed configuration and compilation of the native driver, Qt adapter, and preview application; ran CTest; verified SDK/library/application artifacts and architectures; syntax-checked the launcher; and ran its launcher smoke check.
+The successful workflow run executes configuration and compilation of the native driver, Qt adapter, and preview application; CTest; SDK/library/application artifact and architecture checks; launcher syntax; and launcher smoke test.
 
-All eight CTest tests passed on both architectures:
+All eight CTest tests passed on both architectures in completed run #45051829571:
 
 1. `amscope_camera_types_tests`
 2. `amscope_acquisition_frame_gate_tests`
@@ -233,6 +232,21 @@ Implement the private SDK dispatch seam in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](
 Keep the test seam private to implementation and test support. Do not add a second public camera abstraction, second `HAmcam`, second SDK-call lock, or a different acquisition mechanism.
 
 The physical AmScope regression remains mandatory after those code changes. The Phase 1 record must identify the exact camera/model and tested commit, include the baseline procedure, and measure the required 15-minute acquisition interval.
+
+## 8. GenTL/GenApi dependency assessment
+
+The dependency investigation is recorded in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md).
+
+Findings:
+
+- EMVA's current package is GenICam 2026.07: GenApi 3.5.1 and GenTL 1.6, among other modules.
+- GenApi 3.5.1 has macOS Runtime/SDK packages; its release notes say a CMake package configuration file was added. Binary slices and CMake target metadata still need direct inspection.
+- The EMVA GenTL deliverable is the standard and C ABI header. A camera/transport vendor supplies the actual .cti Producer. The standard package is not a generic Consumer library.
+- AMSCOPE_DRIVER/macos-version-0.4 contains an existing tested Swift GenTL Consumer (GenTLNative plus API/router and Amcam adapter), but it does not expose a C++ API or C ABI facade.
+- The Amcam adapter does not fabricate an AmScope CTI Producer or GenApi XML/register interface. Keep the AmScope native SDK backend independent.
+- Phase 5 requires a deliberate Consumer integration choice: bridge the Swift Consumer through C ABI, approve a C++ port of its Consumer logic, or identify another existing C++ Consumer. No choice is made in the assessment.
+
+The current phase remains Phase 0. The GenTL investigation proceeds in parallel and does not waive the physical AmScope baseline gate.
 
 ## 9. Hardware record policy
 

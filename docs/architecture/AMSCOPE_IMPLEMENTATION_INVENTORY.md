@@ -183,7 +183,9 @@ All eight tests passed on both Intel x86_64 and Apple Silicon arm64 in workflow 
 - Hardware-I/O UI: **incomplete relative to API**.
 - Separate control and Qt streaming libraries: **not delivered**.
 - Reusable backend-neutral Qt UI library: **not delivered**.
-- Existing GenTL/GenApi C++ integration: **not delivered / dependency blocker**.
+- Official GenApi 3.5.1 runtime and GenTL 1.6 ABI: **identified; package not yet integrated**.
+- Existing GenTL Consumer implementation: **present in Swift AMSCOPE_DRIVER/macos-version-0.4; no direct C++ interface**.
+- C++ GenTL Consumer/CTI adapter: **not delivered; integration choice pending**.
 - Exported CMake package: **not established**.
 - Intel and Apple Silicon CI: **passed at branch head `4de57806` in workflow #45051151740; eight of eight CTest tests passed on both architectures**.
 - Physical AmScope hardware baseline: **not recorded**.
@@ -197,3 +199,23 @@ Update this inventory when a source/API/test/UI change lands. Do not change a ha
 A static source scan of the current AmScope implementation identifies direct SDK entry points across enumeration/session lifecycle, callback-based acquisition and pulling, feature probes and writes, trigger/heartbeat setup, still capture, hardware I/O, and accessory operations. The native session currently has no injected SDK-call boundary, so the existing helper tests cannot force deterministic native Stop/Open/Start/Pull/Close failures.
 
 The Phase 1 test seam and the initial lifecycle/acquisition API subset are specified in [AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md). The vendor header confirms the exact `PAMCAM_EVENT_CALLBACK` (`__stdcall`) and callback-based pull API, but its `Amcam_Close` comment does not explicitly state that no callback can begin after Close returns. The current driver waits for callbacks already counted as active after `Amcam_Close`; this is not by itself proof against a callback that begins after the counter reaches zero. Treat the post-Close callback-quiescence guarantee as an explicit SDK contract to establish with vendor documentation and controlled hardware observation. No source seam or native-session mock test has been implemented yet. Phase 0 physical-camera acceptance remains the prerequisite for behavior-changing Phase 1 work.
+
+
+## 12. GenTL/GenApi dependency discovery
+
+The dependency assessment is recorded in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md).
+
+| Area | Discovery | Current C++ repository status |
+|---|---|---|
+| Official GenApi | EMVA GenICam 2026.07 includes GenApi 3.5.1; macOS Runtime and SDK packages exist; release notes state CMake package config was added | Candidate official runtime; not downloaded, architecture-inspected, or linked |
+| Official GenTL | GenTL 1.6 standard and reference C ABI header are published | No C++ imported target/header in the branch |
+| CTI Producer | Supplied by the camera/transport vendor; required for real transport enumeration and acquisition | No actual Producer .cti in the repository |
+| GenTL Consumer | Existing GenTLNative implementation in AMSCOPE_DRIVER/macos-version-0.4; Swift API and dynamic CTI loader | No C++ interface or C ABI facade in the existing Swift branch |
+| AmScope GenTL adapter | Swift AmcamGenTL maps documented Amcam SDK capabilities to a GenTL-shaped contract but does not create an AmScope .cti Producer | Continue the existing native Amcam SDK backend; never fabricate GenApi XML or register-port access |
+| GenApi on AmScope | Swift conformance record says GenApi XML URL and physical port/register access are not implemented for Amcam | Not available through the inspected Amcam API path |
+
+The Swift implementation's latest reviewed workflow [#44892073579](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/44892073579) completed six CI jobs successfully, including the GenTLNative, GenTLAPI, GenTLRouter, Amcam adapter, and mock Producer test targets. This is software/mock evidence only; no real CTI camera test is recorded.
+
+The Swift GenTLABI header's repository provenance is Aravis 0.9.2. For a new C++ build, prefer the official EMVA GenTL 1.6 reference header or perform an explicit byte/provenance check before reusing the Swift copy.
+
+No GenTL/GenApi integration source change was made. Phase 5 remains blocked pending the Consumer integration choice, target CTI Producer, dependency distribution verification, and real CTI hardware.

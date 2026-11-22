@@ -8,7 +8,7 @@ integration and does not modify vendor sample code.
 ## Development roadmap
 
 The authoritative phase-by-phase completion plan, including the mandatory real-camera test gate for every phase, is maintained in [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md).
-The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/architecture/DEVELOPMENT_HANDOFF.md), the source/test mapping is in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md), and the per-phase hardware record template is in [PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md](../../docs/testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
+The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/architecture/DEVELOPMENT_HANDOFF.md), the source/test mapping is in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md), the GenTL/GenApi dependency assessment is in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md), and the per-phase hardware record template is in [PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md](../../docs/testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
 
 ## Implemented
 
@@ -222,13 +222,16 @@ A model without a configured profile uses its runtime-probed capabilities.
 
 ## CTI / GenTL integration status
 
-This branch does not currently contain GenTL or GenApi C++ headers, linked
-libraries, imported CMake targets, Producer .cti files, or a CTI camera
-adapter. The common ICameraFeatureAccess contract is ready to be implemented
-by that backend, but CTI integration is not complete here. Connect the existing
-GenTL/GenApi runtime and its documented C++ interfaces when that dependency is
-made available to this build; do not add a replacement GenTL or GenApi
-implementation. The AmScope path remains on the native Amcam SDK.
+This branch does not yet contain an integrated GenTL Consumer or CTI adapter.
+The existing dependency assessment identified the official EMVA GenApi 3.5.1
+runtime/SDK and GenTL 1.6 ABI, plus a tested Swift GenTL Consumer in
+AMSCOPE_DRIVER/macos-version-0.4. That Swift Consumer has no direct C++ API
+in the inspected branch. A real camera-vendor .cti Producer is still
+required. The C++ Consumer integration choice remains open; see
+[AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md).
+Do not reimplement GenApi, create a synthetic AmScope CTI Producer, or route
+AmScope through GenApi without a documented XML/register-port interface. The
+AmScope path remains on the native Amcam SDK.
 
 ## One-command build and run
 

@@ -425,11 +425,20 @@ The first implementation slice adds `Camera/Common/include/camera/CameraModels.h
 - The AmScope `CameraInfo` derives from `camera::CameraDeviceInfo`; its raw SDK model flags, model code, speed/fan levels, and I/O line count remain AmScope-specific.
 - AmScope model flags map to common capability names only where the semantic relationship is direct. The common capability snapshot describes model-advertised hardware support; it does not replace runtime feature probes, model profiles, or per-session feature availability.
 
-The first common model test target verifies these type and knowledge-state invariants. At this slice, local Phase 1 CTest validation is recorded as 9/9 passing at source revision `d2e5cb3`. The Phase 2.1 code and its new tenth CTest target are awaiting validation.
+The discovery model tests verify optional identity, opaque device IDs, dimensions, and the three-state capability semantics. Phase 2.1 was validated locally by the project owner with a clean build and 10/10 CTest tests at source revision `03f35bf`. GitHub Actions run [#45067873506](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45067873506) also passed on Intel x86_64 and Apple Silicon arm64. This is compile/automated evidence, not physical-camera evidence.
 
-**2.2 — Common frame and image-layout model (next)**
+**2.2 — Common frame and image-layout model (implemented; validation pending)**
 
-Define a backend-neutral frame contract that preserves dimensions, byte stride, payload lifetime, significant pixel depth, storage-container width, and opaque native pixel-format identity without translating unknown Amcam FourCC values into PFNC or another backend's namespace. Sequence, timestamp, and exposure metadata must represent unknown/unavailable values explicitly and preserve units/clock semantics. Keep Amcam-only SDK flags, percent gain, and other vendor-specific telemetry outside the common frame contract.
+`Camera/Common/include/camera/CameraFrames.h` now defines the backend-neutral `camera::Frame` and immutable `camera::FramePtr` contract:
+
+- Dimensions, row stride, payload bytes, still/live marker, and data/byte-size access are common.
+- `PixelFormat` identifies the known buffer layout (`RGB24`, `Raw8`, `Raw16`); `PixelFormatIdentifier` independently carries an opaque value and its scheme. Amcam RAW uses scheme `amcam.fourcc`; no FourCC is translated into PFNC. RGB24 does not invent a native code.
+- `significantBitsPerPixel` and `storageBitsPerPixel` remain separate. The first describes source-format depth; the second describes the payload's per-pixel storage width.
+- Sequence, timestamp, and exposure are optional. Timestamp carries ticks, ticks-per-second, and an optional clock-domain label. Exposure carries duration ticks and its timebase. A reported zero remains valid metadata.
+- The Amcam adapter consults the SDK's `AMCAM_FRAMEINFO_FLAG_*` validity bits before populating each optional value. Amcam timestamps and exposure durations use a 1,000,000-tick-per-second timebase (microseconds); the clock origin is left unknown. SDK flags, exposure gain percent, and black level remain in `amscope::AmcamFrame`, a typed extension of the common frame.
+- The native frame pool still owns mutable `AmcamFrame` slots and emits the same immutable shared ownership lease through `camera::FramePtr`. Still capture uses the same common frame contract. The callback -> bounded queue -> single pull worker and four-slot lease/drop behavior are unchanged.
+
+A dedicated common frame test covers optional-vs-zero metadata, timebase representation, opaque scheme/value preservation, buffer layout, and the typed backend extension. The AmScope type test verifies that the public callback lease is the common frame pointer and that native metadata remains available via the extension. The hardware-rate utility now consumes optional common metadata without treating zero as unavailable.
 
 **2.3 — Common errors and remaining shared value types**
 

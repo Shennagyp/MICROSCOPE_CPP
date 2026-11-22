@@ -1706,7 +1706,7 @@ private:
         }
     }
 
-    void refreshAstroAutoFocuserState(std::uint64_t generation) {    void refreshAstroAutoFocuserState(std::uint64_t generation) {
+    void refreshAstroAutoFocuserState(std::uint64_t generation) {
         if (!astroAutoFocuserAvailable_ || astroAutoFocuserReadPending_)
             return;
         astroAutoFocuserReadPending_ = true;

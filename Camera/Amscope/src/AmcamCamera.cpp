@@ -192,8 +192,10 @@ struct AmcamCamera::Impl {
             }
 
             lastFrameAt = std::chrono::steady_clock::now();
-            expectedExposureMicroseconds.store(info.v3.expotime,
-                                               std::memory_order_release);
+            if (info.v3.expotime != 0) {
+                expectedExposureMicroseconds.store(info.v3.expotime,
+                                                   std::memory_order_release);
+            }
 
             // Keep draining the SDK when all leases are retained. A slow
             // consumer drops preview frames rather than blocking acquisition.

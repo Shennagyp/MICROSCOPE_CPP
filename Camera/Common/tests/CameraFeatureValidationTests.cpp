@@ -67,6 +67,30 @@ int main() {
     check(accepted(validateFeatureWrite(exposure, CameraFeatureValue{std::int64_t{2500}})),
           "accepts integer within range");
 
+    CameraFeatureDescriptor sensorBitDepth{
+        "SensorBitDepth", "Sensor Bit Depth", CameraFeatureKind::Integer,
+        std::string("significant bits"), true, true, true,
+        std::nullopt, std::nullopt, {}, CameraFeatureGroup::ImageFormat,
+        {8, 10, 12, 14, 16}
+    };
+    check(accepted(validateFeatureWrite(
+              sensorBitDepth, CameraFeatureValue{std::int64_t{12}})),
+          "accepts an advertised discrete integer value");
+    auto unsupportedBitDepth = validateFeatureWrite(
+        sensorBitDepth, CameraFeatureValue{std::int64_t{11}});
+    check(rejected(unsupportedBitDepth) != nullptr &&
+          rejected(unsupportedBitDepth)->code == CameraFeatureAccessError::Code::InvalidValue,
+          "rejects an integer not present in the discrete capability set");
+
+    auto invalidDiscreteDescriptor = sensorBitDepth;
+    invalidDiscreteDescriptor.kind = CameraFeatureKind::Enumeration;
+    auto invalidDiscreteResult = validateFeatureWrite(
+        invalidDiscreteDescriptor,
+        CameraFeatureValue{FeatureEnumeration{"12"}});
+    check(rejected(invalidDiscreteResult) != nullptr &&
+          rejected(invalidDiscreteResult)->code == CameraFeatureAccessError::Code::BackendFailure,
+          "rejects discrete integer values attached to a non-integer feature");
+
     auto wrongType = validateFeatureWrite(exposure, CameraFeatureValue{2500.0});
     check(rejected(wrongType) != nullptr &&
           rejected(wrongType)->code == CameraFeatureAccessError::Code::ValueTypeMismatch &&

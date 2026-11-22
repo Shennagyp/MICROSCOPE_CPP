@@ -199,7 +199,28 @@ public:
         astroAutoFocuserStatusLabel_ = new QLabel("Position unknown", astroAutoFocuserGroup_);
         astroAutoFocuserStatusLabel_->setWordWrap(true);
         astroFocuserForm->addRow("Status", astroAutoFocuserStatusLabel_);
+
+        lensFocusGroup_ = new QGroupBox("Lens focus motor", central);
+        auto* lensFocusForm = new QFormLayout(lensFocusGroup_);
+        lensFocusRow_ = new QWidget(lensFocusGroup_);
+        auto* lensFocusLayout = new QHBoxLayout(lensFocusRow_);
+        lensFocusLayout->setContentsMargins(0, 0, 0, 0);
+        lensFocusTargetSelector_ = new QSpinBox(lensFocusRow_);
+        lensFocusTargetSelector_->setRange(0, 0);
+        lensFocusMoveButton_ = new QPushButton("Move", lensFocusRow_);
+        lensFocusRefreshButton_ = new QPushButton("Refresh", lensFocusRow_);
+        lensFocusLayout->addWidget(lensFocusTargetSelector_, 1);
+        lensFocusLayout->addWidget(lensFocusMoveButton_);
+        lensFocusLayout->addWidget(lensFocusRefreshButton_);
+        lensFocusForm->addRow("Manual focus position", lensFocusRow_);
+        lensFocusStatusLabel_ = new QLabel("Lens state unknown", lensFocusGroup_);
+        lensFocusStatusLabel_->setWordWrap(true);
+        lensFocusForm->addRow("Lens / AF state", lensFocusStatusLabel_);
+        lensFocusGroup_->hide();
+
         astroAutoFocuserGroup_->hide();
+
+        accessoryGroup_->hide();        astroAutoFocuserGroup_->hide();
 
         accessoryGroup_->hide();
 
@@ -208,6 +229,7 @@ public:
         settingsColumn->addWidget(refreshFeaturesButton_);
         settingsColumn->addWidget(accessoryGroup_);
         settingsColumn->addWidget(astroAutoFocuserGroup_);
+        settingsColumn->addWidget(lensFocusGroup_);
         settingsColumn->addWidget(featureScroll_, 1);
 
         auto* workspace = new QHBoxLayout();
@@ -257,6 +279,12 @@ public:
                 this, [this]() { moveAstroAutoFocuser(); });
         connect(astroAutoFocuserHaltButton_, &QPushButton::clicked,
                 this, [this]() { haltAstroAutoFocuser(); });
+        connect(astroAutoFocuserRefreshButton_, &QPushButton::clicked,
+                this, [this]() { refreshAstroAutoFocuserState(); });
+        connect(lensFocusMoveButton_, &QPushButton::clicked,
+                this, [this]() { moveLensFocus(); });
+        connect(lensFocusRefreshButton_, &QPushButton::clicked,
+                this, [this]() { refreshLensFocusState(); });
         connect(astroAutoFocuserRefreshButton_, &QPushButton::clicked,
                 this, [this]() { refreshAstroAutoFocuserState(); });
         connect(filterWheelRefreshButton_, &QPushButton::clicked,
@@ -717,9 +745,13 @@ private:
         astroAutoFocuserReadPending_ = false;
         astroAutoFocuserStateKnown_ = false;
         astroAutoFocuserMoving_ = false;
+        lensFocusReadPending_ = false;
+        lensFocusStateKnown_ = false;
+        lensFocusManual_ = false;
         accessoryOperationPending_ = false;
         accessoryGroup_->hide();
         astroAutoFocuserGroup_->hide();
+        lensFocusGroup_->hide();
         setFeatureControlsEnabled(false);
         featureStatus_->setText("Reading feature descriptors…");
 
@@ -1246,8 +1278,16 @@ private:
         astroAutoFocuserReadPending_ = false;
         astroAutoFocuserStateKnown_ = false;
         astroAutoFocuserMoving_ = false;
+        lensFocusAvailable_ = false;
+        lensFocusReadPending_ = false;
+        lensFocusStateKnown_ = false;
+        lensFocusManual_ = false;
         accessoryOperationPending_ = false;
         accessoryGroup_->hide();
+        lensFocusGroup_->hide();
+        lensFocusTargetSelector_->setRange(0, 0);
+        lensFocusTargetSelector_->setValue(0);
+        lensFocusStatusLabel_->setText("Lens state unknown");
         astroAutoFocuserGroup_->hide();
         astroAutoFocuserTargetSelector_->setRange(0, 0);
         astroAutoFocuserTargetSelector_->setValue(0);
@@ -1274,7 +1314,9 @@ private:
         filterWheelAvailable_ = available("AmcamFilterWheelAvailable");
         astroAutoFocuserAvailable_ =
             available("AmcamAstroAutoFocuserAvailable");
+        lensFocusAvailable_ = available("AmcamFocusMotorAvailable");
         astroAutoFocuserGroup_->setVisible(astroAutoFocuserAvailable_);
+        lensFocusGroup_->setVisible(lensFocusAvailable_);
 
         embeddedLightSourceRow_->setVisible(embeddedLightSourceAvailable_);
         if (QWidget* label = accessoryForm_->labelForField(embeddedLightSourceRow_))
@@ -1284,7 +1326,8 @@ private:
             label->setVisible(filterWheelAvailable_);
 
         const bool anyAccessory =
-            embeddedLightSourceAvailable_ || filterWheelAvailable_;
+            embeddedLightSourceAvailable_ || filterWheelAvailable_ ||
+            lensFocusAvailable_;
         accessoryGroup_->setVisible(anyAccessory);
         if (anyAccessory)
             refreshAccessoryState(generation);
@@ -1299,6 +1342,8 @@ private:
             refreshFilterWheelState(generation);
         if (astroAutoFocuserAvailable_)
             refreshAstroAutoFocuserState(generation);
+        if (lensFocusAvailable_)
+            refreshLensFocusState(generation);
     }
 
     void refreshEmbeddedLightSource(std::uint64_t generation) {
@@ -1471,7 +1516,122 @@ private:
     }
 
 
-    void refreshAstroAutoFocuserState(std::uint64_t generation) {
+
+    void refreshLensFocusState(std::uint64_t generation) {
+        if (!lensFocusAvailable_ || lensFocusReadPending_)
+            return;
+        lensFocusReadPending_ = true;
+        updateControls(camera_.state());
+
+        const auto requestId = camera_.requestLensFocusState(
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::LensFocusStateResult result) {
+                if (generation != featureUiGeneration_) return;
+                lensFocusReadPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    lensFocusStateKnown_ = false;
+                    lensFocusManual_ = false;
+                    lensFocusStatusLabel_->setText("Unavailable");
+                    featureStatus_->setText(
+                        QString("Lens focus-state read failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                } else {
+                    const auto& state =
+                        std::get<amscope::LensFocusState>(result);
+                    lensFocusStateKnown_ = true;
+                    lensFocusManual_ = state.manualFocusSelected;
+                    const auto minimumPosition = std::min(
+                        state.nearFocusMotorPosition, state.farFocusMotorPosition);
+                    const auto maximumPosition = std::max(
+                        state.nearFocusMotorPosition, state.farFocusMotorPosition);
+                    {
+                        const QSignalBlocker blocker(lensFocusTargetSelector_);
+                        lensFocusTargetSelector_->setRange(
+                            minimumPosition, maximumPosition);
+                        lensFocusTargetSelector_->setValue(
+                            state.currentFocusMotorPosition);
+                    }
+
+                    QString status =
+                        QString("Lens %1 | %2 focus | motor %3 (range %4…%5)")
+                            .arg(static_cast<qulonglong>(state.lensId))
+                            .arg(state.manualFocusSelected ? "Manual" : "Auto")
+                            .arg(state.currentFocusMotorPosition)
+                            .arg(minimumPosition)
+                            .arg(maximumPosition);
+                    if (state.currentFocalLength != 0 ||
+                        state.minimumFocalLength != 0 ||
+                        state.maximumFocalLength != 0) {
+                        status += QString(" | focal length %1 (range %2…%3)")
+                            .arg(static_cast<qulonglong>(state.currentFocalLength))
+                            .arg(static_cast<qulonglong>(state.minimumFocalLength))
+                            .arg(static_cast<qulonglong>(state.maximumFocalLength));
+                    }
+                    if (state.autofocusMode) {
+                        status += QString(" | AF mode %1 / status %2")
+                            .arg(static_cast<qulonglong>(*state.autofocusMode))
+                            .arg(static_cast<qulonglong>(
+                                state.autofocusStatus.value_or(0)));
+                    }
+                    if (state.apertureCalibrated) {
+                        status += *state.apertureCalibrated
+                            ? " | aperture calibrated"
+                            : " | aperture not calibrated";
+                    }
+                    lensFocusStatusLabel_->setText(status);
+                }
+                updateControls(camera_.state());
+            });
+        if (requestId == 0) {
+            lensFocusReadPending_ = false;
+            lensFocusStateKnown_ = false;
+            lensFocusManual_ = false;
+            lensFocusStatusLabel_->setText("Request rejected");
+            updateControls(camera_.state());
+        }
+    }
+
+    void refreshLensFocusState() {
+        refreshLensFocusState(featureUiGeneration_);
+    }
+
+    void moveLensFocus() {
+        if (!lensFocusAvailable_ || accessoryOperationPending_ ||
+            lensFocusReadPending_ || !lensFocusStateKnown_ || !lensFocusManual_)
+            return;
+        accessoryOperationPending_ = true;
+        updateControls(camera_.state());
+        const auto generation = featureUiGeneration_;
+        const auto position = static_cast<std::int32_t>(
+            lensFocusTargetSelector_->value());
+        const auto requestId = camera_.requestSetManualLensFocusPosition(
+            position,
+            [this, generation](
+                amscope::QtAmcamCamera::FeatureRequestId,
+                amscope::QtAmcamCamera::AccessoryCommandResult result) {
+                if (generation != featureUiGeneration_) return;
+                accessoryOperationPending_ = false;
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    featureStatus_->setText(
+                        QString("Manual lens-focus move failed: %1")
+                            .arg(QString::fromStdString(error->message)));
+                    updateControls(camera_.state());
+                } else {
+                    lensFocusStateKnown_ = false;
+                    lensFocusStatusLabel_->setText(
+                        "Move command accepted; Refresh to query the motor position.");
+                    updateControls(camera_.state());
+                }
+            });
+        if (requestId == 0) {
+            accessoryOperationPending_ = false;
+            featureStatus_->setText("Manual lens-focus command could not be queued.");
+            updateControls(camera_.state());
+        }
+    }
+
+    void refreshAstroAutoFocuserState(std::uint64_t generation) {    void refreshAstroAutoFocuserState(std::uint64_t generation) {
         if (!astroAutoFocuserAvailable_ || astroAutoFocuserReadPending_)
             return;
         astroAutoFocuserReadPending_ = true;
@@ -1626,7 +1786,7 @@ private:
         const bool accessoriesIdle =
             idle && !accessoryOperationPending_ &&
             !embeddedLightSourceReadPending_ && !filterWheelReadPending_ &&
-            !astroAutoFocuserReadPending_;
+            !astroAutoFocuserReadPending_ && !lensFocusReadPending_;
         const bool accessoryControlsIdle = (open || streaming) && accessoriesIdle;
         accessoryGroup_->setEnabled(accessoryControlsIdle);
         astroAutoFocuserGroup_->setEnabled((open || streaming) && accessoriesIdle);
@@ -1641,6 +1801,15 @@ private:
             astroAutoFocuserStateKnown_ && astroAutoFocuserMoving_);
         astroAutoFocuserRefreshButton_->setEnabled(
             accessoryControlsIdle && astroAutoFocuserAvailable_);
+        lensFocusGroup_->setEnabled((open || streaming) && accessoriesIdle);
+        lensFocusTargetSelector_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_ &&
+            lensFocusStateKnown_ && lensFocusManual_);
+        lensFocusMoveButton_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_ &&
+            lensFocusStateKnown_ && lensFocusManual_);
+        lensFocusRefreshButton_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_);
         embeddedLightSourceSlider_->setEnabled(
             accessoryControlsIdle && embeddedLightSourceAvailable_ &&
             embeddedLightSourceStateKnown_);
@@ -1686,6 +1855,10 @@ private:
     bool astroAutoFocuserReadPending_ = false;
     bool astroAutoFocuserStateKnown_ = false;
     bool astroAutoFocuserMoving_ = false;
+    bool lensFocusAvailable_ = false;
+    bool lensFocusReadPending_ = false;
+    bool lensFocusStateKnown_ = false;
+    bool lensFocusManual_ = false;
     bool accessoryOperationPending_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
 
@@ -1721,6 +1894,12 @@ private:
     QPushButton* astroAutoFocuserHaltButton_ = nullptr;
     QPushButton* astroAutoFocuserRefreshButton_ = nullptr;
     QLabel* astroAutoFocuserStatusLabel_ = nullptr;
+    QGroupBox* lensFocusGroup_ = nullptr;
+    QWidget* lensFocusRow_ = nullptr;
+    QSpinBox* lensFocusTargetSelector_ = nullptr;
+    QPushButton* lensFocusMoveButton_ = nullptr;
+    QPushButton* lensFocusRefreshButton_ = nullptr;
+    QLabel* lensFocusStatusLabel_ = nullptr;
     QScrollArea* featureScroll_ = nullptr;
     QWidget* featureContent_ = nullptr;
     QFormLayout* featureForm_ = nullptr;

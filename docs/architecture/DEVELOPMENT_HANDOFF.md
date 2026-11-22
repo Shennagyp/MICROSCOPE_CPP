@@ -8,7 +8,7 @@
 **Phase 2.1 local/CI validation revision:** `03f35bf07d8236e5aab33aea0cde987155cf0425`  
 **Phase 2.2 frame-model source snapshot:** `3da2a385508f1b639f98bbd34f5a6dabd9a3406a`  
 **Preview migration fix:** `609174c3ad56b50b25465e5688672627ce315a3f`  
-**Latest branch head:** `0952952a32d084b4f29f860c07c472aedeb023a5`  
+**Latest branch head before this handoff correction:** `0952952a32d084b4f29f860c07c472aedeb023a5`  
 **Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
 **Current phase:** Phase 2.2 — common frame and image-layout model  
 **Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 was validated locally by the user with a clean build and 10/10 CTest tests, and by GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2 has been implemented in the source snapshot above: common frame/payload/layout and optional timing metadata, an opaque format identifier, and an Amcam-specific typed extension. It adds an eleventh CTest target. The user's first clean build at `c13101ce` exposed stale legacy `Frame` field references in `app/main.cpp`; compilation stopped at `amscope_preview`, so CTest did not run. Those preview references are migrated to the common optional metadata contract in `609174c`, with explicit `QJsonValue` and `<memory>` includes in `0952952`. The fixed revision still awaits a clean local build, 11/11 CTest result, cross-architecture CI, and real-camera/RAW-capable-camera regression. The two MU503 physical runs and residual 15-minute/fault-injection follow-ups remain recorded below.

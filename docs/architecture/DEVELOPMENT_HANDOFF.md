@@ -9,6 +9,8 @@
 **Phase 2.2 frame-model source snapshot:** `3da2a385508f1b639f98bbd34f5a6dabd9a3406a`  
 **Preview migration fix:** `609174c3ad56b50b25465e5688672627ce315a3f`  
 **Fixed-8-bit RAW correction:** `a16ae3bd77c56b14384736aa457e859c73a8072f`  
+**Common RAW 8/16-bit selector:** `3ef46d3a5b85aa7ae2e22d160d92f61aecace5bb`  
+**Latest implementation CI:** [run #45075496341](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45075496341) — in progress at handoff refresh  
 **Local validation head:** `7b81b5e639f8b8f4eae04f30c1145c975092073b` (clean Release build and 11/11 CTest passed)  
 **Current CI:** [run #45072725032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45072725032) — Apple Silicon arm64 passed; Intel x86_64 in progress  
 **Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
@@ -251,7 +253,7 @@ The initial RAW still implementation treated that option as mandatory for every 
 
 ### Physical-camera validation for Phase 2.2
 
-The original frame-model software validation passed at `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`. The later fixed-8-bit RAW correction at `a16ae3b` also passed the user's clean Release build and 11/11 CTest suite at `7b81b5e`. Current-head run [#45072725032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45072725032) passed Apple Silicon arm64; Intel x86_64 remained in progress at this refresh.
+The original frame-model software validation passed at `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`. The fixed-8-bit RAW correction at `a16ae3b` passed the user's clean Release build and 11/11 CTest suite at `7b81b5e`. The common 8/16-bit selector at `3ef46d3` is a newer unvalidated source increment; CI run [#45075496341](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45075496341) was in progress at this refresh.
 
 The remaining required Phase 2.2 regression must use a physical AmScope camera:
 

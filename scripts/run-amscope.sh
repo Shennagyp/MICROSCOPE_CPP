@@ -97,5 +97,12 @@ fi
 "${CMAKE_COMMAND}" "${CMAKE_ARGS[@]}"
 "${CMAKE_COMMAND}" --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --parallel
 
-# Pass any additional arguments through to the preview application.
+# The optional hardware-test mode uses the same configured build but opens
+# its own small preview window and reports physical-camera performance metrics.
+if [[ "${1:-}" == "--hardware-rate-test" ]]; then
+    shift
+    exec "${BUILD_DIR}/amscope_hardware_rate_test" "$@"
+fi
+
+# Otherwise pass all arguments through to the regular preview application.
 exec "${BUILD_DIR}/amscope_preview" "$@"

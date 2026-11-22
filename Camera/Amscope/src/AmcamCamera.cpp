@@ -52,12 +52,36 @@ bool failHr(amscope::CameraError* out, const char* operation, HRESULT hr) {
     return fail(out, operation, static_cast<std::int32_t>(hr), hrMessage(operation, hr));
 }
 
+// The SDK's model flags independently advertise supported RAW pixel depths.
+// Use them as a fallback when Amcam_get_MaxBitDepth is unavailable or reports
+// only the 8-bit mode, while preserving the SDK result when it reports a
+// greater supported depth.
+unsigned rawMaximumBitDepthFromModelFlags(std::uint64_t modelFlags) {
+    if ((modelFlags & AMCAM_FLAG_RAW16) != 0) return 16U;
+    if ((modelFlags & AMCAM_FLAG_RAW14) != 0) return 14U;
+    if ((modelFlags & (AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW12PACK)) != 0) return 12U;
+    if ((modelFlags & AMCAM_FLAG_RAW11) != 0) return 11U;
+    if ((modelFlags & AMCAM_FLAG_RAW10) != 0) return 10U;
+    if ((modelFlags & AMCAM_FLAG_RAW8) != 0) return 8U;
+    return 0U;
+}
+
+unsigned rawMaximumBitDepth(HAmcam handle, std::uint64_t modelFlags) {
+    const HRESULT result = Amcam_get_MaxBitDepth(handle);
+    const unsigned sdkMaximum =
+        SUCCEEDED(result) && result >= 8 && result <= 16
+            ? static_cast<unsigned>(result)
+            : 0U;
+    return std::max(sdkMaximum, rawMaximumBitDepthFromModelFlags(modelFlags));
+}
+
 // AMCAM_OPTION_BITDEPTH selects 8-bit output or the camera's maximum
 // significant bit depth. Fixed 8-bit sensors have no distinct maximum-depth
 // mode, so the SDK may return E_NOTIMPL for the option.
 // Amcam_get_MaxBitDepth returns the camera's maximum bit depth as its HRESULT.
 HRESULT getRawBitDepthMode(
     HAmcam handle,
+    std::uint64_t modelFlags,
     int& bitDepthMode,
     const char** failureOperation,
     int requestedModeFallback = -1) {
@@ -65,13 +89,13 @@ HRESULT getRawBitDepthMode(
         *failureOperation = "Amcam_get_MaxBitDepth";
 
     const HRESULT maxBitDepthResult = Amcam_get_MaxBitDepth(handle);
-    if (FAILED(maxBitDepthResult))
-        return maxBitDepthResult;
-
     const unsigned maxBitDepth =
-        static_cast<unsigned>(maxBitDepthResult);
-    if (maxBitDepth < 8 || maxBitDepth > 16)
+        rawMaximumBitDepth(handle, modelFlags);
+    if (maxBitDepth < 8U || maxBitDepth > 16U) {
+        if (FAILED(maxBitDepthResult))
+            return maxBitDepthResult;
         return E_INVALIDARG;
+    }
 
     // A successful put may be the only confirmation available on models
     // where BITDEPTH is writable but its getter is not implemented. Prefer a
@@ -102,28 +126,7 @@ HRESULT getRawBitDepthMode(
     return S_OK;
 }
 
-// The SDK's model flags independently advertise supported RAW pixel depths.
-// Use them as a fallback when Amcam_get_MaxBitDepth is unavailable or reports
-// only the 8-bit mode, while preserving the SDK result when it reports a
-// greater supported depth.
-unsigned rawMaximumBitDepthFromModelFlags(std::uint64_t modelFlags) {
-    if ((modelFlags & AMCAM_FLAG_RAW16) != 0) return 16U;
-    if ((modelFlags & AMCAM_FLAG_RAW14) != 0) return 14U;
-    if ((modelFlags & (AMCAM_FLAG_RAW12 | AMCAM_FLAG_RAW12PACK)) != 0) return 12U;
-    if ((modelFlags & AMCAM_FLAG_RAW11) != 0) return 11U;
-    if ((modelFlags & AMCAM_FLAG_RAW10) != 0) return 10U;
-    if ((modelFlags & AMCAM_FLAG_RAW8) != 0) return 8U;
-    return 0U;
-}
 
-unsigned rawMaximumBitDepth(HAmcam handle, std::uint64_t modelFlags) {
-    const HRESULT result = Amcam_get_MaxBitDepth(handle);
-    const unsigned sdkMaximum =
-        SUCCEEDED(result) && result >= 8 && result <= 16
-            ? static_cast<unsigned>(result)
-            : 0U;
-    return std::max(sdkMaximum, rawMaximumBitDepthFromModelFlags(modelFlags));
-}
 std::string boundedString(const char* value, std::size_t capacity) {
     if (!value) return {};
     return std::string(value, std::find(value, value + capacity, '\0'));
@@ -2410,7 +2413,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
                     }
                     if (SUCCEEDED(hr))
                         hr = getRawBitDepthMode(
-                            impl_->handle, rawBitDepthMode, &failureOperation,
+                            impl_->handle, impl_->modelFlags, rawBitDepthMode, &failureOperation,
                             impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
                 }
             } else if (modelAdvertisesRaw) {
@@ -4267,7 +4270,7 @@ bool AmcamCamera::captureStill(
             }
             const char* storageModeFailureOperation = "Amcam_get_MaxBitDepth";
             const HRESULT storageModeResult = getRawBitDepthMode(
-                impl_->handle, rawBitDepthMode, &storageModeFailureOperation,
+                impl_->handle, impl_->modelFlags, rawBitDepthMode, &storageModeFailureOperation,
                 impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
             if (FAILED(storageModeResult)) {
                 return failHr(error, storageModeFailureOperation, storageModeResult);

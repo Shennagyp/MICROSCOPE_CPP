@@ -121,6 +121,8 @@ public:
 private:
     void refreshCameras() {
         if (camera_.state() != amscope::CameraState::Closed) {
+            statusBar()->showMessage(
+                "Close the current camera session before refreshing device enumeration.");
             return;
         }
 

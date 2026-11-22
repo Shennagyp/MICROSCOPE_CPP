@@ -1627,7 +1627,8 @@ private:
                                             !accessoryOperationPending_);
         const bool accessoriesIdle =
             idle && !accessoryOperationPending_ &&
-            !embeddedLightSourceReadPending_ && !filterWheelReadPending_;
+            !embeddedLightSourceReadPending_ && !filterWheelReadPending_ &&
+            !astroAutoFocuserReadPending_;
         const bool accessoryControlsIdle = (open || streaming) && accessoriesIdle;
         accessoryGroup_->setEnabled(accessoryControlsIdle);
         astroAutoFocuserGroup_->setEnabled((open || streaming) && accessoriesIdle);

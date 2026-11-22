@@ -130,23 +130,59 @@ public:
         frame_ = std::move(frame);
         message_.clear();
 
-        if (frame_ && frame_->pixelFormat == amscope::PixelFormat::RGB24 &&
-            frame_->data() && frame_->width > 0 && frame_->height > 0 &&
+        const bool validDimensions =
+            frame_ && frame_->data() && frame_->width > 0 && frame_->height > 0 &&
             frame_->width <= static_cast<std::uint32_t>(std::numeric_limits<int>::max()) &&
             frame_->height <= static_cast<std::uint32_t>(std::numeric_limits<int>::max()) &&
-            frame_->strideBytes <= static_cast<std::uint32_t>(std::numeric_limits<int>::max())) {
-            image_ = QImage(
-                frame_->data(),
-                static_cast<int>(frame_->width),
-                static_cast<int>(frame_->height),
-                static_cast<int>(frame_->strideBytes),
-                QImage::Format_RGB888);
+            frame_->strideBytes <= static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+
+        if (validDimensions) {
+            const std::uint64_t minimumRowBytes =
+                static_cast<std::uint64_t>(frame_->width) *
+                (frame_->pixelFormat == amscope::PixelFormat::RGB24 ? 3U :
+                 frame_->pixelFormat == amscope::PixelFormat::Raw16 ? 2U : 1U);
+            const std::uint64_t requiredBytes =
+                static_cast<std::uint64_t>(frame_->strideBytes) * frame_->height;
+            const bool validBuffer =
+                frame_->strideBytes >= minimumRowBytes &&
+                requiredBytes <= frame_->byteSize();
+
+            if (validBuffer) {
+                const int width = static_cast<int>(frame_->width);
+                const int height = static_cast<int>(frame_->height);
+                const int stride = static_cast<int>(frame_->strideBytes);
+                switch (frame_->pixelFormat) {
+                case amscope::PixelFormat::RGB24:
+                    image_ = QImage(frame_->data(), width, height, stride,
+                                    QImage::Format_RGB888);
+                    break;
+                case amscope::PixelFormat::Raw8:
+                    // Display the sensor mosaic as monochrome samples. This is
+                    // a preview-only interpretation; the leased RAW bytes remain
+                    // untouched for capture and downstream image processing.
+                    image_ = QImage(frame_->data(), width, height, stride,
+                                    QImage::Format_Grayscale8);
+                    break;
+                case amscope::PixelFormat::Raw16:
+                    // The SDK is configured for native byte order on this
+                    // platform. Keep the original 16-bit sample buffer intact.
+                    image_ = QImage(frame_->data(), width, height, stride,
+                                    QImage::Format_Grayscale16);
+                    break;
+                case amscope::PixelFormat::Unknown:
+                    break;
+                }
+            }
         }
 
         if (image_.isNull()) {
             frame_.reset();
             hasUnpaintedFrame_ = false;
-            message_ = QStringLiteral("No renderable RGB frame");
+            message_ = QStringLiteral("No renderable frame (format: %1, %2x%3, stride: %4)")
+                .arg(frame_ ? pixelFormatName(frame_->pixelFormat) : QStringLiteral("invalid"))
+                .arg(frame_ ? frame_->width : 0)
+                .arg(frame_ ? frame_->height : 0)
+                .arg(frame_ ? frame_->strideBytes : 0);
         } else {
             // Count a frame when this newly submitted image is actually painted.
             // Do not use the SDK sequence field as a uniqueness token: some

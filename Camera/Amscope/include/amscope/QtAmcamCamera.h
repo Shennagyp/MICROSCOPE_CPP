@@ -60,10 +60,13 @@ public:
     using CameraOperationResult = std::variant<T, CameraError>;
     using AutoWhiteBalanceResult = CameraOperationResult<std::monostate>;
     using FrameRateResult = CameraOperationResult<FrameRateStatistics>;
+    using StillCaptureResult = CameraOperationResult<FramePtr>;
     using AutoWhiteBalanceCallback =
         std::function<void(FeatureRequestId, AutoWhiteBalanceResult)>;
     using FrameRateCallback =
         std::function<void(FeatureRequestId, FrameRateResult)>;
+    using StillCaptureCallback =
+        std::function<void(FeatureRequestId, StillCaptureResult)>;
     using LifecycleResult = CameraOperationResult<std::monostate>;
     using LifecycleCallback =
         std::function<void(CameraRequestId, LifecycleResult)>;
@@ -102,8 +105,14 @@ public:
     // GUI callers should use the asynchronous request methods below.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& stats, CameraError* error = nullptr);
+    bool captureStill(const StillCaptureRequest& request,
+                      FramePtr& frame,
+                      CameraError* error = nullptr);
     FeatureRequestId requestAutoWhiteBalance(AutoWhiteBalanceCallback callback);
     FeatureRequestId requestFrameRate(FrameRateCallback callback);
+    FeatureRequestId requestStillCapture(
+        StillCaptureRequest request,
+        StillCaptureCallback callback);
 
     // Asynchronous camera operations for GUI/application code. A zero request
     // ID means rejection (empty callback, full queue, shutdown, or this instance

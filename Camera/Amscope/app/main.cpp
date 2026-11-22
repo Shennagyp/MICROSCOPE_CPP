@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QImage>
 #include <QHBoxLayout>
@@ -15,6 +16,9 @@
 #include <QMetaObject>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSaveFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QStringList>
@@ -97,6 +101,12 @@ public:
         startButton_ = new QPushButton("Start", central);
         stopButton_ = new QPushButton("Stop", central);
         closeButton_ = new QPushButton("Close", central);
+        stillCaptureModeSelector_ = new QComboBox(central);
+        stillCaptureModeSelector_->addItem(
+            "Processed still", static_cast<int>(amscope::StillCaptureMode::Processed));
+        stillCaptureModeSelector_->addItem(
+            "RAW still", static_cast<int>(amscope::StillCaptureMode::Raw));
+        captureStillButton_ = new QPushButton("Capture still", central);
 
         toolbar->addWidget(cameraSelector_, 1);
         toolbar->addWidget(refreshCamerasButton_);
@@ -104,6 +114,8 @@ public:
         toolbar->addWidget(startButton_);
         toolbar->addWidget(stopButton_);
         toolbar->addWidget(closeButton_);
+        toolbar->addWidget(stillCaptureModeSelector_);
+        toolbar->addWidget(captureStillButton_);
 
         preview_ = new QLabel("Select a camera and press Open, then Start.", central);
         preview_->setAlignment(Qt::AlignCenter);
@@ -154,6 +166,9 @@ public:
         });
         connect(closeButton_, &QPushButton::clicked, this, [this]() {
             closeCamera();
+        });
+        connect(captureStillButton_, &QPushButton::clicked, this, [this]() {
+            captureStill();
         });
         connect(refreshFeaturesButton_, &QPushButton::clicked, this, [this]() {
             refreshFeatureDescriptors();
@@ -373,6 +388,117 @@ private:
             lifecycleRequestPending_ = false;
             statusBar()->showMessage("The acquisition stop request could not be queued.");
             setFeatureControlsEnabled(true);
+            updateControls(camera_.state());
+        }
+    }
+
+    void captureStill() {
+        if (lifecycleRequestPending_ || stillCapturePending_ ||
+            camera_.state() != amscope::CameraState::Streaming) {
+            return;
+        }
+
+        amscope::StillCaptureRequest request;
+        request.mode = static_cast<amscope::StillCaptureMode>(
+            stillCaptureModeSelector_->currentData().toInt());
+        request.timeoutMilliseconds = 30000;
+
+        stillCapturePending_ = true;
+        statusBar()->showMessage(
+            request.mode == amscope::StillCaptureMode::Raw
+                ? "Capturing RAW still image…"
+                : "Capturing processed still image…");
+        updateControls(camera_.state());
+
+        const auto requestId = camera_.requestStillCapture(
+            request,
+            [this](amscope::QtAmcamCamera::FeatureRequestId,
+                   amscope::QtAmcamCamera::StillCaptureResult result) {
+                stillCapturePending_ = false;
+                updateControls(camera_.state());
+
+                if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
+                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    return;
+                }
+
+                const amscope::FramePtr frame =
+                    std::get<amscope::FramePtr>(std::move(result));
+                if (!frame || !frame->data()) {
+                    statusBar()->showMessage("Still capture returned an empty frame.");
+                    return;
+                }
+
+                const bool raw = frame->pixelFormat != amscope::PixelFormat::RGB24;
+                const QString suggested = raw
+                    ? QString("amscope_%1x%2_%3bit.raw")
+                          .arg(frame->width).arg(frame->height)
+                          .arg(static_cast<unsigned>(frame->bitsPerPixel))
+                    : QString("amscope_%1x%2.png")
+                          .arg(frame->width).arg(frame->height);
+                const QString path = QFileDialog::getSaveFileName(
+                    this,
+                    raw ? "Save RAW still image" : "Save processed still image",
+                    suggested,
+                    raw ? "RAW sensor data (*.raw)" : "PNG image (*.png)");
+                if (path.isEmpty()) {
+                    statusBar()->showMessage("Still image captured; save cancelled.");
+                    return;
+                }
+
+                if (!raw) {
+                    const QImage image(
+                        frame->data(),
+                        static_cast<int>(frame->width),
+                        static_cast<int>(frame->height),
+                        static_cast<int>(frame->strideBytes),
+                        QImage::Format_RGB888);
+                    if (!image.copy().save(path, "PNG")) {
+                        statusBar()->showMessage("Could not save the processed still image.");
+                        return;
+                    }
+                    statusBar()->showMessage("Processed still image saved.");
+                    return;
+                }
+
+                QSaveFile rawFile(path);
+                const auto byteCount = static_cast<qint64>(frame->byteSize());
+                if (!rawFile.open(QIODevice::WriteOnly) ||
+                    rawFile.write(reinterpret_cast<const char*>(frame->data()),
+                                  byteCount) != byteCount ||
+                    !rawFile.commit()) {
+                    statusBar()->showMessage("Could not save the RAW still payload.");
+                    return;
+                }
+
+                const QJsonObject metadata{
+                    {"width", static_cast<qint64>(frame->width)},
+                    {"height", static_cast<qint64>(frame->height)},
+                    {"strideBytes", static_cast<qint64>(frame->strideBytes)},
+                    {"bitsPerPixel", static_cast<int>(frame->bitsPerPixel)},
+                    {"pixelFormatFourCC", static_cast<qint64>(frame->pixelFormatCode)},
+                    {"sequence", static_cast<qint64>(frame->sequence)},
+                    {"timestampMicroseconds",
+                     static_cast<qint64>(frame->timestampMicroseconds)},
+                    {"exposureMicroseconds",
+                     static_cast<qint64>(frame->exposureMicroseconds)}
+                };
+                QSaveFile metadataFile(path + ".json");
+                const QByteArray json =
+                    QJsonDocument(metadata).toJson(QJsonDocument::Indented);
+                if (!metadataFile.open(QIODevice::WriteOnly) ||
+                    metadataFile.write(json) != json.size() ||
+                    !metadataFile.commit()) {
+                    statusBar()->showMessage(
+                        "RAW payload saved, but its metadata sidecar could not be saved.");
+                    return;
+                }
+                statusBar()->showMessage("RAW still image and metadata sidecar saved.");
+            });
+
+        if (requestId == 0) {
+            stillCapturePending_ = false;
+            statusBar()->showMessage("The still-capture request could not be queued.");
             updateControls(camera_.state());
         }
     }
@@ -945,13 +1071,16 @@ private:
         const bool streaming = state == amscope::CameraState::Streaming;
 
         const bool idle =
-            !lifecycleRequestPending_ && !cameraEnumerationPending_;
+            !lifecycleRequestPending_ && !cameraEnumerationPending_ &&
+            !stillCapturePending_;
         cameraSelector_->setEnabled(closed && idle);
         refreshCamerasButton_->setEnabled(closed && idle);
         openButton_->setEnabled(closed && idle && cameraSelector_->count() > 0);
         startButton_->setEnabled(open && idle);
         stopButton_->setEnabled(streaming && idle);
         closeButton_->setEnabled(!closed && idle);
+        stillCaptureModeSelector_->setEnabled(streaming && idle);
+        captureStillButton_->setEnabled(streaming && idle);
         refreshFeaturesButton_->setEnabled((open || streaming) && idle);
     }
 
@@ -963,6 +1092,7 @@ private:
     std::uint64_t featureUiGeneration_ = 0;
     std::uint64_t lifecycleUiGeneration_ = 0;
     bool lifecycleRequestPending_ = false;
+    bool stillCapturePending_ = false;
     std::uint64_t cameraEnumerationGeneration_ = 0;
     bool cameraEnumerationPending_ = false;
     std::size_t pendingFeatureReads_ = 0;
@@ -975,6 +1105,8 @@ private:
     QPushButton* startButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
     QPushButton* closeButton_ = nullptr;
+    QComboBox* stillCaptureModeSelector_ = nullptr;
+    QPushButton* captureStillButton_ = nullptr;
     QPushButton* refreshFeaturesButton_ = nullptr;
     QLabel* preview_ = nullptr;
     QLabel* frameInfo_ = nullptr;

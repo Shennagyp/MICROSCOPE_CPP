@@ -495,6 +495,25 @@ bool QtAmcamCamera::readFrameRate(
     return ok;
 }
 
+bool QtAmcamCamera::captureStill(
+    const StillCaptureRequest& request,
+    FramePtr& frame,
+    CameraError* error) {
+    if (!requireSynchronousExecutionMode("captureStill", error))
+        return false;
+    CameraError local;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> cameraLock(cameraOperationMutex_);
+        ok = camera_.captureStill(request, frame, &local);
+    }
+    if (!ok) {
+        if (error) *error = local;
+        emitError(local);
+    }
+    return ok;
+}
+
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
@@ -567,6 +586,49 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestFrameRate(
                 }
 
                 if (ok) result.emplace(std::move(statistics));
+                else result.emplace(std::move(local));
+            }
+
+            dispatchFeatureCallback(
+                requestContext,
+                [callback = std::move(callback),
+                 requestId,
+                 result = std::move(*result)]() mutable {
+                    callback(requestId, std::move(result));
+                });
+        });
+}
+
+QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestStillCapture(
+    StillCaptureRequest request,
+    StillCaptureCallback callback) {
+    if (!callback) return 0;
+
+    return enqueueFeatureRequest(
+        [this, request,
+         callback = std::move(callback)](
+            FeatureRequestId requestId,
+            const FeatureRequestContext& requestContext) mutable {
+            std::optional<StillCaptureResult> result;
+            {
+                std::lock_guard<std::mutex> operationLock(cameraOperationMutex_);
+                if (!isRequestContextCurrent(requestContext)) {
+                    return;
+                }
+
+                FramePtr frame;
+                CameraError local;
+                bool ok = false;
+                try {
+                    ok = camera_.captureStill(request, frame, &local);
+                } catch (const std::exception& exception) {
+                    local = {0, "captureStill", exception.what()};
+                } catch (...) {
+                    local = {0, "captureStill",
+                             "Unknown exception while capturing a still image."};
+                }
+
+                if (ok) result.emplace(std::move(frame));
                 else result.emplace(std::move(local));
             }
 

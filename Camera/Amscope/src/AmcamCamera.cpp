@@ -1597,7 +1597,8 @@ struct AmcamCamera::Impl {
 
                 // Only a successfully pulled frame proves acquisition progress.
                 // An IMAGE callback or E_PENDING result alone does not reset health.
-                impl_placeholder = 0;
+                pulledFrames.fetch_add(1, std::memory_order_relaxed);
+                lastFrameAt = std::chrono::steady_clock::now();
                 if (info.v3.expotime != 0)
                     expectedExposureMicroseconds.store(
                         info.v3.expotime, std::memory_order_release);
@@ -1934,6 +1935,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     impl_->resetStillCaptureStateAfterStop();
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
+    impl_->pulledFrames.store(0, std::memory_order_relaxed);
 
     int configuredTriggerMode = 0;
     CameraError triggerHealthError;
@@ -2264,6 +2266,9 @@ CameraState AmcamCamera::state() const noexcept {
 }
 std::uint64_t AmcamCamera::droppedFrames() const noexcept {
     return impl_->dropped.load(std::memory_order_relaxed);
+}
+std::uint64_t AmcamCamera::framesPulled() const noexcept {
+    return impl_->pulledFrames.load(std::memory_order_relaxed);
 }
 
 bool AmcamCamera::setResolution(std::uint32_t index, CameraError* error) {

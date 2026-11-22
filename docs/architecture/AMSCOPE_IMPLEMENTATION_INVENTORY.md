@@ -1,8 +1,8 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`  
-**Branch head reviewed for this inventory refresh:** `1e44fa8bab23f26587adffe8c5e06471956d9e54` (documentation-only relative to the source snapshot)  
-**Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims and visible test/UI coverage; it does not claim physical-camera verification.
+**Source snapshot:** `41d74718fa9a0be37060889b5d2bfcdbd6892e0f` (latest implementation-bearing commit in the reviewed branch)  
+**Branch head reviewed for this inventory refresh:** `48be6c9b635fe9fa40760f66b2efec024bf4fec4` (later commits at that point were documentation-only)  
+**Purpose:** Phase 0 source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported smoke observations; it does not claim full physical-camera qualification.
 
 ---
 
@@ -17,7 +17,7 @@ Use the following labels consistently:
 - **Not present / deferred:** current source/README explicitly says the feature is not delivered.
 - **Unknown:** not established by the inspected source or evidence.
 
-No feature in this inventory is labeled Hardware verified. The reviewed CI run found zero cameras and is not hardware evidence.
+No feature in this inventory is labeled **Hardware verified** because there is no completed, exact-commit hardware record under `docs/testing/hardware/`. The latest CI run found zero cameras and is not hardware evidence. A later user-reported targeted resolution smoke check is recorded separately in Section 10.1 and must not be promoted to full hardware qualification.
 
 ## 2. Source layout and responsibilities
 
@@ -69,7 +69,7 @@ No feature in this inventory is labeled Hardware verified. The reviewed CI run f
 | Sequence, timestamp, exposure, gain, black-level metadata | Source implemented/documented | No full live metadata hardware test | Not recorded |
 | Four immutable `FramePtr` leases | Source implemented/documented | No dedicated pool/retention stress test identified | Not recorded |
 | Private discard buffer when every lease is retained | Source implemented/documented | No direct pool exhaustion test identified | Not recorded |
-| Direct `QImage` wrapper over retained `FramePtr` and `QPainter` paint (no per-frame pixel copy or `QPixmap`) | Source implemented; latest CI pending | No dedicated FrameView rendering test; build/CI required | Not recorded |
+| Direct `QImage` wrapper over retained `FramePtr` and `QPainter` paint (no per-frame pixel copy or `QPixmap`) | Source implemented | No dedicated FrameView rendering test; branch-head CI passed on Intel x86_64 and Apple Silicon arm64 | Not recorded |
 | RAW sensor display as RGB | Explicitly refused by current UI | Not applicable | Not recorded |
 | RAW/Bayer demosaic for visible preview | Not present/deferred | No test target | Not recorded |
 | GPU rendering | Not present/deferred | No test target | Not recorded |
@@ -177,7 +177,7 @@ Additional target-architecture gaps:
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_frame_rate_tests` | Host frame-rate estimator behavior | Camera frame cadence |
 
-All eight tests passed on both Intel x86_64 and Apple Silicon arm64 in workflow run [#45051151740](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45051151740), on branch head `4de57806a898799173adb04af1272e00ff00fb24`. The launcher found zero cameras in CI. This list must be expanded when tests are added; it must not be interpreted as complete native lifecycle coverage.
+All eight registered CTest targets passed on both Intel x86_64 and Apple Silicon arm64 in the latest branch-head workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867), associated with source/documentation branch head `48be6c9b635fe9fa40760f66b2efec024bf4fec4`. The launcher found zero cameras in CI. This list must be expanded when tests are added; it must not be interpreted as complete native lifecycle coverage.
 
 ## 10. Current evidence classification
 
@@ -193,9 +193,20 @@ All eight tests passed on both Intel x86_64 and Apple Silicon arm64 in workflow 
 - Existing GenTL Consumer implementation: **present in Swift AMSCOPE_DRIVER/macos-version-0.4; no direct C++ interface**.
 - C++ GenTL Consumer/CTI adapter: **not delivered; integration choice pending**.
 - Exported CMake package: **not established**.
-- Intel and Apple Silicon CI: **passed at branch head `4de57806` in workflow #45051151740; eight of eight CTest tests passed on both architectures**.
-- Physical AmScope hardware baseline: **not recorded**.
+- Intel and Apple Silicon CI: **passed at branch head `48be6c9` in workflow [#45059333867](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45059333867); eight of eight CTest tests passed on both architectures**.
+- Targeted physical-camera smoke observation: **user reports that live resolution switching now works after a clean rebuild; see Section 10.1**.
+- Physical AmScope hardware baseline: **not recorded; a full exact-commit regression record is still required**.
 - Physical CTI-camera test: **not recorded**.
+
+### 10.1 Targeted user-reported physical-camera smoke observation — 22 November 2026
+
+The user reports the following result after removing the stale generated `build/amscope` directory and running `AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh`:
+
+- The clean rebuild completed and the preview application launched.
+- The live `Resolution` feature in the feature panel successfully changed the camera's live resolution.
+- The earlier filesystem error while writing `AmcamCamera.cpp.o` did not recur after the generated build tree was removed.
+
+The exact camera identity/model code, selected resolution index, resulting live frame dimensions, still-capture dimensions, and FPS telemetry were not supplied. This observation confirms that the live resolution setting path is operational in the user's tested setup; it does not prove the 640×480 throughput target, still-resolution selector, other feature setters, or lifecycle/recovery behavior. It is a targeted smoke observation, not a `Hardware verified` result.
 
 Update this inventory when a source/API/test/UI change lands. Do not change a hardware-evidence cell from "Not recorded" without a completed record under `docs/testing/hardware/`.
 

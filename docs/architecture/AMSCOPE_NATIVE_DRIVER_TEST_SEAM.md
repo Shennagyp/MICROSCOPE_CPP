@@ -1,8 +1,9 @@
 # Native AmScope Driver — Phase 1 SDK Test Seam Design
 
 **Status:** Design prepared; implementation intentionally gated on Phase 0 physical-camera acceptance.  
-**Source/documentation reviewed:** `1e44fa8bab23f26587adffe8c5e06471956d9e54` (native implementation snapshot `a3a03fbd1fe652fd4c1dfa8d2082ef86a2972f13`).  
-**Purpose:** Define the smallest internal test boundary that can deterministically exercise the native session lifecycle and callback-driven acquisition failure paths.
+**Latest implementation-bearing source reviewed:** `41d74718fa9a0be37060889b5d2bfcdbd6892e0f`.  
+**Branch source snapshot reviewed:** `48be6c9b635fe9fa40760f66b2efec024bf4fec4` (subsequent commits are documentation-only).  
+**Purpose:** Define the smallest internal test boundary that can deterministically exercise the native session lifecycle, callback-driven acquisition failure paths, and the current post-Start maximum-rate configuration.
 
 ---
 
@@ -34,6 +35,9 @@ The current AmcamCamera implementation calls the vendor SDK from one translation
 5. Still capture: still-resolution queries, SnapN/SnapR, still-image pull.
 6. Feature access: exposure, gain, pixel format, RAW, white balance, ROI, binning, processing, sensor, thermal, and frame-rate operations.
 7. Accessory and I/O commands: trigger, GPIO/I/O, light source, filter wheel, ST4, AAF, and lens operations.
+8. Post-Start maximum-rate configuration: disable low-noise mode when advertised; set/read back precise FPS and bandwidth for precise-rate models, or set/read back the model's maximum discrete speed level for other models.
+
+The maximum-rate configuration is part of `start()` now. It runs after `Amcam_StartPullModeWithCallback` succeeds and before the acquisition worker is created. A failure follows the Start cleanup path, so the first seam must be able to inject and verify these SDK calls rather than treating them as unrelated telemetry.
 
 The first Phase 1 test seam should not attempt to virtualize every vendor operation. It should cover the SDK calls needed to execute and fault the session/acquisition path. Expand it only when a deterministic native test genuinely needs another operation family.
 
@@ -66,7 +70,8 @@ The initial injected subset should be limited to what is required for enumeratio
 | Close | Verify exactly one terminal close and cleanup after failed Stop |
 | get_FinalSize | Supply the stream dimensions without a device |
 | get_ExpoTime | Supply a deterministic exposure used by the video watchdog |
-| get_Option / put_Option | Supply RAW/heartbeat option state and inject byte-order/cache-flush/heartbeat option results as required |
+| get_Option / put_Option | Supply RAW/heartbeat option state; inject byte-order, generic-FPS-cap, low-noise, precise-FPS/bandwidth, cache-flush, and heartbeat option results |
+| get_Speed / put_Speed | Exercise the non-precise model path: set the model's maximum discrete speed after StartPull and verify readback |
 | get_RawFormat | Supply valid RAW layout if a RAW-path fixture is added; the first RGB fixture may report RAW disabled |
 | StartPullModeWithCallback | Capture the SDK callback/context and control callback timing |
 | Stop | Inject success/failure sequences and verify state/resource retention |
@@ -74,7 +79,7 @@ The initial injected subset should be limited to what is required for enumeratio
 
 Still-resolution/SnapN/SnapR entry points should be added when the still-capture failure/quarantine test fixture is implemented. Feature, accessory, and GPIO function families are outside the first lifecycle seam unless a lifecycle test proves they are required.
 
-The table is intentionally not a replacement SDK. It covers only the test boundary needed for the first deterministic session tests.
+The table is intentionally not a replacement SDK. It covers only the test boundary needed for the first deterministic session tests. `get_Speed` / `put_Speed` are included because the current native Start implementation requires them for non-precise-rate models; omitting them would leave that real startup branch outside deterministic failure coverage.
 
 ### 3.4 Worker-start failure
 
@@ -123,6 +128,9 @@ The fake must model only the API contract required by each test. It must not sim
 | Worker creation failure | SDK Start succeeds; worker launch fails; Stop succeeds | SDK Stop occurs once; callbacks drain; cache flush is attempted; state is Open unless cleanup itself fails |
 | Worker creation + Stop failure | Worker launch fails; Stop fails | Handle and any callback-reachable resources remain owned; state is Faulted; terminal Close can still end ownership |
 | Normal frame path | Start succeeds; fake emits image event; pull returns frame | One worker performs PullImage; frame metadata/layout are preserved; callback is not called from vendor callback thread |
+| Precise-rate model configuration | Model advertises precise frame rate; fake supplies min/max range | After StartPull and before worker creation, the driver disables the generic cap, applies maximum precise FPS and 100% bandwidth, then verifies readback |
+| Discrete-speed model configuration | Model does not advertise precise FPS and has a maximum speed level | After StartPull and before worker creation, `put_Speed(maximum)` is called and `get_Speed` confirms the selected level |
+| Maximum-rate configuration failure | Inject failure or mismatched readback in low-noise, precise-rate, or speed configuration | Start does not publish an acquisition worker; it invokes Stop cleanup; successful Stop drains callbacks and flushes caches, while failed Stop leaves the session Faulted for terminal Close |
 | Recoverable Stop failure | Stop returns failure while Streaming | State returns to Streaming; worker, callback context, event path, pool and frame delivery remain active; no flush is attempted |
 | Successful Stop | Stop succeeds; callbacks are in flight | Queue stops, worker joins, entered callbacks drain, resources release, state becomes Open |
 | Flush failure and retry | Stop succeeds; flush fails; later Start retries and flush succeeds | Pending obligation remains after failure; Start does not start before successful retry; flag clears only on success |
@@ -131,7 +139,7 @@ The fake must model only the API contract required by each test. It must not sim
 | Fatal event vs user Stop | Coordinate both transitions at a barrier | Exactly one transition owner wins; no premature worker exit, stale state restoration, double Stop, or resource release |
 | Still request timeout | Still waiter times out or receives failure | Subsequent still requests remain quarantined until the successful Stop/Start boundary; live event queue remains separate |
 
-The existing queue, watchdog, profile, frame-gate, common feature, and Qt request unit tests remain useful and should not be duplicated by the native fixture. The seam is for the currently missing native session/SDK interaction coverage.
+The existing queue, watchdog, profile, frame-gate, common feature, and Qt request unit tests remain useful and should not be duplicated by the native fixture. The seam is for the currently missing native session/SDK interaction coverage. In particular, the maximum-rate tests must cover both model branches: precise-rate configuration through options and discrete speed configuration through `get_Speed` / `put_Speed`.
 
 ## 6. Scope boundaries
 

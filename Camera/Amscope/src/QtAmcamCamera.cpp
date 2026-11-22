@@ -893,7 +893,6 @@ QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestSoftwareTrigger(
 }
 
 QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
-QtAmcamCamera::FeatureRequestId QtAmcamCamera::requestAutoWhiteBalance(
     AutoWhiteBalanceCallback callback) {
     if (!callback) return 0;
 

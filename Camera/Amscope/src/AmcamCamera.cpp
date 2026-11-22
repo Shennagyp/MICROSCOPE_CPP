@@ -1069,6 +1069,8 @@ struct AmcamCamera::Impl {
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> sdkStarted{false};
     std::atomic<std::uint32_t> expectedExposureMicroseconds{0};
+    std::atomic<std::uint32_t> activeTriggerMode{0};
+    std::atomic<std::uint32_t> heartbeatIntervalMilliseconds{0};
     std::atomic<bool> frameCacheFlushPending{false};
     std::atomic<std::uint32_t> activeSdkCallbacks{0};
     std::atomic<std::uint64_t> dropped{0};
@@ -1084,6 +1086,14 @@ struct AmcamCamera::Impl {
     std::condition_variable callbackWaitCondition;
     std::mutex lifecycleMutex;
     std::mutex apiMutex;
+    struct HeartbeatOptionSnapshot {
+        bool valid = false;
+        int eventMaster = 0;
+        int heartbeatSubscription = 0;
+        int heartbeatInterval = 0;
+        int noFrameTimeout = 0;
+        int noPacketTimeout = 0;
+    } heartbeatSnapshot;
     HAmcam handle = nullptr;
     AmcamCameraProfileRegistry profileRegistry;
     std::string modelName;
@@ -1100,7 +1110,114 @@ struct AmcamCamera::Impl {
 
     bool onWorkerThread() const noexcept { return g_acquisitionOwner == this; }
 
-    void updateExpectedExposure(unsigned exposureMicroseconds) noexcept {
+
+    bool restoreHeartbeatMonitoringLocked(CameraError* error) {
+        if (!heartbeatSnapshot.valid) {
+            heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+            return true;
+        }
+
+        HRESULT firstFailure = S_OK;
+        const auto restoreOption = [&](unsigned option, int value) {
+            const HRESULT hr = Amcam_put_Option(handle, option, value);
+            if (FAILED(hr) && SUCCEEDED(firstFailure))
+                firstFailure = hr;
+        };
+
+        restoreOption(AMCAM_OPTION_HEARTBEAT,
+                      heartbeatSnapshot.heartbeatInterval);
+        restoreOption(AMCAM_OPTION_EVENT_HARDWARE | AMCAM_EVENT_HEARTBEAT,
+                      heartbeatSnapshot.heartbeatSubscription);
+        restoreOption(AMCAM_OPTION_EVENT_HARDWARE,
+                      heartbeatSnapshot.eventMaster);
+        restoreOption(AMCAM_OPTION_NOFRAME_TIMEOUT,
+                      heartbeatSnapshot.noFrameTimeout);
+        restoreOption(AMCAM_OPTION_NOPACKET_TIMEOUT,
+                      heartbeatSnapshot.noPacketTimeout);
+
+        if (FAILED(firstFailure))
+            return failHr(error, "restore Amcam trigger-heartbeat options", firstFailure);
+
+        heartbeatSnapshot = {};
+        heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+        return true;
+    }
+
+    bool enableHeartbeatMonitoringLocked(
+        std::uint32_t requestedIntervalMilliseconds,
+        CameraError* error) {
+        if ((modelFlags & AMCAM_FLAG_EVENT_HARDWARE) == 0 ||
+            !profileRegistry.allows(modelCode, AmcamCameraFeature::HardwareEvents)) {
+            return fail(error, "configureTrigger", -1,
+                        "Triggered acquisition requires the model's hardware-heartbeat capability and an allowed HardwareEvents profile.");
+        }
+        if (requestedIntervalMilliseconds < AMCAM_HEARTBEAT_MIN ||
+            requestedIntervalMilliseconds > AMCAM_HEARTBEAT_MAX) {
+            return fail(error, "configureTrigger", -1,
+                        "Heartbeat interval must be within the SDK range [100, 10000] ms.");
+        }
+
+        if (!heartbeatSnapshot.valid) {
+            HeartbeatOptionSnapshot snapshot;
+            HRESULT hr = Amcam_get_Option(handle, AMCAM_OPTION_EVENT_HARDWARE,
+                                          &snapshot.eventMaster);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_get_Option(EVENT_HARDWARE)", hr);
+            hr = Amcam_get_Option(
+                handle, AMCAM_OPTION_EVENT_HARDWARE | AMCAM_EVENT_HEARTBEAT,
+                &snapshot.heartbeatSubscription);
+            if (FAILED(hr))
+                return failHr(error,
+                              "Amcam_get_Option(EVENT_HARDWARE | HEARTBEAT)", hr);
+            hr = Amcam_get_Option(handle, AMCAM_OPTION_HEARTBEAT,
+                                  &snapshot.heartbeatInterval);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_get_Option(HEARTBEAT)", hr);
+            hr = Amcam_get_Option(handle, AMCAM_OPTION_NOFRAME_TIMEOUT,
+                                  &snapshot.noFrameTimeout);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_get_Option(NOFRAME_TIMEOUT)", hr);
+            hr = Amcam_get_Option(handle, AMCAM_OPTION_NOPACKET_TIMEOUT,
+                                  &snapshot.noPacketTimeout);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_get_Option(NOPACKET_TIMEOUT)", hr);
+            snapshot.valid = true;
+            heartbeatSnapshot = snapshot;
+        }
+
+        const auto setOption = [&](unsigned option, int value,
+                                   const char* operation) -> bool {
+            const HRESULT hr = Amcam_put_Option(handle, option, value);
+            return SUCCEEDED(hr) || failHr(error, operation, hr);
+        };
+
+        if (!setOption(AMCAM_OPTION_NOFRAME_TIMEOUT, 0,
+                       "Amcam_put_Option(NOFRAME_TIMEOUT)") ||
+            !setOption(AMCAM_OPTION_NOPACKET_TIMEOUT, 0,
+                       "Amcam_put_Option(NOPACKET_TIMEOUT)") ||
+            !setOption(AMCAM_OPTION_HEARTBEAT,
+                       static_cast<int>(requestedIntervalMilliseconds),
+                       "Amcam_put_Option(HEARTBEAT)") ||
+            !setOption(AMCAM_OPTION_EVENT_HARDWARE | AMCAM_EVENT_HEARTBEAT, 1,
+                       "Amcam_put_Option(EVENT_HARDWARE | HEARTBEAT)") ||
+            !setOption(AMCAM_OPTION_EVENT_HARDWARE, 1,
+                       "Amcam_put_Option(EVENT_HARDWARE)")) {
+            CameraError original = error ? *error : CameraError{};
+            CameraError restoreError;
+            if (!restoreHeartbeatMonitoringLocked(&restoreError)) {
+                original.message += " Heartbeat option rollback failed: " +
+                                    restoreError.message;
+            }
+            if (error) *error = std::move(original);
+            return false;
+        }
+
+        heartbeatIntervalMilliseconds.store(
+            requestedIntervalMilliseconds, std::memory_order_release);
+        return true;
+    }
+
+    void updateExpectedExposure(unsigned exposureMicroseconds) noexcept {    void updateExpectedExposure(unsigned exposureMicroseconds) noexcept {
         if (exposureMicroseconds == 0) return;
         const auto previous = expectedExposureMicroseconds.exchange(
             exposureMicroseconds, std::memory_order_acq_rel);
@@ -1203,6 +1320,7 @@ struct AmcamCamera::Impl {
             }
             [[fallthrough]];
         case AMCAM_EVENT_IMAGE:
+        case AMCAM_EVENT_HEARTBEAT:
             try {
                 (void)self->eventQueue.push(event);
             } catch (...) {
@@ -1280,6 +1398,7 @@ struct AmcamCamera::Impl {
     void acquisitionLoop(const std::shared_ptr<FramePool>& activePool) noexcept {
         g_acquisitionOwner = this;
         auto lastFrameAt = std::chrono::steady_clock::now();
+        auto lastHeartbeatAt = lastFrameAt;
 
         // The outer loop is important: a fatal event can race a user Stop.
         // If Stop owns the transition, reportFatal declines ownership and the
@@ -1290,10 +1409,18 @@ struct AmcamCamera::Impl {
 
             for (;;) {
                 std::uint32_t event = 0;
-                auto waitResult = eventQueue.waitNextUntil(
-                    lastFrameAt + detail::frameStallTimeout(
-                        expectedExposureMicroseconds.load(std::memory_order_acquire)),
-                    event);
+                const bool triggerMode =
+                    activeTriggerMode.load(std::memory_order_acquire) !=
+                    static_cast<std::uint32_t>(AmcamTriggerMode::Video);
+                const auto exposure =
+                    expectedExposureMicroseconds.load(std::memory_order_acquire);
+                const auto heartbeatInterval =
+                    heartbeatIntervalMilliseconds.load(std::memory_order_acquire);
+                const auto healthDeadline =
+                    triggerMode
+                        ? lastHeartbeatAt + detail::heartbeatStallTimeout(heartbeatInterval)
+                        : lastFrameAt + detail::frameStallTimeout(exposure);
+                auto waitResult = eventQueue.waitNextUntil(healthDeadline, event);
                 if (waitResult == detail::AmcamEventQueue::WaitResult::Timeout) {
                     // During a user-owned Stop, keep consuming/suppressing SDK
                     // events until Stop either succeeds or restores Streaming.
@@ -1304,21 +1431,38 @@ struct AmcamCamera::Impl {
                         const auto now = std::chrono::steady_clock::now();
                         const auto exposure =
                             expectedExposureMicroseconds.load(std::memory_order_acquire);
-                        if (detail::frameStalled(now, lastFrameAt, exposure)) {
+                        const auto interval =
+                            heartbeatIntervalMilliseconds.load(std::memory_order_acquire);
+                        if (detail::acquisitionStalled(
+                                triggerMode, now, lastFrameAt, lastHeartbeatAt,
+                                exposure, interval)) {
+                            const auto lastHealthAt =
+                                triggerMode ? lastHeartbeatAt : lastFrameAt;
                             const auto stalledMilliseconds =
                                 std::chrono::duration_cast<std::chrono::milliseconds>(
-                                    now - lastFrameAt).count();
+                                    now - lastHealthAt).count();
                             fatal = true;
-                            error = {static_cast<std::int32_t>(E_TIMEOUT),
-                                     "Amcam frame watchdog",
-                                     "No preview frame event received for " +
-                                         std::to_string(stalledMilliseconds) +
-                                         " ms (last exposure " +
-                                         std::to_string(exposure) +
-                                         " us; watchdog threshold " +
-                                         std::to_string(
-                                             detail::frameStallTimeout(exposure).count()) +
-                                         " ms)."};
+                            error = {
+                                static_cast<std::int32_t>(E_TIMEOUT),
+                                triggerMode ? "Amcam heartbeat watchdog"
+                                            : "Amcam frame watchdog",
+                                triggerMode
+                                    ? "No hardware heartbeat received for " +
+                                          std::to_string(stalledMilliseconds) +
+                                          " ms (heartbeat interval " +
+                                          std::to_string(interval) +
+                                          " ms; watchdog threshold " +
+                                          std::to_string(
+                                              detail::heartbeatStallTimeout(interval).count()) +
+                                          " ms)."
+                                    : "No preview frame event received for " +
+                                          std::to_string(stalledMilliseconds) +
+                                          " ms (last exposure " +
+                                          std::to_string(exposure) +
+                                          " us; watchdog threshold " +
+                                          std::to_string(
+                                              detail::frameStallTimeout(exposure).count()) +
+                                          " ms)."};
                             break;
                         }
                         continue;
@@ -1357,6 +1501,10 @@ struct AmcamCamera::Impl {
                     state.load(std::memory_order_acquire) == CameraState::Stopping)
                     continue;
 
+                if (event == AMCAM_EVENT_HEARTBEAT) {
+                    lastHeartbeatAt = std::chrono::steady_clock::now();
+                    continue;
+                }
                 if (event == AMCAM_EVENT_DISCONNECTED) {
                     fatal = true;
                     error = {static_cast<std::int32_t>(E_GEN_FAILURE),
@@ -1672,6 +1820,9 @@ bool AmcamCamera::open(const std::string& deviceId, CameraError* error) {
     impl_->eventQueue.stop();
     impl_->sdkStarted.store(false, std::memory_order_release);
     impl_->frameCacheFlushPending.store(false, std::memory_order_release);
+    impl_->activeTriggerMode.store(0, std::memory_order_release);
+    impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+    impl_->heartbeatSnapshot = {};
     impl_->dropped.store(0, std::memory_order_relaxed);
     impl_->state.store(CameraState::Open, std::memory_order_release);
     return true;
@@ -1696,13 +1847,20 @@ bool AmcamCamera::close(CameraError* error) {
     if (impl_->worker.joinable())
         impl_->worker.join();
 
+    CameraError heartbeatRestoreError;
+    bool heartbeatRestored = true;
     {
         std::lock_guard<std::mutex> api(impl_->apiMutex);
+        heartbeatRestored =
+            impl_->restoreHeartbeatMonitoringLocked(&heartbeatRestoreError);
         if (impl_->handle) {
             Amcam_Close(impl_->handle);
             impl_->handle = nullptr;
         }
 
+        impl_->activeTriggerMode.store(0, std::memory_order_release);
+        impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+        impl_->heartbeatSnapshot = {};
         impl_->sdkStarted.store(false, std::memory_order_release);
         impl_->frameCacheFlushPending.store(false, std::memory_order_release);
 
@@ -1725,6 +1883,10 @@ bool AmcamCamera::close(CameraError* error) {
     impl_->onFrame = {};
     impl_->onError = {};
     impl_->state.store(CameraState::Closed, std::memory_order_release);
+    if (!heartbeatRestored) {
+        if (error) *error = std::move(heartbeatRestoreError);
+        return false;
+    }
     return true;
 }
 
@@ -1749,7 +1911,85 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->dropped.store(0, std::memory_order_relaxed);
 
+    int configuredTriggerMode = 0;
+    CameraError triggerHealthError;
+    bool triggerHealthFailed = false;
+    {
+        std::lock_guard<std::mutex> api(impl_->apiMutex);
+        if (!impl_->handle) {
+            impl_->state.store(CameraState::Open, std::memory_order_release);
+            return fail(error, "start", -1, "Camera handle is not open.");
+        }
+        const HRESULT triggerHr = Amcam_get_Option(
+            impl_->handle, AMCAM_OPTION_TRIGGER, &configuredTriggerMode);
+        if (FAILED(triggerHr)) {
+            triggerHealthError = {
+                static_cast<std::int32_t>(triggerHr),
+                "Amcam_get_Option(TRIGGER)",
+                hrMessage("Amcam_get_Option(TRIGGER)", triggerHr)};
+            triggerHealthFailed = true;
+        } else if (configuredTriggerMode < 0 || configuredTriggerMode > 3) {
+            triggerHealthError = {
+                -1, "AMCAM_OPTION_TRIGGER",
+                "The SDK reports an unsupported trigger mode. Self-trigger configuration is not yet exposed by this driver."};
+            triggerHealthFailed = true;
+        } else if (configuredTriggerMode !=
+                   static_cast<int>(AmcamTriggerMode::Video)) {
+            if (configuredTriggerMode == static_cast<int>(AmcamTriggerMode::External) &&
+                (((impl_->modelFlags & AMCAM_FLAG_TRIGGER_EXTERNAL) == 0) ||
+                 !impl_->profileRegistry.allows(
+                     impl_->modelCode, AmcamCameraFeature::TriggerExternal))) {
+                triggerHealthError = {
+                    -1, "start", "The configured external trigger mode is not allowed by this model/profile."};
+                triggerHealthFailed = true;
+            } else if (configuredTriggerMode ==
+                           static_cast<int>(AmcamTriggerMode::ExternalAndSoftware) &&
+                       (((impl_->modelFlags & AMCAM_FLAG_TRIGGER_EXTERNAL) == 0) ||
+                        ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) == 0) ||
+                        !impl_->profileRegistry.allows(
+                            impl_->modelCode, AmcamCameraFeature::TriggerExternal) ||
+                        !impl_->profileRegistry.allows(
+                            impl_->modelCode, AmcamCameraFeature::TriggerSoftware))) {
+                triggerHealthError = {
+                    -1, "start", "The configured mixed trigger mode is not allowed by this model/profile."};
+                triggerHealthFailed = true;
+            } else {
+                std::uint32_t interval =
+                    impl_->heartbeatIntervalMilliseconds.load(std::memory_order_acquire);
+                if (interval < AMCAM_HEARTBEAT_MIN ||
+                    interval > AMCAM_HEARTBEAT_MAX) {
+                    int currentInterval = 0;
+                    const HRESULT readInterval = Amcam_get_Option(
+                        impl_->handle, AMCAM_OPTION_HEARTBEAT, &currentInterval);
+                    interval = SUCCEEDED(readInterval) &&
+                                       currentInterval >= AMCAM_HEARTBEAT_MIN &&
+                                       currentInterval <= AMCAM_HEARTBEAT_MAX
+                                   ? static_cast<std::uint32_t>(currentInterval)
+                                   : 1000U;
+                }
+                if (!impl_->enableHeartbeatMonitoringLocked(
+                        interval, &triggerHealthError)) {
+                    triggerHealthFailed = true;
+                }
+            }
+        } else {
+            impl_->activeTriggerMode.store(0, std::memory_order_release);
+            impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+        }
+
+        if (!triggerHealthFailed)
+            impl_->activeTriggerMode.store(
+                static_cast<std::uint32_t>(configuredTriggerMode),
+                std::memory_order_release);
+    }
+    if (triggerHealthFailed) {
+        impl_->state.store(CameraState::Open, std::memory_order_release);
+        if (error) *error = triggerHealthError;
+        return false;
+    }
+
     int width = 0, height = 0;
+    bool rawOutput = false;    int width = 0, height = 0;
     bool rawOutput = false;
     bool rawPolicyDenied = false;
     unsigned rawFourCC = 0;
@@ -2586,6 +2826,279 @@ bool AmcamCamera::setManualLensFocusPosition(
     return true;
 }
 
+
+bool AmcamCamera::readTriggerConfiguration(
+    AmcamTriggerConfiguration& configuration,
+    CameraError* error) {
+    if (error) *error = {};
+    configuration = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    const auto currentState = impl_->state.load(std::memory_order_acquire);
+    if (!impl_->handle ||
+        (currentState != CameraState::Open && currentState != CameraState::Streaming)) {
+        return fail(error, "readTriggerConfiguration", -1,
+                    "The camera must be open to read trigger configuration.");
+    }
+
+    int mode = -1;
+    HRESULT hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_TRIGGER, &mode);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(TRIGGER)", hr);
+    if (mode < 0 || mode > 3) {
+        return fail(error, "readTriggerConfiguration", -1,
+                    "The SDK reports a trigger mode not exposed by this API.");
+    }
+    configuration.mode = static_cast<AmcamTriggerMode>(mode);
+
+    if (mode == static_cast<int>(AmcamTriggerMode::External) ||
+        mode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware)) {
+        int source = -1;
+        hr = Amcam_IoControl(
+            impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE, 0, &source);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_IoControl(GET_TRIGGERSOURCE)", hr);
+        if (source < 0 || source > 5) {
+            return fail(error, "readTriggerConfiguration", -1,
+                        "The SDK returned an unknown external trigger source.");
+        }
+        configuration.externalSource = static_cast<AmcamTriggerSource>(source);
+    }
+
+    int heartbeat = 0;
+    hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_HEARTBEAT, &heartbeat);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(HEARTBEAT)", hr);
+    if (heartbeat < 0 ||
+        (heartbeat != 0 &&
+         (heartbeat < AMCAM_HEARTBEAT_MIN || heartbeat > AMCAM_HEARTBEAT_MAX))) {
+        return fail(error, "readTriggerConfiguration", -1,
+                    "The SDK returned an invalid heartbeat interval.");
+    }
+    configuration.heartbeatIntervalMilliseconds =
+        static_cast<std::uint32_t>(heartbeat);
+    return true;
+}
+
+bool AmcamCamera::configureTrigger(
+    const AmcamTriggerConfiguration& configuration,
+    CameraError* error) {
+    if (error) *error = {};
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    if (!impl_->handle ||
+        impl_->state.load(std::memory_order_acquire) != CameraState::Open) {
+        return fail(error, "configureTrigger", -1,
+                    "Trigger configuration can only change while the camera is open and stopped.");
+    }
+
+    const auto modeValue = static_cast<std::uint32_t>(configuration.mode);
+    if (modeValue > static_cast<std::uint32_t>(
+                        AmcamTriggerMode::ExternalAndSoftware)) {
+        return fail(error, "configureTrigger", -1,
+                    "The requested trigger mode is invalid or not exposed.");
+    }
+
+    const bool externalMode =
+        configuration.mode == AmcamTriggerMode::External ||
+        configuration.mode == AmcamTriggerMode::ExternalAndSoftware;
+    if (externalMode != configuration.externalSource.has_value()) {
+        return fail(error, "configureTrigger", -1,
+                    "External trigger modes require one explicit trigger source; video and software/simulated modes do not accept one.");
+    }
+
+    if (externalMode) {
+        if ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_EXTERNAL) == 0 ||
+            !impl_->profileRegistry.allows(
+                impl_->modelCode, AmcamCameraFeature::TriggerExternal)) {
+            return fail(error, "configureTrigger", -1,
+                        "The selected model/profile does not allow external triggering.");
+        }
+    }
+    if (configuration.mode == AmcamTriggerMode::ExternalAndSoftware) {
+        if ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SOFTWARE) == 0 ||
+            !impl_->profileRegistry.allows(
+                impl_->modelCode, AmcamCameraFeature::TriggerSoftware)) {
+            return fail(error, "configureTrigger", -1,
+                        "The selected model/profile does not allow mixed external and software triggering.");
+        }
+    }
+    if (configuration.externalSource) {
+        const auto source = static_cast<std::uint32_t>(*configuration.externalSource);
+        if (source > static_cast<std::uint32_t>(AmcamTriggerSource::Software)) {
+            return fail(error, "configureTrigger", -1,
+                        "The requested external trigger source is invalid.");
+        }
+    }
+
+    int previousMode = -1;
+    HRESULT hr = Amcam_get_Option(
+        impl_->handle, AMCAM_OPTION_TRIGGER, &previousMode);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(TRIGGER)", hr);
+    if (previousMode < 0 || previousMode > 3) {
+        return fail(error, "configureTrigger", -1,
+                    "The camera is currently in a trigger mode not exposed by this API.");
+    }
+
+    int previousSource = -1;
+    const bool previousExternal =
+        previousMode == static_cast<int>(AmcamTriggerMode::External) ||
+        previousMode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware);
+    if (previousExternal) {
+        hr = Amcam_IoControl(
+            impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE, 0,
+            &previousSource);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_IoControl(GET_TRIGGERSOURCE)", hr);
+    }
+
+    if (configuration.mode == AmcamTriggerMode::Video) {
+        hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_TRIGGER,
+                              static_cast<int>(AmcamTriggerMode::Video));
+        if (FAILED(hr)) return failHr(error, "Amcam_put_Option(TRIGGER)", hr);
+
+        impl_->activeTriggerMode.store(0, std::memory_order_release);
+        impl_->heartbeatIntervalMilliseconds.store(0, std::memory_order_release);
+        return impl_->restoreHeartbeatMonitoringLocked(error);
+    }
+
+    if (configuration.heartbeatIntervalMilliseconds < AMCAM_HEARTBEAT_MIN ||
+        configuration.heartbeatIntervalMilliseconds > AMCAM_HEARTBEAT_MAX) {
+        return fail(error, "configureTrigger", -1,
+                    "Heartbeat interval must be within [100, 10000] milliseconds.");
+    }
+
+    const bool heartbeatWasConfigured = impl_->heartbeatSnapshot.valid;
+    if (!impl_->enableHeartbeatMonitoringLocked(
+            configuration.heartbeatIntervalMilliseconds, error)) {
+        return false;
+    }
+
+    hr = Amcam_put_Option(
+        impl_->handle, AMCAM_OPTION_TRIGGER, static_cast<int>(modeValue));
+    if (FAILED(hr)) {
+        CameraError original = error ? *error : CameraError{};
+        CameraError restoreError;
+        if (!heartbeatWasConfigured &&
+            !impl_->restoreHeartbeatMonitoringLocked(&restoreError)) {
+            original.message += " Heartbeat rollback failed: " + restoreError.message;
+        }
+        if (error) {
+            *error = original;
+            failHr(error, "Amcam_put_Option(TRIGGER)", hr);
+            if (!restoreError.message.empty())
+                error->message += " " + restoreError.message;
+        }
+        return false;
+    }
+
+    if (configuration.externalSource) {
+        hr = Amcam_IoControl(
+            impl_->handle, 0, AMCAM_IOCONTROLTYPE_SET_TRIGGERSOURCE,
+            static_cast<int>(*configuration.externalSource), nullptr);
+        if (FAILED(hr)) {
+            (void)Amcam_put_Option(
+                impl_->handle, AMCAM_OPTION_TRIGGER, previousMode);
+            if (previousExternal && previousSource >= 0) {
+                (void)Amcam_IoControl(
+                    impl_->handle, 0, AMCAM_IOCONTROLTYPE_SET_TRIGGERSOURCE,
+                    previousSource, nullptr);
+            }
+            CameraError original = {
+                static_cast<std::int32_t>(hr),
+                "Amcam_IoControl(SET_TRIGGERSOURCE)",
+                hrMessage("Amcam_IoControl(SET_TRIGGERSOURCE)", hr)};
+            if (!heartbeatWasConfigured) {
+                CameraError restoreError;
+                if (!impl_->restoreHeartbeatMonitoringLocked(&restoreError))
+                    original.message += " Heartbeat rollback failed: " + restoreError.message;
+            }
+            if (error) *error = std::move(original);
+            return false;
+        }
+
+        int sourceReadback = -1;
+        hr = Amcam_IoControl(
+            impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE, 0,
+            &sourceReadback);
+        if (FAILED(hr) || sourceReadback !=
+                              static_cast<int>(*configuration.externalSource)) {
+            (void)Amcam_put_Option(
+                impl_->handle, AMCAM_OPTION_TRIGGER, previousMode);
+            if (previousExternal && previousSource >= 0) {
+                (void)Amcam_IoControl(
+                    impl_->handle, 0, AMCAM_IOCONTROLTYPE_SET_TRIGGERSOURCE,
+                    previousSource, nullptr);
+            }
+            CameraError original;
+            if (FAILED(hr)) {
+                original = {
+                    static_cast<std::int32_t>(hr),
+                    "Amcam_IoControl(GET_TRIGGERSOURCE)",
+                    hrMessage("Amcam_IoControl(GET_TRIGGERSOURCE)", hr)};
+            } else {
+                original = {
+                    -1, "configureTrigger",
+                    "The selected trigger source readback did not match the requested source."};
+            }
+            if (!heartbeatWasConfigured) {
+                CameraError restoreError;
+                if (!impl_->restoreHeartbeatMonitoringLocked(&restoreError))
+                    original.message += " Heartbeat rollback failed: " + restoreError.message;
+            }
+            if (error) *error = std::move(original);
+            return false;
+        }
+    }
+
+    impl_->activeTriggerMode.store(modeValue, std::memory_order_release);
+    impl_->heartbeatIntervalMilliseconds.store(
+        configuration.heartbeatIntervalMilliseconds, std::memory_order_release);
+    return true;
+}
+
+bool AmcamCamera::sendSoftwareTrigger(
+    std::uint16_t imageCount,
+    CameraError* error) {
+    if (error) *error = {};
+    if (imageCount == 0 || imageCount == std::numeric_limits<std::uint16_t>::max()) {
+        return fail(error, "sendSoftwareTrigger", -1,
+                    "Software trigger count must be within [1, 65534]; zero and continuous mode are not exposed.");
+    }
+
+    std::lock_guard<std::mutex> api(impl_->apiMutex);
+    if (!impl_->handle ||
+        impl_->state.load(std::memory_order_acquire) != CameraState::Streaming) {
+        return fail(error, "sendSoftwareTrigger", -1,
+                    "The camera must be streaming in a trigger mode before software triggering.");
+    }
+
+    int mode = -1;
+    HRESULT hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_TRIGGER, &mode);
+    if (FAILED(hr)) return failHr(error, "Amcam_get_Option(TRIGGER)", hr);
+
+    bool softwareTriggerAllowed =
+        mode == static_cast<int>(AmcamTriggerMode::SoftwareOrSimulated) ||
+        mode == static_cast<int>(AmcamTriggerMode::ExternalAndSoftware);
+    if (mode == static_cast<int>(AmcamTriggerMode::External)) {
+        int source = -1;
+        hr = Amcam_IoControl(
+            impl_->handle, 0, AMCAM_IOCONTROLTYPE_GET_TRIGGERSOURCE, 0, &source);
+        if (FAILED(hr))
+            return failHr(error, "Amcam_IoControl(GET_TRIGGERSOURCE)", hr);
+        softwareTriggerAllowed =
+            source == static_cast<int>(AmcamTriggerSource::Software);
+    }
+    if (!softwareTriggerAllowed) {
+        return fail(error, "sendSoftwareTrigger", -1,
+                    "The active trigger mode/source does not accept software trigger commands.");
+    }
+    if ((impl_->modelFlags & AMCAM_FLAG_TRIGGER_SINGLE) != 0 && imageCount != 1) {
+        return fail(error, "sendSoftwareTrigger", -1,
+                    "This model supports only one image per trigger command.");
+    }
+
+    hr = Amcam_Trigger(impl_->handle, imageCount);
+    return FAILED(hr) ? failHr(error, "Amcam_Trigger", hr) : true;
+}
+
+bool AmcamCamera::readStillResolutions(
 bool AmcamCamera::readStillResolutions(
     std::vector<StillResolution>& resolutions,
     CameraError* error) {

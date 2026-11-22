@@ -66,4 +66,27 @@ inline bool heartbeatStalled(
                heartbeatStallTimeout(heartbeatIntervalMilliseconds);
 }
 
+
+inline std::chrono::milliseconds acquisitionStallTimeout(
+    bool triggerMode,
+    std::uint32_t exposureMicroseconds,
+    std::uint32_t heartbeatIntervalMilliseconds) noexcept {
+    return triggerMode
+        ? heartbeatStallTimeout(heartbeatIntervalMilliseconds)
+        : frameStallTimeout(exposureMicroseconds);
+}
+
+inline bool acquisitionStalled(
+    bool triggerMode,
+    std::chrono::steady_clock::time_point now,
+    std::chrono::steady_clock::time_point lastFrameAt,
+    std::chrono::steady_clock::time_point lastHeartbeatAt,
+    std::uint32_t exposureMicroseconds,
+    std::uint32_t heartbeatIntervalMilliseconds) noexcept {
+    return triggerMode
+        ? heartbeatStalled(now, lastHeartbeatAt, heartbeatIntervalMilliseconds)
+        : frameStalled(now, lastFrameAt, exposureMicroseconds);
+}
+
+
 } // namespace amscope::detail

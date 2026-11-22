@@ -2056,7 +2056,6 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     }
 
     int width = 0, height = 0;
-    bool rawOutput = false;    int width = 0, height = 0;
     bool rawOutput = false;
     bool rawPolicyDenied = false;
     unsigned rawFourCC = 0;
@@ -3051,7 +3050,7 @@ bool AmcamCamera::configureTrigger(
     }
 
     const bool heartbeatWasConfigured = impl_->heartbeatSnapshot.valid;
-    HeartbeatOptionSnapshot previousHeartbeatOptions;
+    Impl::HeartbeatOptionSnapshot previousHeartbeatOptions;
     if (!impl_->readHeartbeatOptionsLocked(previousHeartbeatOptions, error))
         return false;
     if (!impl_->enableHeartbeatMonitoringLocked(

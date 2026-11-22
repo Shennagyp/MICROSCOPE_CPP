@@ -587,6 +587,20 @@ struct AmcamCamera::Impl {
     }
 
     bool reportFatal(CameraError error) noexcept {
+        // A fatal transition can originate from the frame watchdog, not only
+        // from an SDK callback. Wake any still transaction before stopping the
+        // SDK so it cannot wait out its entire capture timeout after fault.
+        try {
+            {
+                std::lock_guard<std::mutex> captureLock(stillCaptureMutex);
+                if (stillCapturePending && stillCaptureFailureEvent == 0)
+                    stillCaptureFailureEvent = AMCAM_EVENT_ERROR;
+            }
+            stillCaptureCondition.notify_all();
+        } catch (...) {
+            // The fatal live transition must still proceed.
+        }
+
         bool expected = false;
         if (!stopRequested.compare_exchange_strong(
                 expected, true, std::memory_order_acq_rel))

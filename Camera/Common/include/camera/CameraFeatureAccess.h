@@ -11,8 +11,11 @@
 namespace camera {
 
 // Backend-neutral feature identifier for selecting RAW output precision.
-// Enumeration values describe significant output bits (for example "8-bit"
-// and the camera's reported maximum such as "12-bit"), not storage width.
+// The feature is an Enumeration whose symbols are exact significant-bit counts
+// formatted as "<N>-bit" (for example "8-bit", "10-bit", "12-bit"). Each
+// backend publishes only the discrete values it can actually configure.
+// A relative mode such as "maximum supported" is not a valid feature value;
+// storage-container width is not significant sensor/output precision.
 inline constexpr std::string_view RawOutputBitDepthFeature =
     "RawOutputBitDepth";
 

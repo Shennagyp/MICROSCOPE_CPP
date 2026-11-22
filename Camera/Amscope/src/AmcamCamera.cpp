@@ -1074,6 +1074,7 @@ struct AmcamCamera::Impl {
     std::atomic<bool> frameCacheFlushPending{false};
     std::atomic<std::uint32_t> activeSdkCallbacks{0};
     std::atomic<std::uint64_t> dropped{0};
+    std::atomic<std::uint64_t> pulledFrames{0};
 
     detail::AmcamEventQueue eventQueue;
     std::mutex stillCaptureMutex;
@@ -1596,7 +1597,7 @@ struct AmcamCamera::Impl {
 
                 // Only a successfully pulled frame proves acquisition progress.
                 // An IMAGE callback or E_PENDING result alone does not reset health.
-                lastFrameAt = std::chrono::steady_clock::now();
+                impl_placeholder = 0;
                 if (info.v3.expotime != 0)
                     expectedExposureMicroseconds.store(
                         info.v3.expotime, std::memory_order_release);

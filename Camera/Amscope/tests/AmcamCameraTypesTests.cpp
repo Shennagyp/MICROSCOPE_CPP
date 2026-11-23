@@ -1,4 +1,4 @@
-#include "amscope/CameraTypes.h"
+#include "amscope/AmcamCamera.h"
 
 static_assert(static_cast<std::uint8_t>(amscope::AmcamIoLine::OptoIsolatedInput) == 0);
 static_assert(static_cast<std::uint8_t>(amscope::AmcamIoLine::OptoIsolatedOutput) == 1);
@@ -12,6 +12,7 @@ static_assert(static_cast<std::uint8_t>(amscope::AmcamIoOutputMode::Strobe) == 2
 #include <iostream>
 #include <memory>
 #include <type_traits>
+#include <utility>
 
 namespace {
 
@@ -47,6 +48,11 @@ constexpr bool parsesOnceToNativeMode() {
 static_assert(parsesOnceToNativeMode(),
               "The public Once symbol must map to native SDK value 2");
 
+static_assert(std::is_same_v<
+                  decltype(std::declval<amscope::AmcamCamera&>().readFrameRateMeasurement()),
+                  camera::CameraOperationResult<camera::FrameRateMeasurement>>,
+              "The typed frame-rate API must expose the common measurement result");
+
 int main() {
     using amscope::AmcamAutoExposureMode;
 
@@ -61,6 +67,16 @@ int main() {
     const amscope::CameraError nativeError{
         -2147467259, "camera.start", "SDK rejected acquisition startup"};
     const auto commonError = amscope::toCommonOperationError(nativeError);
+    camera::CameraOperationResult<camera::FrameRateMeasurement> typedRateResult{
+        commonRate};
+    require(std::holds_alternative<camera::FrameRateMeasurement>(typedRateResult),
+            "typed operation result carries the common measured-rate value");
+    typedRateResult = commonError;
+    require(std::holds_alternative<camera::CameraOperationError>(typedRateResult) &&
+                std::get<camera::CameraOperationError>(typedRateResult).native &&
+                std::get<camera::CameraOperationError>(typedRateResult).native->code ==
+                    nativeError.vendorCode,
+            "typed operation result carries the converted native error without loss");
     require(commonError.code == camera::CameraErrorCode::BackendFailure &&
                 commonError.operation == "camera.start" &&
                 commonError.message == "SDK rejected acquisition startup",

@@ -4,7 +4,7 @@ This target contains reusable Qt Widgets that depend only on the backend-neutral
 `Camera::Common` contracts and Qt Widgets. It is separate from
 `Camera::Qt`, which is the Qt Core frame-mailbox layer.
 
-## Current component: FrameView
+## FrameView
 
 `camera::qtwidgets::FrameView` presents common `camera::Frame`
 layouts:

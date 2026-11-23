@@ -851,12 +851,28 @@ buildAmcamFeatureDescriptors(
         std::nullopt, std::nullopt, std::move(resolutionSymbols),
         camera::CameraFeatureGroup::ImageFormat
     });
+    std::optional<std::string> rawOutputDisabledReason;
+    if (!rawModelSupported) {
+        rawOutputDisabledReason =
+            "The camera model does not advertise RAW sensor output capability.";
+    } else if (!rawModeReadable) {
+        rawOutputDisabledReason =
+            "The SDK did not return a valid RAW sensor-output state.";
+    } else if (!rawOutputAllowed) {
+        rawOutputDisabledReason =
+            "RAW sensor output is blocked by the active camera feature profile.";
+    } else if (!stopped) {
+        rawOutputDisabledReason =
+            "Stop acquisition before changing RAW sensor output.";
+    }
     descriptors.push_back({
         "AmcamRawOutputEnabled", "RAW Sensor Output", CameraFeatureKind::Boolean,
-        std::nullopt, rawAvailable && rawOutputAllowed,
-        rawModeReadable, rawAvailable && rawOutputAllowed && stopped,
+        std::nullopt, rawModelSupported,
+        rawModeReadable, rawModelSupported && rawModeReadable &&
+            rawOutputAllowed && stopped,
         std::nullopt, std::nullopt, {},
-        camera::CameraFeatureGroup::ImageFormat
+        camera::CameraFeatureGroup::ImageFormat,
+        {}, std::move(rawOutputDisabledReason)
     });
     descriptors.push_back({
         std::string(camera::RawOutputBitDepthFeature),
@@ -871,15 +887,30 @@ buildAmcamFeatureDescriptors(
         std::move(rawBitDepthValues),
         std::move(rawBitDepthDisabledReason)
     });
+    std::optional<std::string> rawFormatDisabledReason;
+    if (!rawModelSupported) {
+        rawFormatDisabledReason =
+            "The camera model does not advertise RAW sensor output capability.";
+    } else if (!rawOutputAllowed) {
+        rawFormatDisabledReason =
+            "RAW sensor format is blocked by the active camera feature profile.";
+    } else if (!rawModeReadable || rawMode == 0) {
+        rawFormatDisabledReason =
+            "Enable RAW Sensor Output while acquisition is stopped to query its format.";
+    } else if (!rawFormatReadable) {
+        rawFormatDisabledReason =
+            "The SDK did not return a valid RAW sensor format.";
+    }
     descriptors.push_back({
         "AmcamRawSensorFormat", "RAW Sensor Format", CameraFeatureKind::Enumeration,
-        std::nullopt, rawAvailable && rawOutputAllowed && rawFormatReadable,
+        std::nullopt, rawModelSupported,
         rawFormatReadable, false,
         std::nullopt, std::nullopt,
         rawFormatReadable
             ? std::vector<std::string>{rawFormatFeatureSymbol(rawFourCC, rawBitsPerPixel)}
             : std::vector<std::string>{},
-        camera::CameraFeatureGroup::ImageFormat
+        camera::CameraFeatureGroup::ImageFormat,
+        {}, std::move(rawFormatDisabledReason)
     });
 
     descriptors.push_back({

@@ -214,8 +214,8 @@ void probeCamera(HAmcam camera, const AmcamDeviceV2& selectedDevice) {
     }
 
     std::cout << "=============================================\n";
-    std::cout << "READ-ONLY: no Amcam_put_* calls were made and "
-                 "image acquisition was not started.\n";
+    std::cout << "BASELINE READ-ONLY: no Amcam_put_* calls were made during "
+                 "this section; image acquisition was not started.\n";
 }
 
  
@@ -280,8 +280,8 @@ bool probeRawModeTemporarily(HAmcam camera) {
     printHresult("Read active AMCAM_OPTION_RAW", hr);
     if (FAILED(hr) || activeRawMode != 1) {
         std::cerr << "RAW mode was not confirmed after the request.\n";
-        const bool restored = restoreOriginalMode();
-        return false && restored;
+        restoreOriginalMode();
+        return false;
     }
 
     std::cout << "\n--- Capabilities while RAW mode is active ---\n";

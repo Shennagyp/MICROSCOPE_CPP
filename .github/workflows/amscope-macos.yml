@@ -5,6 +5,7 @@ on:
     branches:
       - amscope-native-driver
       - amscope-native-driver-0.5
+      - amscope-native-driver-0.6
     paths:
       - "Camera/Amscope/**"
       - "Camera/Common/**"

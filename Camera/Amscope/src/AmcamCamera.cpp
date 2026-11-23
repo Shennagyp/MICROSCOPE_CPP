@@ -379,8 +379,11 @@ buildAmcamFeatureDescriptors(
             supportedPixelFormats.push_back(std::to_string(code));
         }
     }
-    const bool pixelFormatProbe = SUCCEEDED(currentPixelFormatHr) &&
-        !supportedPixelFormats.empty() &&
+    // Capability enumeration and current-value readback are independent.
+    // A camera can expose a valid writable format list even when the SDK
+    // cannot read the current format. Do not hide the selector in that case.
+    const bool pixelFormatProbe = !supportedPixelFormats.empty();
+    const bool pixelFormatCurrentValid = SUCCEEDED(currentPixelFormatHr) &&
         std::find(supportedPixelFormats.begin(), supportedPixelFormats.end(),
                   std::to_string(currentPixelFormat)) != supportedPixelFormats.end();
 
@@ -803,7 +806,7 @@ buildAmcamFeatureDescriptors(
     descriptors.push_back({
         "AmcamPixelFormat", "Pixel Format", CameraFeatureKind::Enumeration,
         std::nullopt, pixelFormatProbe && pixelFormatAllowed,
-        SUCCEEDED(currentPixelFormatHr),
+        pixelFormatCurrentValid,
         pixelFormatProbe && pixelFormatAllowed && stopped, std::nullopt, std::nullopt,
         std::move(supportedPixelFormats)
     });
@@ -5084,7 +5087,37 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
             return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
                                 std::string(name), "Pixel format can only be changed while acquisition is stopped.");
-        HRESULT hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, code);
+        // Validate against the camera's live SDK enumeration as well as the
+        // descriptor snapshot. The backend must not send an arbitrary numeric
+        // format code to the vendor API if capabilities changed since refresh.
+        int supportedCount = 0;
+        HRESULT hr = Amcam_get_PixelFormatSupport(
+            impl_->handle, static_cast<char>(-1), &supportedCount);
+        if (FAILED(hr))
+            return featureBackendError(std::string(name),
+                                       "Amcam_get_PixelFormatSupport(count)", hr);
+        if (supportedCount <= 0 || supportedCount > 64)
+            return featureError(CameraFeatureAccessError::Code::BackendFailure,
+                                std::string(name),
+                                "The SDK returned an invalid supported pixel-format count.");
+        bool requestedFormatSupported = false;
+        for (int i = 0; i < supportedCount; ++i) {
+            int supportedCode = -1;
+            hr = Amcam_get_PixelFormatSupport(
+                impl_->handle, static_cast<char>(i), &supportedCode);
+            if (FAILED(hr))
+                return featureBackendError(std::string(name),
+                                           "Amcam_get_PixelFormatSupport(entry)", hr);
+            if (supportedCode == code) {
+                requestedFormatSupported = true;
+                break;
+            }
+        }
+        if (!requestedFormatSupported)
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name),
+                                "The requested pixel format is not supported by this camera.");
+        hr = Amcam_put_Option(impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, code);
         if (FAILED(hr)) return featureBackendError(std::string(name), "Amcam_put_Option(PIXEL_FORMAT)", hr);
         int readback = -1;
         hr = Amcam_get_Option(impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, &readback);

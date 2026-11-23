@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
 **Source snapshot:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (v0.6 common integer-range typing, exact validation, first-frame common metadata reporting, and ownership audit)  
-**Branch head reviewed for this inventory refresh:** `6e4f6bb584719aec6323936350a65e0112dc0066` (project-owner supplied Release build, 11/11 CTest pass, and MU503 RGB24 common-frame hardware record; CI for this exact revision not yet reported)  
+**Branch head reviewed for this inventory refresh:** `892b91a57016e570a1e972343f78ed7c42be801c` (project-owner supplied clean Release configure/build including `amscope_preview`, 13/13 CTest pass including `camera_qt_widgets_frame_view_tests`; post-extraction MU503 preview smoke check remains pending; CI for this exact revision not yet reported)  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---
@@ -75,7 +75,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Significant source depth vs payload storage width | Source implemented as independent `significantBitsPerPixel` and `storageBitsPerPixel` | Common and AmScope type tests cover independent values | Not recorded |
 | Four immutable `FramePtr` leases | Source implemented/documented | No dedicated pool/retention stress test identified | Not recorded |
 | Private discard buffer when every lease is retained | Source implemented/documented | No direct pool exhaustion test identified | Not recorded |
-| Direct `QImage` wrapper over retained `FramePtr` and `QPainter` paint (no per-frame pixel copy or `QPixmap`) | Source implemented | No dedicated FrameView rendering test; branch-head CI passed on Intel x86_64 and Apple Silicon arm64 | Not recorded |
+| Direct `QImage` wrapper over retained `FramePtr` and `QPainter` paint (no per-frame pixel copy or `QPixmap`) | Source implemented in `Camera::QtWidgets::FrameView` | Project-owner local Release build and offscreen FrameView tests passed at `892b91a`; RGB24/RAW8/RAW16 rendering, lease lifetime, invalid payload rejection and paint callback are covered | Post-extraction MU503 preview smoke check pending |
 | RAW sensor display as RGB | Explicitly refused by current UI | Not applicable | Not recorded |
 | RAW/Bayer demosaic for visible preview | Not present/deferred | No test target | Not recorded |
 | GPU rendering | Not present/deferred | No test target | Not recorded |
@@ -146,8 +146,8 @@ The Amcam implementation caches its full descriptor inventory per camera state; 
 | Separate `camera_amscope_control` | Intentionally not introduced | `AmcamCamera` already provides the non-Qt programmatic feature/command surface | A forwarding-only target would duplicate the existing API without establishing a new ownership boundary |
 | Separate Qt streaming mechanism | Implemented in `Camera::Qt` as header-only `FrameStreamMailbox`, embedded by value in `QtAmcamCamera` | Target built and all 12 CTest tests passed locally at `8aa3b23` | No runtime stream QObject, per-camera stream allocation, extra worker, or notification queue; signal remains on `QtAmcamCamera` |
 | Frame-path performance invariants | Frame mailbox extraction preserves the v0.5 atomic-`shared_ptr` latest-slot and notification-flag algorithm; `Amcam_PullImageV4` still writes to preallocated pool/discard storage and the Qt bridge transfers only a `FramePtr` lease | Source comparison and local 12/12 Release CTest pass at `8aa3b23` | No added pixel copy/conversion, frame-buffer allocation, Qt handoff mutex, worker, or queue; measured rate qualification remains Phase 7 |
-| Reusable `camera_ui_qt` | Partial: standalone `Camera::QtWidgets` static target exists; `camera::qtwidgets::FrameView` extracted and consumed by preview | Focused offscreen tests added for RGB24/RAW8/RAW16, lease lifetime, invalid payload and paint callback; local run pending | Extract discovery/lifecycle controls and descriptor-driven feature editors; no AmScope accessory types in generic target |
-| Generic frame presentation widget | `Camera::QtWidgets::FrameView`; depends only on `camera::FramePtr` and Qt Widgets; wraps the retained external pixel memory | Source extracted; focused tests added, local build/run pending | No per-frame owned image/pixel copy, RAW demosaic, GPU renderer, camera ownership, or acquisition queue |
+| Reusable `camera_ui_qt` | Partial: standalone `Camera::QtWidgets` static target exists; `camera::qtwidgets::FrameView` extracted and consumed by preview | Owner-reported Release build and 13/13 CTest pass at `892b91a`; focused offscreen FrameView test passed | Extract discovery/lifecycle controls and descriptor-driven feature editors; post-extraction live MU503 preview check remains pending; no AmScope accessory types in generic target |
+| Generic frame presentation widget | `Camera::QtWidgets::FrameView`; depends only on `camera::FramePtr` and Qt Widgets; wraps the retained external pixel memory | Project-owner local Release build and offscreen test passed at `892b91a`; full 13/13 CTest suite passed | Physical MU503 preview integration pending; no per-frame owned image/pixel copy, RAW demosaic, GPU renderer, camera ownership, or acquisition queue |
 
 ## 8. Explicitly deferred or absent
 
@@ -169,7 +169,7 @@ Additional target-architecture gaps:
 - Existing GenTL/GenApi C++ runtime dependency and CTI adapter are absent from this branch.
 - Backend-neutral camera identity/capability/frame models are not fully extracted from `amscope`.
 - `Amscope::Driver` remains a non-Qt target containing the native Amcam session and programmatic control/command API. `Camera::Qt` supplies the header-only backend-neutral mailbox; `Amscope::Qt` embeds it without a second runtime stream object. No forwarding-only control target is planned.
-- Reusable backend-neutral UI library is not delivered.
+- Reusable backend-neutral Qt UI library is partial: `Camera::QtWidgets::FrameView` is delivered and tested; discovery/lifecycle controls and descriptor-driven editors remain to be extracted.
 - Exported CMake package and clean external-consumer qualification are missing.
 - Vendor SDK redistribution terms have not been established in this inventory.
 
@@ -185,6 +185,7 @@ Additional target-architecture gaps:
 | `amscope_frame_stall_watchdog_tests` | Video/heartbeat timeout calculations | Actual SDK timeout and heartbeat behavior |
 | `amscope_qt_request_tests` | Qt worker request ordering, callback affinity, typed closed-session outcomes, request supersession, synchronous/queued mode exclusion | Real camera SDK operations or physical frame delivery |
 | `camera_qt_frame_stream_tests` | Backend-neutral Qt frame coalescing, latest immutable lease identity, notification re-arm, in-flight publication guard, mailbox clear, QObject affinity | Real camera cadence or renderer/GPU behavior |
+| `camera_qt_widgets_frame_view_tests` | Offscreen RGB24/RAW8/RAW16 rendering, retained frame-lease lifetime, invalid/truncated payload rejection, post-paint callback | Physical camera delivery, sustained preview behavior, GPU rendering, or frame-rate performance |
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_models_tests` | Optional camera identity fields, opaque-ID distinction, common resolution, and Unknown/Unsupported/Supported capability semantics | AmScope model-flag mapping on hardware or GenTL discovery |
 | `camera_common_frame_tests` | Common frame payload/layout, opaque pixel-format scheme/value, optional sequence/timestamp/exposure, explicit timebases, and backend extension support | Real SDK payload layout/metadata accuracy and physical RAW verification |

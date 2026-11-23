@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `3ef46d3a5b85aa7ae2e22d160d92f61aecace5bb` (common discovery and frame models, AmScope adapter, common metadata, preview migration, and fixed-8-bit RAW storage-mode correction)  
-**Branch head reviewed for this inventory refresh:** `7b81b5e639f8b8f4eae04f30c1145c975092073b` (clean local build/11 of 11 tests passed; arm64 CI passed; Intel CI in progress)  
+**Source snapshot:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (v0.6 common integer-range typing, exact validation, first-frame common metadata reporting, and ownership audit)  
+**Branch head reviewed for this inventory refresh:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (source review only; v0.6 local build/CTest and CI verification pending)  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---
@@ -32,8 +32,8 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Frame gate | `detail/AcquisitionFrameGate.h` | Session/generation-aware publication gate |
 | Model policy | `AmcamCameraProfiles.h/.cpp` | Exact model allow/deny feature policy |
 | AmScope types | `CameraTypes.h` | AmScope CameraInfo extension, camera error/state, `AmcamFrame` native metadata extension, SDK enums, trigger/I/O/accessory models; common Frame/FramePtr and ImageResolution are aliases to Camera.Common |
-| Common feature contract | `Camera/Common/include/camera/CameraFeatureAccess.h` | Feature kinds, typed values, descriptors, typed errors/results, feature interface |
-| Common validation | `CameraFeatureValidation.h` | Shared type, range, increment, enum, vector, availability, and writability validation |
+| Common feature contract | `Camera/Common/include/camera/CameraFeatureAccess.h` | Feature kinds, typed values, descriptors, typed errors/results, feature interface; integer and floating-point ranges use distinct types |
+| Common validation | `CameraFeatureValidation.h` | Shared type, exact int64 range/increment validation, floating range validation, enum, vector, availability and writability validation |
 | Common FPS estimator | `FrameRateEstimator.h` | Host frame-rate estimation |
 | Qt facade | `QtAmcamCamera.h/.cpp` | Qt QObject facade, lifecycle/request worker, queued feature/control operations, frame mailbox |
 | Preview | `app/main.cpp` | Current single-window Qt Widgets application |\n| Physical-camera rate test | `app/hardware_rate_test.cpp` | Dedicated Qt preview/test executable measuring event, pull, callback-delivery and paint rates on a connected camera |
@@ -82,14 +82,14 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 
 ## 5. Common feature interface and settings
 
-The common contract currently supports Boolean, integer, integer vector, floating-point, string, and enumeration values. Enumeration symbols are distinct from ordinary strings. Descriptors carry availability, readability, writability, unit, scalar range/increment, vector cardinality, enumeration symbols, and group. Errors distinguish unsupported, not found, unavailable, not readable, not writable, type mismatch, invalid value, and backend failure.
+The common contract currently supports Boolean, integer, integer vector, floating-point, string, and enumeration values. Enumeration symbols are distinct from ordinary strings. Descriptors carry availability, readability, writability, unit, scalar range/increment, vector cardinality, enumeration symbols, and group. Integer limits use `CameraIntegerRange` with exact `int64_t` bounds/increments; floating-point limits use `CameraFloatingPointRange`. The validator rejects a range alternative that does not match the feature kind, checks integer increments without signed overflow, and covers values above `2^53`. Errors distinguish unsupported, not found, unavailable, not readable, not writable, type mismatch, invalid value, and backend failure.
 
 The Amcam implementation caches its full descriptor inventory per camera state; individual `readFeature()` operations reuse that inventory instead of repeating the complete set of SDK probes under the SDK mutex. Successful feature writes invalidate the cache. The preview stops automatic descriptor refresh when Streaming so the full probe set does not contend with `Amcam_PullImageV4`.
 
 | Feature family | Current source coverage | Key semantics/constraints | Test/UI coverage | Hardware evidence |
 |---|---|---|---|---|
 | Exposure auto | `ExposureAuto` | Off/Once/Continuous maps native values 0/2/1 as declared; Once is native one-shot, not emulated | Feature validator and type tests; descriptor-driven UI | Not recorded |
-| Exposure time | `ExposureTime` | Integer microseconds; writable only when current exposure mode permits | Feature validator; descriptor UI | Not recorded |
+| Integer numeric range semantics | `CameraIntegerRange` | Exact int64 bounds and increments; no conversion through double | Common feature tests include adjacent values above `2^53`, mismatched range kind, invalid increments, and full int64-domain arithmetic | Software verification pending on v0.6 |\n| Exposure time | `ExposureTime` | Integer microseconds; writable only when current exposure mode permits | Feature validator; descriptor UI | Not recorded |
 | Analog gain | `AmcamAnalogGainPercent` | Percentage, not GenICam dB | Descriptor UI | Not recorded |
 | Color matrix | `AmcamColorMatrixEnabled` | SDK/model-probed setting | Descriptor UI | Not recorded |
 | Pixel format | `AmcamPixelFormat` | Native SDK format codes; not automatically PFNC | Descriptor UI | Not recorded |

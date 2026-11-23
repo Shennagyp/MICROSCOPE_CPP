@@ -22,7 +22,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 ## Current continuation state — 24 November 2026
 
 - Active branch: `amscope-native-driver-v0.7`.
-- Latest implementation source commit: `17d6b0a7076e140c57fc3760fcde1f3eec2915a0`. Descendant commits after it update the Phase 4 plan/inventory/handoff only.
+- CameraControlPanel implementation commit: `17d6b0a7076e140c57fc3760fcde1f3eec2915a0`; latest source follow-up: `cd37af622783f4dc8a5d3ae16782955887a286ce` adds an explicit `QString` include only. Commits after that source follow-up update Phase 4 documentation.
 - Latest locally validated source remains `892b91a57016e570a1e972343f78ed7c42be801c`: Release build including `amscope_preview`, 13/13 CTest passed. This validation predates the new CameraControlPanel.
 - FrameView physical check: owner confirmed the MU503 preview sequence worked on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record is `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This verifies only the FrameView integration at that source boundary.
 - New component: `camera::qtwidgets::CameraControlPanel` in `Camera/QtWidgets`. It consumes common `CameraDeviceInfo`, preserves opaque IDs, exposes Refresh/Open/Start/Stop/Close callbacks, and receives host-supplied coarse lifecycle/pending state. It does not enumerate, own a session, schedule requests or depend on AmScope types.

@@ -69,24 +69,21 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   precision is exposed through the backend-neutral
   `camera::RawOutputBitDepthFeature`. It is an integer feature with an
   explicit discrete set of exact significant-bit counts, not relative modes
-  or storage widths. The generic feature API and UI preserve these values as
-  integers; backends publish only values they can configure. The Amcam SDK
-  exposes only two configurable modes through
-  `AMCAM_OPTION_BITDEPTH`: 8-bit and the camera's maximum significant depth.
-  Accordingly, the backend advertises `8-bit` and, when the exact maximum is
-  known from the SDK/model descriptor, that exact value (for example,
-  `12-bit`). It does not claim that intermediate depths are configurable.
-  A camera whose maximum is 8-bit has only one distinct choice. An unknown
-  maximum is never advertised as an exact bit count. The backend maps the
-  exact public values to the SDK's native mode values 0 and 1.
-  The feature is writable only while stopped and RAW output is enabled.
-  This sensor-output precision setting is independent of the application's
-  `Processed still` / `RAW still` capture-request selector.
-  Some SDK models implement the setter but not the getter: after a successful
-  set, the requested native mode is retained for the session and used as a
-  fallback only when subsequent SDK readback is unavailable. If readback is
-  available, it remains authoritative and must match the request. Frame
-  metadata keeps significant source depth separate from storage width;
+  or storage widths. The Amcam backend derives this set from the live
+  `Amcam_get_PixelFormatSupport` enumeration, retaining every distinct
+  significant depth represented by supported RAW/sensor-mosaic pixel formats
+  (for example, 8, 10, 12, 14 or 16 bits when those formats are actually
+  enumerated by the connected camera). Selecting a depth resolves to a
+  supported SDK pixel-format code through `AMCAM_OPTION_PIXEL_FORMAT` and
+  verifies the selected format by readback. The selector does not reduce the
+  choices to 8-bit and maximum, and it does not invent intermediate depths.
+  If the modern pixel-format enumeration is unavailable, the backend does
+  not advertise the legacy `AMCAM_OPTION_BITDEPTH` 8-bit/maximum switch as
+  though it were a complete discrete selector; exact multi-depth selection
+  is reported unavailable instead. This sensor-output precision setting is
+  independent of the application's `Processed still` / `RAW still`
+  capture-request selector and the separate RAW transport enablement option.
+  Frame metadata keeps significant source depth separate from storage width;
   vendor RAW payload bytes are not transformed. After a still capture, the UI
   reports the returned frame's measured significant and storage bit depths
   separately above the capture controls; this readout is not a requested

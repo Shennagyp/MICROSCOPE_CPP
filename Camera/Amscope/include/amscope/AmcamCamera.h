@@ -42,6 +42,9 @@ public:
     // Non-feature camera command and telemetry surfaces.
     bool autoWhiteBalance(CameraError* error = nullptr);
     bool readFrameRate(FrameRateStatistics& statistics, CameraError* error = nullptr);
+    // Typed common-model API. The legacy overload remains for source compatibility.
+    [[nodiscard]] camera::CameraOperationResult<camera::FrameRateMeasurement>
+    readFrameRateMeasurement();
     bool readTriggerConfiguration(
         AmcamTriggerConfiguration& configuration, CameraError* error = nullptr);
     bool readIoLines(

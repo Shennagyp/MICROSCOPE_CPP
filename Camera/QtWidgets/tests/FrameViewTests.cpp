@@ -1,6 +1,7 @@
 #include "camera/qtwidgets/FrameView.h"
 
 #include <QApplication>
+#include <QColor>
 #include <QImage>
 #include <QWidget>
 
@@ -57,7 +58,7 @@ int main(int argc, char** argv) {
     rgbFrame.reset();
 
     if (rgbLease.expired())
-        return fail("FrameView did not retain the immutable frame lease.") ? EXIT_SUCCESS : EXIT_FAILURE;
+        fail("FrameView did not retain the immutable frame lease.");\n        return EXIT_FAILURE;
 
     view.show();
     application.processEvents();
@@ -67,14 +68,14 @@ int main(int argc, char** argv) {
     view.render(&rendered);
 
     if (presentedCount != 1)
-        return fail("A valid RGB frame was not counted after paint.") ? EXIT_SUCCESS : EXIT_FAILURE;
+        fail("A valid RGB frame was not counted after paint.");\n        return EXIT_FAILURE;
     if (rendered.pixelColor(100, 160) != QColor(255, 0, 0) ||
         rendered.pixelColor(500, 160) != QColor(0, 255, 0))
-        return fail("RGB24 pixels were not rendered from the retained frame buffer.") ? EXIT_SUCCESS : EXIT_FAILURE;
+        fail("RGB24 pixels were not rendered from the retained frame buffer.");\n        return EXIT_FAILURE;
 
     view.setMessage(QStringLiteral("No camera selected."));
     if (!rgbLease.expired())
-        return fail("FrameView retained the previous lease after clearing the image.") ? EXIT_SUCCESS : EXIT_FAILURE;
+        fail("FrameView retained the previous lease after clearing the image.");\n        return EXIT_FAILURE;
 
     presentedCount = 0;
     view.setFrame(makeRaw8Frame());
@@ -82,10 +83,10 @@ int main(int argc, char** argv) {
     view.render(&rendered);
 
     if (presentedCount != 1)
-        return fail("A valid RAW8 frame was not counted after paint.") ? EXIT_SUCCESS : EXIT_FAILURE;
+        fail("A valid RAW8 frame was not counted after paint.");\n        return EXIT_FAILURE;
     if (rendered.pixelColor(100, 160).red() != 11 ||
         rendered.pixelColor(500, 160).red() != 240)
-        return fail("RAW8 samples were not presented as grayscale without changing the source data.") ? EXIT_SUCCESS : EXIT_FAILURE;
+        fail("RAW8 samples were not presented as grayscale without changing the source data.");\n        return EXIT_FAILURE;
 
     auto invalid = std::make_shared<camera::Frame>();
     invalid->width = 2;
@@ -98,7 +99,7 @@ int main(int argc, char** argv) {
     view.render(&rendered);
 
     if (presentedCount != 2)
-        return fail("An invalid/truncated frame was incorrectly counted as presented.") ? EXIT_SUCCESS : EXIT_FAILURE;
+        fail("An invalid/truncated frame was incorrectly counted as presented.");\n        return EXIT_FAILURE;
 
     std::cout << "All Qt Widgets frame view tests passed.\n";
     return EXIT_SUCCESS;

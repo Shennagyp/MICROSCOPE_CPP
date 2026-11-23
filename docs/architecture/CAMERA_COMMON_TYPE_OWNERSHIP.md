@@ -14,7 +14,7 @@ This document records which public values belong to the backend-neutral camera c
 | `CameraDeviceInfo` | Discovered candidate with opaque ID, display label, identity, capabilities and preview dimensions | Backend routing identity stays opaque |
 | `ImageResolution` | Width and height as a dimension value | It is not a vendor resolution-table index |
 | `CameraCapability` / `CameraCapabilities` | Known/unknown hardware capability facts | `Unknown`, `Unsupported` and `Supported` remain distinct; capability does not imply current feature availability |
-| `Frame` / `FramePtr` | Immutable image payload and common layout/metadata | Pixel layout, exact format identity, source significant depth and storage width are distinct |
+| `Frame` / `FramePtr` | Immutable image payload and common layout/metadata | Live/still marker, pixel layout, exact format identity, source significant depth and storage width are distinct |
 | `FrameTimestamp` | Backend timestamp ticks and explicit ticks-per-second | Clock origin/domain remains unknown unless the producer reports it |
 | `FrameExposure` | Per-frame measured exposure duration and its timebase | Not the configured exposure feature value |
 | `CameraFeatureKind` / `CameraFeatureValue` | Shared scalar/vector/enum value categories | Vendor feature names and native codes remain opaque to common consumers |
@@ -74,6 +74,7 @@ This avoids false equivalence between backend error spaces, lifecycle models and
 The native-only probe reports the first delivered common frame's:
 
 - Width and height.
+- Live/still marker.
 - Stride in bytes and actual payload byte count.
 - Common pixel-layout enum.
 - Optional opaque format scheme/value.

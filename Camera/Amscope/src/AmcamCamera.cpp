@@ -2923,6 +2923,8 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
     stats.framesPerSecond = milliseconds == 0 ? 0.0 :
         static_cast<double>(frames) * 1000.0 / static_cast<double>(milliseconds);
     stats.totalFrames = total;
+    stats.framesInInterval = frames;
+    stats.intervalMilliseconds = milliseconds;
     return true;
 }
 

@@ -1210,7 +1210,8 @@ private:
                     QStringList formats;
                     for (const auto& code : pixelFormat->enumerationValues) {
                         formats.push_back(
-                            code + ":" + amcamPixelFormatLabel(code));
+                            QString::fromStdString(code) + QStringLiteral(":") +
+                            amcamPixelFormatLabel(code));
                     }
                     status += QString(
                         " Pixel Format: available=%1, writable=%2, readable=%3, supported=[%4].")

@@ -69,20 +69,21 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   precision is exposed through the backend-neutral
   `camera::RawOutputBitDepthFeature`. It is an integer feature with an
   explicit discrete set of exact significant-bit counts, not relative modes
-  or storage widths. The Amcam backend derives this set from the live
-  `Amcam_get_PixelFormatSupport` enumeration, retaining every distinct
-  significant depth represented by supported RAW/sensor-mosaic pixel formats
-  (for example, 8, 10, 12, 14 or 16 bits when those formats are actually
-  enumerated by the connected camera). Selecting a depth resolves to a
-  supported SDK pixel-format code through `AMCAM_OPTION_PIXEL_FORMAT` and
-  verifies the selected format by readback. The selector does not reduce the
-  choices to 8-bit and maximum, and it does not invent intermediate depths.
-  If the modern pixel-format enumeration is unavailable, the backend does
-  not advertise the legacy `AMCAM_OPTION_BITDEPTH` 8-bit/maximum switch as
-  though it were a complete discrete selector; exact multi-depth selection
-  is reported unavailable instead. This sensor-output precision setting is
-  independent of the application's `Processed still` / `RAW still`
-  capture-request selector and the separate RAW transport enablement option.
+  or storage widths. The Amcam backend merges two independent capability
+  sources: every distinct significant depth in the live
+  `Amcam_get_PixelFormatSupport` RAW/sensor-mosaic enumeration, plus the
+  legacy `AMCAM_OPTION_BITDEPTH` 8-bit and camera-maximum modes when those
+  depths are not already represented by an exact pixel format. Thus a camera
+  that enumerates RAW12 but omits RAW8 still exposes both 8 and 12 bits; a
+  camera enumerating RAW10 and RAW12 can expose 8, 10 and 12 bits. It does not
+  invent intermediate precisions. Each choice retains its selection
+  mechanism: exact pixel-format choices use `AMCAM_OPTION_PIXEL_FORMAT`,
+  while legacy-only choices use `AMCAM_OPTION_BITDEPTH`; writes verify
+  readback through the corresponding SDK setting. If neither source exposes
+  more than one distinct precision, the selector remains non-writable.
+  This sensor-output precision setting is independent of the application's
+  `Processed still` / `RAW still` capture-request selector and the separate
+  RAW transport enablement option.
   Frame metadata keeps significant source depth separate from storage width;
   vendor RAW payload bytes are not transformed. After a still capture, the UI
   reports the returned frame's measured significant and storage bit depths

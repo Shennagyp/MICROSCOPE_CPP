@@ -47,6 +47,18 @@ This opt-in mode temporarily requests `AMCAM_OPTION_RAW=1`, reads maximum bit de
 
 The default run remains strictly read-only. The RAW-mode run intentionally changes one setting temporarily and must be used only when the camera is stopped.
 
+### Capture one actual RAW frame
+
+To move beyond capability metadata and inspect bytes delivered by the SDK, close the microscope application and run:
+
+\`\`\`bash
+bash scripts/run-amscope-sdk-probe.sh --capture-raw-frame 2>&1 | tee amscope-raw-frame-capture.txt
+\`\`\`
+
+This opt-in test temporarily enables RAW mode if necessary, reads the active RAW FourCC and significant depth, allocates a buffer sized for up to 16-bit words, starts pull-mode acquisition, pulls the first RAW frame, stops acquisition, and restores/verifies the original RAW-mode setting. It writes \`amscope-raw-frame.raw\` in the repository root (overwriting a previous file with that name). The output reports frame dimensions, exact payload byte count, significant sample depth, storage word width, observed sample range, and number of distinct values. It does not debayer, demosaic, scale, or otherwise transform the captured samples.
+
+The sample statistics are diagnostic, not a sensor-ADC calibration. A scene that does not exercise the sensor's full range may produce a narrow sample range. For depths above 8 bits, the diagnostic interprets the SDK's two-byte RAW words as little-endian 16-bit values, consistent with the Mac host architecture. Preserve the \`.raw\` file and terminal output for independent analysis. Do not interrupt the process while it is restoring the original RAW setting.
+
 
 ## Interpreting the generic MU Series bit-depth manual
 

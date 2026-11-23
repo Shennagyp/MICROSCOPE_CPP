@@ -50,6 +50,14 @@ static_assert(parsesOnceToNativeMode(),
 int main() {
     using amscope::AmcamAutoExposureMode;
 
+    const amscope::FrameRateStatistics nativeRate{91.0, 1322, 91, 1000};
+    const auto commonRate = amscope::toCommonFrameRateMeasurement(nativeRate);
+    const auto commonRateValue = commonRate.framesPerSecond();
+    require(commonRateValue && *commonRateValue == 91.0 &&
+                commonRate.cumulativeFrames &&
+                *commonRate.cumulativeFrames == 1322,
+            "AmScope frame-rate telemetry preserves interval and cumulative counts");
+
     const amscope::CameraError nativeError{
         -2147467259, "camera.start", "SDK rejected acquisition startup"};
     const auto commonError = amscope::toCommonOperationError(nativeError);

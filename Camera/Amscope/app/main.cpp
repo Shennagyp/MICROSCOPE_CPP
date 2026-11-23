@@ -247,10 +247,10 @@ public:
             close();
         });
 
-        featureStatus_ = new QLabel("Open a camera to inspect its available features.", central);
+        featureStatus_ = new QLabel("Open a camera to inspect its available features.", cameraControlsWindow_);
         featureStatus_->setWordWrap(true);
 
-        refreshFeaturesButton_ = new QPushButton("Refresh features", central);
+        refreshFeaturesButton_ = new QPushButton("Refresh features", cameraControlsWindow_);
         featureTabs_ = new QTabWidget(cameraControlsWindow_);
         featureTabs_->setMinimumWidth(460);
         featureTabs_->setMaximumWidth(620);
@@ -259,7 +259,7 @@ public:
         featureTabs_->setToolTip(
             "Camera features are grouped by function. Stop acquisition before editing settings.");
 
-        accessoryGroup_ = new QGroupBox("Camera accessories", central);
+        accessoryGroup_ = new QGroupBox("Camera accessories", cameraControlsWindow_);
         accessoryForm_ = new QFormLayout(accessoryGroup_);
 
         embeddedLightSourceRow_ = new QWidget(accessoryGroup_);
@@ -295,7 +295,7 @@ public:
         filterWheelLayout->addWidget(filterWheelRefreshButton_);
         accessoryForm_->addRow("Filter wheel", filterWheelRow_);
 
-        astroAutoFocuserGroup_ = new QGroupBox("Astronomy auto-focuser", central);
+        astroAutoFocuserGroup_ = new QGroupBox("Astronomy auto-focuser", cameraControlsWindow_);
         auto* astroFocuserForm = new QFormLayout(astroAutoFocuserGroup_);
         astroAutoFocuserRow_ = new QWidget(astroAutoFocuserGroup_);
         auto* astroFocuserLayout = new QHBoxLayout(astroAutoFocuserRow_);
@@ -314,7 +314,7 @@ public:
         astroAutoFocuserStatusLabel_->setWordWrap(true);
         astroFocuserForm->addRow("Status", astroAutoFocuserStatusLabel_);
 
-        lensFocusGroup_ = new QGroupBox("Lens focus motor", central);
+        lensFocusGroup_ = new QGroupBox("Lens focus motor", cameraControlsWindow_);
         auto* lensFocusForm = new QFormLayout(lensFocusGroup_);
         lensFocusRow_ = new QWidget(lensFocusGroup_);
         auto* lensFocusLayout = new QHBoxLayout(lensFocusRow_);
@@ -339,7 +339,7 @@ public:
         lensFocusStatusLabel_->setWordWrap(true);
         lensFocusForm->addRow("Lens / AF state", lensFocusStatusLabel_);
 
-        triggerGroup_ = new QGroupBox("Trigger configuration", central);
+        triggerGroup_ = new QGroupBox("Trigger configuration", cameraControlsWindow_);
         auto* triggerForm = new QFormLayout(triggerGroup_);
         triggerModeSelector_ = new QComboBox(triggerGroup_);
         triggerForm->addRow("Acquisition mode", triggerModeSelector_);
@@ -530,7 +530,6 @@ public:
             statusBar()->showMessage(message);
         });
 
-        refreshCameras();
         updateControls(camera_.state());
     }
 
@@ -547,6 +546,9 @@ private:
         cameraControlsWindow_->show();
         cameraControlsWindow_->raise();
         cameraControlsWindow_->activateWindow();
+        if (camera_.state() == amscope::CameraState::Closed) {
+            refreshCameras();
+        }
     }
     struct FeatureControl {
         camera::CameraFeatureDescriptor descriptor;
@@ -1171,6 +1173,7 @@ private:
         featureControls_.clear();
         featureOrder_.clear();
         pendingFeatureReads_ = 0;
+        featureReadbackReady_ = false;
         clearAccessoryControls();
         updateFrameInfoLabel();
     }

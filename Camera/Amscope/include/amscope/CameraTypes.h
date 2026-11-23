@@ -9,6 +9,7 @@
 #include "camera/CameraModels.h"
 #include "camera/CameraFrames.h"
 #include "camera/CameraOperationError.h"
+#include "camera/CameraFrameRate.h"
 
 namespace amscope {
 enum class CameraState : std::uint8_t { Closed, Open, Starting, Streaming, Stopping, Faulted };
@@ -119,7 +120,24 @@ struct ExposureSettings {
     std::uint16_t defaultGainPercent = 0;
 };
 struct WhiteBalanceSettings { int temperature = 0; int tint = 0; };
-struct FrameRateStatistics { double framesPerSecond = 0.0; std::uint32_t totalFrames = 0; };
+struct FrameRateStatistics {
+    double framesPerSecond = 0.0;
+    std::uint32_t totalFrames = 0;
+    // Preserve the SDK's raw measurement interval so common consumers do not
+    // have to reverse-engineer it from a rounded floating-point rate.
+    std::uint32_t framesInInterval = 0;
+    std::uint32_t intervalMilliseconds = 0;
+};
+
+[[nodiscard]] inline camera::FrameRateMeasurement toCommonFrameRateMeasurement(
+    const FrameRateStatistics& statistics) {
+    return camera::FrameRateMeasurement{
+        statistics.framesInInterval,
+        statistics.intervalMilliseconds,
+        1000,
+        statistics.totalFrames
+    };
+}
 
 struct EmbeddedLightSourceState {
     std::uint32_t level = 0;

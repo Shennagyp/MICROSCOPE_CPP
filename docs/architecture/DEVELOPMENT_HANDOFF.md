@@ -1,6 +1,6 @@
 # Development Continuation Handoff — AmScope Native Driver
 
-**Last reviewed:** 23 November 2026  
+**Last reviewed:** 24 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver-v0.7`  
 **Physical run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
@@ -11,24 +11,36 @@
 **Fixed-8-bit RAW correction:** `a16ae3bd77c56b14384736aa457e859c73a8072f`  
 **Common RAW 8/16-bit selector:** `3ef46d3a5b85aa7ae2e22d160d92f61aecace5bb`  
 **Latest CI for active branch:** No CI result has been reported for the v0.7 Phase 4 source commit; earlier workflow runs in the historical notes below predate this extraction.  
-**Latest local validation source commit:** `892b91a57016e570a1e972343f78ed7c42be801c` (Release configure/build including `amscope_preview`; 13/13 CTest passed, including the new FrameView tests)  
+**Latest local validation source commit:** `892b91a57016e570a1e972343f78ed7c42be801c` (Release configure/build including `amscope_preview`; 13/13 CTest passed, including FrameView tests; predates the CameraControlPanel increment)  
 **Current CI:** Not reported for the active v0.7 Phase 4 source commit.  
-**Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
+**Latest Phase 4 physical smoke checkout:** `5339c441659b45a3bdb30fdce6971f6dc991f885` (MU503 FrameView preview, Open/Start/Stop/Close; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`)  
 **Current phase:** Phase 4 — extract reusable Qt camera UI  
-**Phase status:** Phases 0–3 are accepted by the project owner. Phase 4 is in progress on `amscope-native-driver-v0.7`: `Camera::QtWidgets` and `camera::qtwidgets::FrameView` have been added, the AmScope preview composes the extracted widget, the owner completed the Release build including `amscope_preview`, and all 13/13 CTest tests passed at source commit `892b91a`. The new offscreen FrameView tests cover RGB24/RAW8/RAW16 presentation, lease lifetime, malformed payload rejection and paint notification. The remaining Phase 4 gate is a physical MU503 preview smoke check after this extraction; no FPS benchmark or additional hardware feature test is implied. See `AMSCOPE_NATIVE_RELEASE_PLAN.md` and `AMSCOPE_IMPLEMENTATION_INVENTORY.md` for the governing state.
+**Phase status:** Phases 0–3 are accepted by the project owner. Phase 4's first component, `camera::qtwidgets::FrameView`, passed the owner-reported Release build and 13/13 CTest at implementation source `892b91a`, followed by a successful MU503 Open/Start/changing-frame/Stop/Close smoke check on checkout `5339c44`. The next increment, `camera::qtwidgets::CameraControlPanel`, is implemented on `17d6b0a` and added to the AmScope preview; its local Release build and expanded 14-target CTest suite are pending. The panel remains a host-driven view: no session ownership, enumeration implementation, request scheduling, or backend lifecycle semantics moved into `Camera::QtWidgets`.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
-## Current continuation state — 23 November 2026
+## Current continuation state — 24 November 2026
 
 - Active branch: `amscope-native-driver-v0.7`.
-- Current branch head after documentation refresh: `d8fbbd0a483f1fa15829805b52c24aff8e1e4842`. The tested implementation source is `892b91a57016e570a1e972343f78ed7c42be801c`; the commits after it update documentation only.
-- The owner completed the v0.7 Release configure and full build in `build/amscope-v07`. The native driver, Qt adapter, `Camera::QtWidgets`, probes, tests, and `amscope_preview` all built successfully. CTest passed **13/13** in 0.32 seconds.
-- Phase 4's first reusable UI component is `camera::qtwidgets::FrameView`, in the standalone `Camera::QtWidgets` target. Its dependency boundary is `Camera::Common` + Qt Widgets. It wraps retained frame memory through `QImage`; it does not add a per-frame pixel copy, GPU renderer, acquisition queue, or camera ownership.
-- The offscreen FrameView test passed for RGB24, RAW8 and RAW16 rendering, retained-lease lifetime, malformed payload rejection and paint callback. These are software/widget tests, not physical-camera integration evidence.
-- **Next gate:** launch `./build/amscope-v07/amscope_preview`, select the MU503, Open, Start, confirm that changing live frames are rendered by the extracted FrameView, then Stop and Close. This is a focused functional smoke check, not an FPS benchmark. Do not change camera settings just to maximize the observed rate.
-- Once that smoke check is accepted, continue Phase 4 by extracting the next reusable UI component. Keep AmScope-specific lifecycle/request scheduling, still capture, telemetry and accessory behavior in the application composition layer unless a genuinely backend-neutral contract is identified.
-- No CI result or post-extraction physical MU503 preview result has been reported for this source revision. Do not mark Phase 4 complete until its remaining exit criteria in the release plan are met.
+- Latest implementation source commit: `17d6b0a7076e140c57fc3760fcde1f3eec2915a0`. Descendant commits after it update the Phase 4 plan/inventory/handoff only.
+- Latest locally validated source remains `892b91a57016e570a1e972343f78ed7c42be801c`: Release build including `amscope_preview`, 13/13 CTest passed. This validation predates the new CameraControlPanel.
+- FrameView physical check: owner confirmed the MU503 preview sequence worked on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record is `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This verifies only the FrameView integration at that source boundary.
+- New component: `camera::qtwidgets::CameraControlPanel` in `Camera/QtWidgets`. It consumes common `CameraDeviceInfo`, preserves opaque IDs, exposes Refresh/Open/Start/Stop/Close callbacks, and receives host-supplied coarse lifecycle/pending state. It does not enumerate, own a session, schedule requests or depend on AmScope types.
+- The AmScope preview converts discovered `amscope::CameraInfo` to its common base type and retains enumeration, async requests, lifecycle generations, error reporting and native ownership. Still capture, feature editors, trigger panel and accessory controls remain in the application.
+- Added `camera_qt_widgets_camera_control_panel_tests`; expected total CTest count is now 14. The new panel source/CMake integration is **not yet built or tested locally**; no CI result is recorded for commit `17d6b0a`.
+- **Next local gate:**
+
+```sh
+git pull --ff-only
+cmake --build build/amscope-v07 --config Release --parallel
+ctest --test-dir build/amscope-v07 --output-on-failure
+```
+
+The build should regenerate CMake because `Camera/QtWidgets/CMakeLists.txt` changed. Require `amscope_preview` to link and all 14/14 CTest tests to pass.
+
+- After the software gate, repeat the MU503 discovery/select/Open/Start/changing-frame/Stop/Close smoke through the newly extracted control panel. The earlier FrameView smoke is not evidence for this later UI change.
+- Next implementation slice after acceptance: extract the descriptor-driven feature editor while keeping feature request ordering, validation/readback policy, generations, and camera operations in the host/backend layer. Then continue with commands, telemetry and capability presentation.
+- Do not claim Phase 4 complete yet. The composed supported-feature read/write interaction and remaining reusable UI extraction are still open; do not run an FPS benchmark for this UI slice.
 
 > The sections below retain the earlier v0.6 handoff snapshot and historical evidence. Where their branch, phase, or next-action statements conflict with the current continuation state above, this current section and the revised release plan take precedence. The acquisition, session-ownership, frame-lease and performance invariants remain applicable unless the current source and governing plan explicitly supersede them.
 

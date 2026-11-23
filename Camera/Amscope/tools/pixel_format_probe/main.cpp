@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <cctype>
 #include <cstdint>
+#include <cstddef>
 #include <fstream>
 #include <iomanip>
 #include <iostream>

@@ -474,6 +474,16 @@ buildAmcamFeatureDescriptors(
         rawBitDepthDisabledReason =
             "Stop acquisition before changing sensor output bit depth.";
     }
+    // Preserve the actual capability inputs in the control tooltip. This is
+    // important for distinguishing a fixed 8-bit sensor from an SDK/model
+    // descriptor mismatch; a generic disabled state is not actionable.
+    if (rawBitDepthDisabledReason) {
+        *rawBitDepthDisabledReason +=
+            " [effective maximum=" + std::to_string(rawMaxBitDepth) +
+            " bits; model flags=" + std::to_string(modelFlags) +
+            "; RAW model capability=" +
+            (rawModelSupported ? "yes" : "no") + "]";
+    }
 
     const bool hasColorRawSensor =
         (modelFlags & (AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |

@@ -552,7 +552,8 @@ buildAmcamFeatureDescriptors(
             (rawBitDepth == 0 ||
              (rawBitDepth == 1 && rawMaximumBitDepthValid));
     const bool rawBitDepthWritable = modernPixelFormatApiAvailable
-        ? rawPixelChoices.size() > 1U
+        ? !rawPixelChoices.empty() &&
+            (rawPixelChoices.size() > 1U || !rawCurrentFormatIsDepth)
         : rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
     std::vector<std::int64_t> rawBitDepthValues;
     if (modernPixelFormatApiAvailable) {

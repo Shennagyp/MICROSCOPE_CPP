@@ -253,6 +253,70 @@ The original setting is still restored after acquisition. Stop and restoration r
 
 A unique sequence number alone does not prove that payload bytes are fresh. A changing checksum alone does not prove optical responsiveness. The dark-versus-lit comparison remains necessary.
 
+## 6.2 Follow-up hardware run — 2026-11-23
+
+The user pulled the sequence diagnostic and ran it under dark and illuminated conditions.
+
+### Dark run
+
+- Build succeeded on the user's Apple Silicon Mac.
+- SDK enumerated the MU503 normally.
+- RAW mode enabled and read back successfully.
+- \`Amcam_StartPullModeWithCallback\` succeeded.
+- One \`AMCAM_EVENT_IMAGE\` was received.
+- One \`Amcam_PullImageV4\` succeeded.
+- The pulled 1280 × 960 payload contained:
+  - minimum = 77
+  - maximum = 166
+  - distinct sample values = 89
+  - sentinel-valued bytes = 3
+  - FNV-1a 64-bit checksum = \`0xDA9B498EF1A3E86F\`
+- Reported frame metadata fields (\`seq\`, timestamp, \`framecount\`, \`timecount\`, \`uFV\`) were all zero.
+- The eight-frame request then timed out after 30 seconds with only one image event.
+- No SDK error, disconnect, or frame/packet timeout callback was counted.
+- Software dropped-frame counter remained 0.
+- RAW mode was restored and verified as 0.
+
+**Interpretation:** unlike the previous all-\`0xFF\` result, this capture contained a broad distribution of sample values and only three sentinel matches. This strongly suggests that the SDK wrote most of the expected payload region on this run. It does not establish freshness or optical response. The frame-info validity bitmask was not previously printed, so zero metadata fields cannot be interpreted as valid zero sequence/timestamp values.
+
+### Illuminated run
+
+- SDK enumerated the MU503 normally.
+- RAW mode enable/readback succeeded.
+- Pull-mode start succeeded.
+- Zero image events were received in 30 seconds.
+- Zero frames were pulled.
+- No SDK error, disconnect, or frame/packet timeout callback was counted.
+- Software dropped-frame counter remained 0.
+- RAW mode was restored and verified as 0.
+
+**Important artifact-integrity caveat:** the capture program previously left an existing \`amscope-raw-frame.raw\` file untouched when no frame was captured. The shell command then unconditionally copied that path to \`amscope-raw-sequence-lit.raw\`. Because the dark run had already created the file, the purported illuminated binary may simply be a copy of the dark run. Do not compare or interpret the illuminated \`.raw\` artifact as a new capture. The illuminated terminal log is valid evidence of zero image events; the binary artifact is not established as fresh.
+
+### Revised diagnosis
+
+The previous hypothesis “the RAW pull path always returns all-255 data” is rejected. The new dark capture demonstrates at least one run in which the pulled payload was not constant and the caller buffer was almost entirely overwritten.
+
+The current defect is more precisely described as **intermittent or absent RAW image-event delivery, with frame freshness and optical response still unverified**.
+
+The new evidence does not yet distinguish among:
+- camera/SDK acquisition lifecycle state;
+- trigger mode or exposure duration;
+- callback/event delivery behavior;
+- camera-side stream start/readout;
+- host-side SDK buffer queue behavior.
+
+### Instrumentation added after this run
+
+The probe now:
+- records a histogram of every callback event code instead of only selected terminal events;
+- reads and reports \`AMCAM_OPTION_TRIGGER\` before acquisition;
+- reads configured and actual exposure time before acquisition;
+- reads the dedicated callback-thread option;
+- prints the V3 frame-info flag bitmask and labels sequence/timestamp/count/autofocus metadata as valid only when their corresponding flags are set;
+- removes the previous generated \`amscope-raw-frame.raw\` artifact before starting a new capture, preventing a failed run from leaving a stale payload that can be copied as if it were fresh.
+
+The removal behavior applies only to the probe's documented generated output path. Copy any prior capture before starting another run.
+
 ## 7. Required next investigation
 
 ### Gate A — Establish whether the camera works in the official application

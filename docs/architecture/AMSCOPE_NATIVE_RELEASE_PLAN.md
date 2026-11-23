@@ -263,11 +263,11 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 
 ## 6. Revised status ledger
 
-| Phase | Deliverable | Status at v0.5 |
+| Phase | Deliverable | Status at v0.6 before local verification |
 |---|---|---|
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
-| 2 | Common camera contract closure | IN PROGRESS; public type ownership documented; integer ranges made type-exact; v0.6 build/CTest verification pending; common-frame hardware verification remains |
+| 2 | Common camera contract closure | IN PROGRESS; public type ownership documented; exact integer ranges and first-frame metadata reporting committed; v0.6 build/CTest and physical frame verification pending |
 | 3 | Native control / Qt streaming boundaries | PARTIALLY PRESENT; finalize and test without duplicate ownership |
 | 4 | Reusable Qt camera UI | OPEN |
 | 5 | AmScope feature/model claim reconciliation | OPEN |

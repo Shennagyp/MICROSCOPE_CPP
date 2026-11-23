@@ -554,38 +554,31 @@ buildAmcamFeatureDescriptors(
             : rawMaximumBitDepth(handle, modelFlags);
     const bool rawMaximumBitDepthValid =
         rawMaxBitDepth >= 8U && rawMaxBitDepth <= 16U;
-    const bool rawBitDepthHardwareSupported = modernPixelFormatApiAvailable
-        ? !rawPixelChoices.empty()
-        : rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
+    // This feature promises an exact, freely selectable set of discrete
+    // precisions. The legacy BITDEPTH switch cannot satisfy that contract: it
+    // exposes only 8-bit and maximum. Do not present those two legacy modes as
+    // if they were the camera's complete set of selectable bit depths.
+    const bool rawBitDepthHardwareSupported =
+        modernPixelFormatApiAvailable && !rawPixelChoices.empty();
     const bool rawCurrentFormatIsDepth =
         SUCCEEDED(currentPixelFormatHr) &&
         rawBitDepthForPixelFormat(rawPixelChoices, supportedPixelFormatCodes, currentPixelFormat).has_value();
-    const bool rawBitDepthReadable = modernPixelFormatApiAvailable
-        ? rawCurrentFormatIsDepth
-        : SUCCEEDED(rawBitDepthModeHr) &&
-            (rawBitDepth == 0 ||
-             (rawBitDepth == 1 && rawMaximumBitDepthValid));
-    const bool rawBitDepthWritable = modernPixelFormatApiAvailable
-        ? !rawPixelChoices.empty() &&
-            (rawPixelChoices.size() > 1U || !rawCurrentFormatIsDepth)
-        : rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
+    const bool rawBitDepthReadable =
+        modernPixelFormatApiAvailable && rawCurrentFormatIsDepth;
+    const bool rawBitDepthWritable =
+        modernPixelFormatApiAvailable && !rawPixelChoices.empty() &&
+        (rawPixelChoices.size() > 1U || !rawCurrentFormatIsDepth);
     std::vector<std::int64_t> rawBitDepthValues;
-    if (modernPixelFormatApiAvailable) {
-        rawBitDepthValues.reserve(rawPixelChoices.size());
-        for (const auto& choice : rawPixelChoices)
-            rawBitDepthValues.push_back(static_cast<std::int64_t>(choice.bitDepth));
-    } else {
-        rawBitDepthValues.push_back(8);
-        if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U)
-            rawBitDepthValues.push_back(static_cast<std::int64_t>(rawMaxBitDepth));
-    }
+    rawBitDepthValues.reserve(rawPixelChoices.size());
+    for (const auto& choice : rawPixelChoices)
+        rawBitDepthValues.push_back(static_cast<std::int64_t>(choice.bitDepth));
     std::optional<std::string> rawBitDepthDisabledReason;
     if (modernPixelFormatApiAvailable && rawPixelChoices.empty()) {
         rawBitDepthDisabledReason =
             "The SDK pixel-format list contains no selectable RAW or sensor-mosaic precision formats.";
-    } else if (!modernPixelFormatApiAvailable && !rawMaximumBitDepthValid) {
+    } else if (!modernPixelFormatApiAvailable) {
         rawBitDepthDisabledReason =
-            "The SDK did not report a valid maximum sensor bit depth.";
+            "The SDK does not expose an enumerable pixel-format list. Its legacy bit-depth switch offers only 8-bit and maximum, so arbitrary discrete precision selection cannot be provided.";
     } else if (!rawBitDepthWritable) {
         rawBitDepthDisabledReason =
             "The camera exposes only one selectable RAW bit depth.";
@@ -4978,29 +4971,10 @@ AmcamCamera::readFeature(std::string_view name) {
                 static_cast<std::int64_t>(*selectedDepth)};
         }
 
-        // Compatibility path for SDK/model combinations that do not expose
-        // the modern pixel-format enumeration.
-        int mode = -1;
-        const char* failureOperation = nullptr;
-        const int requestedFallback =
-            impl_->requestedRawBitDepthMode.load(std::memory_order_acquire);
-        const HRESULT modeHr = getRawBitDepthMode(
-            impl_->handle, impl_->modelFlags, mode, &failureOperation,
-            requestedFallback);
-        if (FAILED(modeHr))
-            return featureBackendError(
-                std::string(name),
-                failureOperation ? failureOperation : "getRawBitDepthMode",
-                modeHr);
-
-        const unsigned maximumBitDepth =
-            rawMaximumBitDepth(impl_->handle, impl_->modelFlags);
-        const unsigned selectedBitDepth = mode == 0 ? 8U : maximumBitDepth;
-        if (selectedBitDepth < 8U || selectedBitDepth > 16U)
-            return featureError(CameraFeatureAccessError::Code::BackendFailure,
-                                std::string(name),
-                                "The SDK selected maximum RAW precision but did not report its exact significant bit depth.");
-        return CameraFeatureValue{static_cast<std::int64_t>(selectedBitDepth)};
+        return featureError(
+            CameraFeatureAccessError::Code::FeatureUnavailable,
+            std::string(name),
+            "The SDK does not expose enumerable pixel formats. The legacy 8-bit/maximum switch cannot provide the complete discrete bit-depth selector.");
     }
     if (name == "AmcamRawSensorFormat") {
         unsigned fourCC = 0, bitsPerPixel = 0;
@@ -5345,34 +5319,10 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
             return std::monostate{};
         }
 
-        // Legacy compatibility: only 8-bit and the reported maximum are
-        // selectable through AMCAM_OPTION_BITDEPTH.
-        const unsigned maximumBitDepth =
-            rawMaximumBitDepth(impl_->handle, impl_->modelFlags);
-        const int requested =
-            selectedBitDepth == 8 ? 0 :
-            (maximumBitDepth > 8U &&
-             selectedBitDepth == static_cast<std::int64_t>(maximumBitDepth))
-                ? 1 : -1;
-        if (requested < 0)
-            return featureError(CameraFeatureAccessError::Code::InvalidValue,
-                                std::string(name),
-                                "Select one of the exact RAW significant bit depths advertised by this camera.");
-        const HRESULT hr = Amcam_put_Option(
-            impl_->handle, AMCAM_OPTION_BITDEPTH, requested);
-        if (FAILED(hr))
-            return featureBackendError(
-                std::string(name), "Amcam_put_Option(BITDEPTH)", hr);
-        int readback = -1;
-        const HRESULT readbackHr = Amcam_get_Option(
-            impl_->handle, AMCAM_OPTION_BITDEPTH, &readback);
-        if (SUCCEEDED(readbackHr) && readback != requested)
-            return featureError(
-                CameraFeatureAccessError::Code::BackendFailure,
-                std::string(name),
-                "RAW output bit-depth readback did not match the requested mode.");
-        impl_->requestedRawBitDepthMode.store(requested, std::memory_order_release);
-        return std::monostate{};
+        return featureError(
+            CameraFeatureAccessError::Code::FeatureUnavailable,
+            std::string(name),
+            "The SDK does not expose enumerable pixel formats. The legacy 8-bit/maximum switch cannot provide the complete discrete bit-depth selector.");
     }
 
     if (name == "AmcamLinearToneMappingEnabled" ||

@@ -40,6 +40,72 @@ void printHresult(const char* operation, HRESULT result) {
               << '\n';
 }
 
+const char* eventName(unsigned eventCode) {
+    switch (eventCode) {
+        case AMCAM_EVENT_EXPOSURE: return "AMCAM_EVENT_EXPOSURE";
+        case AMCAM_EVENT_TEMPTINT: return "AMCAM_EVENT_TEMPTINT";
+        case AMCAM_EVENT_IMAGE: return "AMCAM_EVENT_IMAGE";
+        case AMCAM_EVENT_STILLIMAGE: return "AMCAM_EVENT_STILLIMAGE";
+        case AMCAM_EVENT_WBGAIN: return "AMCAM_EVENT_WBGAIN";
+        case AMCAM_EVENT_TRIGGERFAIL: return "AMCAM_EVENT_TRIGGERFAIL";
+        case AMCAM_EVENT_BLACK: return "AMCAM_EVENT_BLACK";
+        case AMCAM_EVENT_FFC: return "AMCAM_EVENT_FFC";
+        case AMCAM_EVENT_DFC: return "AMCAM_EVENT_DFC";
+        case AMCAM_EVENT_ROI: return "AMCAM_EVENT_ROI";
+        case AMCAM_EVENT_LEVELRANGE: return "AMCAM_EVENT_LEVELRANGE";
+        case AMCAM_EVENT_AUTOEXPO_CONV: return "AMCAM_EVENT_AUTOEXPO_CONV";
+        case AMCAM_EVENT_AUTOEXPO_CONVFAIL: return "AMCAM_EVENT_AUTOEXPO_CONVFAIL";
+        case AMCAM_EVENT_ERROR: return "AMCAM_EVENT_ERROR";
+        case AMCAM_EVENT_DISCONNECTED: return "AMCAM_EVENT_DISCONNECTED";
+        case AMCAM_EVENT_NOFRAMETIMEOUT: return "AMCAM_EVENT_NOFRAMETIMEOUT";
+        case AMCAM_EVENT_NOPACKETTIMEOUT: return "AMCAM_EVENT_NOPACKETTIMEOUT";
+        case AMCAM_EVENT_EXPO_START: return "AMCAM_EVENT_EXPO_START";
+        case AMCAM_EVENT_EXPO_STOP: return "AMCAM_EVENT_EXPO_STOP";
+        case AMCAM_EVENT_TRIGGER_ALLOW: return "AMCAM_EVENT_TRIGGER_ALLOW";
+        case AMCAM_EVENT_HEARTBEAT: return "AMCAM_EVENT_HEARTBEAT";
+        case AMCAM_EVENT_TRIGGER_IN: return "AMCAM_EVENT_TRIGGER_IN";
+        default: return "unknown event";
+    }
+}
+
+void printAutoExposureDiagnostics(HAmcam camera, const char* phase) {
+    std::cout << "--- Auto-exposure state (" << phase << ") ---\n";
+
+    int enabled = -1;
+    HRESULT hr = Amcam_get_AutoExpoEnable(camera, &enabled);
+    printHresult("Amcam_get_AutoExpoEnable", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    auto exposure enabled: " << enabled << '\n';
+    }
+
+    unsigned short gain = 0;
+    hr = Amcam_get_ExpoAGain(camera, &gain);
+    printHresult("Amcam_get_ExpoAGain", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    exposure analog gain: " << gain << "%\n";
+    }
+
+    int triggerAutoExposure = -1;
+    hr = Amcam_get_Option(camera, AMCAM_OPTION_AUTOEXPO_TRIGGER,
+                          &triggerAutoExposure);
+    printHresult("Read auto-exposure-on-trigger option", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    auto exposure on trigger: "
+                  << triggerAutoExposure << '\n';
+    }
+
+    int convergence = -2;
+    hr = Amcam_get_Option(camera, AMCAM_OPTION_AUTOEXPO_CONV, &convergence);
+    printHresult("Read auto-exposure convergence status", hr);
+    if (SUCCEEDED(hr)) {
+        const char* state = convergence == 1 ? "converged" :
+            convergence == 0 ? "not converged" :
+            convergence == -1 ? "not applicable" : "unknown";
+        std::cout << "    auto-exposure convergence: "
+                  << convergence << " (" << state << ")\n";
+    }
+}
+
 std::string fourccString(unsigned value) {
     std::string result;
     result.reserve(4);
@@ -469,6 +535,8 @@ bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
         std::cout << "    counter before: " << droppedFramesBefore << '\n';
     }
 
+    printAutoExposureDiagnostics(camera, "before acquisition");
+
     hr = Amcam_StartPullModeWithCallback(camera, rawFrameEventCallback, &capture);
     printHresult("Amcam_StartPullModeWithCallback (RAW)", hr);
     if (FAILED(hr)) {
@@ -491,6 +559,7 @@ bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
     if (acquisitionStarted) {
         const HRESULT stopResult = Amcam_Stop(camera);
         printHresult("Amcam_Stop after RAW acquisition", stopResult);
+        printAutoExposureDiagnostics(camera, "after acquisition");
         if (FAILED(stopResult)) success = false;
         acquisitionStarted = false;
     }
@@ -526,7 +595,8 @@ bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
         } else {
             for (const auto& [eventCode, count] : capture.eventCounts) {
                 std::cout << " 0x" << std::hex << std::uppercase << eventCode
-                          << std::dec << std::nouppercase << '=' << count;
+                          << std::dec << std::nouppercase << " ("
+                          << eventName(eventCode) << ")=" << count;
             }
         }
         std::cout << '\n';

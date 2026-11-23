@@ -2920,11 +2920,14 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
     unsigned frames = 0, milliseconds = 0, total = 0;
     const HRESULT hr = Amcam_get_FrameRate(impl_->handle, &frames, &milliseconds, &total);
     if (FAILED(hr)) return failHr(error, "Amcam_get_FrameRate", hr);
-    stats.framesPerSecond = milliseconds == 0 ? 0.0 :
-        static_cast<double>(frames) * 1000.0 / static_cast<double>(milliseconds);
     stats.totalFrames = total;
     stats.framesInInterval = frames;
     stats.intervalMilliseconds = milliseconds;
+    // Keep one authoritative rate derivation. The legacy double API maps an
+    // unavailable interval to 0.0 for compatibility; the common typed model
+    // preserves that distinction as std::nullopt.
+    stats.framesPerSecond =
+        toCommonFrameRateMeasurement(stats).framesPerSecond().value_or(0.0);
     return true;
 }
 

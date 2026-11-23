@@ -438,6 +438,12 @@ buildAmcamFeatureDescriptors(
         rawMaximumBitDepth(handle, modelFlags);
     const bool rawMaximumBitDepthValid =
         rawMaxBitDepth >= 8U && rawMaxBitDepth <= 16U;
+    // Maximum bit depth is queried through the SDK's dedicated
+    // Amcam_get_MaxBitDepth API. Do not additionally require RAW transport
+    // capability flags: legacy model descriptors can omit those flags even
+    // when the camera reports a configurable sensor precision.
+    const bool rawBitDepthHardwareSupported =
+        rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
     // The common feature contract publishes exact significant-bit counts,
     // never a relative "maximum" mode. This backend can select only 8-bit or
     // the SDK's maximum; intermediate depths are not configurable through
@@ -458,13 +464,7 @@ buildAmcamFeatureDescriptors(
             static_cast<std::int64_t>(rawMaxBitDepth));
     }
     std::optional<std::string> rawBitDepthDisabledReason;
-    if (!hasModelDescriptor) {
-        rawBitDepthDisabledReason =
-            "The SDK did not provide a model descriptor for this camera.";
-    } else if (!rawModelSupported) {
-        rawBitDepthDisabledReason =
-            "The camera model does not advertise a supported RAW sensor depth.";
-    } else if (!rawMaximumBitDepthValid) {
+    if (!rawMaximumBitDepthValid) {
         rawBitDepthDisabledReason =
             "The SDK did not report a valid maximum sensor bit depth.";
     } else if (rawMaxBitDepth <= 8U) {
@@ -888,10 +888,9 @@ buildAmcamFeatureDescriptors(
         std::string(camera::RawOutputBitDepthFeature),
         "Sensor Output Bit Depth", CameraFeatureKind::Integer,
         std::string("significant bits"),
-        rawModelSupported && rawMaximumBitDepthValid && rawMaxBitDepth > 8U,
+        rawBitDepthHardwareSupported,
         rawBitDepthReadable,
-        rawModelSupported && rawMaximumBitDepthValid &&
-            rawBitDepthWritable && stopped,
+        rawBitDepthHardwareSupported && rawBitDepthWritable && stopped,
         std::nullopt, std::nullopt, {},
         camera::CameraFeatureGroup::Sensor,
         std::move(rawBitDepthValues),

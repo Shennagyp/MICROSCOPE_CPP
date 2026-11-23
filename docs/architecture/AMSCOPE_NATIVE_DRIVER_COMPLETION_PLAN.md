@@ -1,3 +1,6 @@
+> **SUPERSEDED PHASE SEQUENCE — 23 November 2026**  
+> The current release scope, implementation phases, status ledger, and acceptance criteria are now governed by [AMSCOPE_NATIVE_RELEASE_PLAN.md](AMSCOPE_NATIVE_RELEASE_PLAN.md). This document is retained as a historical technical reference for architecture invariants, detailed implementation rationale, and prior verification records. Where phase order, scope, or acceptance requirements conflict, the revised release plan takes precedence.
+
 # AmScope Native Driver and Camera Module Completion Plan
 
 **Target branch:** `amscope-native-driver`  

@@ -161,7 +161,7 @@ struct RawFrameCapture {
     std::condition_variable completedCondition;
     std::atomic<bool> pullStarted{false};
     bool completed = false;
-    HRESULT pullResult = E_FAIL;
+    HRESULT pullResult = 0; // Read only after completed becomes true.
     AmcamFrameInfoV4 frameInfo{};
 };
 

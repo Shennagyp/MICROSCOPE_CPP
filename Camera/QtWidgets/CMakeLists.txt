@@ -13,7 +13,7 @@ endif()
 
 find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
 
-add_library(camera_qt_widgets
+add_library(camera_qt_widgets STATIC
     src/FrameView.cpp
     include/camera/qtwidgets/FrameView.h)
 add_library(Camera::QtWidgets ALIAS camera_qt_widgets)

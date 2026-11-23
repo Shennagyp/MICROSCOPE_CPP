@@ -80,11 +80,13 @@ unsigned rawMaximumBitDepth(HAmcam handle, std::uint64_t modelFlags) {
 // 8-bit versus camera-maximum and cannot represent intermediate depths.
 std::optional<unsigned> rawPixelFormatBitDepth(int pixelFormat) {
     switch (pixelFormat) {
-    case AMCAM_PIXELFORMAT_RAW8: return 8U;
+    case AMCAM_PIXELFORMAT_RAW8:
+    case AMCAM_PIXELFORMAT_GMCY8: return 8U;
     case AMCAM_PIXELFORMAT_RAW10: return 10U;
     case AMCAM_PIXELFORMAT_RAW11: return 11U;
     case AMCAM_PIXELFORMAT_RAW12:
-    case AMCAM_PIXELFORMAT_RAW12PACK: return 12U;
+    case AMCAM_PIXELFORMAT_RAW12PACK:
+    case AMCAM_PIXELFORMAT_GMCY12: return 12U;
     case AMCAM_PIXELFORMAT_RAW14: return 14U;
     case AMCAM_PIXELFORMAT_RAW16: return 16U;
     default: return std::nullopt;
@@ -102,12 +104,14 @@ std::vector<RawPixelFormatChoice> rawPixelFormatChoices(
     // public bit-depth feature represents significant precision, not packing.
     constexpr RawPixelFormatChoice candidates[] = {
         {8U, AMCAM_PIXELFORMAT_RAW8},
+        {8U, AMCAM_PIXELFORMAT_GMCY8},
         {10U, AMCAM_PIXELFORMAT_RAW10},
         {11U, AMCAM_PIXELFORMAT_RAW11},
         {12U, AMCAM_PIXELFORMAT_RAW12},
+        {12U, AMCAM_PIXELFORMAT_RAW12PACK},
+        {12U, AMCAM_PIXELFORMAT_GMCY12},
         {14U, AMCAM_PIXELFORMAT_RAW14},
-        {16U, AMCAM_PIXELFORMAT_RAW16},
-        {12U, AMCAM_PIXELFORMAT_RAW12PACK}
+        {16U, AMCAM_PIXELFORMAT_RAW16}
     };
     std::vector<RawPixelFormatChoice> choices;
     for (const auto& candidate : candidates) {

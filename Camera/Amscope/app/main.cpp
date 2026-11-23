@@ -1,10 +1,15 @@
 #include "amscope/QtAmcamCamera.h"
 #include "camera/FrameRateEstimator.h"
+#include "camera/CameraFeatureValidation.h"
 #include "camera/qtwidgets/CameraControlPanel.h"
 #include "camera/qtwidgets/FrameView.h"
+#include "camera/qtwidgets/ImageInfoBar.h"
 
 #include <QByteArray>
+#include <QAction>
 #include <QApplication>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -17,6 +22,9 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMetaObject>
+#include <QMenu>
+#include <QMenuBar>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QJsonDocument>
@@ -184,35 +192,66 @@ public:
         setWindowTitle("AmScope Native Camera Preview");
         resize(1280, 820);
 
+        // The main window is an image-first workspace. All camera operations
+        // live in the modeless Camera Controls window, opened only from File.
         auto* central = new QWidget(this);
         auto* root = new QVBoxLayout(central);
+        preview_ = new camera::qtwidgets::FrameView(central);
+        imageInfoBar_ = new camera::qtwidgets::ImageInfoBar(central);
+        imageInfoBar_->setEditRequestedHandler([this](const std::string& id) {
+            constexpr const char* prefix = "feature:";
+            if (id.rfind(prefix, 0) == 0) {
+                editFeatureFromInfoBar(id.substr(std::char_traits<char>::length(prefix)));
+            }
+        });
+        root->addWidget(preview_, 1);
+        root->addWidget(imageInfoBar_);
+        setCentralWidget(central);
+
+        cameraControlsWindow_ = new QDialog(this, Qt::Window);
+        cameraControlsWindow_->setWindowTitle("Camera Controls");
+        cameraControlsWindow_->setModal(false);
+        cameraControlsWindow_->resize(980, 820);
+        auto* controlsRoot = new QVBoxLayout(cameraControlsWindow_);
         auto* toolbar = new QHBoxLayout();
 
-        cameraControls_ = new camera::qtwidgets::CameraControlPanel(central);
-        stillCaptureModeSelector_ = new QComboBox(central);
-        stillResolutionSelector_ = new QComboBox(central);
-        stillResolutionSelector_->setToolTip("Still-image resolution reported by the camera SDK.");
-        stillPrecisionLabel_ = new QLabel("Last still: —", central);
+        cameraControls_ =
+            new camera::qtwidgets::CameraControlPanel(cameraControlsWindow_);
+        stillCaptureModeSelector_ = new QComboBox(cameraControlsWindow_);
+        stillResolutionSelector_ = new QComboBox(cameraControlsWindow_);
+        stillResolutionSelector_->setToolTip(
+            "Still-image resolution reported by the camera SDK.");
+        stillPrecisionLabel_ = new QLabel("Last still: —", cameraControlsWindow_);
         stillPrecisionLabel_->setToolTip(
             "Significant and storage bit depths reported by the most recently captured still frame. This is measured output metadata, not a requested setting.");
         stillCaptureModeSelector_->addItem(
             "Processed still", static_cast<int>(amscope::StillCaptureMode::Processed));
         stillCaptureModeSelector_->addItem(
             "RAW still", static_cast<int>(amscope::StillCaptureMode::Raw));
-        captureStillButton_ = new QPushButton("Capture still", central);
+        captureStillButton_ =
+            new QPushButton("Capture still", cameraControlsWindow_);
 
         toolbar->addWidget(cameraControls_, 1);
         toolbar->addWidget(stillResolutionSelector_);
         toolbar->addWidget(stillCaptureModeSelector_);
         toolbar->addWidget(captureStillButton_);
 
-        preview_ = new camera::qtwidgets::FrameView(central);
+        auto* fileMenu = menuBar()->addMenu("&File");
+        auto* controlsAction = fileMenu->addAction("Camera Controls...");
+        connect(controlsAction, &QAction::triggered, this, [this]() {
+            showCameraControlsWindow();
+        });
+        fileMenu->addSeparator();
+        auto* exitAction = fileMenu->addAction("Exit");
+        connect(exitAction, &QAction::triggered, this, [this]() {
+            close();
+        });
 
         featureStatus_ = new QLabel("Open a camera to inspect its available features.", central);
         featureStatus_->setWordWrap(true);
 
         refreshFeaturesButton_ = new QPushButton("Refresh features", central);
-        featureTabs_ = new QTabWidget(central);
+        featureTabs_ = new QTabWidget(cameraControlsWindow_);
         featureTabs_->setMinimumWidth(460);
         featureTabs_->setMaximumWidth(620);
         featureTabs_->setDocumentMode(true);
@@ -355,7 +394,9 @@ public:
 
         accessoryGroup_->hide();
 
-        auto* settingsColumn = new QVBoxLayout();
+        auto* settingsContent = new QWidget(cameraControlsWindow_);
+        auto* settingsColumn = new QVBoxLayout(settingsContent);
+        settingsColumn->setContentsMargins(0, 0, 0, 0);
         settingsColumn->addWidget(featureStatus_);
         settingsColumn->addWidget(refreshFeaturesButton_);
         settingsColumn->addWidget(triggerGroup_);
@@ -364,11 +405,14 @@ public:
         settingsColumn->addWidget(lensFocusGroup_);
         settingsColumn->addWidget(featureTabs_, 1);
 
-        auto* workspace = new QHBoxLayout();
-        workspace->addWidget(preview_, 1);
-        workspace->addLayout(settingsColumn);
+        auto* settingsScroll = new QScrollArea(cameraControlsWindow_);
+        settingsScroll->setWidgetResizable(true);
+        settingsScroll->setWidget(settingsContent);
 
-        frameInfo_ = new QLabel("No frames received", central);
+        controlsRoot->addLayout(toolbar);
+        controlsRoot->addWidget(stillPrecisionLabel_, 0, Qt::AlignRight);
+        controlsRoot->addWidget(settingsScroll, 1);
+
         preview_->setFramePresentedCallback([this]() {
             const double monotonicSeconds = std::chrono::duration<double>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -382,12 +426,6 @@ public:
         connect(frameRateTimer_, &QTimer::timeout, this, [this]() {
             updatePulledFrameRate();
         });
-
-        root->addWidget(stillPrecisionLabel_, 0, Qt::AlignRight);
-        root->addLayout(toolbar);
-        root->addLayout(workspace, 1);
-        root->addWidget(frameInfo_);
-        setCentralWidget(central);
 
         cameraControls_->setRefreshRequestedHandler(
             [this]() { refreshCameras(); });
@@ -505,10 +543,16 @@ public:
     }
 
 private:
+    void showCameraControlsWindow() {
+        cameraControlsWindow_->show();
+        cameraControlsWindow_->raise();
+        cameraControlsWindow_->activateWindow();
+    }
     struct FeatureControl {
         camera::CameraFeatureDescriptor descriptor;
         QWidget* editor = nullptr;
         bool hasCurrentValue = false;
+        std::optional<camera::CameraFeatureValue> currentValue;
     };
 
     void refreshCameras() {
@@ -946,8 +990,15 @@ private:
                         "Camera feature controls are unavailable in the current state.");
                 } else {
                     preview_->setMessage("Select a camera and press Open, then Start.");
-                    frameInfo_->setText("No frames received");
+                    hasReceivedFrame_ = false;
+                    lastFramePixelFormat_ = camera::PixelFormat::Unknown;
+                    lastFrameSignificantBits_ = 0;
+                    lastFrameStorageBits_ = 0;
+                    lastFrameSequence_.reset();
+                    lastExposureMicroseconds_.reset();
+                    lastFrameBytes_ = 0;
                     stillPrecisionLabel_->setText("Last still: —");
+                    updateFrameInfoLabel();
                     statusBar()->showMessage("Camera session closed.");
                     featureStatus_->setText(
                         "Open a camera to inspect its available features.");
@@ -1117,8 +1168,10 @@ private:
         }
         featureForms_.clear();
         featureControls_.clear();
+        featureOrder_.clear();
         pendingFeatureReads_ = 0;
         clearAccessoryControls();
+        updateFrameInfoLabel();
     }
 
     void rebuildFeatureControls(
@@ -1151,6 +1204,7 @@ private:
                 foundForm = featureForms_.emplace(descriptor.group, form).first;
             }
             foundForm->second->addRow(featureNameText(descriptor), editor);
+            featureOrder_.push_back(descriptor.name);
             featureControls_.emplace(
                 descriptor.name,
                 FeatureControl{descriptor, editor});
@@ -1287,6 +1341,165 @@ private:
         return editor;
     }
 
+    void editFeatureFromInfoBar(const std::string& featureName) {
+        const auto found = featureControls_.find(featureName);
+        if (found == featureControls_.end() || !found->second.currentValue) return;
+
+        const auto& descriptor = found->second.descriptor;
+        if (!descriptor.isAvailable || !descriptor.isReadable ||
+            !descriptor.isWritable || pendingFeatureWrite_ ||
+            camera_.state() != amscope::CameraState::Open) {
+            return;
+        }
+
+        QDialog dialog(this);
+        dialog.setWindowTitle(
+            QString("Edit %1").arg(QString::fromStdString(descriptor.displayName)));
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* form = new QFormLayout();
+        QWidget* editor = nullptr;
+
+        switch (descriptor.kind) {
+        case camera::CameraFeatureKind::Boolean: {
+            auto* check = new QCheckBox(&dialog);
+            check->setChecked(std::get<bool>(*found->second.currentValue));
+            editor = check;
+            break;
+        }
+        case camera::CameraFeatureKind::Integer: {
+            const auto current = std::get<std::int64_t>(*found->second.currentValue);
+            if (!descriptor.discreteIntegerValues.empty()) {
+                auto* combo = new QComboBox(&dialog);
+                for (const auto choice : descriptor.discreteIntegerValues) {
+                    combo->addItem(
+                        QString::number(static_cast<qlonglong>(choice)),
+                        QVariant::fromValue<qlonglong>(static_cast<qlonglong>(choice)));
+                }
+                combo->setCurrentIndex(combo->findData(
+                    QVariant::fromValue<qlonglong>(static_cast<qlonglong>(current))));
+                editor = combo;
+            } else {
+                auto* line = new QLineEdit(QString::number(
+                    static_cast<qlonglong>(current)), &dialog);
+                line->setPlaceholderText(numericRangeText(descriptor));
+                editor = line;
+            }
+            break;
+        }
+        case camera::CameraFeatureKind::FloatingPoint: {
+            const double current = std::get<double>(*found->second.currentValue);
+            const auto* range = descriptor.numericRange
+                ? std::get_if<camera::CameraFloatingPointRange>(
+                      &*descriptor.numericRange)
+                : nullptr;
+            if (range) {
+                auto* spin = new QDoubleSpinBox(&dialog);
+                spin->setDecimals(12);
+                spin->setRange(range->minimum, range->maximum);
+                spin->setSingleStep(range->increment.value_or(1.0));
+                spin->setKeyboardTracking(false);
+                spin->setValue(current);
+                editor = spin;
+            } else {
+                auto* line = new QLineEdit(QString::number(current, 'g', 12), &dialog);
+                editor = line;
+            }
+            break;
+        }
+        case camera::CameraFeatureKind::Enumeration: {
+            auto* combo = new QComboBox(&dialog);
+            for (const auto& symbol : descriptor.enumerationValues) {
+                combo->addItem(
+                    QString::fromStdString(symbol),
+                    QString::fromStdString(symbol));
+            }
+            const auto& current =
+                std::get<camera::FeatureEnumeration>(*found->second.currentValue).symbol;
+            combo->setCurrentIndex(combo->findData(QString::fromStdString(current)));
+            editor = combo;
+            break;
+        }
+        case camera::CameraFeatureKind::IntegerVector:
+        case camera::CameraFeatureKind::String:
+            return;
+        }
+
+        if (!editor) return;
+        QString label = QString::fromStdString(descriptor.displayName);
+        if (descriptor.unit) {
+            label += QString(" (%1)").arg(QString::fromStdString(*descriptor.unit));
+        }
+        form->addRow(label, editor);
+        layout->addLayout(form);
+
+        auto* buttons = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(buttons);
+
+        if (dialog.exec() != QDialog::Accepted) return;
+
+        camera::CameraFeatureValue value;
+        switch (descriptor.kind) {
+        case camera::CameraFeatureKind::Boolean:
+            value = qobject_cast<QCheckBox*>(editor)->isChecked();
+            break;
+        case camera::CameraFeatureKind::Integer: {
+            if (auto* combo = qobject_cast<QComboBox*>(editor)) {
+                bool ok = false;
+                const qlonglong number = combo->currentData().toLongLong(&ok);
+                if (!ok) return;
+                value = static_cast<std::int64_t>(number);
+            } else {
+                bool ok = false;
+                const qlonglong number =
+                    qobject_cast<QLineEdit*>(editor)->text().trimmed().toLongLong(&ok);
+                if (!ok) {
+                    statusBar()->showMessage("Enter a valid signed integer.", 5000);
+                    return;
+                }
+                value = static_cast<std::int64_t>(number);
+            }
+            break;
+        }
+        case camera::CameraFeatureKind::FloatingPoint: {
+            bool ok = false;
+            double number = 0.0;
+            if (auto* spin = qobject_cast<QDoubleSpinBox*>(editor)) {
+                number = spin->value();
+                ok = true;
+            } else {
+                number = qobject_cast<QLineEdit*>(editor)->text().trimmed().toDouble(&ok);
+            }
+            if (!ok || !std::isfinite(number)) {
+                statusBar()->showMessage("Enter a finite numeric value.", 5000);
+                return;
+            }
+            value = number;
+            break;
+        }
+        case camera::CameraFeatureKind::Enumeration: {
+            auto* combo = qobject_cast<QComboBox*>(editor);
+            if (!combo || combo->currentIndex() < 0) return;
+            value = camera::FeatureEnumeration{
+                utf8String(combo->currentData().toString())};
+            break;
+        }
+        case camera::CameraFeatureKind::IntegerVector:
+        case camera::CameraFeatureKind::String:
+            return;
+        }
+
+        const auto validation = camera::validateFeatureWrite(descriptor, value);
+        if (const auto* error =
+                std::get_if<camera::CameraFeatureAccessError>(&validation)) {
+            statusBar()->showMessage(QString::fromStdString(error->message), 6000);
+            return;
+        }
+        submitFeatureValue(featureName, std::move(value));
+    }
+
     void refreshFeatureValues(std::uint64_t generation) {
         pendingFeatureReads_ = 0;
         for (const auto& entry : featureControls_) {
@@ -1297,6 +1510,7 @@ private:
 
         if (pendingFeatureReads_ == 0) {
             setFeatureControlsEnabled(true);
+            updateFrameInfoLabel();
             return;
         }
 
@@ -1316,6 +1530,7 @@ private:
                         if (const auto* error =
                                 std::get_if<camera::CameraFeatureAccessError>(&result)) {
                             found->second.hasCurrentValue = false;
+                            found->second.currentValue.reset();
                             QString tooltip = QString::fromStdString(error->message);
                             if (found->second.descriptor.disabledReason) {
                                 tooltip += "\n" + QString::fromStdString(
@@ -1327,6 +1542,11 @@ private:
                                 std::get<camera::CameraFeatureValue>(result);
                             found->second.hasCurrentValue =
                                 setFeatureEditorValue(found->second, value);
+                            if (found->second.hasCurrentValue) {
+                                found->second.currentValue = value;
+                            } else {
+                                found->second.currentValue.reset();
+                            }
                             if (!found->second.hasCurrentValue) {
                                 found->second.editor->setToolTip(
                                     "The backend returned a value that does not match its descriptor.");
@@ -1346,6 +1566,7 @@ private:
                     if (pendingFeatureReads_ == 0) {
                         setFeatureControlsEnabled(true);
                     }
+                    updateFrameInfoLabel();
                 });
 
             if (requestId == 0) {
@@ -1553,6 +1774,26 @@ private:
             return;
         }
 
+        submitFeatureValue(featureName, std::move(value));
+    }
+
+    void submitFeatureValue(
+        const std::string& featureName,
+        camera::CameraFeatureValue value) {
+        if (pendingFeatureWrite_) return;
+
+        const auto found = featureControls_.find(featureName);
+        if (found == featureControls_.end()) return;
+
+        const auto validation =
+            camera::validateFeatureWrite(found->second.descriptor, value);
+        if (const auto* error =
+                std::get_if<camera::CameraFeatureAccessError>(&validation)) {
+            featureStatus_->setText(QString::fromStdString(error->message));
+            updateFrameInfoLabel();
+            return;
+        }
+
         pendingFeatureWrite_ = true;
         setFeatureControlsEnabled(false);
         featureStatus_->setText(
@@ -1580,8 +1821,8 @@ private:
                             .arg(QString::fromStdString(featureName)));
                 }
 
-                // Feature writes may change the writable state of related
-                // descriptors (for example, automatic/manual exposure).
+                // The backend verifies the write. Refresh descriptors and
+                // current values before presenting the new value in the bar.
                 refreshFeatureDescriptors();
             });
 
@@ -1591,6 +1832,7 @@ private:
                 "The feature write could not be queued.");
             setFeatureControlsEnabled(true);
         }
+        updateFrameInfoLabel();
     }
 
     void setFeatureControlsEnabled(bool enabled) {
@@ -1616,6 +1858,7 @@ private:
         }
         refreshFeaturesButton_->setEnabled(
             canEnable && camera_.state() == amscope::CameraState::Open);
+        updateFrameInfoLabel();
     }
 
     void updatePulledFrameRate() {
@@ -1644,41 +1887,152 @@ private:
         updateFrameInfoLabel();
     }
 
-    void updateFrameInfoLabel() {
-        const QString sequenceText = lastFrameSequence_
-            ? QString("sequence %1")
-                  .arg(static_cast<qulonglong>(*lastFrameSequence_))
-            : QStringLiteral("sequence unavailable");
-        QString text = hasReceivedFrame_
-            ? QString("%1 x %2 | %3 | %4 bytes")
-                  .arg(static_cast<qulonglong>(lastFrameWidth_))
-                  .arg(static_cast<qulonglong>(lastFrameHeight_))
-                  .arg(sequenceText)
-                  .arg(static_cast<qulonglong>(lastFrameBytes_))
-            : QStringLiteral("No frames received");
+    QString featureValueText(const camera::CameraFeatureValue& value) const {
+        return std::visit([](const auto& item) -> QString {
+            using T = std::decay_t<decltype(item)>;
+            if constexpr (std::is_same_v<T, bool>) {
+                return item ? QStringLiteral("On") : QStringLiteral("Off");
+            } else if constexpr (std::is_same_v<T, std::int64_t>) {
+                return QString::number(static_cast<qlonglong>(item));
+            } else if constexpr (std::is_same_v<T, double>) {
+                return QString::number(item, 'g', 12);
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                return QString::fromStdString(item);
+            } else if constexpr (std::is_same_v<T, camera::FeatureEnumeration>) {
+                return QString::fromStdString(item.symbol);
+            } else {
+                QStringList values;
+                for (const auto entry : item) {
+                    values.push_back(QString::number(static_cast<qlonglong>(entry)));
+                }
+                return values.join(", ");
+            }
+        }, value);
+    }
 
+    bool isImageInfoFeature(const camera::CameraFeatureDescriptor& descriptor) const {
+        if (descriptor.group == camera::CameraFeatureGroup::Exposure ||
+            descriptor.group == camera::CameraFeatureGroup::Color ||
+            descriptor.group == camera::CameraFeatureGroup::ImageProcessing) {
+            return true;
+        }
+
+        const QString name = QString::fromStdString(descriptor.displayName).toLower();
+        return name.contains("exposure") ||
+               name.contains("gain") ||
+               name.contains("white balance");
+    }
+
+    void updateFrameInfoLabel() {
+        std::vector<camera::qtwidgets::ImageInfoBarItem> items;
+        items.reserve(12 + featureOrder_.size());
+
+        if (!hasReceivedFrame_) {
+            items.push_back({
+                "frame-state", "Frame", "No frames received", {},
+                "Waiting for the first camera frame.", false});
+        } else {
+            items.push_back({
+                "frame-size", "Frame",
+                QString("%1 × %2")
+                    .arg(static_cast<qulonglong>(lastFrameWidth_))
+                    .arg(static_cast<qulonglong>(lastFrameHeight_)).toStdString(),
+                "px", "Current acquired frame dimensions.", false});
+            items.push_back({
+                "pixel-format", "Format",
+                pixelFormatName(lastFramePixelFormat_).toStdString(),
+                {}, "Pixel-buffer layout delivered to the preview.", false});
+
+            if (lastFrameSignificantBits_ != 0 || lastFrameStorageBits_ != 0) {
+                items.push_back({
+                    "pixel-depth", "Depth",
+                    QString("%1 significant / %2 stored")
+                        .arg(lastFrameSignificantBits_)
+                        .arg(lastFrameStorageBits_).toStdString(),
+                    "bits/pixel", "Significant source depth and storage width are distinct.", false});
+            }
+            items.push_back({
+                "payload-size", "Payload",
+                QString::number(static_cast<qulonglong>(lastFrameBytes_)).toStdString(),
+                "bytes", "Size of the most recently acquired frame payload.", false});
+            if (lastFrameSequence_) {
+                items.push_back({
+                    "sequence", "Sequence",
+                    QString::number(static_cast<qulonglong>(*lastFrameSequence_)).toStdString(),
+                    {}, "Backend frame sequence metadata.", false});
+            }
+        }
+
+        if (lastExposureMicroseconds_) {
+            items.push_back({
+                "frame-exposure", "Frame Exposure",
+                QString::number(static_cast<qulonglong>(*lastExposureMicroseconds_)).toStdString(),
+                "us", "Exposure duration carried by the acquired frame metadata; not a setting write.", false});
+        }
         if (imageEventsPerSecond_) {
-            text += QString(" | event %1 FPS")
-                .arg(*imageEventsPerSecond_, 0, 'f', 1);
+            items.push_back({
+                "event-rate", "SDK Events",
+                QString::number(*imageEventsPerSecond_, 'f', 1).toStdString(),
+                "FPS", "Application-observed image-event notification rate.", false});
         }
         if (pulledFramesPerSecond_) {
-            text += QString(" | pull %1 FPS")
-                .arg(*pulledFramesPerSecond_, 0, 'f', 1);
-        }
-        if (lastExposureMicroseconds_) {
-            text += QString(" | exposure %1 us")
-                .arg(static_cast<qulonglong>(*lastExposureMicroseconds_));
+            items.push_back({
+                "pull-rate", "Pulled",
+                QString::number(*pulledFramesPerSecond_, 'f', 1).toStdString(),
+                "FPS", "Application-observed successful frame-pull rate.", false});
         }
         if (previewFramesPerSecond_) {
-            text += QString(" | paint %1 FPS")
-                .arg(*previewFramesPerSecond_, 0, 'f', 1);
+            items.push_back({
+                "paint-rate", "Preview",
+                QString::number(*previewFramesPerSecond_, 'f', 1).toStdString(),
+                "FPS", "FrameView paint/presentation rate.", false});
         }
-        const std::uint64_t dropped = camera_.droppedFrames();
-        if (dropped != 0) {
-            text += QString(" | dropped %1")
-                .arg(static_cast<qulonglong>(dropped));
+        items.push_back({
+            "dropped-frames", "Dropped",
+            QString::number(static_cast<qulonglong>(camera_.droppedFrames())).toStdString(),
+            {}, "Frames reported as dropped by the camera acquisition path.", false});
+
+        for (const auto& name : featureOrder_) {
+            const auto found = featureControls_.find(name);
+            if (found == featureControls_.end()) continue;
+            const auto& control = found->second;
+            const auto& descriptor = control.descriptor;
+
+            if (!isImageInfoFeature(descriptor) ||
+                !descriptor.isAvailable || !descriptor.isReadable ||
+                !control.currentValue) {
+                continue;
+            }
+
+            const bool scalarEditable =
+                descriptor.kind == camera::CameraFeatureKind::Boolean ||
+                descriptor.kind == camera::CameraFeatureKind::Integer ||
+                descriptor.kind == camera::CameraFeatureKind::FloatingPoint ||
+                descriptor.kind == camera::CameraFeatureKind::Enumeration;
+            const bool editable =
+                scalarEditable && descriptor.isWritable &&
+                !pendingFeatureWrite_ &&
+                camera_.state() == amscope::CameraState::Open;
+
+            std::string tooltip;
+            if (descriptor.disabledReason) {
+                tooltip = *descriptor.disabledReason;
+            } else if (editable) {
+                tooltip = "Double-click to edit. The displayed value changes after camera readback.";
+            } else {
+                tooltip = "Read-only in the camera's current state.";
+            }
+
+            items.push_back({
+                "feature:" + name,
+                descriptor.displayName,
+                featureValueText(*control.currentValue).toStdString(),
+                descriptor.unit.value_or(std::string{}),
+                std::move(tooltip),
+                editable});
         }
-        frameInfo_->setText(text);
+
+        imageInfoBar_->setItems(std::move(items));
     }
 
     void presentLatestFrame() {
@@ -1690,6 +2044,9 @@ private:
 
         lastFrameWidth_ = frame->width;
         lastFrameHeight_ = frame->height;
+        lastFramePixelFormat_ = frame->pixelFormat;
+        lastFrameSignificantBits_ = frame->significantBitsPerPixel;
+        lastFrameStorageBits_ = frame->storageBitsPerPixel;
         lastFrameSequence_ = frame->sequenceNumber;
         lastFrameBytes_ = frame->byteSize();
         lastExposureMicroseconds_.reset();
@@ -2740,6 +3097,9 @@ private:
     std::uint32_t lastFrameHeight_ = 0;
     std::optional<std::uint64_t> lastFrameSequence_;
     std::size_t lastFrameBytes_ = 0;
+    camera::PixelFormat lastFramePixelFormat_ = camera::PixelFormat::Unknown;
+    std::uint8_t lastFrameSignificantBits_ = 0;
+    std::uint8_t lastFrameStorageBits_ = 0;
     bool hasReceivedFrame_ = false;
     QTimer* frameRateTimer_ = nullptr;
 
@@ -2783,7 +3143,9 @@ private:
     std::optional<amscope::AmcamTriggerConfiguration> currentTriggerConfiguration_;
     bool accessoryOperationPending_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
+    std::vector<std::string> featureOrder_;
 
+    QDialog* cameraControlsWindow_ = nullptr;
     camera::qtwidgets::CameraControlPanel* cameraControls_ = nullptr;
     QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
@@ -2791,7 +3153,7 @@ private:
     QPushButton* captureStillButton_ = nullptr;
     QPushButton* refreshFeaturesButton_ = nullptr;
     camera::qtwidgets::FrameView* preview_ = nullptr;
-    QLabel* frameInfo_ = nullptr;
+    camera::qtwidgets::ImageInfoBar* imageInfoBar_ = nullptr;
     QLabel* featureStatus_ = nullptr;
     QGroupBox* accessoryGroup_ = nullptr;
     QFormLayout* accessoryForm_ = nullptr;

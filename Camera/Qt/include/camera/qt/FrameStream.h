@@ -14,7 +14,7 @@ public:
     FrameStreamMailbox(const FrameStreamMailbox&) = delete;
     FrameStreamMailbox& operator=(const FrameStreamMailbox&) = delete;
     template <typename IsCurrent, typename QueueNotification>
-    void publishFrame(FramePtr frame, IsCurrent&& isCurrent,
+    void publishFrame(FramePtr&& frame, IsCurrent&& isCurrent,
                       QueueNotification&& queueNotification) {
         if (!isCurrent()) return;
         const FramePtr published = std::move(frame);

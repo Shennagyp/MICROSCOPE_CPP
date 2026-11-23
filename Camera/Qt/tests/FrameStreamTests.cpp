@@ -48,7 +48,8 @@ int main(int argc,char** argv) {
                 frame->width==200U && frame->pixels.size()==1U &&
                 frame->pixels.front()==200U;
             rearmedPublished=makeFrame(201);
-            mailbox.publishFrame(rearmedPublished,[]() noexcept {return true;},
+            auto rearmedLease=rearmedPublished;
+            mailbox.publishFrame(std::move(rearmedLease),[]() noexcept {return true;},
                 [&]() noexcept {notificationContext.queue();});
         } else if(notificationContext.notifications==2) {
             rearmOk=frame && rearmedPublished && frame==rearmedPublished &&

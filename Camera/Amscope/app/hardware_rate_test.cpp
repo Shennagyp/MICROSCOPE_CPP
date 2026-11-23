@@ -416,6 +416,12 @@ struct Measurement {
     std::uint64_t previewFrameSubmissions = 0;
     std::uint64_t paintEvents = 0;
     std::uint64_t droppedFrames = 0;
+    std::optional<camera::FrameRateMeasurement> deviceFrameRateMeasurement;
+    std::optional<camera::CameraOperationError> deviceFrameRateError;
+    bool stoppedRateStateCheckPerformed = false;
+    bool stoppedRateStateCheckPassed = false;
+    std::optional<camera::CameraErrorCode> stoppedRateStateErrorCode;
+    bool stoppedRateStateErrorHasNativeCode = false;
     bool hasSequence = false;
     std::uint64_t firstSequence = 0;
     std::uint64_t lastSequence = 0;
@@ -478,7 +484,12 @@ void printReport(
               static_cast<double>(
                   *measurement.exposureAtMeasurementStartMicroseconds)
             : 0.0;
+    const bool typedRateApiPass =
+        measurement.deviceFrameRateMeasurement.has_value() &&
+        measurement.stoppedRateStateCheckPerformed &&
+        measurement.stoppedRateStateCheckPassed;
     const bool operationalPass =
+        typedRateApiPass &&
         measurement.callbackFrames > 0 &&
         dimensionsMatch &&
         measurement.paintedFrames > 0 &&
@@ -517,6 +528,57 @@ void printReport(
         << measurement.durationSeconds << ",\n"
         << "  \"event_fps\": " << eventFps << ",\n"
         << "  \"pull_fps\": " << pullFps << ",\n"
+        << "  \"device_rate_api_succeeded\": "
+        << (measurement.deviceFrameRateMeasurement ? "true" : "false") << ",\n"
+        << "  \"device_rate_fps\": "
+        << (measurement.deviceFrameRateMeasurement &&
+                    measurement.deviceFrameRateMeasurement->framesPerSecond()
+                ? std::to_string(*measurement.deviceFrameRateMeasurement->framesPerSecond())
+                : "null") << ",\n"
+        << "  \"device_rate_frames_in_interval\": "
+        << (measurement.deviceFrameRateMeasurement
+                ? std::to_string(measurement.deviceFrameRateMeasurement->framesInInterval)
+                : "null") << ",\n"
+        << "  \"device_rate_interval_ticks\": "
+        << (measurement.deviceFrameRateMeasurement
+                ? std::to_string(measurement.deviceFrameRateMeasurement->intervalTicks)
+                : "null") << ",\n"
+        << "  \"device_rate_ticks_per_second\": "
+        << (measurement.deviceFrameRateMeasurement
+                ? std::to_string(measurement.deviceFrameRateMeasurement->ticksPerSecond)
+                : "null") << ",\n"
+        << "  \"device_rate_cumulative_frames\": "
+        << (measurement.deviceFrameRateMeasurement &&
+                    measurement.deviceFrameRateMeasurement->cumulativeFrames
+                ? std::to_string(*measurement.deviceFrameRateMeasurement->cumulativeFrames)
+                : "null") << ",\n"
+        << "  \"device_rate_error_code\": "
+        << (measurement.deviceFrameRateError
+                ? std::to_string(static_cast<unsigned>(measurement.deviceFrameRateError->code))
+                : "null") << ",\n"
+        << "  \"device_rate_error_message\": "
+        << (measurement.deviceFrameRateError
+                ? "\"" + jsonEscape(measurement.deviceFrameRateError->message) + "\""
+                : "null") << ",\n"
+        << "  \"device_rate_native_code\": "
+        << (measurement.deviceFrameRateError &&
+                    measurement.deviceFrameRateError->native
+                ? std::to_string(measurement.deviceFrameRateError->native->code)
+                : "null") << ",\n"
+        << "  \"stopped_rate_state_check_performed\": "
+        << (measurement.stoppedRateStateCheckPerformed ? "true" : "false") << ",\n"
+        << "  \"stopped_rate_state_check_passed\": "
+        << (measurement.stoppedRateStateCheckPerformed
+                ? (measurement.stoppedRateStateCheckPassed ? "true" : "false")
+                : "null") << ",\n"
+        << "  \"stopped_rate_state_error_code\": "
+        << (measurement.stoppedRateStateErrorCode
+                ? std::to_string(static_cast<unsigned>(*measurement.stoppedRateStateErrorCode))
+                : "null") << ",\n"
+        << "  \"stopped_rate_state_error_has_native_code\": "
+        << (measurement.stoppedRateStateCheckPerformed
+                ? (measurement.stoppedRateStateErrorHasNativeCode ? "true" : "false")
+                : "null") << ",\n"
         << "  \"callback_fps\": " << callbackFps << ",\n"
         << "  \"paint_fps\": " << paintFps << ",\n"
         << "  \"frame_poll_ticks\": " << measurement.framePollTicks << ",\n"
@@ -970,6 +1032,15 @@ int main(int argc, char** argv) {
                     measurement.exposureAtMeasurementEndMicroseconds =
                         exposureAtMeasurementEndMicroseconds;
 
+                    const auto deviceRateResult = camera.readFrameRateMeasurement();
+                    if (const auto* rate =
+                            std::get_if<camera::FrameRateMeasurement>(&deviceRateResult)) {
+                        measurement.deviceFrameRateMeasurement = *rate;
+                    } else {
+                        measurement.deviceFrameRateError =
+                            std::get<camera::CameraOperationError>(deviceRateResult);
+                    }
+
                     {
                         std::lock_guard<std::mutex> lock(capture->mutex);
                         capture->measuring = false;
@@ -1005,6 +1076,20 @@ int main(int argc, char** argv) {
                     if (!stopSucceeded) {
                         std::cerr << "Camera Stop failed: "
                                   << cameraError.message << '\n';
+                    } else {
+                        measurement.stoppedRateStateCheckPerformed = true;
+                        const auto stoppedRateResult = camera.readFrameRateMeasurement();
+                        if (const auto* stoppedError =
+                                std::get_if<camera::CameraOperationError>(&stoppedRateResult)) {
+                            measurement.stoppedRateStateErrorCode = stoppedError->code;
+                            measurement.stoppedRateStateErrorHasNativeCode =
+                                stoppedError->native.has_value();
+                            measurement.stoppedRateStateCheckPassed =
+                                stoppedError->code == camera::CameraErrorCode::InvalidState &&
+                                !stoppedError->native;
+                        } else {
+                            measurement.stoppedRateStateCheckPassed = false;
+                        }
                     }
 
                     bool resolutionRestored = !resolutionChanged;

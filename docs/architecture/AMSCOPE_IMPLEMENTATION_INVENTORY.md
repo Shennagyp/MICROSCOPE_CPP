@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
 **Source snapshot:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (v0.6 common integer-range typing, exact validation, first-frame common metadata reporting, and ownership audit)  
-**Branch head reviewed for this inventory refresh:** `82687b288577d8901641aff143c69ac97945e52b` (source review only; v0.6 local build/CTest and CI verification pending)  
+**Branch head reviewed for this inventory refresh:** `6e4f6bb584719aec6323936350a65e0112dc0066` (project-owner supplied Release build, 11/11 CTest pass, and MU503 RGB24 common-frame hardware record; CI for this exact revision not yet reported)  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---
@@ -66,12 +66,12 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 
 | Behavior | Source state | Automated test evidence | Real-camera evidence |
 |---|---|---|---|
-| Packed RGB24 live frames | Source implemented/documented | No camera payload integration test identified | Not recorded |
+| Packed RGB24 live frames | Source implemented/documented | Common frame model tests; v0.6 native probe reports first common frame | **Hardware verified on MU503:** 1280×960, RGB24, stride 3,840, payload 3,686,400 bytes; exact geometry match. See `docs/testing/hardware/phase-2-mu503-rgb24-2026-11-23.md` |
 | RAW8 and RAW16 live frame representation | Source implemented/documented | Camera type tests verify representation fields, not sensor payload bytes | Not recorded |
 | Sensor FourCC and significant depth separate from storage container width | Source implemented | Camera type tests cover representation distinction | Not recorded |
-| Optional sequence/timestamp/exposure metadata | Source implemented; populated only when the corresponding Amcam `AMCAM_FRAMEINFO_FLAG_*` validity bit is set | Common frame tests cover optional-vs-zero semantics and timebases; no physical metadata regression for the new adapter yet | Not recorded |
+| Optional sequence/timestamp/exposure metadata | Source implemented; populated only when the corresponding Amcam `AMCAM_FRAMEINFO_FLAG_*` validity bit is set | Common frame tests cover optional-vs-zero semantics and timebases | MU503 RGB24 sample: all three reported unavailable; physical presence/zero-value behavior in other modes not established |
 | Amcam SDK flags, exposure gain percent, and black level | Source implemented in `amscope::AmcamFrame` extension, not in common frame | AmScope type test checks extension and retained values | Not recorded |
-| Opaque pixel-format identity | Source implemented; Amcam RAW uses `amcam.fourcc`, with no automatic PFNC translation | Common and AmScope type tests cover scheme/value retention | Not recorded |
+| Opaque pixel-format identity | Source implemented; Amcam RAW uses `amcam.fourcc`, with no automatic PFNC translation | Common and AmScope type tests cover scheme/value retention | RGB24 sample correctly has no invented native identifier; physical RAW FourCC verification remains open if RAW is supported/claimed |
 | Significant source depth vs payload storage width | Source implemented as independent `significantBitsPerPixel` and `storageBitsPerPixel` | Common and AmScope type tests cover independent values | Not recorded |
 | Four immutable `FramePtr` leases | Source implemented/documented | No dedicated pool/retention stress test identified | Not recorded |
 | Private discard buffer when every lease is retained | Source implemented/documented | No direct pool exhaustion test identified | Not recorded |

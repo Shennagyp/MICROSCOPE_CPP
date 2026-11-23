@@ -4,7 +4,9 @@
 #include <QColor>
 #include <QImage>
 
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <utility>
@@ -32,6 +34,20 @@ camera::FramePtr makeRaw8Frame() {
     frame->significantBitsPerPixel = 8;
     frame->storageBitsPerPixel = 8;
     frame->pixels = {11, 240};
+    return frame;
+}
+
+camera::FramePtr makeRaw16Frame() {
+    auto frame = std::make_shared<camera::Frame>();
+    frame->width = 2;
+    frame->height = 1;
+    frame->strideBytes = 4;
+    frame->pixelFormat = camera::PixelFormat::Raw16;
+    frame->significantBitsPerPixel = 12;
+    frame->storageBitsPerPixel = 16;
+    frame->pixels.resize(4);
+    const std::uint16_t samples[] = {0x1100, 0xEE00};
+    std::memcpy(frame->pixels.data(), samples, sizeof(samples));
     return frame;
 }
 
@@ -94,6 +110,15 @@ int main(int argc, char** argv) {
     if (rendered.pixelColor(100, 160).red() != 11 ||
         rendered.pixelColor(500, 160).red() != 240) {
         fail("RAW8 samples were not presented as grayscale.");
+        return EXIT_FAILURE;
+    }
+
+    presentedCount = 0;
+    view.setFrame(makeRaw16Frame());
+    rendered.fill(Qt::black);
+    view.render(&rendered);
+    if (presentedCount != 1) {
+        fail("A valid RAW16 frame was not counted after paint.");
         return EXIT_FAILURE;
     }
 

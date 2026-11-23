@@ -6,6 +6,7 @@ on:
       - amscope-native-driver
     paths:
       - "Camera/Amscope/**"
+      - "scripts/run-amscope-sdk-probe.sh"
       - "Camera/Common/**"
       - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
@@ -118,6 +119,9 @@ jobs:
 
       - name: Validate one-command launcher syntax
         run: bash -n scripts/run-amscope.sh
+
+      - name: Validate standalone SDK probe launcher syntax
+        run: bash -n scripts/run-amscope-sdk-probe.sh
 
       - name: Build and run one-command launcher smoke check
         run: scripts/run-amscope.sh --list-cameras

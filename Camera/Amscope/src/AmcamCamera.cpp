@@ -844,14 +844,14 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         std::string(camera::RawOutputBitDepthFeature),
-        "RAW Output Bit Depth", CameraFeatureKind::Integer,
+        "Sensor Output Bit Depth", CameraFeatureKind::Integer,
         std::string("significant bits"),
         rawModelSupported && rawMaximumBitDepthValid && rawMaxBitDepth > 8U,
         rawBitDepthReadable,
         rawModelSupported && rawMaximumBitDepthValid &&
             rawBitDepthWritable && stopped,
         std::nullopt, std::nullopt, {},
-        camera::CameraFeatureGroup::ImageFormat,
+        camera::CameraFeatureGroup::Sensor,
         std::move(rawBitDepthValues)
     });
     descriptors.push_back({

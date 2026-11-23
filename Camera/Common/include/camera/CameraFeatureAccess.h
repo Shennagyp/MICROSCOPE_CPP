@@ -75,6 +75,10 @@ struct CameraFeatureDescriptor {
     // Non-empty only for Integer features whose values are a discrete set.
     // An editor should present these values as choices, not a free-form field.
     std::vector<std::int64_t> discreteIntegerValues;
+    // Explains why a feature is disabled or unavailable in the current state.
+    // Backends should populate this when hardware capability or lifecycle
+    // state prevents configuration; UI clients may expose it as a tooltip.
+    std::optional<std::string> disabledReason;
 };
 
 struct CameraFeatureAccessError {

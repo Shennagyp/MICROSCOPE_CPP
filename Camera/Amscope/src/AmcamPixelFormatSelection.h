@@ -31,6 +31,17 @@ struct RawPixelFormatChoice {
     int legacyBitDepthMode = -1;
 };
 
+inline unsigned rawPixelFormatMaximumBitDepth(
+    const std::vector<int>& supportedPixelFormats) {
+    unsigned maximum = 0;
+    for (const int pixelFormat : supportedPixelFormats) {
+        const auto bitDepth = rawPixelFormatBitDepth(pixelFormat);
+        if (bitDepth)
+            maximum = std::max(maximum, *bitDepth);
+    }
+    return maximum;
+}
+
 inline std::vector<RawPixelFormatChoice> rawPixelFormatChoices(
     const std::vector<int>& supportedPixelFormats,
     unsigned maximumBitDepth) {

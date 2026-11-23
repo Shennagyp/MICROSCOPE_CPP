@@ -1,8 +1,8 @@
 # AmScope Native Camera Module — Revised Implementation and Release Plan
 
 **Revision date:** 23 November 2026  
-**Target branch:** `amscope-native-driver-0.6`  
-**Revision baseline:** `bd4ecfbb4afc7744d5f08dd3e721609e22da48b5`  
+**Target branch:** `amscope-native-driver-0.7`  
+**Revision baseline:** `03417b3a0dbd3b846500bed7fc2417f0a7082057` (accepted v0.6 head from which v0.7 was branched)  
 **Language/runtime:** C++17, Qt 6, macOS  
 **Status:** Active release plan. This document supersedes the earlier phase sequence in `AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md`.
 
@@ -163,7 +163,7 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; first generic widget extracted into `Camera::QtWidgets`; local build/test pending**
+**Status: IN PROGRESS; `FrameView` extracted; owner-reported Release build and 13/13 CTest pass at `892b91a`; post-extraction MU503 preview smoke check pending**
 
 Implemented in this Phase 4 slice:
 
@@ -171,8 +171,10 @@ Implemented in this Phase 4 slice:
 - Extracted the preview's `FrameView` into `camera::qtwidgets::FrameView`. Its public contract uses only `camera::FramePtr` and Qt Widgets; it has no AmScope SDK, `AmcamCamera`, or `QtAmcamCamera` dependency.
 - Preserved the existing external-memory `QImage` wrappers for RGB24, RAW8, and RAW16, the retained immutable frame lease, and the post-paint callback. The stream widget does not make an owned pixel copy, perform RAW demosaicing, or introduce a GPU renderer.
 - The AmScope preview now composes this reusable widget. Camera lifecycle, still-image saving, FPS accounting, feature requests, and AmScope accessory panels remain in the application layer.
+- The owner completed a Release configure and full build on `amscope-native-driver-v0.7` at `892b91a57016e570a1e972343f78ed7c42be801c`. The `amscope_preview` executable linked successfully, and all 13/13 CTest tests passed (0.32 seconds), including `camera_qt_widgets_frame_view_tests`.
+- The focused offscreen test covers RGB24, RAW8 and RAW16 paint paths, retention/release of the immutable `FramePtr` lease, invalid/truncated payload rejection, and the post-paint callback.
 
-Local validation for the new target and `camera_qt_widgets_frame_view_tests` is pending; do not treat source integration as a passing build.
+This verifies compilation and the isolated widget behavior. It does not yet verify the physical camera-to-Qt-preview integration after the extraction; that focused MU503 smoke check remains the next Phase 4 gate.
 
 Extract only the components needed to turn the preview into a reusable library:
 
@@ -290,13 +292,13 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 
 ## 6. Revised status ledger
 
-| Phase | Deliverable | Status at v0.6 before local verification |
+| Phase | Deliverable | Status after local Phase 4 verification on v0.7 |
 |---|---|---|
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
 | 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | OPEN |
+| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView extracted; Release build and 13/13 CTest passed at `892b91a`; post-extraction MU503 preview smoke check pending |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |
 | 7 | Integrated AmScope release qualification | OPEN |

@@ -208,10 +208,13 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
     endif()
 
     find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../QtWidgets"
+        "${CMAKE_CURRENT_BINARY_DIR}/camera_qt_widgets")
 
     add_executable(amscope_preview app/main.cpp)
     target_compile_features(amscope_preview PRIVATE cxx_std_17)
-    target_link_libraries(amscope_preview PRIVATE Amscope::Qt Qt6::Widgets)
+    target_link_libraries(amscope_preview PRIVATE Amscope::Qt Camera::QtWidgets Qt6::Widgets)
     set_target_properties(amscope_preview PROPERTIES
         BUILD_RPATH "@loader_path")
 

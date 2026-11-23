@@ -2641,6 +2641,92 @@ private:
             streaming && idle && stillResolutionSelector_->count() > 0);
         refreshFeaturesButton_->setEnabled(open && idle &&
                                             !accessoryOperationPending_);
+        const bool accessoriesIdle =
+            idle && !accessoryOperationPending_ &&
+            !embeddedLightSourceReadPending_ && !filterWheelReadPending_ &&
+            !astroAutoFocuserReadPending_ && !lensFocusReadPending_ &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_;
+        const bool accessoryControlsIdle = (open || streaming) && accessoriesIdle;
+        accessoryGroup_->setEnabled(accessoryControlsIdle);
+        astroAutoFocuserGroup_->setEnabled((open || streaming) && accessoriesIdle);
+        astroAutoFocuserTargetSelector_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
+            astroAutoFocuserStateKnown_ && !astroAutoFocuserMoving_);
+        astroAutoFocuserMoveButton_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
+            astroAutoFocuserStateKnown_ && !astroAutoFocuserMoving_);
+        astroAutoFocuserHaltButton_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
+            astroAutoFocuserStateKnown_ && astroAutoFocuserMoving_);
+        astroAutoFocuserRefreshButton_->setEnabled(
+            accessoryControlsIdle && astroAutoFocuserAvailable_);
+        lensFocusGroup_->setEnabled((open || streaming) && accessoriesIdle);
+        lensFocusTargetSelector_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_ &&
+            lensFocusStateKnown_ && lensFocusManual_);
+        lensFocusMoveButton_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_ &&
+            lensFocusStateKnown_ && lensFocusManual_);
+        lensFocusRefreshButton_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_);
+        lensApertureSelector_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_ &&
+            lensFocusStateKnown_ && lensApertureCalibrated_ &&
+            lensApertureChoicesAvailable_);
+        lensApertureSetButton_->setEnabled(
+            accessoryControlsIdle && lensFocusAvailable_ &&
+            lensFocusStateKnown_ && lensApertureCalibrated_ &&
+            lensApertureChoicesAvailable_ &&
+            lensApertureSelector_->currentIndex() >= 0);
+        embeddedLightSourceSlider_->setEnabled(
+            accessoryControlsIdle && embeddedLightSourceAvailable_ &&
+            embeddedLightSourceStateKnown_);
+        embeddedLightSourceApplyButton_->setEnabled(
+            accessoryControlsIdle && embeddedLightSourceAvailable_ &&
+            embeddedLightSourceStateKnown_);
+        filterWheelPositionSelector_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_ &&
+            filterWheelStateKnown_ && !filterWheelMoving_);
+        filterWheelDirectionSelector_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_ &&
+            filterWheelStateKnown_ && !filterWheelMoving_);
+        filterWheelMoveButton_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_ &&
+            filterWheelStateKnown_ && !filterWheelMoving_);
+        filterWheelRefreshButton_->setEnabled(
+            accessoryControlsIdle && filterWheelAvailable_);
+
+        triggerGroup_->setEnabled(
+            (open || streaming) && !triggerConfigurationReadPending_ &&
+            !triggerOperationPending_);
+        triggerModeSelector_->setEnabled(open && triggerPanelAvailable_ &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerSourceSelector_->setEnabled(open && triggerPanelAvailable_ &&
+            selectedTriggerModeUsesExternalSource() &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerHeartbeatInterval_->setEnabled(open && triggerPanelAvailable_ &&
+            triggerModeSelector_->currentIndex() >= 0 &&
+            triggerModeSelector_->currentData().toInt() !=
+                static_cast<int>(amscope::AmcamTriggerMode::Video) &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerApplyButton_->setEnabled(open && triggerPanelAvailable_ &&
+            triggerModeSelector_->currentIndex() >= 0 &&
+            (!selectedTriggerModeUsesExternalSource() ||
+             triggerSourceSelector_->currentIndex() >= 0) &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        triggerRefreshButton_->setEnabled(
+            (open || streaming) && triggerPanelAvailable_ &&
+            !triggerConfigurationReadPending_ && !triggerOperationPending_);
+        softwareTriggerCount_->setEnabled(streaming &&
+            triggerConfigurationKnown_ && currentTriggerConfiguration_.has_value() &&
+            configurationAllowsSoftwareTrigger(*currentTriggerConfiguration_) &&
+            !triggerOperationPending_ && !triggerConfigurationReadPending_);
+        softwareTriggerButton_->setEnabled(streaming &&
+            triggerConfigurationKnown_ && currentTriggerConfiguration_.has_value() &&
+            configurationAllowsSoftwareTrigger(*currentTriggerConfiguration_) &&
+            !triggerOperationPending_ && !triggerConfigurationReadPending_);
+    }
+
     amscope::QtAmcamCamera camera_;
     camera::FrameRateEstimator previewFrameRateEstimator_;
     std::optional<double> previewFramesPerSecond_;

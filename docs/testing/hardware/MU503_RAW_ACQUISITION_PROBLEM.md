@@ -317,6 +317,37 @@ The probe now:
 
 The removal behavior applies only to the probe's documented generated output path. Copy any prior capture before starting another run.
 
+### 6.3 Follow-up capture after event decoding — 2026-11-23
+
+The user repeated the dark and illuminated sequence captures after pulling commit `26b8cd2`, which added trigger, exposure, callback-thread, frame-info validity, callback-event histogram, and stale-artifact diagnostics.
+
+Both captures reported:
+- Trigger mode = 0 (video).
+- Configured exposure = 70,000 µs.
+- Actual exposure = 70,000 µs.
+- Dedicated callback thread = 0 (disabled; callbacks use the SDK's internal thread).
+- `Amcam_StartPullModeWithCallback` succeeded.
+- No `AMCAM_EVENT_IMAGE`, SDK error, disconnect, or frame/packet timeout event.
+- Software dropped-frame counter remained 0.
+- Callback histogram = `0x1=3`.
+- RAW mode restoration succeeded.
+
+No RAW payload file was produced in either run. The shell copy commands consequently failed, confirming that stale-output deletion prevented a previous capture from being mislabeled as a new one.
+
+**Event decoding:** the bundled SDK header defines `AMCAM_EVENT_EXPOSURE = 0x0001` as an exposure-time or gain change. The SDK HTML event table describes it as an exposure-time change. It is a settings-change notification, **not** an image-arrival notification. The image-arrival event is `AMCAM_EVENT_IMAGE = 0x0004`. Therefore the three callbacks do not represent three frames; the callback stream is reporting exposure changes while no image event is delivered.
+
+**What is now established:** the device is configured for video acquisition and reports a 70 ms actual exposure, yet the pull-mode callback does not report image arrival within 30 seconds. Exposure duration alone cannot explain the 30-second absence of image events. The absence of SDK error/timeout events does not prove the sensor is streaming; both no-frame and no-packet timeout options default to disabled in the SDK.
+
+**What remains unknown:** whether auto exposure is enabled, whether analog gain or exposure changes during the run, whether the official AmScope application can acquire normally, and whether the failure is specific to RAW mode or affects processed RGB acquisition too.
+
+The next diagnostic code revision adds read-only auto-exposure state reads before and after acquisition:
+- `Amcam_get_AutoExpoEnable`
+- `Amcam_get_ExpoAGain`
+- `AMCAM_OPTION_AUTOEXPO_TRIGGER`
+- `AMCAM_OPTION_AUTOEXPO_CONV`
+
+The callback histogram now prints symbolic event names alongside numeric codes. No auto-exposure, trigger, timeout, or callback-thread setting is changed by this diagnostic.
+
 ## 7. Required next investigation
 
 ### Gate A — Establish whether the camera works in the official application

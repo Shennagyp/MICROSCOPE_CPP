@@ -1150,6 +1150,33 @@ private:
                     featureControls_.size() - availableControlCount;
                 QString status = QString("%1 available feature(s).")
                     .arg(static_cast<qulonglong>(availableControlCount));
+                const auto bitDepth = std::find_if(
+                    descriptors.begin(), descriptors.end(),
+                    [](const camera::CameraFeatureDescriptor& descriptor) {
+                        return descriptor.name ==
+                            std::string(camera::RawOutputBitDepthFeature);
+                    });
+                if (bitDepth != descriptors.end()) {
+                    status += QString(
+                        " Sensor Output Bit Depth: available=%1, writable=%2, "
+                        "readable=%3, values=[%4].")
+                        .arg(bitDepth->isAvailable ? "yes" : "no")
+                        .arg(bitDepth->isWritable ? "yes" : "no")
+                        .arg(bitDepth->isReadable ? "yes" : "no")
+                        .arg([&bitDepth]() {
+                            QStringList values;
+                            for (const auto value : bitDepth->discreteIntegerValues)
+                                values.push_back(QString::number(
+                                    static_cast<qlonglong>(value)));
+                            return values.join(", ");
+                        }());
+                    if (bitDepth->disabledReason) {
+                        status += " " +
+                            QString::fromStdString(*bitDepth->disabledReason);
+                    }
+                } else {
+                    status += " Sensor Output Bit Depth descriptor is missing.";
+                }
                 if (shownUnavailableCount != 0) {
                     status += QString(
                         " %1 unavailable diagnostic feature(s) shown disabled.")

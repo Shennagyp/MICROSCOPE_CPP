@@ -46,6 +46,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -108,9 +109,18 @@ QString amcamPixelFormatLabel(const std::string& symbol) {
 
 QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
     if (!descriptor.numericRange) return {};
-    return QStringLiteral("%1 … %2")
-        .arg(descriptor.numericRange->minimum, 0, 'g', 12)
-        .arg(descriptor.numericRange->maximum, 0, 'g', 12);
+    return std::visit([](const auto& range) {
+        using Range = std::decay_t<decltype(range)>;
+        if constexpr (std::is_same_v<Range, camera::CameraIntegerRange>) {
+            return QStringLiteral("%1 … %2")
+                .arg(static_cast<qlonglong>(range.minimum))
+                .arg(static_cast<qlonglong>(range.maximum));
+        } else {
+            return QStringLiteral("%1 … %2")
+                .arg(range.minimum, 0, 'g', 12)
+                .arg(range.maximum, 0, 'g', 12);
+        }
+    }, *descriptor.numericRange);
 }
 
 QString pixelFormatName(camera::PixelFormat format) {
@@ -1362,14 +1372,15 @@ private:
             break;
         }
         case camera::CameraFeatureKind::FloatingPoint: {
-            if (descriptor.numericRange) {
+            const auto* range = descriptor.numericRange
+                ? std::get_if<camera::CameraFloatingPointRange>(
+                      &*descriptor.numericRange)
+                : nullptr;
+            if (range) {
                 auto* control = new QDoubleSpinBox(featureTabs_);
                 control->setDecimals(12);
-                control->setRange(
-                    descriptor.numericRange->minimum,
-                    descriptor.numericRange->maximum);
-                control->setSingleStep(
-                    descriptor.numericRange->increment.value_or(1.0));
+                control->setRange(range->minimum, range->maximum);
+                control->setSingleStep(range->increment.value_or(1.0));
                 control->setKeyboardTracking(false);
                 connect(control, &QDoubleSpinBox::editingFinished, this,
                         [this, name = descriptor.name]() {
@@ -1378,7 +1389,11 @@ private:
                 editor = control;
             } else {
                 auto* control = new QLineEdit(featureTabs_);
-                control->setPlaceholderText("Numeric value");
+                control->setReadOnly(descriptor.numericRange.has_value());
+                control->setPlaceholderText(
+                    descriptor.numericRange
+                        ? "Invalid floating-point range descriptor"
+                        : "Numeric value");
                 connect(control, &QLineEdit::editingFinished, this,
                         [this, name = descriptor.name]() {
                     submitFeatureWrite(name);

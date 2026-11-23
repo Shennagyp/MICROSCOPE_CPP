@@ -209,12 +209,13 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   macOS CI runs these tests before checking SDK and library artifacts.
 - Application-owned delivered libraries use camera_-prefixed artifact names;
   the original Amcam SDK library remains libamcam.dylib.
-- The backend-neutral `Camera::Qt` target provides `camera::qt::FrameStream`,
-  a one-frame latest mailbox with coalesced notification on the stream QObject
-  affinity thread. It has no camera, SDK, lifecycle, or operation-queue ownership.
-- `QtAmcamCamera` composes one `AmcamCamera` with that stream. It executes device
-  enumeration, lifecycle, and feature descriptor/read/write requests on one
-  bounded, serialized worker and delivers
+- `Camera::Qt` provides the header-only `camera::qt::FrameStreamMailbox`
+  primitive used by Qt adapters. The mailbox owns only the immutable latest-frame
+  lease and notification-pending state; QObject notification remains with the
+  adapter. It adds no camera, session, worker, or operation-queue ownership.
+- `QtAmcamCamera` composes one `AmcamCamera` and embeds this mailbox by value. It
+  executes device enumeration, lifecycle, and feature descriptor/read/write
+  requests on one bounded, serialized worker and delivers
   completions on its Qt affinity thread. GUI Refresh/Open/Start/Stop/Close use
   this queue instead of blocking the UI.
   Lifecycle requests remain FIFO; session generations invalidate old-session
@@ -527,25 +528,14 @@ uses @loader_path for runtime resolution.
 
 ## Qt frame handoff
 
-The AmScope facade exposes the backend-neutral stream as
-`QtAmcamCamera::frameStream()`. Connect its signal to the consumer/render thread,
-then take the latest immutable frame lease in that slot:
+Connect `QtAmcamCamera::frameAvailable()` to a slot on the consumer/render
+thread with `Qt::QueuedConnection`. In that slot call `takeLatestFrame()` and
+keep the returned `FramePtr` alive for the complete period in which the renderer
+reads its pixels, then release it.
 
-```cpp
-QObject::connect(
-    &camera.frameStream(),
-    &camera::qt::FrameStream::frameAvailable,
-    &consumer,
-    [&camera]() {
-        camera::FramePtr frame = camera.frameStream().takeLatestFrame();
-        // Keep frame alive while the renderer reads frame->pixels.
-    },
-    Qt::QueuedConnection);
-```
-
-`Camera::Qt` depends only on `Camera::Common` and Qt Core, not on the Amcam SDK.
-`Amscope::Qt` composes it with the native driver. Keep the returned `FramePtr`
-alive while the renderer reads its pixels, then release it.
+`Camera::Qt` supplies the header-only `FrameStreamMailbox` mechanism. The
+AmScope adapter embeds it directly while keeping the QObject signal, queued
+notification, and consumer API on `QtAmcamCamera`.
 
 The mailbox is preview-oriented and freshness-first; it is not an ordered
 recording/processing queue. A later recording path needs its own bounded queue

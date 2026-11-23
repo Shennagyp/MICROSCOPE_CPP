@@ -19,11 +19,12 @@
 #include <variant>
 
 Q_DECLARE_METATYPE(amscope::CameraState)
+Q_DECLARE_METATYPE(amscope::FramePtr)
 
 namespace amscope {
 
 // AmScope-specific Qt operation facade. AmcamCamera remains the sole native
-// session owner; generic frame handoff is delegated to camera::qt::FrameStream.
+// session owner; frame mailbox mechanics are shared through Camera::Qt.
 //
 // The synchronous ICameraFeatureAccess and lifecycle methods are available
 // for direct non-GUI consumers. The first accepted operation commits this
@@ -130,9 +131,7 @@ public:
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] std::uint64_t framesPulled() const noexcept;
     [[nodiscard]] std::uint64_t imageEventsReceived() const noexcept;
-    [[nodiscard]] camera::qt::FrameStream& frameStream() noexcept {
-        return *frameStream_;
-    }
+    [[nodiscard]] FramePtr takeLatestFrame();
 
     // Synchronous command/telemetry entry points are for non-GUI consumers.
     // GUI callers should use the asynchronous request methods below.
@@ -245,6 +244,7 @@ public:
         const camera::CameraFeatureValue& value) override;
 
 signals:
+    void frameAvailable();
     void stateChanged(amscope::CameraState state);
     void errorOccurred(const QString& message, qint32 vendorCode);
 
@@ -305,13 +305,13 @@ private:
     void publishLatestFrame(
         FramePtr frame,
         const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate);
-    void clearFrameMailbox();
-    void emitError(const CameraError& error);
+    void queueFrameNotification();
+    void clearFrameMailbox();    void emitError(const CameraError& error);
 
     static constexpr std::size_t kMaximumPendingFeatureRequests = 256;
 
     AmcamCamera camera_;
-    camera::qt::FrameStream* frameStream_ = nullptr;
+    camera::qt::FrameStreamMailbox frameStreamMailbox_;
     std::shared_ptr<detail::AcquisitionFrameGate> acquisitionFrameGate_;
 
     // All calls into camera_ are serialized at this facade boundary. The

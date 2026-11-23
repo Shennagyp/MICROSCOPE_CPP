@@ -11,14 +11,13 @@ endif()
 if(NOT TARGET Qt6::Core)
     find_package(Qt6 6.2 REQUIRED COMPONENTS Core)
 endif()
-add_library(camera_qt_core src/FrameStream.cpp include/camera/qt/FrameStream.h)
+add_library(camera_qt_core INTERFACE)
 add_library(Camera::Qt ALIAS camera_qt_core)
-set_target_properties(camera_qt_core PROPERTIES AUTOMOC ON OUTPUT_NAME "camera_qt_core")
-target_compile_features(camera_qt_core PUBLIC cxx_std_17)
-target_include_directories(camera_qt_core PUBLIC
+target_compile_features(camera_qt_core INTERFACE cxx_std_17)
+target_include_directories(camera_qt_core INTERFACE
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
     "$<INSTALL_INTERFACE:include>")
-target_link_libraries(camera_qt_core PUBLIC Camera::Common Qt6::Core)
+target_link_libraries(camera_qt_core INTERFACE Camera::Common Qt6::Core)
 if(BUILD_TESTING)
     add_executable(camera_qt_frame_stream_tests tests/FrameStreamTests.cpp)
     target_compile_features(camera_qt_frame_stream_tests PRIVATE cxx_std_17)
@@ -26,7 +25,4 @@ if(BUILD_TESTING)
     add_test(NAME camera_qt_frame_stream_tests COMMAND camera_qt_frame_stream_tests)
 endif()
 include(GNUInstallDirs)
-install(TARGETS camera_qt_core
-    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")

@@ -587,7 +587,7 @@ public:
         connect(softwareTriggerButton_, &QPushButton::clicked,
                 this, [this]() { sendSoftwareTrigger(); });
 
-        connect(&camera_.frameStream(), &camera::qt::FrameStream::frameAvailable,
+        connect(&camera_, &amscope::QtAmcamCamera::frameAvailable,
                 this, [this]() {
             presentLatestFrame();
         });
@@ -1832,7 +1832,7 @@ private:
     }
 
     void presentLatestFrame() {
-        amscope::FramePtr frame = camera_.frameStream().takeLatestFrame();
+        amscope::FramePtr frame = camera_.takeLatestFrame();
         if (!frame || frame->data() == nullptr ||
             frame->width == 0 || frame->height == 0) {
             return;

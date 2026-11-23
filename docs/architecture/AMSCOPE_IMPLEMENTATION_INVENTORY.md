@@ -138,13 +138,13 @@ The Amcam implementation caches its full descriptor inventory per camera state; 
 | Feature-state generation | Implemented | Partially covered | Test feature descriptor invalidation after real dependent writes |
 | UI callback delivered on QObject affinity thread | Implemented | Qt request tests | Hardware regression |
 | Synchronous vs queued mode commitment | Implemented | Qt request tests verify a queued instance rejects synchronous feature access and a synchronous instance rejects queued requests | No additional Phase 3 work identified for mode exclusion |
-| Latest-frame mailbox / Qt notification | Extracted to backend-neutral `Camera::Qt` as `camera::qt::FrameStream` | Dedicated `camera_qt_frame_stream_tests` covers latest lease, notification coalescing/re-arm, in-flight publication guard, mailbox clear, and QObject affinity | Physical high-rate frame delivery remains part of integrated hardware qualification |
+| Latest-frame mailbox / Qt notification | Embedded header-only `camera::qt::FrameStreamMailbox` from `Camera::Qt`; original `QtAmcamCamera` signal/notification target retained | Dedicated `camera_qt_frame_stream_tests` covers latest lease, notification coalescing/re-arm, in-flight publication guard, clear, and Qt affinity | Physical high-rate frame delivery remains part of integrated hardware qualification |
 | Descriptor-driven feature editor | Implemented | Preview compile; common validation tests | Extract reusable UI widgets |
 | Trigger panel | Implemented | Preview compile | Hardware UI test |
 | Lens focus/aperture panel | Implemented | Preview compile | Hardware/accessory test |
 | Accessory panels | Partial | Preview source | Add missing native I/O UI if required |
 | Separate `camera_amscope_control` | Intentionally not introduced | `AmcamCamera` already provides the non-Qt programmatic feature/command surface | A forwarding-only target would duplicate the existing API without establishing a new ownership boundary |
-| Separate Qt streaming library | Implemented in this Phase 3 slice as `Camera::Qt` / `camera::qt::FrameStream` | Dedicated unit test target; focused build/test pending | Owns only latest-frame handoff and QObject notification; no camera/session/request ownership |
+| Separate Qt streaming mechanism | Implemented in `Camera::Qt` as header-only `FrameStreamMailbox`, embedded by value in `QtAmcamCamera` | Dedicated unit test target; focused build/test pending | No runtime stream QObject, per-camera stream allocation, extra worker, or notification queue; signal remains on `QtAmcamCamera` |
 | Reusable `camera_ui_qt` | Not delivered | None | Extract widgets from `PreviewWindow` |
 
 ## 8. Explicitly deferred or absent
@@ -166,7 +166,7 @@ Additional target-architecture gaps:
 
 - Existing GenTL/GenApi C++ runtime dependency and CTI adapter are absent from this branch.
 - Backend-neutral camera identity/capability/frame models are not fully extracted from `amscope`.
-- `Amscope::Driver` remains a non-Qt target containing the native Amcam session and programmatic control/command API. `Camera::Qt` isolates backend-neutral Qt frame delivery; `Amscope::Qt` composes both. No forwarding-only control target is planned.
+- `Amscope::Driver` remains a non-Qt target containing the native Amcam session and programmatic control/command API. `Camera::Qt` supplies the header-only backend-neutral mailbox; `Amscope::Qt` embeds it without a second runtime stream object. No forwarding-only control target is planned.
 - Reusable backend-neutral UI library is not delivered.
 - Exported CMake package and clean external-consumer qualification are missing.
 - Vendor SDK redistribution terms have not been established in this inventory.

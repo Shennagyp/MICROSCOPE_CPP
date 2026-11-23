@@ -54,9 +54,9 @@ QtAmcamCamera::QtAmcamCamera(QObject* parent)
 QtAmcamCamera::QtAmcamCamera(
     AmcamCameraProfileRegistry profiles,
     QObject* parent)
-    : QObject(parent), camera_(std::move(profiles)),
-      frameStream_(new camera::qt::FrameStream(this)) {
+    : QObject(parent), camera_(std::move(profiles)) {
     qRegisterMetaType<amscope::CameraState>("amscope::CameraState");
+    qRegisterMetaType<amscope::FramePtr>("amscope::FramePtr");
     featureWorker_ = std::thread([this]() { runFeatureWorker(); });
 }
 
@@ -445,6 +445,11 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStop(
                 requestId, std::move(callback), std::move(result));
         },
         FeatureRequestSemantics::LifecycleMutation);
+}
+
+FramePtr QtAmcamCamera::takeLatestFrame() {
+    return frameStreamMailbox_.takeLatestFrame(
+        [this]() noexcept { queueFrameNotification(); });
 }
 
 CameraState QtAmcamCamera::state() const noexcept { return camera_.state(); }
@@ -1974,17 +1979,26 @@ void QtAmcamCamera::dispatchToOwnerThread(std::function<void()> callback) {
 void QtAmcamCamera::publishLatestFrame(
     FramePtr frame,
     const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate) {
-    frameStream_->publishFrame(
+    // Callbacks run synchronously. Capture the existing gate by reference to
+    // avoid a per-frame shared_ptr copy/refcount operation.
+    frameStreamMailbox_.publishFrame(
         std::move(frame),
-        [this, frameGate]() noexcept {
+        [this, &frameGate]() noexcept {
             return frameGate &&
                 frameGate->accepts(
                     sessionGeneration_.load(std::memory_order_acquire));
-        });
+        },
+        [this]() noexcept { queueFrameNotification(); });
+}
+
+void QtAmcamCamera::queueFrameNotification() {
+    QMetaObject::invokeMethod(this, [this]() {
+        emit frameAvailable();
+    }, Qt::QueuedConnection);
 }
 
 void QtAmcamCamera::clearFrameMailbox() {
-    frameStream_->clear();
+    frameStreamMailbox_.clear();
 }
 
 void QtAmcamCamera::emitError(const CameraError& error) {

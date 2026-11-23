@@ -75,8 +75,8 @@ unsigned rawMaximumBitDepth(HAmcam handle, std::uint64_t modelFlags) {
     return std::max(sdkMaximum, rawMaximumBitDepthFromModelFlags(modelFlags));
 }
 
-// Pixel-format enumeration is the authoritative source for discrete RAW
-// output precision on SDK v20+. The legacy BITDEPTH option exposes only
+// Pixel-format enumeration is the authoritative source for discrete RAW /
+// sensor-mosaic output precision on SDK v20+. The legacy BITDEPTH option exposes only
 // 8-bit versus camera-maximum and cannot represent intermediate depths.
 std::optional<unsigned> rawPixelFormatBitDepth(int pixelFormat) {
     switch (pixelFormat) {
@@ -151,10 +151,17 @@ std::optional<int> rawPixelFormatForBitDepth(
 
 std::optional<unsigned> rawBitDepthForPixelFormat(
     const std::vector<RawPixelFormatChoice>& choices,
+    const std::vector<int>& supportedPixelFormats,
     int pixelFormat) {
     // The selected format may be an alternate representation of a depth
     // (notably RAW12PACK) even when the bit-depth selector prefers another
-    // canonical format for writes. Read every supported representation.
+    // canonical format for writes. Require the exact current format to be in
+    // the live SDK list before accepting its precision.
+    if (std::find(supportedPixelFormats.begin(),
+                  supportedPixelFormats.end(), pixelFormat) ==
+        supportedPixelFormats.end()) {
+        return std::nullopt;
+    }
     const auto bitDepth = rawPixelFormatBitDepth(pixelFormat);
     if (!bitDepth)
         return std::nullopt;
@@ -549,7 +556,7 @@ buildAmcamFeatureDescriptors(
         : rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
     const bool rawCurrentFormatIsDepth =
         SUCCEEDED(currentPixelFormatHr) &&
-        rawBitDepthForPixelFormat(rawPixelChoices, currentPixelFormat).has_value();
+        rawBitDepthForPixelFormat(rawPixelChoices, supportedPixelFormatCodes, currentPixelFormat).has_value();
     const bool rawBitDepthReadable = modernPixelFormatApiAvailable
         ? rawCurrentFormatIsDepth
         : SUCCEEDED(rawBitDepthModeHr) &&
@@ -572,7 +579,7 @@ buildAmcamFeatureDescriptors(
     std::optional<std::string> rawBitDepthDisabledReason;
     if (modernPixelFormatApiAvailable && rawPixelChoices.empty()) {
         rawBitDepthDisabledReason =
-            "The SDK pixel-format list contains no selectable RAW precision formats.";
+            "The SDK pixel-format list contains no selectable RAW or sensor-mosaic precision formats.";
     } else if (!modernPixelFormatApiAvailable && !rawMaximumBitDepthValid) {
         rawBitDepthDisabledReason =
             "The SDK did not report a valid maximum sensor bit depth.";
@@ -4958,7 +4965,7 @@ AmcamCamera::readFeature(std::string_view name) {
                 return featureBackendError(
                     std::string(name), "Amcam_get_Option(PIXEL_FORMAT)", currentHr);
             const auto selectedDepth =
-                rawBitDepthForPixelFormat(choices, currentFormat);
+                rawBitDepthForPixelFormat(choices, supportedFormats, currentFormat);
             if (!selectedDepth)
                 return featureError(
                     CameraFeatureAccessError::Code::FeatureNotReadable,

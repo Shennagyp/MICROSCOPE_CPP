@@ -1,8 +1,8 @@
 # AmScope Native Camera Module — Revised Implementation and Release Plan
 
 **Revision date:** 23 November 2026  
-**Target branch:** `amscope-native-driver-0.5`  
-**Revision baseline:** `f18cd67087e5174fe1181e8537b8034539efb745`  
+**Target branch:** `amscope-native-driver-0.6`  
+**Revision baseline:** `bd4ecfbb4afc7744d5f08dd3e721609e22da48b5`  
 **Language/runtime:** C++17, Qt 6, macOS  
 **Status:** Active release plan. This document supersedes the earlier phase sequence in `AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md`.
 
@@ -96,22 +96,23 @@ No more work is scheduled for comparing `WaitImageV3` against the production pat
 
 ### Phase 2 — Close the common camera contract
 
-**Status: IN PROGRESS; source model and automated tests substantially implemented**
+**Status: IN PROGRESS; public type ownership audit documented; typed numeric ranges implemented on v0.6; automated verification and physical frame verification pending**
 
-The common layer already has discovery identity/capabilities, common frame/payload metadata, typed feature descriptors/values/errors/results, feature validation, and host frame-rate estimation.
+The common layer already contains discovery identity/capabilities, common frame/payload metadata, typed feature descriptors/values/errors/results, feature validation, and host frame-rate estimation. The public-type ownership decisions are recorded in [CAMERA_COMMON_TYPE_OWNERSHIP.md](CAMERA_COMMON_TYPE_OWNERSHIP.md).
+
+The v0.6 implementation corrects a type mismatch in common feature ranges: integer feature bounds/increments now use exact `int64_t` values, while floating-point features retain `double` ranges. Validation requires the range alternative to match the descriptor kind and avoids signed overflow during integer increment alignment. The Qt editor and Amcam descriptor construction use the corresponding typed range.
 
 Remaining work:
 
-1. Audit public types and document their semantic owner.
-2. Keep genuinely shared feature and frame semantics in `Camera/Common`.
+1. Build the v0.6 branch and run the common feature/model/frame tests plus the full CTest suite.
+2. Review any regression caused by the public numeric-range type change; it is an intentional v0.6 API change before package stability.
 3. Keep AmScope SDK errors, camera states, trigger/I/O enums, accessory state, Amcam FourCC, and other vendor-specific concepts in `amscope` unless a second real backend demonstrates an exact shared meaning.
-4. Do not introduce a universal camera lifecycle/state model or a generic operation-error hierarchy merely to satisfy the old checklist. The current common feature error contract is already backend-neutral; `CameraError` remains the AmScope operation/SDK error at this release boundary.
-5. Verify the common frame adapter with a real MU503 frame: dimensions, pixel layout, stride, byte count, and the availability/absence of optional sequence, timestamp, and exposure fields. Verify RAW identity/significant depth/storage width only if the tested device and selected mode actually support it. Record unsupported or unavailable fields honestly.
+4. Verify the common frame adapter with a real MU503 frame: dimensions, pixel layout, stride, byte count, and the availability/absence of optional sequence, timestamp, and exposure fields. The native-only probe now reports the first delivered common frame's metadata. Verify RAW identity/significant depth/storage width only if the tested device and selected mode actually support it. Record unsupported or unavailable fields honestly.
 
 **Exit criteria**
 
 - `Camera/Common` compiles without Amcam or Qt dependencies.
-- Common contract tests pass (currently included in the 11-test CTest suite).
+- Common contract tests pass, including exact integer range checks above (2^{53}) and signed-domain increment validation.
 - The physical frame observation agrees with the common frame contract.
 - No duplicate or invented common abstraction remains.
 
@@ -266,7 +267,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 |---|---|---|
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
-| 2 | Common camera contract closure | IN PROGRESS; implementation/tests substantially present; common-frame hardware verification remains |
+| 2 | Common camera contract closure | IN PROGRESS; public type ownership documented; integer ranges made type-exact; v0.6 build/CTest verification pending; common-frame hardware verification remains |
 | 3 | Native control / Qt streaming boundaries | PARTIALLY PRESENT; finalize and test without duplicate ownership |
 | 4 | Reusable Qt camera UI | OPEN |
 | 5 | AmScope feature/model claim reconciliation | OPEN |

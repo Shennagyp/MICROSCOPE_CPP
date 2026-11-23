@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -28,6 +29,76 @@ void printUsage(const char* executable) {
     std::cerr << "Usage: " << executable
               << " [--device-id ID] [--seconds N]\n"
               << "When exactly one camera is connected, --device-id may be omitted.\n";
+}
+
+const char* pixelFormatName(amscope::PixelFormat format) {
+    switch (format) {
+    case amscope::PixelFormat::Unknown: return "Unknown";
+    case amscope::PixelFormat::RGB24: return "RGB24";
+    case amscope::PixelFormat::Raw8: return "Raw8";
+    case amscope::PixelFormat::Raw16: return "Raw16";
+    }
+    return "Unknown";
+}
+
+struct FrameSnapshot {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::uint32_t strideBytes = 0;
+    amscope::PixelFormat pixelFormat = amscope::PixelFormat::Unknown;
+    std::optional<camera::PixelFormatIdentifier> pixelFormatIdentifier;
+    std::uint8_t significantBitsPerPixel = 0;
+    std::uint8_t storageBitsPerPixel = 0;
+    std::size_t byteSize = 0;
+    std::optional<std::uint64_t> sequenceNumber;
+    std::optional<camera::FrameTimestamp> timestamp;
+    std::optional<camera::FrameExposure> exposure;
+};
+
+void printFrameSnapshot(const FrameSnapshot& frame) {
+    std::cout << "FRAME"
+              << " width=" << frame.width
+              << " height=" << frame.height
+              << " stride_bytes=" << frame.strideBytes
+              << " byte_size=" << frame.byteSize
+              << " pixel_format=" << pixelFormatName(frame.pixelFormat)
+              << " significant_bits=" << static_cast<unsigned>(frame.significantBitsPerPixel)
+              << " storage_bits=" << static_cast<unsigned>(frame.storageBitsPerPixel);
+
+    if (frame.pixelFormatIdentifier) {
+        std::cout << " format_scheme=" << frame.pixelFormatIdentifier->scheme
+                  << " format_value=0x" << std::hex
+                  << frame.pixelFormatIdentifier->value << std::dec;
+    } else {
+        std::cout << " format_identifier=unavailable";
+    }
+
+    if (frame.sequenceNumber)
+        std::cout << " sequence=" << *frame.sequenceNumber;
+    else
+        std::cout << " sequence=unavailable";
+
+    if (frame.timestamp) {
+        std::cout << " timestamp_ticks=" << frame.timestamp->ticks
+                  << " timestamp_ticks_per_second="
+                  << frame.timestamp->ticksPerSecond
+                  << " clock_domain=";
+        if (frame.timestamp->clockDomain)
+            std::cout << *frame.timestamp->clockDomain;
+        else
+            std::cout << "unknown";
+    } else {
+        std::cout << " timestamp=unavailable";
+    }
+
+    if (frame.exposure) {
+        std::cout << " exposure_ticks=" << frame.exposure->durationTicks
+                  << " exposure_ticks_per_second="
+                  << frame.exposure->ticksPerSecond;
+    } else {
+        std::cout << " exposure=unavailable";
+    }
+    std::cout << "\n";
 }
 
 } // namespace
@@ -98,6 +169,8 @@ int main(int argc, char** argv) {
     }
 
     std::atomic<std::uint64_t> frameCount{0};
+    std::mutex frameSnapshotMutex;
+    std::optional<FrameSnapshot> firstFrame;
     std::atomic<bool> hasSequence{false};
     std::atomic<std::uint64_t> firstSequence{0};
     std::atomic<std::uint64_t> lastSequence{0};
@@ -115,10 +188,30 @@ int main(int argc, char** argv) {
 
     const auto runStarted = std::chrono::steady_clock::now();
     const bool started = camera.start(
-        [&frameCount, &hasSequence, &firstSequence, &lastSequence, &lastFrameTimeNs](
+        [&frameCount, &frameSnapshotMutex, &firstFrame,
+         &hasSequence, &firstSequence, &lastSequence, &lastFrameTimeNs](
             amscope::FramePtr frame) {
             if (!frame) return;
             frameCount.fetch_add(1, std::memory_order_relaxed);
+
+            {
+                std::lock_guard<std::mutex> lock(frameSnapshotMutex);
+                if (!firstFrame) {
+                    firstFrame = FrameSnapshot{
+                        frame->width,
+                        frame->height,
+                        frame->strideBytes,
+                        frame->pixelFormat,
+                        frame->pixelFormatIdentifier,
+                        frame->significantBitsPerPixel,
+                        frame->storageBitsPerPixel,
+                        frame->byteSize(),
+                        frame->sequenceNumber,
+                        frame->timestamp,
+                        frame->exposure
+                    };
+                }
+            }
             if (frame->sequenceNumber) {
                 const auto sequence = *frame->sequenceNumber;
                 if (!hasSequence.load(std::memory_order_relaxed))
@@ -206,6 +299,14 @@ int main(int argc, char** argv) {
     const std::uint64_t totalFrames = frameCount.load(std::memory_order_relaxed);
     const std::uint64_t lastFrameNs =
         lastFrameTimeNs.load(std::memory_order_relaxed);
+
+    {
+        std::lock_guard<std::mutex> lock(frameSnapshotMutex);
+        if (firstFrame)
+            printFrameSnapshot(*firstFrame);
+        else
+            std::cout << "FRAME metadata=unavailable(no frame received)\\n";
+    }
 
     std::cout << "RESULT duration_ms=" << elapsed
               << " frames=" << totalFrames

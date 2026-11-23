@@ -77,7 +77,7 @@ int main() {
                 std::get<camera::CameraOperationError>(typedRateResult).native->code ==
                     nativeError.vendorCode,
             "typed operation result carries the converted native error without loss");
-    require(commonError.code == camera::CameraErrorCode::BackendFailure &&
+    require(commonError.code == nativeError.commonCode &&
                 commonError.operation == "camera.start" &&
                 commonError.message == "SDK rejected acquisition startup",
             "AmScope operation errors map to a common category with operation context");

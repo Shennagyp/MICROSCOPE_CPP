@@ -39,6 +39,9 @@ struct CameraError {
     std::int32_t vendorCode = 0;
     std::string operation;
     std::string message;
+    // Classified only from documented Amcam HRESULT meanings. Unknown native
+    // codes remain BackendFailure; vendor identity is preserved separately.
+    camera::CameraErrorCode commonCode = camera::CameraErrorCode::BackendFailure;
 };
 
 // Explicit boundary conversion for operation-level APIs. The native code is
@@ -46,7 +49,7 @@ struct CameraError {
 [[nodiscard]] inline camera::CameraOperationError toCommonOperationError(
     const CameraError& error) {
     camera::CameraOperationError common;
-    common.code = camera::CameraErrorCode::BackendFailure;
+    common.code = error.commonCode;
     common.operation = error.operation;
     common.message = error.message;
     common.native = camera::CameraNativeError{"amcam.sdk", error.vendorCode};

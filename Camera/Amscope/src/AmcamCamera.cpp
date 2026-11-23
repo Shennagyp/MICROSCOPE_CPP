@@ -6,6 +6,7 @@
 #include "amscope/detail/FrameStallWatchdog.h"
 #include "camera/CameraFeatureValidation.h"
 #include "AmcamPixelFormatSelection.h"
+#include "AmcamErrorMapping.h"
 
 #include <algorithm>
 #include <atomic>
@@ -44,6 +45,7 @@ bool fail(amscope::CameraError* out, const char* operation,
           std::int32_t code, std::string message) {
     if (out) {
         out->vendorCode = code;
+        out->commonCode = amscope::detail::commonCameraErrorCode(code);
         out->operation = operation ? operation : "";
         out->message = std::move(message);
     }

@@ -57,6 +57,7 @@ set_target_properties(amscope_vendor PROPERTIES IMPORTED_LOCATION "${AMSCOPE_VEN
 add_library(amscope_driver SHARED
     src/AmcamCamera.cpp
     src/AmcamPixelFormatSelection.h
+    src/AmcamErrorMapping.h
     src/AmcamCameraProfiles.cpp
     src/AmcamEventQueue.h
     src/AmcamSessionPrimitives.h
@@ -100,6 +101,17 @@ if(BUILD_TESTING)
     target_include_directories(amscope_camera_types_tests PRIVATE include)
     target_link_libraries(amscope_camera_types_tests PRIVATE Camera::Common)
     add_test(NAME amscope_camera_types_tests COMMAND amscope_camera_types_tests)
+
+    add_executable(amscope_error_mapping_tests
+        tests/AmcamErrorMappingTests.cpp
+        src/AmcamErrorMapping.h)
+    target_compile_features(amscope_error_mapping_tests PRIVATE cxx_std_17)
+    target_include_directories(amscope_error_mapping_tests PRIVATE
+        include
+        src
+        "${AMSCOPE_VENDOR_INCLUDE_DIR}")
+    target_link_libraries(amscope_error_mapping_tests PRIVATE Camera::Common)
+    add_test(NAME amscope_error_mapping_tests COMMAND amscope_error_mapping_tests)
 
     add_executable(amscope_pixel_format_selection_tests
         tests/AmcamPixelFormatSelectionTests.cpp

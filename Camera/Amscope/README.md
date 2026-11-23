@@ -46,8 +46,8 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   Fatal acquisition callbacks immediately invalidate their frame gate and
   clear the latest-frame mailbox. Publication checks the generation before and
   after its atomic store; if the generation changed during publication, a CAS
-  removes that stale lease without clearing a newer frame. The mailbox uses no lock. The fatal
-  session transition is then enqueued into the same FIFO as Stop/Close and feature
+  removes that stale lease without clearing a newer frame. The mailbox uses no lock.
+  The fatal session transition is then enqueued into the same FIFO as Stop/Close and feature
   requests. Earlier accepted lifecycle operations run first and may supersede
   the fault notification; later requests bind to the post-fault generation. The
   fatal event has a reserved control slot beyond the normal 256-request limit.

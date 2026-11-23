@@ -50,7 +50,7 @@ The default run remains strictly read-only. The RAW-mode run intentionally chang
 
 ## Interpreting the generic MU Series bit-depth manual
 
-The MU Series Windows manual documents an 8-bit/16-bit **software control**, but it is a series-wide manual and does not establish that every MU model supports 16-bit sensor output. In particular, a 16-bit image/storage representation is not proof of 16-bit source samples. For this camera, distinguish the manual's application control from the connected device's live SDK capabilities: model flags, `Amcam_get_MaxBitDepth`, RAW-mode pixel-format enumeration, and actual captured sample values. The manual's generic UI screenshot must not override a model-specific SDK result.
+The MU Series Windows manual documents an 8-bit/16-bit **camera bit-depth control**, but it is a series-wide manual and does not establish that every MU model supports both modes. The SDK header likewise defines the legacy `AMCAM_OPTION_BITDEPTH` option as 0 = 8-bit and 1 = 16-bit; however, the MU503 probe returned `0x80004001` (`E_NOTIMPL`) when reading that option. Its modern pixel-format enumeration reported only `RAW8`, and `Amcam_get_MaxBitDepth` returned 8, including with RAW mode enabled. Thus, the manual proves that an 8/16 control exists in the MU software family, not that this specific MU503 implements 16-bit output. A 16-bit image/storage representation would also not, by itself, prove 16-bit source samples.
 
 ## Compare with the application
 

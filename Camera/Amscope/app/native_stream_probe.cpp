@@ -44,6 +44,7 @@ const char* pixelFormatName(amscope::PixelFormat format) {
 struct FrameSnapshot {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    bool isStill = false;
     std::uint32_t strideBytes = 0;
     amscope::PixelFormat pixelFormat = amscope::PixelFormat::Unknown;
     std::optional<camera::PixelFormatIdentifier> pixelFormatIdentifier;
@@ -59,6 +60,7 @@ void printFrameSnapshot(const FrameSnapshot& frame) {
     std::cout << "FRAME"
               << " width=" << frame.width
               << " height=" << frame.height
+              << " is_still=" << (frame.isStill ? "true" : "false")
               << " stride_bytes=" << frame.strideBytes
               << " byte_size=" << frame.byteSize
               << " pixel_format=" << pixelFormatName(frame.pixelFormat)
@@ -200,6 +202,7 @@ int main(int argc, char** argv) {
                     firstFrame = FrameSnapshot{
                         frame->width,
                         frame->height,
+                        frame->isStill,
                         frame->strideBytes,
                         frame->pixelFormat,
                         frame->pixelFormatIdentifier,

@@ -32,7 +32,7 @@ namespace amscope::detail {
     case E_WRONG_THREAD:
         return camera::CameraErrorCode::InvalidState;
     case E_ACCESSDENIED:
-        return camera::CameraErrorCode::Unavailable;
+        return camera::CameraErrorCode::PermissionDenied;
     case E_GEN_FAILURE:
     case E_UNREACH:
         return camera::CameraErrorCode::TransportFailure;

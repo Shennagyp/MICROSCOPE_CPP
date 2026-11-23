@@ -25,7 +25,7 @@ int main() {
     static_assert(commonCameraErrorCode(E_BUSY) == CameraErrorCode::InvalidState);
     static_assert(commonCameraErrorCode(E_UNEXPECTED) == CameraErrorCode::InvalidState);
     static_assert(commonCameraErrorCode(E_WRONG_THREAD) == CameraErrorCode::InvalidState);
-    static_assert(commonCameraErrorCode(E_ACCESSDENIED) == CameraErrorCode::Unavailable);
+    static_assert(commonCameraErrorCode(E_ACCESSDENIED) == CameraErrorCode::PermissionDenied);
     static_assert(commonCameraErrorCode(E_GEN_FAILURE) == CameraErrorCode::TransportFailure);
     static_assert(commonCameraErrorCode(E_UNREACH) == CameraErrorCode::TransportFailure);
     static_assert(commonCameraErrorCode(E_PENDING) == CameraErrorCode::Unavailable);

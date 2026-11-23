@@ -22,7 +22,8 @@ enum class CameraErrorCode : std::uint8_t {
     DeviceDisconnected,
     TransportFailure,
     BackendFailure,
-    InternalFailure
+    InternalFailure,
+    PermissionDenied
 };
 
 // Backend details are preserved rather than translated into a fabricated

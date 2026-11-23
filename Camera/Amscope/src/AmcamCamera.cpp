@@ -42,10 +42,11 @@ constexpr int kPackedRows = -1;
 thread_local const void* g_acquisitionOwner = nullptr;
 
 bool fail(amscope::CameraError* out, const char* operation,
-          std::int32_t code, std::string message) {
+          std::int32_t code, std::string message,
+          camera::CameraErrorCode commonCode = camera::CameraErrorCode::BackendFailure) {
     if (out) {
         out->vendorCode = code;
-        out->commonCode = amscope::detail::commonCameraErrorCode(code);
+        out->commonCode = commonCode;
         out->operation = operation ? operation : "";
         out->message = std::move(message);
     }
@@ -59,7 +60,9 @@ std::string hrMessage(const char* operation, HRESULT hr) {
     return text.str();
 }
 bool failHr(amscope::CameraError* out, const char* operation, HRESULT hr) {
-    return fail(out, operation, static_cast<std::int32_t>(hr), hrMessage(operation, hr));
+    return fail(out, operation, static_cast<std::int32_t>(hr),
+                hrMessage(operation, hr),
+                amscope::detail::commonCameraErrorCode(static_cast<std::int32_t>(hr)));
 }
 
 // The SDK's model flags independently advertise supported RAW pixel depths.
@@ -2919,7 +2922,8 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
     std::lock_guard<std::mutex> api(impl_->apiMutex);
     if (!impl_->handle ||
         impl_->state.load(std::memory_order_acquire) != CameraState::Streaming)
-        return fail(error, "readFrameRate", -1, "Acquisition must be running.");
+        return fail(error, "readFrameRate", -1, "Acquisition must be running.",
+                    camera::CameraErrorCode::InvalidState);
     unsigned frames = 0, milliseconds = 0, total = 0;
     const HRESULT hr = Amcam_get_FrameRate(impl_->handle, &frames, &milliseconds, &total);
     if (FAILED(hr)) return failHr(error, "Amcam_get_FrameRate", hr);

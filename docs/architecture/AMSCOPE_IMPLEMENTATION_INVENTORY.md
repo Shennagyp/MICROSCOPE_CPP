@@ -1,6 +1,6 @@
 # AmScope Implementation Inventory
 
-**Source snapshot:** `3ef46d3a5b85aa7ae2e22d160d92f61aecace5bb` (common discovery and frame models, AmScope adapter, common metadata, preview migration, and fixed-8-bit RAW storage-mode correction)  
+**Source snapshot:** `c80240957bcf16ef926ed428ece2f1e12a2b9699` (common discovery and frame models, AmScope adapter, common metadata, preview migration, and fixed-8-bit RAW storage-mode correction)  
 **Branch head reviewed for this inventory refresh:** `7b81b5e639f8b8f4eae04f30c1145c975092073b` (clean local build/11 of 11 tests passed; arm64 CI passed; Intel CI in progress)  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
@@ -33,6 +33,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Model policy | `AmcamCameraProfiles.h/.cpp` | Exact model allow/deny feature policy |
 | AmScope types | `CameraTypes.h` | AmScope CameraInfo extension, camera error/state, `AmcamFrame` native metadata extension, SDK enums, trigger/I/O/accessory models; common Frame/FramePtr and ImageResolution are aliases to Camera.Common |
 | Common feature contract | `Camera/Common/include/camera/CameraFeatureAccess.h` | Feature kinds, typed values, descriptors, typed errors/results, feature interface |
+| Common operation errors | `Camera/Common/include/camera/CameraOperationError.h`; `Camera/Amscope/src/AmcamErrorMapping.h` | Backend-neutral result/error contract; documented Amcam HRESULT classification with native-domain preservation and conservative unknown-code fallback |
 | Common validation | `CameraFeatureValidation.h` | Shared type, range, increment, enum, vector, availability, and writability validation |
 | Common FPS estimator | `FrameRateEstimator.h` | Host frame-rate estimation |
 | Qt facade | `QtAmcamCamera.h/.cpp` | Qt QObject facade, lifecycle/request worker, queued feature/control operations, frame mailbox |

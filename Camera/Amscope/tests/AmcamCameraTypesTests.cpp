@@ -86,6 +86,13 @@ int main() {
                 commonError.native->code == -2147467259,
             "AmScope native error identity is preserved without reinterpreting its code");
 
+    const amscope::CameraError invalidStateError{
+        -1, "readFrameRate", "Acquisition must be running.",
+        camera::CameraErrorCode::InvalidState};
+    const auto commonInvalidState = amscope::toCommonOperationError(invalidStateError);
+    require(commonInvalidState.code == camera::CameraErrorCode::InvalidState,
+            "typed operation errors preserve explicit local precondition classification");
+
     static_assert(std::is_same_v<amscope::FramePtr, camera::FramePtr>,
                   "The AmScope frame callback must expose the common frame lease");
     static_assert(std::is_base_of_v<camera::Frame, amscope::AmcamFrame>,

@@ -96,3 +96,6 @@ Run the probe with the application closed, then run the application and use **Re
 - Different model flags between direct enumeration and the application indicate a model-descriptor discrepancy to investigate separately from the selector.
 
 Save both complete terminal outputs and provide them alongside the application's diagnostic text. The `AMCAM_FLAG_USB30_OVER_USB20` bit is an SDK model-descriptor classification, not a measurement of the negotiated USB link. The SDK display name may also include a transport suffix that conflicts with the operating system's live topology. Verify physical link speed independently through the host OS; do not infer USB2 fallback from this flag alone. This probe establishes what the installed vendor SDK advertises and returns; it does not independently establish the sensor's physical ADC depth.
+
+
+The sequence probe reports callback event names and read-only auto-exposure diagnostics before and after acquisition. `AMCAM_EVENT_EXPOSURE` (`0x0001`) indicates an exposure/gain setting change; it is not an image-arrival event. `AMCAM_EVENT_IMAGE` (`0x0004`) indicates that a frame is available to pull.

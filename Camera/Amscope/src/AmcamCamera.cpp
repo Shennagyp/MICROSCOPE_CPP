@@ -2912,6 +2912,7 @@ bool AmcamCamera::autoWhiteBalance(CameraError* error) {
 }
 
 bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) {
+    stats = {};
     if (error) *error = {};
     std::lock_guard<std::mutex> api(impl_->apiMutex);
     if (!impl_->handle ||

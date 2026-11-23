@@ -1250,7 +1250,7 @@ private:
         }
         case camera::CameraFeatureKind::IntegerVector:
         case camera::CameraFeatureKind::String: {
-            auto* control = new QLineEdit(featureContent_);
+            auto* control = new QLineEdit(featureTabs_);
             if (descriptor.kind == camera::CameraFeatureKind::IntegerVector) {
                 control->setPlaceholderText(
                     descriptor.elementCount
@@ -1281,7 +1281,7 @@ private:
                 });
                 editor = control;
             } else {
-                auto* control = new QLineEdit(featureContent_);
+                auto* control = new QLineEdit(featureTabs_);
                 control->setPlaceholderText("Numeric value");
                 connect(control, &QLineEdit::editingFinished, this,
                         [this, name = descriptor.name]() {
@@ -1293,11 +1293,11 @@ private:
         }
         case camera::CameraFeatureKind::Enumeration: {
             if (descriptor.enumerationValues.empty()) {
-                auto* control = new QLineEdit(featureContent_);
+                auto* control = new QLineEdit(featureTabs_);
                 control->setReadOnly(true);
                 editor = control;
             } else {
-                auto* control = new QComboBox(featureContent_);
+                auto* control = new QComboBox(featureTabs_);
                 for (const auto& symbol : descriptor.enumerationValues) {
                     const QString item = QString::fromStdString(symbol);
                     control->addItem(item, item);

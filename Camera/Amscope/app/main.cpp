@@ -1653,6 +1653,11 @@ private:
                                 camera_.state() == amscope::CameraState::Open;
         for (auto& entry : featureControls_) {
             const auto& descriptor = entry.second.descriptor;
+            // A readable current value is required only when the editor
+            // needs one to be safe. Discrete integer selectors (including
+            // sensor bit depth) can still be configured when the SDK exposes
+            // a setter and exact legal values but does not implement readback.
+            // In that case leave the selector unselected until the user chooses.
             const bool valueIsKnown =
                 !descriptor.isReadable || entry.second.hasCurrentValue;
             entry.second.editor->setEnabled(

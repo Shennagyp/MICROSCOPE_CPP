@@ -444,6 +444,8 @@ A dedicated common frame test covers optional-vs-zero metadata, timebase represe
 
 Classify the remaining error, measured frame-rate, and image value models. Move only semantics that have matching meaning and units across backends. Preserve native error codes and operation context as backend details. Add round-trip tests only for types that actually cross a persistence or external API boundary; do not invent serialization solely to satisfy a generic checklist.
 
+**Implementation started — common operation errors.** `CameraOperationError.h` now defines backend-neutral operation error categories, operation context, and optional native error identity (`domain` plus signed code). `CameraOperationResult<T>` carries either a successful value or that error. Feature access retains its separate `CameraFeatureAccessError`, because it has feature-specific identity and expected/actual value-kind semantics. The new contract has focused tests for success, typed failure, optional native details, and preservation of native error identity. The AmScope `CameraError` and its public call sites have not yet been migrated; conversion must be explicit and must not discard SDK error values.
+
 ### Work
 
 1. Classify every current public type by semantic ownership.
@@ -745,6 +747,33 @@ At least one complete end-to-end test must run from the installed release packag
 - No release-blocking lifecycle, acquisition, feature, packaging, or UI defect remains.
 - Public documentation describes only behavior that has been implemented and evidenced.
 
+## 14. Phase 9 — Deferred low-level SDK and transport investigation
+
+**Objective:** isolate hardware/vendor-specific diagnostics that are not prerequisites for the Camera Module architecture or its common contracts.
+
+This phase is deliberately scheduled after Phase 8. It must not interrupt Phases 2–8 or pull low-level SDK probing into the backend-neutral model work.
+
+### Deferred scope
+
+1. Detailed vendor SDK call/ABI investigation beyond what is required to maintain the accepted native driver.
+2. USB link negotiation, host-controller, cable/port, and transport-level throughput diagnosis.
+3. Vendor-specific RAW acquisition probes, payload freshness experiments, and SDK buffer-overwrite diagnostics.
+4. Model-specific acquisition tuning and hardware-in-the-loop experiments that do not define common camera semantics.
+5. Additional vendor SDK fault injection and recovery qualification not required by the accepted Phase 1 contract.
+
+### Boundary
+
+- No vendor SDK type, constant, header, or transport-specific assumption may enter `Camera.Common`.
+- Findings may inform backend adapters and hardware records, but must not silently redefine common contracts.
+- Work in this phase is not a prerequisite for Phase 2 model extraction, Phase 3 library separation, or the generic UI/library architecture.
+- Existing accepted driver behavior remains maintained; this phase defers exploratory low-level investigation, not necessary bug fixes.
+
+### Exit criteria
+
+- Every retained hardware-specific claim is tied to an exact device/model, SDK revision, host/transport configuration, and reproducible record.
+- No low-level diagnostic abstraction leaks into the backend-neutral API.
+- Any resulting backend change is separately reviewed and regression-tested against the common contract.
+
 ## 14. Dependency order and parallel work
 
 The intended sequence is:
@@ -760,6 +789,7 @@ The intended sequence is:
 | 6 | Evidence-backed feature, command, telemetry, and model coverage | Phases 2–5 |
 | 7 | Exported packages and clean external consumers | Phases 3–6 |
 | 8 | Final hardware qualification and release | Phases 0–7 |
+| 9 | Deferred low-level SDK/transport investigation | Phase 8; explicitly non-blocking for Phases 2–8 |
 
 The GenTL/GenApi dependency discovery (Phase 5, steps 1–3) can proceed in parallel with Phases 1–3. The official GenApi 3.5.1 runtime and GenTL 1.6 ABI are identified; the remaining C++ Consumer integration choice is recorded in AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md. The adapter and hardware acceptance still depend on the finalized common model, a target vendor CTI Producer, and a real CTI camera.
 
@@ -773,13 +803,14 @@ Update this table as implementation progresses. A phase is not complete until bo
 |---|---|---|---|---|
 | 0 — Baseline | Accepted by project owner on 22 Nov 2026; repository/source review, camera open/preview, live 640×480 mode, resolution restoration, and two MU503 rate runs recorded | Existing CI baseline passed; current follow-up tests pending | Two 15-second-class physical runs: 91.253 and 91.183 event/pull/callback FPS, zero drops, Stop/restore/Close succeeded; full 15-minute regression and exact-commit hardware record remain unrecorded | ACCEPTED BY OWNER; residual regression checks non-blocking |
 | 1 — Native driver | Accepted by project owner on 22 Nov 2026; single-session lifecycle and callback/queue/worker/pull architecture retained | Existing suite plus new callback/cache-flush/frame-lease primitive tests; latest revision CI pending | MU503 640×480 runs delivered approximately 91 FPS with zero reported drops; Stop/restore/Close passed; extended 15-minute and failure-injection matrix remains recommended | ACCEPTED BY OWNER; deterministic SDK fault-injection is post-acceptance hardening |
-| 2 — Common models | IN PROGRESS. Slice 2.1 common discovery/identity/resolution/capability models implemented; common frame and remaining value-model extraction pending | Existing feature tests plus new common model tests; Phase 2 CI pending | Full AmScope regression after all common model slices; RAW-capable camera required for frame-layout acceptance | OPEN |
+| 2 — Common models | IN PROGRESS. Slices 2.1 and 2.2 implemented; slice 2.3 started with backend-neutral operation errors. AmScope error conversion and remaining shared-value classification are pending | Discovery, frame, feature, frame-rate, and new operation-error contract tests; current branch CI must verify the new test | Full AmScope regression after all common model slices; RAW-capable camera required for frame-layout acceptance | OPEN |
 | 3 — Library separation | Target boundaries not yet delivered | Required | Required | OPEN |
 | 4 — Reusable UI | Preview exists; reusable UI library not yet delivered | Required | Required | OPEN |
 | 5 — GenTL/GenApi | Official GenApi 3.5.1 and GenTL 1.6 package identified; existing Consumer found in Swift, but no direct C++ interface; CTI adapter absent | Swift Consumer/mock Producer CI green; C++ integration tests pending | Real CTI camera and AmScope regression required | BLOCKED — Consumer integration choice and target Producer required |
 | 6 — Capability coverage | Broad implementation; inventory reconciliation required | Required | Physical model matrix required | OPEN |
 | 7 — Packaging | Initial install rules exist; exported package/consumer qualification required | Required | Installed artifacts on physical camera required | OPEN |
 | 8 — Release | Not started | Required | Complete hardware matrix required | OPEN |
+| 9 — Low-level SDK/transport investigation | Deferred until after Phase 8; not part of the current execution track | Defined after core/release work | Device-specific diagnostic records required if resumed | DEFERRED |
 
 The ledger is intentionally conservative. A green CI run is not a hardware acceptance record.
 

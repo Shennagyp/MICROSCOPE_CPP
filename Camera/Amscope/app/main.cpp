@@ -1190,13 +1190,15 @@ private:
         clearFeatureControls();
 
         for (const auto& descriptor : descriptors) {
-            // Keep the sensor bit-depth descriptor visible even when unavailable
-            // so the user can see the backend's reason instead of a missing control.
-            // Other unavailable features remain omitted to avoid filling the UI
-            // with controls that the connected device cannot use.
-            const bool showBitDepthDiagnostic = descriptor.name ==
-                std::string(camera::RawOutputBitDepthFeature);
-            if (!descriptor.isAvailable && !showBitDepthDiagnostic) continue;
+            // RAW controls are a diagnostic group: show the camera's reported
+            // capability even when the active feature profile blocks writes or
+            // the RAW mode is currently disabled. Hiding these rows made it
+            // appear that the application had no RAW sensor configuration.
+            const bool showRawDiagnostic =
+                descriptor.name == "AmcamRawOutputEnabled" ||
+                descriptor.name == "AmcamRawSensorFormat" ||
+                descriptor.name == std::string(camera::RawOutputBitDepthFeature);
+            if (!descriptor.isAvailable && !showRawDiagnostic) continue;
 
             QWidget* editor = createFeatureEditor(descriptor);
             auto foundForm = featureForms_.find(descriptor.group);

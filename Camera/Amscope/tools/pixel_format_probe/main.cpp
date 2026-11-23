@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -321,6 +322,12 @@ void __stdcall rawFrameEventCallback(unsigned event, void* context) {
 }
 
 bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
+    constexpr const char* outputPath = "amscope-raw-frame.raw";
+    if (std::remove(outputPath) == 0) {
+        std::cout << "Removed previous capture artifact before acquisition: "
+                  << outputPath << '\n';
+    }
+
     std::cout << "\n========== RAW ACQUISITION VALIDITY TEST ==========\n"
               << "Requested consecutive frames: " << targetFrameCount << '\n';
     int originalRawMode = -1;
@@ -591,7 +598,6 @@ bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
                       << "\nDistinct payload checksums: " << distinctChecksums
                       << " / " << capture.records.size() << '\n';
 
-            const std::string outputPath = "amscope-raw-frame.raw";
             std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
             if (!output) {
                 std::cerr << "Could not create " << outputPath << '\n';

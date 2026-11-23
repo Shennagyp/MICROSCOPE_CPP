@@ -19,6 +19,7 @@ add_library(camera_qt_widgets
 add_library(Camera::QtWidgets ALIAS camera_qt_widgets)
 
 target_compile_features(camera_qt_widgets PUBLIC cxx_std_17)
+set_target_properties(camera_qt_widgets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(camera_qt_widgets
     PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
@@ -38,4 +39,8 @@ if(BUILD_TESTING)
 endif()
 
 include(GNUInstallDirs)
+install(TARGETS camera_qt_widgets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")

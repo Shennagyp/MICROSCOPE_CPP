@@ -43,10 +43,12 @@ thread_local const void* g_acquisitionOwner = nullptr;
 
 bool fail(amscope::CameraError* out, const char* operation,
           std::int32_t code, std::string message,
-          camera::CameraErrorCode commonCode = camera::CameraErrorCode::BackendFailure) {
+          camera::CameraErrorCode commonCode = camera::CameraErrorCode::BackendFailure,
+          bool hasNativeCode = false) {
     if (out) {
         out->vendorCode = code;
         out->commonCode = commonCode;
+        out->hasNativeCode = hasNativeCode;
         out->operation = operation ? operation : "";
         out->message = std::move(message);
     }
@@ -62,7 +64,8 @@ std::string hrMessage(const char* operation, HRESULT hr) {
 bool failHr(amscope::CameraError* out, const char* operation, HRESULT hr) {
     return fail(out, operation, static_cast<std::int32_t>(hr),
                 hrMessage(operation, hr),
-                amscope::detail::commonCameraErrorCode(static_cast<std::int32_t>(hr)));
+                amscope::detail::commonCameraErrorCode(static_cast<std::int32_t>(hr)),
+                true);
 }
 
 // The SDK's model flags independently advertise supported RAW pixel depths.

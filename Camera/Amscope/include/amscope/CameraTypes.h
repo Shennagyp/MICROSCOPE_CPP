@@ -42,6 +42,9 @@ struct CameraError {
     // Classified only from documented Amcam HRESULT meanings. Unknown native
     // codes remain BackendFailure; vendor identity is preserved separately.
     camera::CameraErrorCode commonCode = camera::CameraErrorCode::BackendFailure;
+    // Synthetic precondition/readback errors use sentinel integers; only
+    // failHr() marks a value as an actual native HRESULT.
+    bool hasNativeCode = false;
 };
 
 // Explicit boundary conversion for operation-level APIs. The native code is
@@ -52,7 +55,8 @@ struct CameraError {
     common.code = error.commonCode;
     common.operation = error.operation;
     common.message = error.message;
-    common.native = camera::CameraNativeError{"amcam.sdk", error.vendorCode};
+    if (error.hasNativeCode)
+        common.native = camera::CameraNativeError{"amcam.sdk", error.vendorCode};
     return common;
 }
 using PixelFormat = camera::PixelFormat;

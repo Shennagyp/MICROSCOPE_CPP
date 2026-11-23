@@ -33,7 +33,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Model policy | `AmcamCameraProfiles.h/.cpp` | Exact model allow/deny feature policy |
 | AmScope types | `CameraTypes.h` | AmScope CameraInfo extension, camera error/state, `AmcamFrame` native metadata extension, SDK enums, trigger/I/O/accessory models; common Frame/FramePtr and ImageResolution are aliases to Camera.Common |
 | Common feature contract | `Camera/Common/include/camera/CameraFeatureAccess.h` | Feature kinds, typed values, descriptors, typed errors/results, feature interface |
-| Common operation errors | `Camera/Common/include/camera/CameraOperationError.h`; `Camera/Amscope/src/AmcamErrorMapping.h` | Backend-neutral result/error contract; documented Amcam HRESULT classification with native-domain preservation and conservative unknown-code fallback |
+| Common operation errors | `Camera/Common/include/camera/CameraOperationError.h`; `Camera/Amscope/src/AmcamErrorMapping.h` | Backend-neutral result/error contract; documented Amcam HRESULT classification, native-domain preservation only for actual HRESULTs, and conservative unknown-code fallback |
 | Common validation | `CameraFeatureValidation.h` | Shared type, range, increment, enum, vector, availability, and writability validation |
 | Common FPS estimator | `FrameRateEstimator.h` | Host frame-rate estimation |
 | Qt facade | `QtAmcamCamera.h/.cpp` | Qt QObject facade, lifecycle/request worker, queued feature/control operations, frame mailbox |

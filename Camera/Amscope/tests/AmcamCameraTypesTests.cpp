@@ -65,7 +65,8 @@ int main() {
             "AmScope frame-rate telemetry preserves interval and cumulative counts");
 
     const amscope::CameraError nativeError{
-        -2147467259, "camera.start", "SDK rejected acquisition startup"};
+        -2147467259, "camera.start", "SDK rejected acquisition startup",
+        camera::CameraErrorCode::BackendFailure, true};
     const auto commonError = amscope::toCommonOperationError(nativeError);
     camera::CameraOperationResult<camera::FrameRateMeasurement> typedRateResult{
         commonRate};
@@ -92,6 +93,8 @@ int main() {
     const auto commonInvalidState = amscope::toCommonOperationError(invalidStateError);
     require(commonInvalidState.code == camera::CameraErrorCode::InvalidState,
             "typed operation errors preserve explicit local precondition classification");
+    require(!commonInvalidState.native,
+            "synthetic precondition sentinels must not be exposed as native SDK error codes");
 
     static_assert(std::is_same_v<amscope::FramePtr, camera::FramePtr>,
                   "The AmScope frame callback must expose the common frame lease");

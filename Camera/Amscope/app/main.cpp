@@ -105,6 +105,16 @@ QString amcamPixelFormatLabel(const std::string& symbol) {
         .arg(QString::fromStdString(symbol));
 }
 
+QString pixelFormatName(camera::PixelFormat format) {
+    switch (format) {
+    case camera::PixelFormat::Unknown: return QStringLiteral("Unknown");
+    case camera::PixelFormat::RGB24: return QStringLiteral("RGB24");
+    case camera::PixelFormat::Raw8: return QStringLiteral("Raw8");
+    case camera::PixelFormat::Raw16: return QStringLiteral("Raw16");
+    }
+    return QStringLiteral("Unknown");
+}
+
 QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
     if (!descriptor.numericRange) return {};
     return std::visit([](const auto& range) {

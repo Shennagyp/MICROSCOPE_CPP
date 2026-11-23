@@ -173,11 +173,15 @@ std::optional<RawPixelFormatChoice> rawPixelFormatForBitDepth(
 
 std::optional<unsigned> rawBitDepthForLegacyMode(
     const std::vector<RawPixelFormatChoice>& choices,
-    int legacyMode) {
+    int legacyMode,
+    unsigned maximumBitDepth) {
+    if (legacyMode != 0 && legacyMode != 1)
+        return std::nullopt;
+    const unsigned selectedDepth = legacyMode == 0 ? 8U : maximumBitDepth;
     const auto found = std::find_if(
         choices.begin(), choices.end(),
-        [legacyMode](const RawPixelFormatChoice& choice) {
-            return choice.legacyBitDepthMode == legacyMode;
+        [selectedDepth](const RawPixelFormatChoice& choice) {
+            return choice.bitDepth == selectedDepth;
         });
     return found == choices.end()
         ? std::nullopt
@@ -596,7 +600,7 @@ buildAmcamFeatureDescriptors(
         Amcam_get_Option(handle, AMCAM_OPTION_BITDEPTH, &legacyBitDepthMode);
     const bool rawLegacyBitDepthReadable =
         SUCCEEDED(legacyBitDepthHr) &&
-        rawBitDepthForLegacyMode(rawPixelChoices, legacyBitDepthMode).has_value();
+        rawBitDepthForLegacyMode(rawPixelChoices, legacyBitDepthMode, rawMaxBitDepth).has_value();
     const bool rawBitDepthReadable =
         rawCurrentFormatIsDepth || rawLegacyBitDepthReadable;
     const bool rawBitDepthWritable =
@@ -5018,7 +5022,7 @@ AmcamCamera::readFeature(std::string_view name) {
                 impl_->handle, AMCAM_OPTION_BITDEPTH, &legacyMode);
             if (SUCCEEDED(legacyHr)) {
                 const auto selectedDepth =
-                    rawBitDepthForLegacyMode(choices, legacyMode);
+                    rawBitDepthForLegacyMode(choices, legacyMode, maximumBitDepth);
                 if (selectedDepth)
                     return CameraFeatureValue{
                         static_cast<std::int64_t>(*selectedDepth)};
@@ -5044,7 +5048,7 @@ AmcamCamera::readFeature(std::string_view name) {
             impl_->handle, AMCAM_OPTION_BITDEPTH, &legacyMode);
         if (SUCCEEDED(legacyHr)) {
             const auto selectedDepth =
-                rawBitDepthForLegacyMode(legacyChoices, legacyMode);
+                rawBitDepthForLegacyMode(legacyChoices, legacyMode, maximumBitDepth);
             if (selectedDepth)
                 return CameraFeatureValue{
                     static_cast<std::int64_t>(*selectedDepth)};
@@ -5399,7 +5403,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
                     return featureBackendError(
                         std::string(name), "Amcam_get_Option(BITDEPTH)", pixelHr);
                 const auto readbackDepth =
-                    rawBitDepthForLegacyMode(choices, readbackMode);
+                    rawBitDepthForLegacyMode(choices, readbackMode, maximumBitDepth);
                 if (!readbackDepth || *readbackDepth !=
                         static_cast<unsigned>(selectedBitDepth))
                     return featureError(
@@ -5460,7 +5464,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
             return featureBackendError(
                 std::string(name), "Amcam_get_Option(BITDEPTH)", pixelHr);
         const auto readbackDepth =
-            rawBitDepthForLegacyMode(legacyChoices, readbackMode);
+            rawBitDepthForLegacyMode(legacyChoices, readbackMode, maximumBitDepth);
         if (!readbackDepth || *readbackDepth !=
                 static_cast<unsigned>(selectedBitDepth))
             return featureError(

@@ -445,9 +445,9 @@ bash scripts/run-amscope-native-probe.sh --device-id "CAMERA_ID" --seconds 60
 The probe reports one-second frame-delivery counts, optional sequence values,
 dropped frames, native camera state, last-frame age, and acquisition errors. It
 also prints one `FRAME` record from the first delivered common frame: dimensions,
-stride, payload byte count, buffer pixel layout, optional format identity,
-significant/storage bit depths, and the availability and timebases of sequence,
-timestamp, and exposure metadata. This record is intended for Phase 2 common
+live/still marker, stride, payload byte count, buffer pixel layout, optional
+format identity, significant/storage bit depths, and the availability and
+timebases of sequence, timestamp, and exposure metadata. This record is intended for Phase 2 common
 frame-contract verification; it is not an FPS benchmark. It also treats failed
 Stop/Close cleanup as a failed probe. The default sample duration is 30 seconds;
 supported values are 5–3600 seconds.

@@ -1,5 +1,6 @@
 #include "amscope/QtAmcamCamera.h"
 #include "camera/FrameRateEstimator.h"
+#include "camera/qtwidgets/CameraControlPanel.h"
 #include "camera/qtwidgets/FrameView.h"
 
 #include <QByteArray>
@@ -187,14 +188,7 @@ public:
         auto* root = new QVBoxLayout(central);
         auto* toolbar = new QHBoxLayout();
 
-        cameraSelector_ = new QComboBox(central);
-        cameraSelector_->setMinimumWidth(320);
-
-        refreshCamerasButton_ = new QPushButton("Refresh cameras", central);
-        openButton_ = new QPushButton("Open", central);
-        startButton_ = new QPushButton("Start", central);
-        stopButton_ = new QPushButton("Stop", central);
-        closeButton_ = new QPushButton("Close", central);
+        cameraControls_ = new camera::qtwidgets::CameraControlPanel(central);
         stillCaptureModeSelector_ = new QComboBox(central);
         stillResolutionSelector_ = new QComboBox(central);
         stillResolutionSelector_->setToolTip("Still-image resolution reported by the camera SDK.");
@@ -207,12 +201,7 @@ public:
             "RAW still", static_cast<int>(amscope::StillCaptureMode::Raw));
         captureStillButton_ = new QPushButton("Capture still", central);
 
-        toolbar->addWidget(cameraSelector_, 1);
-        toolbar->addWidget(refreshCamerasButton_);
-        toolbar->addWidget(openButton_);
-        toolbar->addWidget(startButton_);
-        toolbar->addWidget(stopButton_);
-        toolbar->addWidget(closeButton_);
+        toolbar->addWidget(cameraControls_, 1);
         toolbar->addWidget(stillResolutionSelector_);
         toolbar->addWidget(stillCaptureModeSelector_);
         toolbar->addWidget(captureStillButton_);
@@ -400,21 +389,16 @@ public:
         root->addWidget(frameInfo_);
         setCentralWidget(central);
 
-        connect(refreshCamerasButton_, &QPushButton::clicked, this, [this]() {
-            refreshCameras();
-        });
-        connect(openButton_, &QPushButton::clicked, this, [this]() {
-            openCamera();
-        });
-        connect(startButton_, &QPushButton::clicked, this, [this]() {
-            startCamera();
-        });
-        connect(stopButton_, &QPushButton::clicked, this, [this]() {
-            stopCamera();
-        });
-        connect(closeButton_, &QPushButton::clicked, this, [this]() {
-            closeCamera();
-        });
+        cameraControls_->setRefreshRequestedHandler(
+            [this]() { refreshCameras(); });
+        cameraControls_->setOpenRequestedHandler(
+            [this](const std::string& deviceId) { openCamera(deviceId); });
+        cameraControls_->setStartRequestedHandler(
+            [this]() { startCamera(); });
+        cameraControls_->setStopRequestedHandler(
+            [this]() { stopCamera(); });
+        cameraControls_->setCloseRequestedHandler(
+            [this]() { closeCamera(); });
         connect(captureStillButton_, &QPushButton::clicked, this, [this]() {
             captureStill();
         });
@@ -535,9 +519,8 @@ private:
 
         const std::uint64_t generation = ++cameraEnumerationGeneration_;
         cameraEnumerationPending_ = true;
-        cameraSelector_->setEnabled(false);
-        refreshCamerasButton_->setEnabled(false);
         statusBar()->showMessage("Refreshing cameras…");
+        updateControls(camera_.state());
 
         const auto requestId = camera_.requestEnumerateCameras(
             [this, generation](
@@ -545,32 +528,33 @@ private:
                 amscope::QtAmcamCamera::CameraListResult result) {
                 if (generation != cameraEnumerationGeneration_) return;
                 cameraEnumerationPending_ = false;
-                cameraSelector_->clear();
 
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
-                    cameras_.clear();
+                    cameraControls_->setDevices({});
                     statusBar()->showMessage(QString::fromStdString(error->message));
                     updateControls(camera_.state());
                     return;
                 }
 
-                cameras_ =
+                const auto discoveredCameras =
                     std::get<std::vector<amscope::CameraInfo>>(std::move(result));
-                for (const auto& camera : cameras_) {
-                    const std::string label = !camera.displayName.empty()
-                                                  ? camera.displayName
-                                                  : camera.modelName;
-                    cameraSelector_->addItem(
-                        QString::fromStdString(label),
-                        QString::fromStdString(camera.id));
+                std::vector<camera::CameraDeviceInfo> commonDevices;
+                commonDevices.reserve(discoveredCameras.size());
+                for (const auto& discovered : discoveredCameras) {
+                    auto commonInfo =
+                        static_cast<const camera::CameraDeviceInfo&>(discovered);
+                    if (commonInfo.displayName.empty())
+                        commonInfo.displayName = discovered.modelName;
+                    commonDevices.push_back(std::move(commonInfo));
                 }
+                cameraControls_->setDevices(std::move(commonDevices));
 
-                if (cameras_.empty()) {
+                if (discoveredCameras.empty()) {
                     statusBar()->showMessage("No AmScope camera detected.");
                 } else {
                     statusBar()->showMessage(
                         QString("%1 camera(s) detected.")
-                            .arg(static_cast<qulonglong>(cameras_.size())));
+                            .arg(static_cast<qulonglong>(discoveredCameras.size())));
                 }
                 updateControls(camera_.state());
             });
@@ -578,19 +562,17 @@ private:
         if (requestId == 0) {
             cameraEnumerationPending_ = false;
             statusBar()->showMessage("Camera enumeration could not be queued.");
-            updateControls(camera_.state());
-        } else {
-            updateControls(camera_.state());
         }
+        updateControls(camera_.state());
     }
 
-    void openCamera() {
+    void openCamera(const std::string& deviceId) {
         if (lifecycleRequestPending_) return;
-        const QString id = cameraSelector_->currentData().toString();
-        if (id.isEmpty()) {
+        if (deviceId.empty()) {
             statusBar()->showMessage("Select a camera first.");
             return;
         }
+        const QString id = QString::fromStdString(deviceId);
 
         const std::uint64_t generation = ++lifecycleUiGeneration_;
         lifecycleRequestPending_ = true;
@@ -2621,19 +2603,37 @@ private:
     }
 
     void updateControls(amscope::CameraState state) {
-        const bool closed = state == amscope::CameraState::Closed;
         const bool open = state == amscope::CameraState::Open;
         const bool streaming = state == amscope::CameraState::Streaming;
+
+        camera::qtwidgets::CameraControlPanelState panelState;
+        switch (state) {
+        case amscope::CameraState::Closed:
+            panelState.lifecycle =
+                camera::qtwidgets::CameraPanelLifecycleState::Closed;
+            break;
+        case amscope::CameraState::Open:
+            panelState.lifecycle =
+                camera::qtwidgets::CameraPanelLifecycleState::Open;
+            break;
+        case amscope::CameraState::Streaming:
+            panelState.lifecycle =
+                camera::qtwidgets::CameraPanelLifecycleState::Streaming;
+            break;
+        case amscope::CameraState::Faulted:
+            panelState.lifecycle =
+                camera::qtwidgets::CameraPanelLifecycleState::Faulted;
+            break;
+        }
+        panelState.discoveryPending = cameraEnumerationPending_;
+        panelState.lifecycleRequestPending = lifecycleRequestPending_;
+        panelState.otherOperationPending =
+            stillCapturePending_ || stillResolutionsPending_;
+        cameraControls_->setState(panelState);
 
         const bool idle =
             !lifecycleRequestPending_ && !cameraEnumerationPending_ &&
             !stillCapturePending_ && !stillResolutionsPending_;
-        cameraSelector_->setEnabled(closed && idle);
-        refreshCamerasButton_->setEnabled(closed && idle);
-        openButton_->setEnabled(closed && idle && cameraSelector_->count() > 0);
-        startButton_->setEnabled(open && idle);
-        stopButton_->setEnabled(streaming && idle);
-        closeButton_->setEnabled(!closed && idle);
         stillResolutionSelector_->setEnabled(
             streaming && idle && stillResolutionSelector_->count() > 0);
         stillCaptureModeSelector_->setEnabled(streaming && idle);
@@ -2641,94 +2641,7 @@ private:
             streaming && idle && stillResolutionSelector_->count() > 0);
         refreshFeaturesButton_->setEnabled(open && idle &&
                                             !accessoryOperationPending_);
-        const bool accessoriesIdle =
-            idle && !accessoryOperationPending_ &&
-            !embeddedLightSourceReadPending_ && !filterWheelReadPending_ &&
-            !astroAutoFocuserReadPending_ && !lensFocusReadPending_ &&
-            !triggerConfigurationReadPending_ && !triggerOperationPending_;
-        const bool accessoryControlsIdle = (open || streaming) && accessoriesIdle;
-        accessoryGroup_->setEnabled(accessoryControlsIdle);
-        astroAutoFocuserGroup_->setEnabled((open || streaming) && accessoriesIdle);
-        astroAutoFocuserTargetSelector_->setEnabled(
-            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
-            astroAutoFocuserStateKnown_ && !astroAutoFocuserMoving_);
-        astroAutoFocuserMoveButton_->setEnabled(
-            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
-            astroAutoFocuserStateKnown_ && !astroAutoFocuserMoving_);
-        astroAutoFocuserHaltButton_->setEnabled(
-            accessoryControlsIdle && astroAutoFocuserAvailable_ &&
-            astroAutoFocuserStateKnown_ && astroAutoFocuserMoving_);
-        astroAutoFocuserRefreshButton_->setEnabled(
-            accessoryControlsIdle && astroAutoFocuserAvailable_);
-        lensFocusGroup_->setEnabled((open || streaming) && accessoriesIdle);
-        lensFocusTargetSelector_->setEnabled(
-            accessoryControlsIdle && lensFocusAvailable_ &&
-            lensFocusStateKnown_ && lensFocusManual_);
-        lensFocusMoveButton_->setEnabled(
-            accessoryControlsIdle && lensFocusAvailable_ &&
-            lensFocusStateKnown_ && lensFocusManual_);
-        lensFocusRefreshButton_->setEnabled(
-            accessoryControlsIdle && lensFocusAvailable_);
-        lensApertureSelector_->setEnabled(
-            accessoryControlsIdle && lensFocusAvailable_ &&
-            lensFocusStateKnown_ && lensApertureCalibrated_ &&
-            lensApertureChoicesAvailable_);
-        lensApertureSetButton_->setEnabled(
-            accessoryControlsIdle && lensFocusAvailable_ &&
-            lensFocusStateKnown_ && lensApertureCalibrated_ &&
-            lensApertureChoicesAvailable_ &&
-            lensApertureSelector_->currentIndex() >= 0);
-        embeddedLightSourceSlider_->setEnabled(
-            accessoryControlsIdle && embeddedLightSourceAvailable_ &&
-            embeddedLightSourceStateKnown_);
-        embeddedLightSourceApplyButton_->setEnabled(
-            accessoryControlsIdle && embeddedLightSourceAvailable_ &&
-            embeddedLightSourceStateKnown_);
-        filterWheelPositionSelector_->setEnabled(
-            accessoryControlsIdle && filterWheelAvailable_ &&
-            filterWheelStateKnown_ && !filterWheelMoving_);
-        filterWheelDirectionSelector_->setEnabled(
-            accessoryControlsIdle && filterWheelAvailable_ &&
-            filterWheelStateKnown_ && !filterWheelMoving_);
-        filterWheelMoveButton_->setEnabled(
-            accessoryControlsIdle && filterWheelAvailable_ &&
-            filterWheelStateKnown_ && !filterWheelMoving_);
-        filterWheelRefreshButton_->setEnabled(
-            accessoryControlsIdle && filterWheelAvailable_);
-
-        triggerGroup_->setEnabled(
-            (open || streaming) && !triggerConfigurationReadPending_ &&
-            !triggerOperationPending_);
-        triggerModeSelector_->setEnabled(open && triggerPanelAvailable_ &&
-            !triggerConfigurationReadPending_ && !triggerOperationPending_);
-        triggerSourceSelector_->setEnabled(open && triggerPanelAvailable_ &&
-            selectedTriggerModeUsesExternalSource() &&
-            !triggerConfigurationReadPending_ && !triggerOperationPending_);
-        triggerHeartbeatInterval_->setEnabled(open && triggerPanelAvailable_ &&
-            triggerModeSelector_->currentIndex() >= 0 &&
-            triggerModeSelector_->currentData().toInt() !=
-                static_cast<int>(amscope::AmcamTriggerMode::Video) &&
-            !triggerConfigurationReadPending_ && !triggerOperationPending_);
-        triggerApplyButton_->setEnabled(open && triggerPanelAvailable_ &&
-            triggerModeSelector_->currentIndex() >= 0 &&
-            (!selectedTriggerModeUsesExternalSource() ||
-             triggerSourceSelector_->currentIndex() >= 0) &&
-            !triggerConfigurationReadPending_ && !triggerOperationPending_);
-        triggerRefreshButton_->setEnabled(
-            (open || streaming) && triggerPanelAvailable_ &&
-            !triggerConfigurationReadPending_ && !triggerOperationPending_);
-        softwareTriggerCount_->setEnabled(streaming &&
-            triggerConfigurationKnown_ && currentTriggerConfiguration_.has_value() &&
-            configurationAllowsSoftwareTrigger(*currentTriggerConfiguration_) &&
-            !triggerOperationPending_ && !triggerConfigurationReadPending_);
-        softwareTriggerButton_->setEnabled(streaming &&
-            triggerConfigurationKnown_ && currentTriggerConfiguration_.has_value() &&
-            configurationAllowsSoftwareTrigger(*currentTriggerConfiguration_) &&
-            !triggerOperationPending_ && !triggerConfigurationReadPending_);
-    }
-
     amscope::QtAmcamCamera camera_;
-    std::vector<amscope::CameraInfo> cameras_;
     camera::FrameRateEstimator previewFrameRateEstimator_;
     std::optional<double> previewFramesPerSecond_;
     std::optional<double> imageEventsPerSecond_;
@@ -2785,12 +2698,7 @@ private:
     bool accessoryOperationPending_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
 
-    QComboBox* cameraSelector_ = nullptr;
-    QPushButton* refreshCamerasButton_ = nullptr;
-    QPushButton* openButton_ = nullptr;
-    QPushButton* startButton_ = nullptr;
-    QPushButton* stopButton_ = nullptr;
-    QPushButton* closeButton_ = nullptr;
+    camera::qtwidgets::CameraControlPanel* cameraControls_ = nullptr;
     QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
     QLabel* stillPrecisionLabel_ = nullptr;

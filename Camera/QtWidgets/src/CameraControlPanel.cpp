@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QPushButton>
+#include <QString>
 
 #include <utility>
 

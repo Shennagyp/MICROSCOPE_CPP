@@ -8,7 +8,7 @@ This is a standalone C++ executable that includes the vendor's `amcam.h` and lin
 - Complete model flag value and RAW-related model capability flags.
 - The SDK model's USB transport classification flag, explicitly distinguished from the negotiated physical USB link.
 - `Amcam_get_MaxBitDepth` result, interpreted as the maximum depth when its successful return value is between 8 and 16.
-- Current `AMCAM_OPTION_RAW`, `AMCAM_OPTION_BITDEPTH`, and `AMCAM_OPTION_PIXEL_FORMAT` values.
+- Current `AMCAM_OPTION_RAW`, `AMCAM_OPTION_BITDEPTH`, `AMCAM_OPTION_RGB`, and `AMCAM_OPTION_PIXEL_FORMAT` values. The RGB option is decoded separately because it controls processed RGB/Grey output representation, not RAW sensor precision.
 - Count and entries returned by `Amcam_get_PixelFormatSupport`.
 - Current RAW FourCC and bits-per-pixel from `Amcam_get_RawFormat`.
 
@@ -50,7 +50,11 @@ The default run remains strictly read-only. The RAW-mode run intentionally chang
 
 ## Interpreting the generic MU Series bit-depth manual
 
-The MU Series Windows manual documents an 8-bit/16-bit **camera bit-depth control**, but it is a series-wide manual and does not establish that every MU model supports both modes. The SDK header likewise defines the legacy `AMCAM_OPTION_BITDEPTH` option as 0 = 8-bit and 1 = 16-bit; however, the MU503 probe returned `0x80004001` (`E_NOTIMPL`) when reading that option. Its modern pixel-format enumeration reported only `RAW8`, and `Amcam_get_MaxBitDepth` returned 8, including with RAW mode enabled. Thus, the manual proves that an 8/16 control exists in the MU software family, not that this specific MU503 implements 16-bit output. A 16-bit image/storage representation would also not, by itself, prove 16-bit source samples.
+The MU Series Windows manual documents an 8-bit/16-bit **camera bit-depth control**, but it is a series-wide manual and does not establish that every MU model supports both modes. There is also a wording discrepancy inside the vendor SDK package: the C header defines legacy `AMCAM_OPTION_BITDEPTH` as 0 = 8-bit and 1 = 16-bit, while the SDK HTML guide describes 0 = 8-bit and 1 = the camera's maximum bit depth. Treat that legacy option as model-specific and do not infer support from the generic definition.
+
+For this MU503, `Amcam_get_MaxBitDepth` returned 8, the modern pixel-format enumeration reported only `RAW8`, and reading `AMCAM_OPTION_BITDEPTH` returned `0x80004001` (`E_NOTIMPL`), including with RAW mode enabled. The camera therefore advertises no higher-precision RAW mode through this SDK. The SDK also has a separate `AMCAM_OPTION_RGB` setting for processed output: RGB48 and RGB64 require camera bit depth greater than 8, while Grey16 is restricted to monochrome cameras with bit depth greater than 8. This is not a mechanism for recovering precision that the camera does not supply. The probe now reads the current RGB-output setting, but does not change it.
+
+The image-pull API's `bits` argument selects the returned processed-image buffer representation; the SDK explicitly says this argument is ignored in RAW mode. Consequently, a 16-bit buffer/container alone is not evidence of more than 8 bits of sensor information.
 
 ## Compare with the application
 

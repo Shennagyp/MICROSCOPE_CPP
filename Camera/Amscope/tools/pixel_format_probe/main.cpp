@@ -71,12 +71,15 @@ void printRawModelFlags(std::uint64_t flags) {
     if (!any) std::cout << " none";
     std::cout << '\n';
 
+    std::cout << "SDK model transport classification (not a live link measurement): ";
     if ((flags & AMCAM_FLAG_USB30_OVER_USB20) != 0) {
-        std::cout << "USB transport: USB 3.0 camera connected over USB 2.0\n";
+        std::cout << "AMCAM_FLAG_USB30_OVER_USB20 is set; the SDK model "
+                     "descriptor classifies this USB 3.0 camera as attached "
+                     "through USB 2.0\n";
     } else if ((flags & AMCAM_FLAG_USB30) != 0) {
-        std::cout << "USB transport: USB 3.0 capability flag present\n";
+        std::cout << "AMCAM_FLAG_USB30 is set\n";
     } else {
-        std::cout << "USB transport: no USB 3.0 capability flag reported\n";
+        std::cout << "no USB 3.0 model flag is reported\n";
     }
 }
 
@@ -92,7 +95,7 @@ void printDeviceList(const AmcamDeviceV2* devices, unsigned count) {
     std::cout << "Enumerated cameras: " << count << '\n';
     for (unsigned i = 0; i < count; ++i) {
         const auto& device = devices[i];
-        std::cout << "\n[" << i << "] "
+        std::cout << "\n[" << i << "] SDK display name: "
                   << boundedString(device.displayname, sizeof(device.displayname))
                   << "\n    camera id: "
                   << boundedString(device.id, sizeof(device.id));
@@ -121,12 +124,58 @@ void printOptionInt(HAmcam camera, const char* label, unsigned option) {
     if (SUCCEEDED(result)) std::cout << "    value: " << value << '\n';
 }
 
+void printFirmwareIdentity(HAmcam camera) {
+    std::cout << "\n--- Camera hardware/firmware identity ---\n";
+
+    unsigned short revision = 0;
+    HRESULT hr = Amcam_get_Revision(camera, &revision);
+    printHresult("Amcam_get_Revision", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    revision: " << revision << " (0x"
+                  << std::hex << std::uppercase << revision
+                  << std::dec << std::nouppercase << ")\n";
+    }
+
+    char firmware[16]{};
+    hr = Amcam_get_FwVersion(camera, firmware);
+    printHresult("Amcam_get_FwVersion", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    firmware version: "
+                  << boundedString(firmware, sizeof(firmware)) << '\n';
+    }
+
+    char hardware[16]{};
+    hr = Amcam_get_HwVersion(camera, hardware);
+    printHresult("Amcam_get_HwVersion", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    hardware version: "
+                  << boundedString(hardware, sizeof(hardware)) << '\n';
+    }
+
+    char productionDate[10]{};
+    hr = Amcam_get_ProductionDate(camera, productionDate);
+    printHresult("Amcam_get_ProductionDate", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    production date: "
+                  << boundedString(productionDate, sizeof(productionDate)) << '\n';
+    }
+
+    char fpga[16]{};
+    hr = Amcam_get_FpgaVersion(camera, fpga);
+    printHresult("Amcam_get_FpgaVersion", hr);
+    if (SUCCEEDED(hr)) {
+        std::cout << "    FPGA version: "
+                  << boundedString(fpga, sizeof(fpga)) << '\n';
+    }
+}
+
 void probeCamera(HAmcam camera, const AmcamDeviceV2& selectedDevice) {
     std::cout << "\n========== DIRECT AMCAM SDK PROBE ==========\n";
     const char* sdkVersion = Amcam_Version();
     std::cout << "SDK version: "
               << (sdkVersion ? sdkVersion : "<unavailable>") << '\n';
-    std::cout << "Selected device: "
+    printFirmwareIdentity(camera);
+    std::cout << "SDK display name: "
               << boundedString(selectedDevice.displayname,
                                sizeof(selectedDevice.displayname))
               << '\n';

@@ -138,7 +138,9 @@ Implemented in this Phase 3 slice:
 
 - Added `Camera::Qt` with the header-only `camera::qt::FrameStreamMailbox`. The mailbox is embedded by value at the original end-of-object position in `QtAmcamCamera`; it adds no runtime QObject, heap allocation, worker, or queue.
 - The original `QtAmcamCamera::frameAvailable()` signal and `takeLatestFrame()` API remain intact. Acquisition-generation validation, QObject notification, and the sole `AmcamCamera` session owner remain in the AmScope adapter.
-- The templated mailbox receives synchronous lifecycle and notification callbacks, allowing optimization/inlining into the existing adapter hot path. `camera_qt_frame_stream_tests` covers producer-thread publication, latest-lease identity, notification coalescing/re-arm, stale publication rejection, and clear.
+- The extraction preserves the v0.5 frame-publication mechanism: the former tail `FramePtr` slot and atomic notification flag are embedded in `FrameStreamMailbox`, and the same C++17 atomic-`shared_ptr` store/CAS/exchange algorithm remains in use. This is a structural extraction, not a new synchronization strategy. Do not claim those standard-library operations are lock-free.
+- The acquisition worker still pulls directly into a pre-sized frame-pool slot, or into its private discard buffer when all leases are retained. The Qt boundary transfers the immutable `FramePtr` lease; it does not copy or convert the pixel payload. Frame notification still bypasses the feature-request FIFO and coalesces wakeups.
+- The templated mailbox receives synchronous lifecycle and notification callbacks, allowing optimization/inlining into the existing adapter hot path. `camera_qt_frame_stream_tests` covers producer-thread publication, latest-lease identity, notification coalescing/re-arm, stale publication rejection, and clear; a deterministic concurrent producer/consumer overlap case has now been added and awaits local execution.
 
 Work:
 
@@ -148,6 +150,7 @@ Work:
 4. Preserve independent dependencies: `Amscope::Driver` remains non-Qt; `Camera::Qt` is a header-only mailbox over common frame contracts with no Qt runtime dependency; Qt Core is used by the mailbox test and the `Amscope::Qt` QObject adapter.
 5. Do **not** add a redundant `camera_amscope_control` wrapper if it simply forwards the existing `AmcamCamera` API. The existing class already provides the non-Qt programmatic surface.
 6. Preserve FIFO operation ordering, session/feature generations, callback shutdown synchronization, and one SDK-call serialization boundary.
+7. Treat frame-path performance as an invariant: do not add pixel copies/conversions, per-frame frame-buffer allocations, an explicit frame-path mutex, another worker, or a second notification/operation queue. Preserve the v0.5 publication algorithm unless a measured replacement proves non-regression under equivalent camera settings. The Phase 3 extraction itself is not a physical FPS qualification; controlled rate validation remains in Phase 7.
 
 **Exit criteria**
 

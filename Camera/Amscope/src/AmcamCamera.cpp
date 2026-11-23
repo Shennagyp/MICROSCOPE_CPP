@@ -4715,8 +4715,7 @@ AmcamCamera::readFeature(std::string_view name) {
             impl_->maximumFanSpeed,
             impl_->previewResolutions,
             impl_->profileRegistry,
-            impl_->modelCode,
-            impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
+            impl_->modelCode);
         if (const auto* error =
                 std::get_if<CameraFeatureAccessError>(&described)) {
             return *error;
@@ -5084,8 +5083,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         impl_->maximumFanSpeed,
         impl_->previewResolutions,
         impl_->profileRegistry,
-        impl_->modelCode,
-        impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
+        impl_->modelCode);
     if (const auto* error = std::get_if<CameraFeatureAccessError>(&described))
         return *error;
 

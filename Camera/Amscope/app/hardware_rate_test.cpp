@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -200,6 +201,46 @@ bool writeFeature(
     return true;
 }
 
+struct ExposureSnapshot {
+    std::optional<std::string> autoMode;
+    std::optional<std::uint32_t> timeMicroseconds;
+};
+
+ExposureSnapshot readExposureSnapshot(amscope::AmcamCamera& camera) {
+    ExposureSnapshot snapshot;
+
+    const auto autoResult = camera.readFeature("ExposureAuto");
+    if (const auto* value =
+            std::get_if<camera::CameraFeatureValue>(&autoResult)) {
+        if (const auto* mode = std::get_if<camera::FeatureEnumeration>(value))
+            snapshot.autoMode = mode->symbol;
+    }
+
+    const auto exposureResult = camera.readFeature("ExposureTime");
+    if (const auto* value =
+            std::get_if<camera::CameraFeatureValue>(&exposureResult)) {
+        if (const auto* time = std::get_if<std::int64_t>(value)) {
+            if (*time >= 0 &&
+                *time <= std::numeric_limits<std::uint32_t>::max()) {
+                snapshot.timeMicroseconds =
+                    static_cast<std::uint32_t>(*time);
+            }
+        }
+    }
+
+    return snapshot;
+}
+
+std::string jsonOptionalString(
+    const std::optional<std::string>& value) {
+    return value ? "\"" + jsonEscape(*value) + "\"" : "null";
+}
+
+std::string jsonOptionalUnsigned(
+    const std::optional<std::uint32_t>& value) {
+    return value ? std::to_string(*value) : "null";
+}
+
 bool restoreResolution(
     amscope::AmcamCamera& camera,
     const std::string& originalSymbol,
@@ -369,6 +410,10 @@ private:
 
 struct Measurement {
     double durationSeconds = 0.0;
+    ExposureSnapshot exposureBeforeStart;
+    ExposureSnapshot exposureAfterStart;
+    ExposureSnapshot exposureAtMeasurementStart;
+    ExposureSnapshot exposureAtMeasurementEnd;
     std::uint64_t imageEvents = 0;
     std::uint64_t framesPulled = 0;
     std::uint64_t callbackFrames = 0;
@@ -419,6 +464,25 @@ void printReport(
         measurement.configuredExposureMicroseconds > 0
             ? 1000000.0 /
               static_cast<double>(measurement.configuredExposureMicroseconds)
+            : 0.0;
+    const auto& exposureAtMeasurementStart =
+        measurement.exposureAtMeasurementStart;
+    const auto& exposureAtMeasurementEnd =
+        measurement.exposureAtMeasurementEnd;
+    const bool manualExposureStable =
+        exposureAtMeasurementStart.autoMode &&
+        exposureAtMeasurementEnd.autoMode &&
+        *exposureAtMeasurementStart.autoMode == "Off" &&
+        *exposureAtMeasurementEnd.autoMode == "Off" &&
+        exposureAtMeasurementStart.timeMicroseconds &&
+        exposureAtMeasurementEnd.timeMicroseconds &&
+        *exposureAtMeasurementStart.timeMicroseconds ==
+            *exposureAtMeasurementEnd.timeMicroseconds;
+    const double activeExposureFpsLimit =
+        manualExposureStable &&
+        *exposureAtMeasurementStart.timeMicroseconds > 0
+            ? 1000000.0 / static_cast<double>(
+                  *exposureAtMeasurementStart.timeMicroseconds)
             : 0.0;
     const bool operationalPass =
         measurement.callbackFrames > 0 &&
@@ -496,6 +560,27 @@ void printReport(
         << "  \"exposure_fps_limit\": "
         << (configuredExposureFpsLimit > 0.0
                 ? std::to_string(configuredExposureFpsLimit) : "null") << ",\n"
+        << "  \"exposure_auto_before_start\": "
+        << jsonOptionalString(measurement.exposureBeforeStart.autoMode) << ",\n"
+        << "  \"exposure_us_before_start\": "
+        << jsonOptionalUnsigned(measurement.exposureBeforeStart.timeMicroseconds) << ",\n"
+        << "  \"exposure_auto_after_start\": "
+        << jsonOptionalString(measurement.exposureAfterStart.autoMode) << ",\n"
+        << "  \"exposure_us_after_start\": "
+        << jsonOptionalUnsigned(measurement.exposureAfterStart.timeMicroseconds) << ",\n"
+        << "  \"exposure_auto_at_measurement_start\": "
+        << jsonOptionalString(measurement.exposureAtMeasurementStart.autoMode) << ",\n"
+        << "  \"exposure_us_at_measurement_start\": "
+        << jsonOptionalUnsigned(measurement.exposureAtMeasurementStart.timeMicroseconds) << ",\n"
+        << "  \"exposure_auto_at_measurement_end\": "
+        << jsonOptionalString(measurement.exposureAtMeasurementEnd.autoMode) << ",\n"
+        << "  \"exposure_us_at_measurement_end\": "
+        << jsonOptionalUnsigned(measurement.exposureAtMeasurementEnd.timeMicroseconds) << ",\n"
+        << "  \"manual_exposure_stable_during_measurement\": "
+        << (manualExposureStable ? "true" : "false") << ",\n"
+        << "  \"active_exposure_fps_limit\": "
+        << (activeExposureFpsLimit > 0.0
+                ? std::to_string(activeExposureFpsLimit) : "null") << ",\n"
         << "  \"sdk_exposure_samples\": " << measurement.exposureSamples << ",\n"
         << "  \"exposure_us_min\": " << measurement.exposureMinimum << ",\n"
         << "  \"exposure_us_max\": " << measurement.exposureMaximum << ",\n"
@@ -676,26 +761,13 @@ int main(int argc, char** argv) {
         return 6;
     }
 
-    bool hasConfiguredExposure = false;
-    std::uint32_t configuredExposureMicroseconds = 0;
-    const auto exposureResult = camera.readFeature("ExposureTime");
-    if (const auto* exposureValue =
-            std::get_if<camera::CameraFeatureValue>(&exposureResult)) {
-        if (const auto* exposureInteger =
-                std::get_if<std::int64_t>(exposureValue)) {
-            if (*exposureInteger >= 0 &&
-                *exposureInteger <= std::numeric_limits<std::uint32_t>::max()) {
-                hasConfiguredExposure = true;
-                configuredExposureMicroseconds =
-                    static_cast<std::uint32_t>(*exposureInteger);
-            }
-        }
-    } else {
-        const auto& exposureError =
-            std::get<camera::CameraFeatureAccessError>(exposureResult);
-        std::cerr << "Exposure feature readback unavailable: "
-                  << exposureError.message << '\n';
-    }
+    const auto exposureBeforeStart = readExposureSnapshot(camera);
+    const bool hasConfiguredExposure =
+        exposureBeforeStart.timeMicroseconds.has_value();
+    const std::uint32_t configuredExposureMicroseconds =
+        exposureBeforeStart.timeMicroseconds.value_or(0);
+    if (!hasConfiguredExposure)
+        std::cerr << "Exposure feature readback unavailable before Start.\n";
 
     auto capture = std::make_shared<CaptureState>();
     HardwarePreview preview;
@@ -765,6 +837,8 @@ int main(int argc, char** argv) {
         return 7;
     }
 
+    const auto exposureAfterStart = readExposureSnapshot(camera);
+
     // The Start path applies the model's maximum speed after callback
     // acquisition begins. Read that setting once, before the timed interval.
     bool hasAppliedSpeedLevel = false;
@@ -782,6 +856,7 @@ int main(int argc, char** argv) {
     std::uint64_t pullStart = 0;
     std::uint64_t dropStart = 0;
     std::uint64_t paintStart = 0;
+    ExposureSnapshot exposureAtMeasurementStart;
     Clock::time_point measurementStart;
     bool measurementFinished = false;
     int exitCode = 0;
@@ -790,6 +865,7 @@ int main(int argc, char** argv) {
         static_cast<int>(options.warmupSeconds * 1000.0),
         &application,
         [&]() {
+            exposureAtMeasurementStart = readExposureSnapshot(camera);
             {
                 std::lock_guard<std::mutex> lock(capture->mutex);
                 capture->measuring = true;
@@ -826,9 +902,17 @@ int main(int argc, char** argv) {
                     const double elapsed =
                         std::chrono::duration<double>(
                             measurementEnd - measurementStart).count();
+                    const auto exposureAtMeasurementEnd =
+                        readExposureSnapshot(camera);
 
                     Measurement measurement;
                     measurement.durationSeconds = elapsed;
+                    measurement.exposureBeforeStart = exposureBeforeStart;
+                    measurement.exposureAfterStart = exposureAfterStart;
+                    measurement.exposureAtMeasurementStart =
+                        exposureAtMeasurementStart;
+                    measurement.exposureAtMeasurementEnd =
+                        exposureAtMeasurementEnd;
                     measurement.imageEvents =
                         camera.imageEventsReceived() - eventStart;
                     measurement.framesPulled =

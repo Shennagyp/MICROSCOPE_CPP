@@ -50,6 +50,18 @@ static_assert(parsesOnceToNativeMode(),
 int main() {
     using amscope::AmcamAutoExposureMode;
 
+    const amscope::CameraError nativeError{
+        -2147467259, "camera.start", "SDK rejected acquisition startup"};
+    const auto commonError = amscope::toCommonOperationError(nativeError);
+    require(commonError.code == camera::CameraErrorCode::BackendFailure &&
+                commonError.operation == "camera.start" &&
+                commonError.message == "SDK rejected acquisition startup",
+            "AmScope operation errors map to a common category with operation context");
+    require(commonError.native &&
+                commonError.native->domain == "amcam.sdk" &&
+                commonError.native->code == -2147467259,
+            "AmScope native error identity is preserved without reinterpreting its code");
+
     static_assert(std::is_same_v<amscope::FramePtr, camera::FramePtr>,
                   "The AmScope frame callback must expose the common frame lease");
     static_assert(std::is_base_of_v<camera::Frame, amscope::AmcamFrame>,

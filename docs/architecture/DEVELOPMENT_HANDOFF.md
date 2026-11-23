@@ -245,15 +245,15 @@ The [completion plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is the governing
 
 
 
-### RAW bit-depth option correction
+### Sensor-output bit-depth selector correction
 
-The Amcam SDK manual describes `AMCAM_OPTION_BITDEPTH` as model-specific: 0 selects 8-bit output and 1 selects the camera's maximum bit depth. `Amcam_get_MaxBitDepth` returns that maximum depth. A fixed 8-bit sensor therefore has no selectable 8/16-bit mode and may return `E_NOTIMPL` (documented HRESULT `0x80004001`) from `Amcam_get_Option(AMCAM_OPTION_BITDEPTH)`.
+The Amcam SDK exposes two capability surfaces with different granularity. `AMCAM_OPTION_BITDEPTH` supports 8-bit and camera-maximum modes; `AMCAM_OPTION_PIXEL_FORMAT` is its newer superset and can expose intermediate RAW precisions such as 10, 11, 12, 14 and 16 bits. The selector must combine both sources without reducing the user's choices to only 8 and maximum.
 
-The initial RAW still implementation treated that option as mandatory for every RAW-capable model and aborted before snap/pull when it was unavailable. Commit `a16ae3b` adds a shared storage-mode resolver: maximum depth 8 selects the fixed 8-bit container without querying the optional option; models above 8 bits still query the option and preserve its 8-bit-versus-16-bit mode. It is used by both RAW still capture and RAW live startup. This source fix passed the user's clean Release build and 11/11 CTest suite at `7b81b5e`; Apple Silicon CI passed and Intel x86_64 CI was still in progress at this handoff update. It does not change the still-event waiter/pull path or live acquisition callback/queue/worker mechanism.
+The current source revision merges every distinct RAW/sensor-mosaic precision from `Amcam_get_PixelFormatSupport` with the legacy 8-bit and maximum choices when those depths are not already represented by an exact pixel format. Each choice retains its write mechanism and verifies the corresponding SDK readback. The pure selection logic has been extracted to `AmcamPixelFormatSelection.h` and has dedicated CTest coverage for merged 8/10/11/12/14/16-bit sets, legacy-only fallback, RAW12 packed-format preference, non-RAW filtering, and fixed-8-bit behavior. This is a source-level correction; it does not establish the MU503's actual runtime enumeration or successful hardware writes. The latest Apple Silicon and Intel Actions run must pass before the next physical-camera test.
 
 ### Physical-camera validation for Phase 2.2
 
-The original frame-model software validation passed at `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`. The fixed-8-bit RAW correction at `a16ae3b` passed the user's clean Release build and 11/11 CTest suite at `7b81b5e`. The common 8/16-bit selector at `3ef46d3` is a newer unvalidated source increment; CI run [#45075496341](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45075496341) was in progress at this refresh.
+The original frame-model software validation passed at `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`. The fixed-8-bit RAW correction at `a16ae3b` passed the user's clean Release build and 11/11 CTest suite at `7b81b5e`. The new discrete sensor-depth capability merge and its helper tests are the current unqualified increment; do not ask for another hardware run until both architecture jobs pass.
 
 The remaining required Phase 2.2 regression must use a physical AmScope camera:
 

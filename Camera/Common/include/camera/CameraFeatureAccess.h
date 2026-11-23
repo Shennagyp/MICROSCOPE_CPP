@@ -42,11 +42,23 @@ using CameraFeatureValue = std::variant<
     std::string,
     FeatureEnumeration>;
 
-struct CameraFeatureNumericRange {
+// Numeric limits retain the feature's scalar type. Using double for integer
+// limits loses exactness above 2^53 and can accept/reject the wrong int64 value.
+struct CameraIntegerRange {
+    std::int64_t minimum = 0;
+    std::int64_t maximum = 0;
+    std::optional<std::int64_t> increment;
+};
+
+struct CameraFloatingPointRange {
     double minimum = 0.0;
     double maximum = 0.0;
     std::optional<double> increment;
 };
+
+using CameraFeatureNumericRange = std::variant<
+    CameraIntegerRange,
+    CameraFloatingPointRange>;
 
 enum class CameraFeatureGroup : std::uint8_t {
     General,

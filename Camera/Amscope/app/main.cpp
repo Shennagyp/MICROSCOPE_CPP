@@ -30,6 +30,7 @@
 #include <QStringList>
 #include <QStatusBar>
 #include <QTimer>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QVariant>
 #include <QWidget>
@@ -42,6 +43,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -53,6 +55,21 @@ namespace {
 std::string utf8String(const QString& value) {
     const QByteArray bytes = value.toUtf8();
     return std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
+}
+
+QString featureGroupText(camera::CameraFeatureGroup group) {
+    switch (group) {
+    case camera::CameraFeatureGroup::General: return QStringLiteral("General");
+    case camera::CameraFeatureGroup::Exposure: return QStringLiteral("Exposure");
+    case camera::CameraFeatureGroup::ImageFormat: return QStringLiteral("Image Format");
+    case camera::CameraFeatureGroup::ImageProcessing: return QStringLiteral("Image Processing");
+    case camera::CameraFeatureGroup::Color: return QStringLiteral("Color");
+    case camera::CameraFeatureGroup::Trigger: return QStringLiteral("Trigger");
+    case camera::CameraFeatureGroup::Sensor: return QStringLiteral("Sensor");
+    case camera::CameraFeatureGroup::Transport: return QStringLiteral("Transport");
+    case camera::CameraFeatureGroup::Hardware: return QStringLiteral("Hardware");
+    }
+    return QStringLiteral("Other");
 }
 
 QString featureNameText(const camera::CameraFeatureDescriptor& descriptor) {
@@ -304,16 +321,13 @@ public:
         featureStatus_->setWordWrap(true);
 
         refreshFeaturesButton_ = new QPushButton("Refresh features", central);
-        featureScroll_ = new QScrollArea(central);
-        featureScroll_->setMinimumWidth(340);
-        featureScroll_->setMaximumWidth(460);
-        featureScroll_->setWidgetResizable(true);
-
-        featureContent_ = new QWidget(featureScroll_);
-        featureForm_ = new QFormLayout(featureContent_);
-        featureForm_->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-        featureForm_->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        featureScroll_->setWidget(featureContent_);
+        featureTabs_ = new QTabWidget(central);
+        featureTabs_->setMinimumWidth(460);
+        featureTabs_->setMaximumWidth(620);
+        featureTabs_->setDocumentMode(true);
+        featureTabs_->setMovable(false);
+        featureTabs_->setToolTip(
+            "Camera features are grouped by function. Stop acquisition before editing settings.");
 
         accessoryGroup_ = new QGroupBox("Camera accessories", central);
         accessoryForm_ = new QFormLayout(accessoryGroup_);
@@ -457,7 +471,7 @@ public:
         settingsColumn->addWidget(accessoryGroup_);
         settingsColumn->addWidget(astroAutoFocuserGroup_);
         settingsColumn->addWidget(lensFocusGroup_);
-        settingsColumn->addWidget(featureScroll_, 1);
+        settingsColumn->addWidget(featureTabs_, 1);
 
         auto* workspace = new QHBoxLayout();
         workspace->addWidget(preview_, 1);
@@ -1144,9 +1158,8 @@ private:
     }
 
     void clearFeatureControls() {
-        while (featureForm_->rowCount() > 0) {
-            featureForm_->removeRow(0);
-        }
+        featureTabs_->clear();
+        featureForms_.clear();
         featureControls_.clear();
         pendingFeatureReads_ = 0;
         clearAccessoryControls();
@@ -1162,9 +1175,19 @@ private:
             if (!descriptor.isAvailable) continue;
 
             QWidget* editor = createFeatureEditor(descriptor);
-            featureForm_->addRow(
-                featureNameText(descriptor),
-                editor);
+            auto foundForm = featureForms_.find(descriptor.group);
+            if (foundForm == featureForms_.end()) {
+                auto* scroll = new QScrollArea(featureTabs_);
+                scroll->setWidgetResizable(true);
+                auto* page = new QWidget(scroll);
+                auto* form = new QFormLayout(page);
+                form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+                form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+                scroll->setWidget(page);
+                featureTabs_->addTab(scroll, featureGroupText(descriptor.group));
+                foundForm = featureForms_.emplace(descriptor.group, form).first;
+            }
+            foundForm->second->addRow(featureNameText(descriptor), editor);
             featureControls_.emplace(
                 descriptor.name,
                 FeatureControl{descriptor, editor});
@@ -1183,7 +1206,7 @@ private:
 
         switch (descriptor.kind) {
         case camera::CameraFeatureKind::Boolean: {
-            auto* control = new QCheckBox(featureContent_);
+            auto* control = new QCheckBox(featureTabs_);
             connect(control, &QCheckBox::toggled, this,
                     [this, name = descriptor.name](bool) {
                 submitFeatureWrite(name);
@@ -1193,7 +1216,7 @@ private:
         }
         case camera::CameraFeatureKind::Integer: {
             if (!descriptor.discreteIntegerValues.empty()) {
-                auto* control = new QComboBox(featureContent_);
+                auto* control = new QComboBox(featureTabs_);
                 for (const auto item : descriptor.discreteIntegerValues) {
                     control->addItem(
                         QString::number(static_cast<qlonglong>(item)),
@@ -1208,7 +1231,7 @@ private:
                 });
                 editor = control;
             } else {
-                auto* control = new QLineEdit(featureContent_);
+                auto* control = new QLineEdit(featureTabs_);
                 control->setPlaceholderText(numericRangeText(descriptor));
                 connect(control, &QLineEdit::editingFinished, this,
                         [this, name = descriptor.name]() {
@@ -1237,7 +1260,7 @@ private:
         }
         case camera::CameraFeatureKind::FloatingPoint: {
             if (descriptor.numericRange) {
-                auto* control = new QDoubleSpinBox(featureContent_);
+                auto* control = new QDoubleSpinBox(featureTabs_);
                 control->setDecimals(12);
                 control->setRange(
                     descriptor.numericRange->minimum,
@@ -1283,7 +1306,7 @@ private:
         }
 
         if (!editor) {
-            editor = new QLabel("Unsupported feature type", featureContent_);
+            editor = new QLabel("Unsupported feature type", featureTabs_);
         }
         editor->setObjectName(featureName);
         editor->setEnabled(descriptor.isWritable);
@@ -2804,9 +2827,8 @@ private:
     QSpinBox* softwareTriggerCount_ = nullptr;
     QPushButton* softwareTriggerButton_ = nullptr;
     QLabel* triggerStatusLabel_ = nullptr;
-    QScrollArea* featureScroll_ = nullptr;
-    QWidget* featureContent_ = nullptr;
-    QFormLayout* featureForm_ = nullptr;
+    QTabWidget* featureTabs_ = nullptr;
+    std::map<camera::CameraFeatureGroup, QFormLayout*> featureForms_;
 };
 
 } // namespace

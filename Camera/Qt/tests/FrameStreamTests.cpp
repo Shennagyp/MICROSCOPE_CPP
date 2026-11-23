@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QThread>
 #include <QTimer>
+#include <atomic>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -87,10 +88,10 @@ int main(int argc,char** argv) {
         return EXIT_FAILURE;
     }
     // Exercise producer publication while the Qt consumer is actively taking
-    // frames. The producer is single-threaded and monotonically tags each frame;
-    // the consumer may skip superseded values but must never observe regression
-    // and must eventually observe the final publication.
+    // frames. Periodic producer/consumer handshakes guarantee real overlap while
+    // each batch still allows latest-frame coalescing.
     constexpr std::uint32_t concurrentFrameCount = 5000;
+    constexpr std::uint32_t concurrentBatchSize = 250;
     NotificationContext concurrentContext;
     QEventLoop concurrentLoop;
     QTimer concurrentTimeout;
@@ -98,6 +99,8 @@ int main(int argc,char** argv) {
     QObject::connect(&concurrentTimeout, &QTimer::timeout,
                      &concurrentLoop, &QEventLoop::quit);
 
+    std::atomic<std::uint32_t> lastConsumedConcurrent{0};
+    std::atomic<bool> cancelConcurrentProducer{false};
     bool concurrentAffinity = true;
     bool concurrentMonotonic = true;
     bool concurrentFinalDelivered = false;
@@ -113,23 +116,34 @@ int main(int argc,char** argv) {
         if (frame->width < lastConcurrentValue)
             concurrentMonotonic = false;
         lastConcurrentValue = frame->width;
+        lastConsumedConcurrent.store(lastConcurrentValue, std::memory_order_release);
         if (lastConcurrentValue == concurrentFrameCount) {
             concurrentFinalDelivered = true;
             concurrentLoop.quit();
         }
     };
 
+    concurrentTimeout.start(5000);
     std::thread concurrentProducer([&]() {
         for (std::uint32_t value = 1; value <= concurrentFrameCount; ++value) {
+            if (cancelConcurrentProducer.load(std::memory_order_acquire))
+                break;
             mailbox.publishFrame(
                 makeFrame(value),
                 []() noexcept { return true; },
                 [&]() noexcept { concurrentContext.queue(); });
+
+            if (value % concurrentBatchSize == 0) {
+                while (lastConsumedConcurrent.load(std::memory_order_acquire) < value &&
+                       !cancelConcurrentProducer.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+            }
         }
     });
 
-    concurrentTimeout.start(5000);
     concurrentLoop.exec();
+    cancelConcurrentProducer.store(true, std::memory_order_release);
     concurrentProducer.join();
 
     if (!concurrentFinalDelivered || !concurrentMonotonic ||

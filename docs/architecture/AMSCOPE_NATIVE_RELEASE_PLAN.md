@@ -183,7 +183,7 @@ The owner subsequently confirmed that the post-extraction MU503 preview sequence
 - The panel owns no enumeration, camera session, vendor error, asynchronous request queue, generation, or backend lifecycle operation. The AmScope preview retains those responsibilities and converts discovered AmScope records to their common base values at the composition boundary.
 - It disables buttons until the corresponding host callback is installed. A faulted session permits Close only.
 - Added `camera_qt_widgets_camera_control_panel_tests` for labels/opaque IDs, callbacks, empty discovery, pending-state gating, and Closed/Open/Streaming/Faulted action availability.
-- The implementation is committed at `17d6b0a7076e140c57fc3760fcde1f3eec2915a0`. It has **not** yet been built or tested locally. It adds one CTest target, bringing the expected suite from 13 to 14.
+- Source history: panel contract `a4ca387`, panel implementation `1559099`, AmScope preview/CMake integration `195f0f6`, focused test `5189d40`, preservation of the original accessory/trigger enablement rules `3795427`, callback-presence gating and corresponding test refinement `17d6b0a`, and explicit `QString` include `cd37af6`. The latest source commit is `cd37af622783f4dc8a5d3ae16782955887a286ce`. This increment has **not** yet been built or tested locally. It adds one CTest target, bringing the expected suite from 13 to 14.
 - After local Release build and 14/14 CTest pass, repeat the MU503 discovery/Open/Start/changing-frame/Stop/Close smoke using the new panel. The earlier FrameView smoke does not validate this later panel change.
 
 

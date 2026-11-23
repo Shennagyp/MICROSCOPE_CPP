@@ -47,18 +47,36 @@ This opt-in mode temporarily requests `AMCAM_OPTION_RAW=1`, reads maximum bit de
 
 The default run remains strictly read-only. The RAW-mode run intentionally changes one setting temporarily and must be used only when the camera is stopped.
 
-### Capture one actual RAW frame
+### Capture RAW frames and validate acquisition data
 
-To move beyond capability metadata and inspect bytes delivered by the SDK, close the microscope application and run:
+For a one-frame baseline, close the microscope application and run:
 
 \`\`\`bash
 bash scripts/run-amscope-sdk-probe.sh --capture-raw-frame 2>&1 | tee amscope-raw-frame-capture.txt
 \`\`\`
 
-This opt-in test temporarily enables RAW mode if necessary, reads the active RAW FourCC and significant depth, allocates a buffer sized for up to 16-bit words, starts pull-mode acquisition, pulls the first RAW frame, stops acquisition, and restores/verifies the original RAW-mode setting. It writes \`amscope-raw-frame.raw\` in the repository root (overwriting a previous file with that name). The output reports frame dimensions, exact payload byte count, significant sample depth, storage word width, observed sample range, and number of distinct values. It does not debayer, demosaic, scale, or otherwise transform the captured samples.
+For the acquisition-validity test, capture eight consecutive frames:
 
-The sample statistics are diagnostic, not a sensor-ADC calibration. A scene that does not exercise the sensor's full range may produce a narrow sample range. For depths above 8 bits, the diagnostic interprets the SDK's two-byte RAW words as little-endian 16-bit values, consistent with the Mac host architecture. Preserve the \`.raw\` file and terminal output for independent analysis. Do not interrupt the process while it is restoring the original RAW setting.
+\`\`\`bash
+bash scripts/run-amscope-sdk-probe.sh --capture-raw-sequence 2>&1 | tee amscope-raw-sequence.txt
+\`\`\`
 
+Both modes temporarily enable RAW mode if necessary, read the active RAW FourCC and significant depth, allocate a buffer sized for up to 16-bit words, start pull-mode acquisition, stop acquisition, and restore/verify the original RAW-mode setting. The sequence mode records per-frame sequence number, timestamp, V4 metadata, dimensions, payload size, sample range, distinct-value count, sentinel-byte matches, and FNV-1a 64-bit checksum. It also reports callback/error/timeout/disconnect counts and the SDK software-dropped-frame counter delta when available. The first unmodified payload is written to \`amscope-raw-frame.raw\` in the repository root; copy it before the next capture because the file is overwritten.
+
+The sequence diagnostic initializes the caller buffer to \`0xA5\` before each pull. A high count of remaining sentinel-valued bytes can indicate that the SDK did not overwrite the expected payload region; individual matches are not proof of an unwritten byte because a real sample may also equal \`0xA5\`. Advancing sequence/timestamp metadata does not, by itself, prove that image content is fresh. Compare dark and illuminated runs and retain both logs and binary payloads.
+
+Example paired captures:
+
+\`\`\`bash
+bash scripts/run-amscope-sdk-probe.sh --capture-raw-sequence 2>&1 | tee amscope-raw-sequence-dark.txt
+cp amscope-raw-frame.raw amscope-raw-sequence-dark.raw
+
+# Change only the optical condition to normal illumination.
+bash scripts/run-amscope-sdk-probe.sh --capture-raw-sequence 2>&1 | tee amscope-raw-sequence-lit.txt
+cp amscope-raw-frame.raw amscope-raw-sequence-lit.raw
+\`\`\`
+
+Do not interrupt the process while it is stopping acquisition and restoring the original RAW setting. The full MU503 defect record, measured evidence, and next diagnostic gates are in [MU503_RAW_ACQUISITION_PROBLEM.md](../../../../docs/testing/hardware/MU503_RAW_ACQUISITION_PROBLEM.md).
 
 ## Interpreting the generic MU Series bit-depth manual
 

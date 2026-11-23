@@ -148,14 +148,20 @@ std::optional<int> rawPixelFormatForBitDepth(
 std::optional<unsigned> rawBitDepthForPixelFormat(
     const std::vector<RawPixelFormatChoice>& choices,
     int pixelFormat) {
-    const auto found = std::find_if(
+    // The selected format may be an alternate representation of a depth
+    // (notably RAW12PACK) even when the bit-depth selector prefers another
+    // canonical format for writes. Read every supported representation.
+    const auto bitDepth = rawPixelFormatBitDepth(pixelFormat);
+    if (!bitDepth)
+        return std::nullopt;
+    const auto supportedDepth = std::find_if(
         choices.begin(), choices.end(),
-        [pixelFormat](const RawPixelFormatChoice& choice) {
-            return choice.pixelFormat == pixelFormat;
+        [bitDepth](const RawPixelFormatChoice& choice) {
+            return choice.bitDepth == *bitDepth;
         });
-    return found == choices.end()
+    return supportedDepth == choices.end()
         ? std::nullopt
-        : std::optional<unsigned>(found->bitDepth);
+        : bitDepth;
 }
 
 // AMCAM_OPTION_BITDEPTH selects 8-bit output or the camera's maximum

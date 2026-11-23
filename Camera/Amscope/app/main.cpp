@@ -1158,7 +1158,14 @@ private:
     }
 
     void clearFeatureControls() {
-        featureTabs_->clear();
+        // QTabWidget::clear() removes tab entries but does not delete their
+        // page widgets. Delete each page explicitly so every feature refresh
+        // releases its scroll area, form, and editor widgets.
+        while (featureTabs_->count() > 0) {
+            QWidget* page = featureTabs_->widget(0);
+            featureTabs_->removeTab(0);
+            delete page;
+        }
         featureForms_.clear();
         featureControls_.clear();
         pendingFeatureReads_ = 0;

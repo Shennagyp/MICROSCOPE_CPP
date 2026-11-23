@@ -33,7 +33,7 @@ int main() {
     CameraFeatureDescriptor fps{
         "FrameRate", "Frame Rate", CameraFeatureKind::FloatingPoint,
         std::string("fps"), true, true, true,
-        CameraFeatureNumericRange{1.0, 120.0, 0.1},
+        CameraFeatureNumericRange{CameraFloatingPointRange{1.0, 120.0, 0.1}},
         std::nullopt, {}
     };
 
@@ -61,11 +61,71 @@ int main() {
     CameraFeatureDescriptor exposure{
         "ExposureTime", "Exposure Time", CameraFeatureKind::Integer,
         std::string("us"), true, true, true,
-        CameraFeatureNumericRange{10.0, 100000.0, std::nullopt},
+        CameraFeatureNumericRange{CameraIntegerRange{10, 100000, std::nullopt}},
         std::nullopt, {}
     };
     check(accepted(validateFeatureWrite(exposure, CameraFeatureValue{std::int64_t{2500}})),
           "accepts integer within range");
+
+    // Integer feature ranges must remain exact beyond IEEE-754's 53-bit
+    // integer precision boundary. A double-backed range can collapse adjacent
+    // int64 values and incorrectly accept an off-increment value.
+    constexpr std::int64_t aboveDoubleIntegerPrecision = 9007199254740993LL;
+    CameraFeatureDescriptor exactInteger{
+        "ExactInteger", "Exact Integer", CameraFeatureKind::Integer,
+        std::nullopt, true, true, true,
+        CameraFeatureNumericRange{CameraIntegerRange{
+            aboveDoubleIntegerPrecision,
+            aboveDoubleIntegerPrecision + 10,
+            std::int64_t{2}}},
+        std::nullopt, {}
+    };
+    check(accepted(validateFeatureWrite(
+              exactInteger,
+              CameraFeatureValue{aboveDoubleIntegerPrecision + 2})),
+          "accepts an exactly representable int64 value on the advertised increment");
+    auto adjacentLargeInteger = validateFeatureWrite(
+        exactInteger,
+        CameraFeatureValue{aboveDoubleIntegerPrecision + 1});
+    check(rejected(adjacentLargeInteger) != nullptr &&
+          rejected(adjacentLargeInteger)->code ==
+              CameraFeatureAccessError::Code::InvalidValue,
+          "rejects an adjacent int64 value without rounding it through double");
+
+    auto wrongIntegerRangeType = exactInteger;
+    wrongIntegerRangeType.numericRange = CameraFeatureNumericRange{
+        CameraFloatingPointRange{0.0, 10.0, std::nullopt}};
+    auto wrongIntegerRangeResult = validateFeatureWrite(
+        wrongIntegerRangeType,
+        CameraFeatureValue{aboveDoubleIntegerPrecision + 2});
+    check(rejected(wrongIntegerRangeResult) != nullptr &&
+          rejected(wrongIntegerRangeResult)->code ==
+              CameraFeatureAccessError::Code::BackendFailure,
+          "rejects a floating-point range attached to an integer feature");
+
+    auto invalidIntegerIncrement = exactInteger;
+    invalidIntegerIncrement.numericRange = CameraFeatureNumericRange{
+        CameraIntegerRange{0, 10, std::int64_t{0}}};
+    auto invalidIntegerIncrementResult = validateFeatureWrite(
+        invalidIntegerIncrement, CameraFeatureValue{std::int64_t{2}});
+    check(rejected(invalidIntegerIncrementResult) != nullptr &&
+          rejected(invalidIntegerIncrementResult)->code ==
+              CameraFeatureAccessError::Code::BackendFailure,
+          "rejects a non-positive integer increment as an invalid descriptor");
+
+    CameraFeatureDescriptor fullDomainInteger{
+        "FullDomainInteger", "Full Domain Integer", CameraFeatureKind::Integer,
+        std::nullopt, true, true, true,
+        CameraFeatureNumericRange{CameraIntegerRange{
+            std::numeric_limits<std::int64_t>::min(),
+            std::numeric_limits<std::int64_t>::max(),
+            std::int64_t{1}}},
+        std::nullopt, {}
+    };
+    check(accepted(validateFeatureWrite(
+              fullDomainInteger,
+              CameraFeatureValue{std::numeric_limits<std::int64_t>::max()})),
+          "validates integer increments across the full signed 64-bit range without overflow");
 
     CameraFeatureDescriptor sensorBitDepth{
         "SensorBitDepth", "Sensor Bit Depth", CameraFeatureKind::Integer,
@@ -140,7 +200,7 @@ int main() {
           "rejects read-only feature");
 
     auto invalidRange = exposure;
-    invalidRange.numericRange = CameraFeatureNumericRange{100.0, 1.0, std::nullopt};
+    invalidRange.numericRange = CameraFeatureNumericRange{CameraIntegerRange{100, 1, std::nullopt}};
     auto invalidRangeResult = validateFeatureWrite(
         invalidRange, CameraFeatureValue{std::int64_t{20}});
     check(rejected(invalidRangeResult) != nullptr &&
@@ -149,7 +209,7 @@ int main() {
 
     auto invalidVectorDescriptor = rgb;
     invalidVectorDescriptor.elementCount.reset();
-    invalidVectorDescriptor.numericRange = CameraFeatureNumericRange{0.0, 10.0, std::nullopt};
+    invalidVectorDescriptor.numericRange = CameraFeatureNumericRange{CameraFloatingPointRange{0.0, 10.0, std::nullopt}};
     auto invalidDescriptorResult = validateFeatureWrite(
         invalidVectorDescriptor, CameraFeatureValue{std::vector<std::int64_t>{1, 2, 3}});
     check(rejected(invalidDescriptorResult) != nullptr &&

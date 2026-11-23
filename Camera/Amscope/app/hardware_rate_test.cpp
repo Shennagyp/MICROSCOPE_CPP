@@ -485,7 +485,8 @@ void printReport(
                   *measurement.exposureAtMeasurementStartMicroseconds)
             : 0.0;
     const bool typedRateApiPass =
-        measurement.deviceFrameRateMeasurement.has_value() &&
+        measurement.deviceFrameRateMeasurement &&
+        measurement.deviceFrameRateMeasurement->framesPerSecond().has_value() &&
         measurement.stoppedRateStateCheckPerformed &&
         measurement.stoppedRateStateCheckPassed;
     const bool operationalPass =
@@ -528,6 +529,8 @@ void printReport(
         << measurement.durationSeconds << ",\n"
         << "  \"event_fps\": " << eventFps << ",\n"
         << "  \"pull_fps\": " << pullFps << ",\n"
+        << "  \"typed_rate_api_pass\": "
+        << (typedRateApiPass ? "true" : "false") << ",\n"
         << "  \"device_rate_api_succeeded\": "
         << (measurement.deviceFrameRateMeasurement ? "true" : "false") << ",\n"
         << "  \"device_rate_fps\": "

@@ -514,6 +514,8 @@ After extraction, rerun the Section 3.2 baseline on the physical AmScope camera.
 
 At least one RAW-capable physical camera must be used to verify that the extracted common frame model still retains native pixel-format code, significant sensor bit depth, and storage width independently.
 
+For the Phase 2.3 typed measured-rate API, run `amscope_hardware_rate_test` on a physical camera. The report must include a finite `device_rate_fps`, the SDK interval count/timebase, and `typed_rate_api_pass: true`. After a successful Stop, the test calls the typed API again and requires `InvalidState` with no native error identity. This checks both the active-stream telemetry contract and the stopped-state precondition without fabricating an SDK error code.
+
 ### Exit criteria
 
 - Common models compile without vendor or Qt dependencies.

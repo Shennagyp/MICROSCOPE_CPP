@@ -70,6 +70,14 @@ void printRawModelFlags(std::uint64_t flags) {
     }
     if (!any) std::cout << " none";
     std::cout << '\n';
+
+    if ((flags & AMCAM_FLAG_USB30_OVER_USB20) != 0) {
+        std::cout << "USB transport: USB 3.0 camera connected over USB 2.0\n";
+    } else if ((flags & AMCAM_FLAG_USB30) != 0) {
+        std::cout << "USB transport: USB 3.0 capability flag present\n";
+    } else {
+        std::cout << "USB transport: no USB 3.0 capability flag reported\n";
+    }
 }
 
 bool parseIndex(const char* text, unsigned& index) {
@@ -210,13 +218,154 @@ void probeCamera(HAmcam camera, const AmcamDeviceV2& selectedDevice) {
                  "image acquisition was not started.\n";
 }
 
+ 
+bool probeRawModeTemporarily(HAmcam camera) {
+    std::cout << "\n========== TEMPORARY RAW-MODE PROBE ==========\n";
+    std::cout << "This mode changes AMCAM_OPTION_RAW to 1 while the "
+                 "camera is stopped, reads capabilities, then restores "
+                 "the original value.\n";
+
+    int originalRawMode = -1;
+    HRESULT hr = Amcam_get_Option(
+        camera, AMCAM_OPTION_RAW, &originalRawMode);
+    printHresult("Read original AMCAM_OPTION_RAW", hr);
+    if (FAILED(hr) || (originalRawMode != 0 && originalRawMode != 1)) {
+        std::cerr << "Cannot safely probe RAW mode: original mode is "
+                     "unavailable or invalid.\n";
+        return false;
+    }
+    std::cout << "    original RAW mode: " << originalRawMode << '\n';
+
+    bool changedByProbe = false;
+    const auto restoreOriginalMode = [&]() -> bool {
+        if (!changedByProbe) return true;
+
+        const HRESULT restoreHr = Amcam_put_Option(
+            camera, AMCAM_OPTION_RAW, originalRawMode);
+        printHresult("Restore original AMCAM_OPTION_RAW", restoreHr);
+        if (FAILED(restoreHr)) {
+            std::cerr << "CRITICAL: failed to restore the original RAW mode. "
+                         "Power-cycle/reconnect the camera before further use.\n";
+            return false;
+        }
+
+        int restoredMode = -1;
+        const HRESULT verifyHr = Amcam_get_Option(
+            camera, AMCAM_OPTION_RAW, &restoredMode);
+        printHresult("Verify restored AMCAM_OPTION_RAW", verifyHr);
+        if (FAILED(verifyHr) || restoredMode != originalRawMode) {
+            std::cerr << "CRITICAL: RAW-mode restoration readback did not "
+                         "match the original mode.\n";
+            return false;
+        }
+        std::cout << "    restored RAW mode: " << restoredMode << '\n';
+        return true;
+    };
+
+    if (originalRawMode == 0) {
+        hr = Amcam_put_Option(camera, AMCAM_OPTION_RAW, 1);
+        printHresult("Temporarily enable AMCAM_OPTION_RAW=1", hr);
+        if (FAILED(hr)) {
+            std::cout << "RAW mode could not be enabled; no mode change "
+                         "was confirmed.\n";
+            return false;
+        }
+        changedByProbe = true;
+    } else {
+        std::cout << "Camera was already in RAW mode; no mode switch needed.\n";
+    }
+
+    int activeRawMode = -1;
+    hr = Amcam_get_Option(camera, AMCAM_OPTION_RAW, &activeRawMode);
+    printHresult("Read active AMCAM_OPTION_RAW", hr);
+    if (FAILED(hr) || activeRawMode != 1) {
+        std::cerr << "RAW mode was not confirmed after the request.\n";
+        const bool restored = restoreOriginalMode();
+        return false && restored;
+    }
+
+    std::cout << "\n--- Capabilities while RAW mode is active ---\n";
+
+    const HRESULT maximumDepthResult = Amcam_get_MaxBitDepth(camera);
+    printHresult("Amcam_get_MaxBitDepth [RAW mode]", maximumDepthResult);
+    if (SUCCEEDED(maximumDepthResult) &&
+        maximumDepthResult >= 8 && maximumDepthResult <= 16) {
+        std::cout << "    interpreted RAW maximum: "
+                  << maximumDepthResult << " bits\n";
+    }
+
+    printOptionInt(camera, "Amcam_get_Option(AMCAM_OPTION_BITDEPTH) [RAW]",
+                   AMCAM_OPTION_BITDEPTH);
+
+    int currentPixelFormat = -1;
+    const HRESULT currentPixelFormatResult = Amcam_get_Option(
+        camera, AMCAM_OPTION_PIXEL_FORMAT, &currentPixelFormat);
+    printHresult("Amcam_get_Option(AMCAM_OPTION_PIXEL_FORMAT) [RAW]",
+                 currentPixelFormatResult);
+    if (SUCCEEDED(currentPixelFormatResult)) {
+        const char* name = Amcam_get_PixelFormatName(currentPixelFormat);
+        std::cout << "    current RAW pixel-format code: "
+                  << currentPixelFormat << ", name: "
+                  << (name ? name : "<unknown>") << '\n';
+    }
+
+    int pixelFormatCount = -1;
+    const HRESULT countResult = Amcam_get_PixelFormatSupport(
+        camera, static_cast<char>(-1), &pixelFormatCount);
+    printHresult("Amcam_get_PixelFormatSupport(count) [RAW]", countResult);
+    std::cout << "    RAW-mode reported count: " << pixelFormatCount << '\n';
+
+    constexpr int maximumFormatsToRead = 64;
+    if (SUCCEEDED(countResult) &&
+        pixelFormatCount >= 0 &&
+        pixelFormatCount <= maximumFormatsToRead) {
+        for (int i = 0; i < pixelFormatCount; ++i) {
+            int code = -1;
+            const HRESULT entryResult = Amcam_get_PixelFormatSupport(
+                camera, static_cast<char>(i), &code);
+            std::cout << "    RAW entry[" << i << "]: ";
+            printHresult("Amcam_get_PixelFormatSupport(entry)", entryResult);
+            if (SUCCEEDED(entryResult)) {
+                const char* name = Amcam_get_PixelFormatName(code);
+                std::cout << "        code=" << code
+                          << ", name=" << (name ? name : "<unknown>")
+                          << '\n';
+            }
+        }
+    } else if (SUCCEEDED(countResult) &&
+               pixelFormatCount > maximumFormatsToRead) {
+        std::cout << "    enumeration not expanded: count exceeds safety limit "
+                  << maximumFormatsToRead << '\n';
+    }
+
+    unsigned rawFourCC = 0;
+    unsigned rawBitsPerPixel = 0;
+    const HRESULT rawFormatResult = Amcam_get_RawFormat(
+        camera, &rawFourCC, &rawBitsPerPixel);
+    printHresult("Amcam_get_RawFormat [RAW]", rawFormatResult);
+    if (SUCCEEDED(rawFormatResult)) {
+        std::cout << "    RAW FourCC: '" << fourccString(rawFourCC)
+                  << "' (0x" << std::hex << std::uppercase << rawFourCC
+                  << std::dec << std::nouppercase << ')'
+                  << "\n    RAW bits per pixel: " << rawBitsPerPixel
+                  << '\n';
+    }
+
+    const bool restored = restoreOriginalMode();
+    std::cout << "==============================================\n";
+    return restored;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     if (argc > 1 && std::string(argv[1]) == "--help") {
-        std::cout << "Usage: amscope_sdk_pixel_format_probe [--index N]\n"
-                     "Enumerates connected Amcam cameras and directly probes "
-                     "the selected device using the vendor SDK.\n"
+        std::cout << "Usage: amscope_sdk_pixel_format_probe "
+                     "[--index N] [--probe-raw-mode]\n"
+                     "Directly probes a connected camera using the vendor SDK.\n"
+                     "--probe-raw-mode temporarily enables RAW mode while "
+                     "the camera is stopped, reads RAW output capabilities, "
+                     "and restores the original RAW mode.\n"
                      "A single connected camera is selected automatically. "
                      "With multiple cameras, choose an index interactively "
                      "or pass --index N.\n";
@@ -224,16 +373,29 @@ int main(int argc, char** argv) {
     }
 
     bool hasRequestedIndex = false;
+    bool requestRawModeProbe = false;
     unsigned requestedIndex = 0;
-    if (argc == 3 && std::string(argv[1]) == "--index") {
-        if (!parseIndex(argv[2], requestedIndex)) {
-            std::cerr << "Invalid camera index: " << argv[2] << '\n';
+    for (int argument = 1; argument < argc; ++argument) {
+        const std::string value(argv[argument]);
+        if (value == "--index") {
+            if (hasRequestedIndex || argument + 1 >= argc ||
+                !parseIndex(argv[argument + 1], requestedIndex)) {
+                std::cerr << "--index requires one non-negative integer.\n";
+                return 64;
+            }
+            hasRequestedIndex = true;
+            ++argument;
+        } else if (value == "--probe-raw-mode") {
+            if (requestRawModeProbe) {
+                std::cerr << "--probe-raw-mode was specified more than once.\n";
+                return 64;
+            }
+            requestRawModeProbe = true;
+        } else {
+            std::cerr << "Unknown argument: " << value << '\n'
+                      << "Use --help for usage.\n";
             return 64;
         }
-        hasRequestedIndex = true;
-    } else if (argc != 1) {
-        std::cerr << "Usage: amscope_sdk_pixel_format_probe [--index N]\n";
-        return 64;
     }
 
     AmcamDeviceV2 devices[AMCAM_MAX]{};
@@ -283,6 +445,10 @@ int main(int argc, char** argv) {
     }
 
     probeCamera(camera, devices[selectedIndex]);
+    bool rawModeProbeSucceeded = true;
+    if (requestRawModeProbe) {
+        rawModeProbeSucceeded = probeRawModeTemporarily(camera);
+    }
     Amcam_Close(camera);
-    return 0;
+    return rawModeProbeSucceeded ? 0 : (requestRawModeProbe ? 6 : 0);
 }

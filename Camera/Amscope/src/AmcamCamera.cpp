@@ -466,6 +466,8 @@ buildAmcamFeatureDescriptors(
     int pixelFormatCount = 0;
     const HRESULT pixelCountHr =
         Amcam_get_PixelFormatSupport(handle, static_cast<char>(-1), &pixelFormatCount);
+    int pixelFormatFailedEntry = -1;
+    HRESULT pixelFormatEntryHr = S_OK;
     if (SUCCEEDED(pixelCountHr) && pixelFormatCount > 0 && pixelFormatCount <= 64) {
         supportedPixelFormats.reserve(static_cast<std::size_t>(pixelFormatCount));
         supportedPixelFormatCodes.reserve(static_cast<std::size_t>(pixelFormatCount));
@@ -474,6 +476,8 @@ buildAmcamFeatureDescriptors(
             const HRESULT pixelHr =
                 Amcam_get_PixelFormatSupport(handle, static_cast<char>(i), &code);
             if (FAILED(pixelHr)) {
+                pixelFormatFailedEntry = i;
+                pixelFormatEntryHr = pixelHr;
                 supportedPixelFormats.clear();
                 supportedPixelFormatCodes.clear();
                 break;
@@ -583,8 +587,23 @@ buildAmcamFeatureDescriptors(
     // important for distinguishing a fixed 8-bit sensor from an SDK/model
     // descriptor mismatch; a generic disabled state is not actionable.
     if (rawBitDepthDisabledReason) {
+        std::string enumeratedCodes;
+        for (std::size_t i = 0; i < supportedPixelFormatCodes.size(); ++i) {
+            if (i != 0)
+                enumeratedCodes += ",";
+            enumeratedCodes += std::to_string(supportedPixelFormatCodes[i]);
+        }
         *rawBitDepthDisabledReason +=
-            " [effective maximum=" + std::to_string(rawMaxBitDepth) +
+            " [SDK pixel-format probe: count HRESULT=" +
+            std::to_string(static_cast<long long>(pixelCountHr)) +
+            "; reported count=" + std::to_string(pixelFormatCount) +
+            "; entries read=" +
+            std::to_string(supportedPixelFormatCodes.size()) +
+            "; failed entry=" + std::to_string(pixelFormatFailedEntry) +
+            "; entry HRESULT=" +
+            std::to_string(static_cast<long long>(pixelFormatEntryHr)) +
+            "; format codes={" + enumeratedCodes + "}" +
+            "; effective maximum=" + std::to_string(rawMaxBitDepth) +
             " bits; model flags=" + std::to_string(modelFlags) +
             "; RAW model capability=" +
             (rawModelSupported ? "yes" : "no") + "]";

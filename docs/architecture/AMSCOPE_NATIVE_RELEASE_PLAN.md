@@ -163,7 +163,16 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: NOT STARTED AS A REUSABLE LIBRARY; CURRENT PREVIEW IS THE SOURCE**
+**Status: IN PROGRESS; first generic widget extracted into `Camera::QtWidgets`; local build/test pending**
+
+Implemented in this Phase 4 slice:
+
+- Added the standalone `Camera::QtWidgets` static CMake target, depending on `Camera::Common` and Qt Widgets, with a focused offscreen test target.
+- Extracted the preview's `FrameView` into `camera::qtwidgets::FrameView`. Its public contract uses only `camera::FramePtr` and Qt Widgets; it has no AmScope SDK, `AmcamCamera`, or `QtAmcamCamera` dependency.
+- Preserved the existing external-memory `QImage` wrappers for RGB24, RAW8, and RAW16, the retained immutable frame lease, and the post-paint callback. The stream widget does not make an owned pixel copy, perform RAW demosaicing, or introduce a GPU renderer.
+- The AmScope preview now composes this reusable widget. Camera lifecycle, still-image saving, FPS accounting, feature requests, and AmScope accessory panels remain in the application layer.
+
+Local validation for the new target and `camera_qt_widgets_frame_view_tests` is pending; do not treat source integration as a passing build.
 
 Extract only the components needed to turn the preview into a reusable library:
 

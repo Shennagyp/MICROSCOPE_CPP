@@ -1,6 +1,6 @@
 # Development Continuation Handoff — AmScope Native Driver
 
-**Last reviewed:** 22 November 2026  
+**Last reviewed:** 23 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Active branch:** `amscope-native-driver`  
 **Physical run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
@@ -14,8 +14,10 @@
 **Local validation head:** `7b81b5e639f8b8f4eae04f30c1145c975092073b` (clean Release build and 11/11 CTest passed)  
 **Current CI:** [run #45072725032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45072725032) — Apple Silicon arm64 passed; Intel x86_64 in progress  
 **Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
-**Current phase:** Phase 2.2 — common frame and image-layout model  
+**Current phase:** Phase 2.3 — common operation errors and remaining shared value types  
 **Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 passed the user's clean local build and 10/10 CTest suite, plus GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2's common frame/payload/layout model, optional timing metadata, opaque pixel-format identifier, Amcam-specific frame extension, and preview migration are implemented. The user then pulled branch head `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`, completed a clean Release build of the driver, Qt adapter, hardware-rate executable, preview app, and test targets, and passed all 11/11 CTest tests. GitHub Actions run [#45070941692](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45070941692) passed on Intel x86_64 and Apple Silicon arm64 for that exact head. Phase 2.2's original software revision remains validated. The fixed-8-bit RAW correction in `a16ae3bd77c56b14384736aa457e859c73a8072f` was then built by the user at branch head `7b81b5e639f8b8f4eae04f30c1145c975092073b`: the clean Release build completed and all 11/11 CTest tests passed. Current-head CI run [#45072725032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45072725032) has passed Apple Silicon arm64; Intel x86_64 is still running. The correction uses `Amcam_get_MaxBitDepth` to skip `AMCAM_OPTION_BITDEPTH` on fixed 8-bit sensors and retains the option query for sensors above 8 bits; it is applied to RAW still capture and RAW live startup. Physical-camera validation of frame layout/payload, optional metadata, and RAW format identity/depth remains open. The two earlier MU503 performance runs and residual 15-minute/fault-injection follow-ups remain recorded below.
+
+Phase 2.3 has now started with `CameraOperationError.h`: backend-neutral operation categories, operation context, and optional native error identity (`domain` plus signed code). Feature access errors remain separate because they express feature-specific validation/access semantics. `CameraOperationResult<T>` is covered by a new focused test target registered in `Camera/Common/CMakeLists.txt`. These changes are committed in the current branch; their GitHub Actions result has not yet been established. The AmScope `CameraError` migration and remaining shared-value classification are still pending. Low-level SDK/transport exploration is deferred to Phase 9, after Phase 8, and is not the active task.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
@@ -23,7 +25,7 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 
 ## 1. First actions for the next session
 
-1. Verify that `amscope-native-driver` still points to `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b` or a reviewed descendant. Inspect any newer commits before relying on this state.
+1. Verify the current `amscope-native-driver` head and CI status before relying on this snapshot. The Phase 2.3 error-contract commits are newer than the historical Phase 2.2 validation SHAs.
 2. Read this file, then:
    - [AmScope Native Driver Completion Plan](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
    - [Implementation Inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md)
@@ -31,8 +33,8 @@ This is the continuation entrypoint for subsequent development sessions. It is a
    - [AmScope Driver README](../../Camera/Amscope/README.md)
    - The authoritative Camera Module and UI Libraries architecture paper agreed in the project discussion.
 3. Phases 0 and 1 are accepted by the project owner. Do not reopen them solely because the requested 100 FPS target was not reached; that target is a performance objective, not a lifecycle correctness threshold.
-4. Phase 2 is in progress. Slices 2.1 and 2.2 have passed local clean builds/CTest and cross-architecture CI. Slice 2.2 still requires physical-camera frame/metadata/RAW regression; after that, slice 2.3 classifies remaining common errors and value types.
-5. Keep the remaining 15-minute hardware run, repeated lifecycle cycles, still-capture test where supported, and full SDK fault injection as explicit follow-up coverage. Formal `Hardware verified` status still requires an exact-commit record under `docs/testing/hardware/`.
+4. Phase 2 is in progress. Slices 2.1 and 2.2 have historical local/CI validation; Phase 2.3 is active. Verify the new operation-error test in GitHub Actions, then classify and explicitly convert the AmScope operation error model without losing native error identity.
+5. Keep physical frame/metadata/RAW regression and residual lifecycle hardware coverage as explicit follow-ups. Low-level SDK/transport investigation is Phase 9, after Phase 8. Do not resume exploratory probes during Phases 2–8. Formal `Hardware verified` status still requires an exact-commit record under `docs/testing/hardware/`.
 
 ## 2. Current Git state
 

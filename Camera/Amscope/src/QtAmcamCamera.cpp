@@ -447,10 +447,6 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStop(
         FeatureRequestSemantics::LifecycleMutation);
 }
 
-camera::qt::FrameStream& QtAmcamCamera::frameStream() noexcept {
-    return *frameStream_;
-}
-
 CameraState QtAmcamCamera::state() const noexcept { return camera_.state(); }
 
 std::uint64_t QtAmcamCamera::droppedFrames() const noexcept {

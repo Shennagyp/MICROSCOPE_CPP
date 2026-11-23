@@ -130,7 +130,9 @@ public:
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] std::uint64_t framesPulled() const noexcept;
     [[nodiscard]] std::uint64_t imageEventsReceived() const noexcept;
-    [[nodiscard]] camera::qt::FrameStream& frameStream() noexcept;
+    [[nodiscard]] camera::qt::FrameStream& frameStream() noexcept {
+        return *frameStream_;
+    }
 
     // Synchronous command/telemetry entry points are for non-GUI consumers.
     // GUI callers should use the asynchronous request methods below.

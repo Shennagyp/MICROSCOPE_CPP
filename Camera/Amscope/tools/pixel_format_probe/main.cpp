@@ -154,36 +154,167 @@ void printRgbOutputMode(HAmcam camera) {
 }
 
 
+struct RawFrameRecord {
+    AmcamFrameInfoV4 info{};
+    std::uint64_t byteCount = 0;
+    unsigned minimum = 0;
+    unsigned maximum = 0;
+    std::uint64_t distinctValues = 0;
+    std::uint64_t sentinelBytes = 0;
+    std::uint64_t checksum = 0;
+};
+
 struct RawFrameCapture {
+    static constexpr std::uint8_t sentinel = 0xA5;
     HAmcam camera = nullptr;
     std::vector<std::uint8_t> buffer;
+    std::vector<std::uint8_t> firstFrame;
+    std::vector<RawFrameRecord> records;
     std::mutex mutex;
     std::condition_variable completedCondition;
-    std::atomic<bool> pullStarted{false};
+    unsigned targetFrameCount = 1;
+    unsigned bitsPerPixel = 0;
+    unsigned imageEvents = 0;
+    unsigned errorEvents = 0;
+    unsigned disconnectedEvents = 0;
+    unsigned timeoutEvents = 0;
+    unsigned terminalEvent = 0;
+    HRESULT lastPullResult = 0;
     bool completed = false;
-    HRESULT pullResult = 0; // Read only after completed becomes true.
-    AmcamFrameInfoV4 frameInfo{};
+    bool invalidFrameLayout = false;
 };
 
 void __stdcall rawFrameEventCallback(unsigned event, void* context) {
-    if (event != AMCAM_EVENT_IMAGE || !context) return;
+    if (!context) return;
     auto& capture = *static_cast<RawFrameCapture*>(context);
-    if (capture.pullStarted.exchange(true, std::memory_order_acq_rel)) return;
 
-    AmcamFrameInfoV4 info{};
-    const HRESULT result = Amcam_PullImageV4(
-        capture.camera, capture.buffer.data(), 0, 0, -1, &info);
+    if (event != AMCAM_EVENT_IMAGE) {
+        if (event != AMCAM_EVENT_ERROR &&
+            event != AMCAM_EVENT_DISCONNECTED &&
+            event != AMCAM_EVENT_NOFRAMETIMEOUT &&
+            event != AMCAM_EVENT_NOPACKETTIMEOUT) {
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(capture.mutex);
+            if (event == AMCAM_EVENT_ERROR) ++capture.errorEvents;
+            if (event == AMCAM_EVENT_DISCONNECTED) ++capture.disconnectedEvents;
+            if (event == AMCAM_EVENT_NOFRAMETIMEOUT ||
+                event == AMCAM_EVENT_NOPACKETTIMEOUT) ++capture.timeoutEvents;
+            if (!capture.completed) {
+                capture.terminalEvent = event;
+                capture.completed = true;
+            }
+        }
+        capture.completedCondition.notify_one();
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> lock(capture.mutex);
-        capture.pullResult = result;
-        capture.frameInfo = info;
-        capture.completed = true;
+        ++capture.imageEvents;
+        if (capture.completed ||
+            capture.records.size() >= capture.targetFrameCount) {
+            return;
+        }
+
+        std::fill(capture.buffer.begin(), capture.buffer.end(),
+                  RawFrameCapture::sentinel);
+
+        AmcamFrameInfoV4 info{};
+        const HRESULT result = Amcam_PullImageV4(
+            capture.camera, capture.buffer.data(), 0, 0, -1, &info);
+        capture.lastPullResult = result;
+        if (FAILED(result)) {
+            capture.completed = true;
+        } else {
+            const unsigned frameWidth = info.v3.width;
+            const unsigned frameHeight = info.v3.height;
+            const std::uint64_t bytesPerPixel =
+                capture.bitsPerPixel > 8 ? 2U : 1U;
+            const std::uint64_t byteCount =
+                static_cast<std::uint64_t>(frameWidth) *
+                static_cast<std::uint64_t>(frameHeight) * bytesPerPixel;
+
+            if (frameWidth == 0 || frameHeight == 0 ||
+                byteCount == 0 || byteCount > capture.buffer.size()) {
+                capture.invalidFrameLayout = true;
+                capture.completed = true;
+            } else {
+                RawFrameRecord record;
+                record.info = info;
+                record.byteCount = byteCount;
+                record.minimum = capture.bitsPerPixel > 8 ? 65535U : 255U;
+                record.maximum = 0;
+                std::uint64_t hash = 14695981039346656037ULL;
+
+                if (capture.bitsPerPixel <= 8) {
+                    std::array<bool, 256> seen{};
+                    for (std::uint64_t i = 0; i < byteCount; ++i) {
+                        const std::uint8_t byte =
+                            capture.buffer[static_cast<std::size_t>(i)];
+                        record.minimum = std::min(
+                            record.minimum, static_cast<unsigned>(byte));
+                        record.maximum = std::max(
+                            record.maximum, static_cast<unsigned>(byte));
+                        if (!seen[byte]) {
+                            seen[byte] = true;
+                            ++record.distinctValues;
+                        }
+                        if (byte == RawFrameCapture::sentinel) {
+                            ++record.sentinelBytes;
+                        }
+                        hash ^= byte;
+                        hash *= 1099511628211ULL;
+                    }
+                } else {
+                    std::array<bool, 65536> seen{};
+                    for (std::uint64_t i = 0; i < byteCount; i += 2) {
+                        const unsigned low =
+                            capture.buffer[static_cast<std::size_t>(i)];
+                        const unsigned high =
+                            capture.buffer[static_cast<std::size_t>(i + 1)];
+                        const unsigned sample = low | (high << 8U);
+                        record.minimum = std::min(record.minimum, sample);
+                        record.maximum = std::max(record.maximum, sample);
+                        if (!seen[sample]) {
+                            seen[sample] = true;
+                            ++record.distinctValues;
+                        }
+                        if (low == RawFrameCapture::sentinel) {
+                            ++record.sentinelBytes;
+                        }
+                        if (high == RawFrameCapture::sentinel) {
+                            ++record.sentinelBytes;
+                        }
+                        hash ^= low;
+                        hash *= 1099511628211ULL;
+                        hash ^= high;
+                        hash *= 1099511628211ULL;
+                    }
+                }
+
+                record.checksum = hash;
+                if (capture.records.empty()) {
+                    capture.firstFrame.assign(
+                        capture.buffer.begin(),
+                        capture.buffer.begin() +
+                            static_cast<std::ptrdiff_t>(byteCount));
+                }
+                capture.records.push_back(record);
+                if (capture.records.size() >= capture.targetFrameCount) {
+                    capture.completed = true;
+                }
+            }
+        }
     }
     capture.completedCondition.notify_one();
 }
 
-bool captureOneRawFrame(HAmcam camera) {
-    std::cout << "\n========== ONE-FRAME RAW ACQUISITION TEST ==========\n";
+bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
+    std::cout << "\n========== RAW ACQUISITION VALIDITY TEST ==========\n"
+              << "Requested consecutive frames: " << targetFrameCount << '\n';
     int originalRawMode = -1;
     HRESULT hr = Amcam_get_Option(camera, AMCAM_OPTION_RAW, &originalRawMode);
     printHresult("Read original RAW mode", hr);
@@ -194,6 +325,7 @@ bool captureOneRawFrame(HAmcam camera) {
 
     bool rawModeChanged = false;
     bool success = false;
+    bool acquisitionStarted = false;
     const auto restoreRawMode = [&]() -> bool {
         if (!rawModeChanged) return true;
         const HRESULT restoreResult =
@@ -264,12 +396,24 @@ bool captureOneRawFrame(HAmcam camera) {
 
     RawFrameCapture capture;
     capture.camera = camera;
+    capture.targetFrameCount = targetFrameCount;
+    capture.bitsPerPixel = bitsPerPixel;
     try {
         capture.buffer.resize(static_cast<std::size_t>(capacity64));
+        capture.records.reserve(targetFrameCount);
     } catch (const std::exception& exception) {
         std::cerr << "RAW buffer allocation failed: " << exception.what() << '\n';
         restoreRawMode();
         return false;
+    }
+
+    int droppedFramesBefore = -1;
+    const HRESULT droppedBeforeResult = Amcam_get_Option(
+        camera, AMCAM_OPTION_NUMBER_DROP_FRAME, &droppedFramesBefore);
+    printHresult("Read software-dropped frame counter before acquisition",
+                 droppedBeforeResult);
+    if (SUCCEEDED(droppedBeforeResult)) {
+        std::cout << "    counter before: " << droppedFramesBefore << '\n';
     }
 
     hr = Amcam_StartPullModeWithCallback(camera, rawFrameEventCallback, &capture);
@@ -278,99 +422,130 @@ bool captureOneRawFrame(HAmcam camera) {
         restoreRawMode();
         return false;
     }
+    acquisitionStarted = true;
 
+    bool completed = false;
     {
         std::unique_lock<std::mutex> lock(capture.mutex);
-        const bool completed = capture.completedCondition.wait_for(
+        completed = capture.completedCondition.wait_for(
             lock, std::chrono::seconds(30),
             [&capture] { return capture.completed; });
-        if (!completed) {
-            std::cerr << "Timed out waiting 30 seconds for the first RAW frame.\n";
-        } else {
-            printHresult("Amcam_PullImageV4(first RAW frame)", capture.pullResult);
-            if (SUCCEEDED(capture.pullResult)) {
-                const unsigned frameWidth = capture.frameInfo.v3.width;
-                const unsigned frameHeight = capture.frameInfo.v3.height;
-                const std::uint64_t bytesPerPixel = bitsPerPixel > 8 ? 2U : 1U;
-                const std::uint64_t byteCount =
-                    static_cast<std::uint64_t>(frameWidth) * frameHeight * bytesPerPixel;
-                if (frameWidth == 0 || frameHeight == 0 ||
-                    frameWidth > static_cast<unsigned>(width) ||
-                    frameHeight > static_cast<unsigned>(height) ||
-                    byteCount == 0 || byteCount > capture.buffer.size()) {
-                    std::cerr << "Returned RAW frame dimensions/layout exceed the allocated buffer.\n";
+    }
+    if (!completed) {
+        std::cerr << "Timed out waiting 30 seconds for RAW frame sequence.\n";
+    }
+
+    if (acquisitionStarted) {
+        const HRESULT stopResult = Amcam_Stop(camera);
+        printHresult("Amcam_Stop after RAW acquisition", stopResult);
+        if (FAILED(stopResult)) success = false;
+        acquisitionStarted = false;
+    }
+
+    int droppedFramesAfter = -1;
+    const HRESULT droppedAfterResult = Amcam_get_Option(
+        camera, AMCAM_OPTION_NUMBER_DROP_FRAME, &droppedFramesAfter);
+    printHresult("Read software-dropped frame counter after acquisition",
+                 droppedAfterResult);
+    if (SUCCEEDED(droppedBeforeResult) && SUCCEEDED(droppedAfterResult)) {
+        std::cout << "    counter after: " << droppedFramesAfter
+                  << "\n    counter delta: "
+                  << (droppedFramesAfter - droppedFramesBefore) << '\n';
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(capture.mutex);
+        std::cout << "Image events received: " << capture.imageEvents
+                  << "\nSuccessful RAW frames pulled: "
+                  << capture.records.size()
+                  << "\nSDK error events: " << capture.errorEvents
+                  << "\nDisconnect events: " << capture.disconnectedEvents
+                  << "\nFrame/packet timeout events: " << capture.timeoutEvents
+                  << '\n';
+        if (capture.terminalEvent != 0) {
+            std::cout << "Terminal callback event: 0x"
+                      << std::hex << std::uppercase << capture.terminalEvent
+                      << std::dec << std::nouppercase << '\n';
+        }
+        if (capture.lastPullResult != 0 || !capture.records.empty()) {
+            printHresult("Last Amcam_PullImageV4 result",
+                         capture.lastPullResult);
+        }
+        if (capture.invalidFrameLayout) {
+            std::cerr << "Returned RAW frame dimensions/layout exceed the allocated buffer.\n";
+        }
+
+        for (std::size_t i = 0; i < capture.records.size(); ++i) {
+            const auto& record = capture.records[i];
+            std::cout << "Frame[" << i << "]"
+                      << " seq=" << record.info.v3.seq
+                      << " timestamp_us=" << record.info.v3.timestamp
+                      << " framecount=" << record.info.framecount
+                      << " timecount=" << record.info.timecount
+                      << " uFV=" << record.info.uFV
+                      << " dimensions=" << record.info.v3.width << 'x'
+                      << record.info.v3.height
+                      << " bytes=" << record.byteCount
+                      << " sample_range=" << record.minimum << ".."
+                      << record.maximum
+                      << " distinct_samples=" << record.distinctValues
+                      << " sentinel_byte_matches=" << record.sentinelBytes
+                      << " fnv1a64=0x" << std::hex << std::uppercase
+                      << record.checksum << std::dec << std::nouppercase
+                      << '\n';
+        }
+
+        if (!capture.records.empty()) {
+            unsigned distinctSequences = 0;
+            unsigned distinctTimestamps = 0;
+            unsigned distinctChecksums = 0;
+            for (std::size_t i = 0; i < capture.records.size(); ++i) {
+                bool newSequence = true;
+                bool newTimestamp = true;
+                bool newChecksum = true;
+                for (std::size_t j = 0; j < i; ++j) {
+                    newSequence = newSequence &&
+                        capture.records[i].info.v3.seq !=
+                        capture.records[j].info.v3.seq;
+                    newTimestamp = newTimestamp &&
+                        capture.records[i].info.v3.timestamp !=
+                        capture.records[j].info.v3.timestamp;
+                    newChecksum = newChecksum &&
+                        capture.records[i].checksum !=
+                        capture.records[j].checksum;
+                }
+                if (newSequence) ++distinctSequences;
+                if (newTimestamp) ++distinctTimestamps;
+                if (newChecksum) ++distinctChecksums;
+            }
+            std::cout << "Distinct frame sequence values: " << distinctSequences
+                      << " / " << capture.records.size()
+                      << "\nDistinct frame timestamps: " << distinctTimestamps
+                      << " / " << capture.records.size()
+                      << "\nDistinct payload checksums: " << distinctChecksums
+                      << " / " << capture.records.size() << '\n';
+
+            const std::string outputPath = "amscope-raw-frame.raw";
+            std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
+            if (!output) {
+                std::cerr << "Could not create " << outputPath << '\n';
+            } else {
+                output.write(
+                    reinterpret_cast<const char*>(capture.firstFrame.data()),
+                    static_cast<std::streamsize>(capture.firstFrame.size()));
+                output.close();
+                if (!output) {
+                    std::cerr << "Failed while writing " << outputPath << '\n';
                 } else {
-                    const std::string outputPath = "amscope-raw-frame.raw";
-                    std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
-                    if (!output) {
-                        std::cerr << "Could not create " << outputPath << '\n';
-                    } else {
-                        output.write(
-                            reinterpret_cast<const char*>(capture.buffer.data()),
-                            static_cast<std::streamsize>(byteCount));
-                        output.close();
-                        if (!output) {
-                            std::cerr << "Failed while writing " << outputPath << '\n';
-                        } else {
-                            std::cout << "Saved: " << outputPath << '\n'
-                                      << "    frame dimensions: " << frameWidth
-                                      << " x " << frameHeight << '\n'
-                                      << "    payload bytes: " << byteCount << '\n'
-                                      << "    SDK significant depth: " << bitsPerPixel
-                                      << " bits per pixel\n"
-                                      << "    payload word width: "
-                                      << (bytesPerPixel * 8U) << " bits\n";
-                            if (bitsPerPixel <= 8) {
-                                std::array<bool, 256> seen{};
-                                unsigned minimum = 255, maximum = 0;
-                                std::uint64_t uniqueCount = 0;
-                                for (std::uint64_t i = 0; i < byteCount; ++i) {
-                                    const unsigned sample =
-                                        capture.buffer[static_cast<std::size_t>(i)];
-                                    minimum = std::min(minimum, sample);
-                                    maximum = std::max(maximum, sample);
-                                    if (!seen[sample]) {
-                                        seen[sample] = true;
-                                        ++uniqueCount;
-                                    }
-                                }
-                                std::cout << "    observed sample range: "
-                                          << minimum << " .. " << maximum << '\n'
-                                          << "    distinct sample values: "
-                                          << uniqueCount << " / 256\n";
-                            } else {
-                                unsigned minimum = 65535, maximum = 0;
-                                std::uint64_t uniqueCount = 0, above8Bit = 0;
-                                std::array<bool, 65536> seen{};
-                                for (std::uint64_t i = 0; i < byteCount; i += 2) {
-                                    const unsigned sample =
-                                        static_cast<unsigned>(capture.buffer[static_cast<std::size_t>(i)]) |
-                                        (static_cast<unsigned>(capture.buffer[static_cast<std::size_t>(i + 1)]) << 8U);
-                                    minimum = std::min(minimum, sample);
-                                    maximum = std::max(maximum, sample);
-                                    if (sample > 255U) ++above8Bit;
-                                    if (!seen[sample]) {
-                                        seen[sample] = true;
-                                        ++uniqueCount;
-                                    }
-                                }
-                                std::cout << "    observed little-endian 16-bit sample range: "
-                                          << minimum << " .. " << maximum << '\n'
-                                          << "    distinct sample values: " << uniqueCount
-                                          << " / 65536\n"
-                                          << "    samples above 255: " << above8Bit << '\n';
-                            }
-                            success = true;
-                        }
-                    }
+                    std::cout << "Saved first unmodified RAW payload: "
+                              << outputPath << '\n';
+                    success = true;
                 }
             }
         }
     }
 
-    const HRESULT stopResult = Amcam_Stop(camera);
-    printHresult("Amcam_Stop after one-frame RAW acquisition", stopResult);
-    if (FAILED(stopResult)) success = false;
+    if (capture.records.size() != targetFrameCount) success = false;
     if (!restoreRawMode()) success = false;
     std::cout << "===================================================\n";
     return success;
@@ -663,14 +838,16 @@ bool probeRawModeTemporarily(HAmcam camera) {
 int main(int argc, char** argv) {
     if (argc > 1 && std::string(argv[1]) == "--help") {
         std::cout << "Usage: amscope_sdk_pixel_format_probe "
-                     "[--index N] [--probe-raw-mode] [--capture-raw-frame]\n"
+                     "[--index N] [--probe-raw-mode] [--capture-raw-frame] [--capture-raw-sequence]\n"
                      "Directly probes a connected camera using the vendor SDK.\n"
                      "--probe-raw-mode temporarily enables RAW mode while "
                      "the camera is stopped, reads RAW output capabilities, "
                      "and restores the original RAW mode.\n"
-                     "--capture-raw-frame captures one RAW frame, writes "
-                     "amscope-raw-frame.raw, reports payload size and sample "
-                     "statistics, then restores the original RAW mode.\n"
+                     "--capture-raw-frame captures one RAW frame; --capture-raw-sequence "
+                     "captures eight consecutive frames. Both write the first "
+                     "payload to amscope-raw-frame.raw and report per-frame "
+                     "sequence, timestamp, sample statistics, sentinel matches, "
+                     "and checksum before restoring RAW mode.\n"
                      "A single connected camera is selected automatically. "
                      "With multiple cameras, choose an index interactively "
                      "or pass --index N.\n";
@@ -680,6 +857,7 @@ int main(int argc, char** argv) {
     bool hasRequestedIndex = false;
     bool requestRawModeProbe = false;
     bool requestRawFrameCapture = false;
+    bool requestRawSequenceCapture = false;
     unsigned requestedIndex = 0;
     for (int argument = 1; argument < argc; ++argument) {
         const std::string value(argv[argument]);
@@ -703,6 +881,12 @@ int main(int argc, char** argv) {
                 return 64;
             }
             requestRawFrameCapture = true;
+        } else if (value == "--capture-raw-sequence") {
+            if (requestRawSequenceCapture) {
+                std::cerr << "--capture-raw-sequence was specified more than once.\n";
+                return 64;
+            }
+            requestRawSequenceCapture = true;
         } else {
             std::cerr << "Unknown argument: " << value << '\n'
                       << "Use --help for usage.\n";
@@ -762,10 +946,18 @@ int main(int argc, char** argv) {
         rawModeProbeSucceeded = probeRawModeTemporarily(camera);
     }
     bool rawCaptureSucceeded = true;
+    if (requestRawFrameCapture && requestRawSequenceCapture) {
+        std::cerr << "Choose either --capture-raw-frame or --capture-raw-sequence, not both.\n";
+        Amcam_Close(camera);
+        return 64;
+    }
     if (requestRawFrameCapture) {
-        rawCaptureSucceeded = captureOneRawFrame(camera);
+        rawCaptureSucceeded = captureRawFrames(camera, 1);
+    } else if (requestRawSequenceCapture) {
+        rawCaptureSucceeded = captureRawFrames(camera, 8);
     }
     Amcam_Close(camera);
     return rawModeProbeSucceeded && rawCaptureSucceeded
-        ? 0 : ((requestRawModeProbe || requestRawFrameCapture) ? 6 : 0);
+        ? 0 : ((requestRawModeProbe || requestRawFrameCapture ||
+          requestRawSequenceCapture) ? 6 : 0);
 }

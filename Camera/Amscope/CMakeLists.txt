@@ -92,6 +92,38 @@ add_custom_command(TARGET amscope_driver POST_BUILD
 option(AMSCOPE_BUILD_QT_ADAPTER "Build the Qt 6 Core adapter" ON)
 option(AMSCOPE_BUILD_PREVIEW_APP "Build the Qt Widgets preview application" ON)
 
+# Standalone diagnostics. These tools intentionally use different acquisition
+# paths and are never part of the production camera session or Qt preview.
+option(AMSCOPE_BUILD_NATIVE_PROBE
+    "Build the native AmcamCamera acquisition probe (no Qt)" OFF)
+option(AMSCOPE_BUILD_SDK_WAIT_PROBE
+    "Build the direct vendor WaitImageV3 reference probe (no Qt)" OFF)
+
+if(AMSCOPE_BUILD_NATIVE_PROBE)
+    add_executable(amscope_native_probe app/native_stream_probe.cpp)
+    target_compile_features(amscope_native_probe PRIVATE cxx_std_17)
+    target_link_libraries(amscope_native_probe PRIVATE Amscope::Driver)
+    set_target_properties(amscope_native_probe PROPERTIES
+        BUILD_RPATH "@loader_path"
+        INSTALL_RPATH "@loader_path")
+endif()
+
+if(AMSCOPE_BUILD_SDK_WAIT_PROBE)
+    add_executable(amscope_sdk_wait_probe app/vendor_wait_probe.cpp)
+    target_compile_features(amscope_sdk_wait_probe PRIVATE cxx_std_17)
+    target_include_directories(amscope_sdk_wait_probe PRIVATE
+        "${AMSCOPE_VENDOR_INCLUDE_DIR}")
+    target_link_libraries(amscope_sdk_wait_probe PRIVATE amscope_vendor)
+    set_target_properties(amscope_sdk_wait_probe PROPERTIES
+        BUILD_RPATH "@loader_path"
+        INSTALL_RPATH "@loader_path")
+    add_custom_command(TARGET amscope_sdk_wait_probe POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${AMSCOPE_VENDOR_LIBRARY}"
+            "$<TARGET_FILE_DIR:amscope_sdk_wait_probe>/libamcam.dylib"
+        VERBATIM)
+endif()
+
 if(BUILD_TESTING)
     add_executable(amscope_camera_types_tests
         tests/AmcamCameraTypesTests.cpp)

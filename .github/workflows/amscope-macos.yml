@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - amscope-native-driver
+      - amscope-native-driver-0.5
     paths:
       - "Camera/Amscope/**"
       - "Camera/Common/**"
       - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
+      - "scripts/run-amscope-native-probe.sh"
+      - "scripts/run-amscope-vendor-wait-probe.sh"
       - ".github/workflows/amscope-macos.yml"
   pull_request:
     paths:
@@ -18,6 +21,8 @@ on:
       - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
+      - "scripts/run-amscope-native-probe.sh"
+      - "scripts/run-amscope-vendor-wait-probe.sh"
       - ".github/workflows/amscope-macos.yml"
   workflow_dispatch:
 
@@ -69,6 +74,8 @@ jobs:
             -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
             -DAMSCOPE_BUILD_QT_ADAPTER=ON \
             -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+            -DAMSCOPE_BUILD_NATIVE_PROBE=ON \
+            -DAMSCOPE_BUILD_SDK_WAIT_PROBE=ON \
             -DBUILD_TESTING=ON
 
       - name: Compile
@@ -84,21 +91,35 @@ jobs:
           test -f build/amscope/libamcam.dylib
           test -x build/amscope/amscope_preview
           test -x build/amscope/amscope_hardware_rate_test
+          test -x build/amscope/amscope_native_probe
+          test -x build/amscope/amscope_sdk_wait_probe
           lipo build/amscope/libcamera_amscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/libcamera_amscope_qt.a -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/amscope_preview -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/amscope_hardware_rate_test -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope/amscope_native_probe -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope/amscope_sdk_wait_probe -verify_arch "${{ matrix.architecture }}"
           otool -L build/amscope/amscope_preview
           otool -L build/amscope/amscope_hardware_rate_test
+          otool -L build/amscope/amscope_native_probe
+          otool -L build/amscope/amscope_sdk_wait_probe
           otool -L build/amscope/libcamera_amscope_driver.dylib
           file build/amscope/libcamera_amscope_qt.a
+
+      - name: Exercise diagnostic probe help paths
+        run: |
+          build/amscope/amscope_native_probe --help
+          build/amscope/amscope_sdk_wait_probe --help
 
       - name: Confirm preview executable
         run: test -x build/amscope/amscope_preview
 
-      - name: Validate one-command launcher syntax
-        run: bash -n scripts/run-amscope.sh
+      - name: Validate launcher syntax
+        run: |
+          bash -n scripts/run-amscope.sh
+          bash -n scripts/run-amscope-native-probe.sh
+          bash -n scripts/run-amscope-vendor-wait-probe.sh
 
       - name: Build and run one-command launcher smoke check
         run: scripts/run-amscope.sh --list-cameras

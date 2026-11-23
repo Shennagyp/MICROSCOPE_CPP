@@ -420,6 +420,73 @@ blocking feature requests run off the UI thread; stale completions are ignored.
 The image path uses QLabel/QImage for a simple CPU preview; it is not the final
 GPU renderer or a zero-copy presentation path.
 
+## Acquisition-isolation diagnostics
+
+Two standalone programs isolate the source of acquisition failures. They are
+development diagnostics, not alternate production backends, and each process
+must own the camera exclusively. **Never run the probes or the preview at the
+same time.**
+
+### Native driver, without Qt
+
+Build and run the production `AmcamCamera` callback-to-pull path without the
+Qt adapter, Widgets, or preview:
+
+```sh
+bash scripts/run-amscope-native-probe.sh --seconds 60
+```
+
+When more than one camera is connected, pass its current enumerated opaque ID:
+
+```sh
+bash scripts/run-amscope-native-probe.sh --device-id "CAMERA_ID" --seconds 60
+```
+
+The probe reports one-second frame-delivery counts, optional sequence values,
+dropped frames, native camera state, last-frame age, and acquisition errors.
+It also treats failed Stop/Close cleanup as a failed probe. The default sample
+duration is 30 seconds; supported values are 5–3600 seconds.
+
+### Vendor SDK reference path, without AmcamCamera or Qt
+
+Build and run the vendor SDK's polling-style reference path:
+
+```sh
+bash scripts/run-amscope-vendor-wait-probe.sh --seconds 60
+```
+
+For multiple cameras:
+
+```sh
+bash scripts/run-amscope-vendor-wait-probe.sh --device-id "CAMERA_ID" --seconds 60
+```
+
+This program uses `Amcam_StartPullModeWithCallback(camera, nullptr, nullptr)`
+with `Amcam_WaitImageV3`, matching the bundled vendor wait-sample pairing.
+It reports successful frames, timeouts, sequence progression, and available
+read-only SDK packet/queue/drop counters. It does not change those SDK options.
+A failed WaitImage call or failed Stop makes the probe fail. The default sample
+duration is 60 seconds; supported values are 5–3600 seconds.
+
+### Interpreting the comparison
+
+Run the programs separately, using the same camera, resolution, exposure,
+transport connection, and duration where possible.
+
+| Native-only probe | Vendor-only probe | Interpretation |
+|---|---|---|
+| Stalls/faults | Stalls/faults | Investigate camera, firmware, USB/transport, SDK, or shared camera configuration first |
+| Stalls/faults | Stable | Investigate the production AmcamCamera setup, callback-to-pull path, and its lifecycle |
+| Stable | Stable | The native acquisition path is less likely to be the fault; isolate the Qt bridge and renderer next |
+| Stable | Stalls/faults | Investigate the vendor polling path's compatibility with this model/configuration; do not infer that production callback/pull is faulty |
+
+The vendor-only program is a reference diagnostic, not the application's
+production acquisition strategy. The production driver remains
+SDK callback -> bounded event queue -> one acquisition worker ->
+`Amcam_PullImageV4`. The native-only probe exercises that exact driver path
+while excluding Qt; the vendor-only probe intentionally exercises the
+different `WaitImageV3` path to provide an independent SDK/device comparison.
+
 ## Direct CMake build
 
 The default build includes both the Qt 6 Core adapter and Qt Widgets preview:

@@ -1141,11 +1141,22 @@ private:
                 rebuildAccessoryControls(descriptors, generation);
                 refreshFeatureValues(generation);
 
+                const auto availableCount = static_cast<std::size_t>(std::count_if(
+                    descriptors.begin(), descriptors.end(),
+                    [](const auto& descriptor) { return descriptor.isAvailable; }));
+                const auto shownUnavailableCount =
+                    featureControls_.size() - availableCount;
+                QString status = QString("%1 available feature(s).")
+                    .arg(static_cast<qulonglong>(availableCount));
+                if (shownUnavailableCount != 0) {
+                    status += QString(
+                        " %1 unavailable diagnostic feature(s) shown disabled.")
+                        .arg(static_cast<qulonglong>(shownUnavailableCount));
+                }
                 featureStatus_->setText(
                     descriptors.empty()
                         ? "The camera exposed no feature descriptors."
-                        : QString("%1 available feature(s).").arg(
-                              static_cast<qulonglong>(featureControls_.size())));
+                        : status);
             });
 
         if (requestId == 0) {
@@ -1177,9 +1188,13 @@ private:
         clearFeatureControls();
 
         for (const auto& descriptor : descriptors) {
-            // Unavailable features are intentionally omitted. Availability is
-            // resolved by the backend from hardware evidence and model policy.
-            if (!descriptor.isAvailable) continue;
+            // Keep the sensor bit-depth descriptor visible even when unavailable
+            // so the user can see the backend's reason instead of a missing control.
+            // Other unavailable features remain omitted to avoid filling the UI
+            // with controls that the connected device cannot use.
+            const bool showBitDepthDiagnostic = descriptor.name ==
+                std::string(camera::RawOutputBitDepthFeature);
+            if (!descriptor.isAvailable && !showBitDepthDiagnostic) continue;
 
             QWidget* editor = createFeatureEditor(descriptor);
             auto foundForm = featureForms_.find(descriptor.group);
@@ -1316,7 +1331,10 @@ private:
             editor = new QLabel("Unsupported feature type", featureTabs_);
         }
         editor->setObjectName(featureName);
-        editor->setEnabled(descriptor.isWritable);
+        editor->setEnabled(descriptor.isAvailable && descriptor.isWritable);
+        if (descriptor.disabledReason) {
+            editor->setToolTip(QString::fromStdString(*descriptor.disabledReason));
+        }
         return editor;
     }
 
@@ -1349,8 +1367,12 @@ private:
                         if (const auto* error =
                                 std::get_if<camera::CameraFeatureAccessError>(&result)) {
                             found->second.hasCurrentValue = false;
-                            found->second.editor->setToolTip(
-                                QString::fromStdString(error->message));
+                            QString tooltip = QString::fromStdString(error->message);
+                            if (found->second.descriptor.disabledReason) {
+                                tooltip += "\n" + QString::fromStdString(
+                                    *found->second.descriptor.disabledReason);
+                            }
+                            found->second.editor->setToolTip(tooltip);
                         } else {
                             const auto& value =
                                 std::get<camera::CameraFeatureValue>(result);
@@ -1360,7 +1382,11 @@ private:
                                 found->second.editor->setToolTip(
                                     "The backend returned a value that does not match its descriptor.");
                             } else {
-                                found->second.editor->setToolTip(QString{});
+                                found->second.editor->setToolTip(
+                                    found->second.descriptor.disabledReason
+                                        ? QString::fromStdString(
+                                              *found->second.descriptor.disabledReason)
+                                        : QString{});
                             }
                         }
                     }
@@ -1626,7 +1652,8 @@ private:
             const bool valueIsKnown =
                 !descriptor.isReadable || entry.second.hasCurrentValue;
             entry.second.editor->setEnabled(
-                canEnable && descriptor.isWritable && valueIsKnown);
+                canEnable && descriptor.isAvailable &&
+                descriptor.isWritable && valueIsKnown);
         }
         refreshFeaturesButton_->setEnabled(
             canEnable && camera_.state() == amscope::CameraState::Open);

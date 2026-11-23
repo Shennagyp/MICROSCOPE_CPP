@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
 **Source snapshot:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (v0.6 common integer-range typing, exact validation, first-frame common metadata reporting, and ownership audit)  
-**Branch head reviewed for this inventory refresh:** `17d6b0a7076e140c57fc3760fcde1f3eec2915a0` (FrameView remains validated by the owner-reported Release build, 13/13 CTest and MU503 smoke check; the new CameraControlPanel source/test integration is present but awaits local build/CTest)  
+**Branch head reviewed for this inventory refresh:** `cd37af622783f4dc8a5d3ae16782955887a286ce` (FrameView remains validated by the owner-reported Release build, 13/13 CTest and MU503 smoke check; the new CameraControlPanel source/test integration is present but awaits local build/CTest)  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---

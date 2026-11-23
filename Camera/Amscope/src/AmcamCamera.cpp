@@ -2928,6 +2928,15 @@ bool AmcamCamera::readFrameRate(FrameRateStatistics& stats, CameraError* error) 
     return true;
 }
 
+camera::CameraOperationResult<camera::FrameRateMeasurement>
+AmcamCamera::readFrameRateMeasurement() {
+    FrameRateStatistics statistics;
+    CameraError error;
+    if (!readFrameRate(statistics, &error))
+        return toCommonOperationError(error);
+    return toCommonFrameRateMeasurement(statistics);
+}
+
 
 bool AmcamCamera::readEmbeddedLightSource(
     EmbeddedLightSourceState& result,

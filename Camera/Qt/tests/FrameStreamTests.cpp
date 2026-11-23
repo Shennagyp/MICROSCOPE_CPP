@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QThread>
 #include <QTimer>
+#include <atomic>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -86,6 +87,59 @@ int main(int argc,char** argv) {
         std::cerr<<"Clear did not empty the latest lease.\n";
         return EXIT_FAILURE;
     }
+    // Exercise producer publication while the Qt consumer is actively taking
+    // frames. The producer is single-threaded and monotonically tags each frame;
+    // the consumer may skip superseded values but must never observe regression
+    // and must eventually observe the final publication.
+    constexpr std::uint32_t concurrentFrameCount = 5000;
+    NotificationContext concurrentContext;
+    QEventLoop concurrentLoop;
+    QTimer concurrentTimeout;
+    concurrentTimeout.setSingleShot(true);
+    QObject::connect(&concurrentTimeout, &QTimer::timeout,
+                     &concurrentLoop, &QEventLoop::quit);
+
+    bool concurrentAffinity = true;
+    bool concurrentMonotonic = true;
+    bool concurrentFinalDelivered = false;
+    std::uint32_t lastConcurrentValue = 0;
+    concurrentContext.callback = [&]() {
+        concurrentAffinity =
+            concurrentAffinity &&
+            QThread::currentThread() == concurrentContext.thread();
+        const camera::FramePtr frame = mailbox.takeLatestFrame(
+            [&]() noexcept { concurrentContext.queue(); });
+        if (!frame) return;
+
+        if (frame->width < lastConcurrentValue)
+            concurrentMonotonic = false;
+        lastConcurrentValue = frame->width;
+        if (lastConcurrentValue == concurrentFrameCount) {
+            concurrentFinalDelivered = true;
+            concurrentLoop.quit();
+        }
+    };
+
+    std::thread concurrentProducer([&]() {
+        for (std::uint32_t value = 1; value <= concurrentFrameCount; ++value) {
+            mailbox.publishFrame(
+                makeFrame(value),
+                []() noexcept { return true; },
+                [&]() noexcept { concurrentContext.queue(); });
+        }
+    });
+
+    concurrentTimeout.start(5000);
+    concurrentLoop.exec();
+    concurrentProducer.join();
+
+    if (!concurrentFinalDelivered || !concurrentMonotonic ||
+        !concurrentAffinity) {
+        std::cerr << "Concurrent producer/consumer publication lost the final "
+                     "frame, regressed frame order, or violated Qt affinity.\n";
+        return EXIT_FAILURE;
+    }
+
     std::cout<<"All Qt frame stream mailbox tests passed.\n";
     return EXIT_SUCCESS;
 }

@@ -115,6 +115,28 @@ QString pixelFormatName(camera::PixelFormat format) {
     return QStringLiteral("Unknown");
 }
 
+QString pixelFormatIdentifierText(const camera::Frame& frame) {
+    if (!frame.pixelFormatIdentifier)
+        return QStringLiteral("unavailable");
+    return QStringLiteral("%1:0x%2")
+        .arg(QString::fromStdString(frame.pixelFormatIdentifier->scheme))
+        .arg(static_cast<qulonglong>(frame.pixelFormatIdentifier->value), 0, 16);
+}
+
+QJsonValue optionalUnsignedJson(
+    const std::optional<std::uint64_t>& value) {
+    if (!value)
+        return QJsonValue(QJsonValue::Null);
+    // Store unsigned 64-bit values as decimal strings to avoid JSON double
+    // precision loss and signed qint64 overflow.
+    return QJsonValue(QString::number(static_cast<qulonglong>(*value)));
+}
+
+QJsonValue optionalStringJson(const std::optional<std::string>& value) {
+    return value ? QJsonValue(QString::fromStdString(*value))
+                 : QJsonValue(QJsonValue::Null);
+}
+
 QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
     if (!descriptor.numericRange) return {};
     return std::visit([](const auto& range) {

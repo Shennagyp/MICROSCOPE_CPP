@@ -7,7 +7,7 @@ integration and does not modify vendor sample code.
 
 ## Development roadmap
 
-The authoritative phase-by-phase completion plan, including the mandatory real-camera test gate for every phase, is maintained in [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md).
+The current AmScope-native release scope, revised implementation phases, and release acceptance criteria are maintained in [AMSCOPE_NATIVE_RELEASE_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md). The previous [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is retained as a historical technical reference; its original phase sequence is superseded.
 The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/architecture/DEVELOPMENT_HANDOFF.md), the source/test mapping is in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md), the GenTL/GenApi dependency assessment is in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md), and the per-phase hardware record template is in [PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md](../../docs/testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
 
 ## Implemented

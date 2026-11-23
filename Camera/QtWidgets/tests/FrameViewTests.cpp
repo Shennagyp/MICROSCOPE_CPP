@@ -3,13 +3,11 @@
 #include <QApplication>
 #include <QColor>
 #include <QImage>
-#include <QWidget>
 
 #include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <utility>
-#include <vector>
 
 namespace {
 
@@ -37,9 +35,8 @@ camera::FramePtr makeRaw8Frame() {
     return frame;
 }
 
-bool fail(const char* message) {
-    std::cerr << message << '\n';
-    return false;
+void fail(const char* message) {
+    std::cerr << message << '\\n';
 }
 
 } // namespace
@@ -57,8 +54,10 @@ int main(int argc, char** argv) {
     view.setFrame(rgbFrame);
     rgbFrame.reset();
 
-    if (rgbLease.expired())
-        fail("FrameView did not retain the immutable frame lease.");\n        return EXIT_FAILURE;
+    if (rgbLease.expired()) {
+        fail("FrameView did not retain the immutable frame lease.");
+        return EXIT_FAILURE;
+    }
 
     view.show();
     application.processEvents();
@@ -67,26 +66,36 @@ int main(int argc, char** argv) {
     rendered.fill(Qt::black);
     view.render(&rendered);
 
-    if (presentedCount != 1)
-        fail("A valid RGB frame was not counted after paint.");\n        return EXIT_FAILURE;
+    if (presentedCount != 1) {
+        fail("A valid RGB frame was not counted after paint.");
+        return EXIT_FAILURE;
+    }
     if (rendered.pixelColor(100, 160) != QColor(255, 0, 0) ||
-        rendered.pixelColor(500, 160) != QColor(0, 255, 0))
-        fail("RGB24 pixels were not rendered from the retained frame buffer.");\n        return EXIT_FAILURE;
+        rendered.pixelColor(500, 160) != QColor(0, 255, 0)) {
+        fail("RGB24 pixels were not rendered from the retained frame buffer.");
+        return EXIT_FAILURE;
+    }
 
     view.setMessage(QStringLiteral("No camera selected."));
-    if (!rgbLease.expired())
-        fail("FrameView retained the previous lease after clearing the image.");\n        return EXIT_FAILURE;
+    if (!rgbLease.expired()) {
+        fail("FrameView retained the previous lease after clearing the image.");
+        return EXIT_FAILURE;
+    }
 
     presentedCount = 0;
     view.setFrame(makeRaw8Frame());
     rendered.fill(Qt::black);
     view.render(&rendered);
 
-    if (presentedCount != 1)
-        fail("A valid RAW8 frame was not counted after paint.");\n        return EXIT_FAILURE;
+    if (presentedCount != 1) {
+        fail("A valid RAW8 frame was not counted after paint.");
+        return EXIT_FAILURE;
+    }
     if (rendered.pixelColor(100, 160).red() != 11 ||
-        rendered.pixelColor(500, 160).red() != 240)
-        fail("RAW8 samples were not presented as grayscale without changing the source data.");\n        return EXIT_FAILURE;
+        rendered.pixelColor(500, 160).red() != 240) {
+        fail("RAW8 samples were not presented as grayscale.");
+        return EXIT_FAILURE;
+    }
 
     auto invalid = std::make_shared<camera::Frame>();
     invalid->width = 2;
@@ -98,9 +107,11 @@ int main(int argc, char** argv) {
     rendered.fill(Qt::black);
     view.render(&rendered);
 
-    if (presentedCount != 2)
-        fail("An invalid/truncated frame was incorrectly counted as presented.");\n        return EXIT_FAILURE;
+    if (presentedCount != 1) {
+        fail("An invalid/truncated frame was incorrectly counted as presented.");
+        return EXIT_FAILURE;
+    }
 
-    std::cout << "All Qt Widgets frame view tests passed.\n";
+    std::cout << "All Qt Widgets frame view tests passed.\\n";
     return EXIT_SUCCESS;
 }

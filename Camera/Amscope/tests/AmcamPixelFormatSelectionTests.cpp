@@ -13,6 +13,7 @@ using amscope::detail::rawBitDepthForLegacyMode;
 using amscope::detail::rawBitDepthForPixelFormat;
 using amscope::detail::rawPixelFormatChoices;
 using amscope::detail::rawPixelFormatForBitDepth;
+using amscope::detail::rawPixelFormatMaximumBitDepth;
 
 void expectValues(
     const std::vector<amscope::detail::RawPixelFormatChoice>& choices,
@@ -27,6 +28,7 @@ void testEnumeratedDepthsMergeWithLegacyModes() {
         AMCAM_PIXELFORMAT_RAW10,
         AMCAM_PIXELFORMAT_RAW12
     };
+    assert(rawPixelFormatMaximumBitDepth(formats) == 12U);
     const auto choices = rawPixelFormatChoices(formats, 12);
     expectValues(choices, {8, 10, 12});
 

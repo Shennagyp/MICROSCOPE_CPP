@@ -138,7 +138,7 @@ The Amcam implementation caches its full descriptor inventory per camera state; 
 | Feature-state generation | Implemented | Partially covered | Test feature descriptor invalidation after real dependent writes |
 | UI callback delivered on QObject affinity thread | Implemented | Qt request tests | Hardware regression |
 | Synchronous vs queued mode commitment | Implemented | Qt request tests verify a queued instance rejects synchronous feature access and a synchronous instance rejects queued requests | No additional Phase 3 work identified for mode exclusion |
-| Latest-frame mailbox / Qt notification | Header-only `camera::qt::FrameStreamMailbox` from `Camera::Qt`, embedded at original end-of-object position; original `QtAmcamCamera` signal/notification target retained | Local Release CTest at `8aa3b23`: 12/12 passed, including `camera_qt_frame_stream_tests` (0.49 s) with deterministic concurrent producer/consumer overlap | Physical Qt-to-camera smoke check in Phase 3; high-rate measurement remains Phase 7 |
+| Latest-frame mailbox / Qt notification | Header-only `camera::qt::FrameStreamMailbox` from `Camera::Qt`, embedded at original end-of-object position; original `QtAmcamCamera` signal/notification target retained | Local Release CTest at `8aa3b23`: 12/12 passed, including concurrent producer/consumer overlap | Owner confirmed physical Qt-to-MU503 streaming smoke check valid; high-rate measurement remains Phase 7 |
 | Descriptor-driven feature editor | Implemented | Preview compile; common validation tests | Extract reusable UI widgets |
 | Trigger panel | Implemented | Preview compile | Hardware UI test |
 | Lens focus/aperture panel | Implemented | Preview compile | Hardware/accessory test |

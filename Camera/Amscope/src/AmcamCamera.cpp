@@ -419,6 +419,8 @@ buildAmcamFeatureDescriptors(
     using camera::CameraFeatureDescriptor;
     using camera::CameraFeatureKind;
     using camera::CameraFeatureNumericRange;
+    using camera::CameraIntegerRange;
+    using camera::CameraFloatingPointRange;
     using camera::CameraFeatureAccessError;
 
     if (!handle || !featureIsOperational(state)) {
@@ -886,7 +888,10 @@ buildAmcamFeatureDescriptors(
             autoMode == static_cast<int>(amscope::AmcamAutoExposureMode::Off),
         exposureProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  static_cast<double>(minExposure), static_cast<double>(maxExposure), std::nullopt})
+                  CameraIntegerRange{
+                      static_cast<std::int64_t>(minExposure),
+                      static_cast<std::int64_t>(maxExposure),
+                      std::nullopt}})
             : std::nullopt,
         std::nullopt, {}
     });
@@ -895,7 +900,10 @@ buildAmcamFeatureDescriptors(
         std::string("%"), gainProbe && gainAllowed, gainProbe, gainProbe && gainAllowed,
         gainProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  static_cast<double>(minGain), static_cast<double>(maxGain), std::nullopt})
+                  CameraIntegerRange{
+                      static_cast<std::int64_t>(minGain),
+                      static_cast<std::int64_t>(maxGain),
+                      std::nullopt}})
             : std::nullopt,
         std::nullopt, {}
     });
@@ -916,14 +924,14 @@ buildAmcamFeatureDescriptors(
         "AmcamWhiteBalanceTemperature", "White Balance Temperature", CameraFeatureKind::Integer,
         std::string("K"), tempTintProbe && whiteBalanceAllowed,
         tempTintProbe, tempTintProbe && whiteBalanceAllowed,
-        CameraFeatureNumericRange{2000.0, 15000.0, std::nullopt},
+        CameraFeatureNumericRange{CameraIntegerRange{2000, 15000, std::nullopt}},
         std::nullopt, {}
     });
     descriptors.push_back({
         "AmcamWhiteBalanceTint", "White Balance Tint", CameraFeatureKind::Integer,
         std::nullopt, tempTintProbe && whiteBalanceAllowed,
         tempTintProbe, tempTintProbe && whiteBalanceAllowed,
-        CameraFeatureNumericRange{200.0, 2500.0, std::nullopt},
+        CameraFeatureNumericRange{CameraIntegerRange{200, 2500, std::nullopt}},
         std::nullopt, {}
     });
     descriptors.push_back({
@@ -938,8 +946,9 @@ buildAmcamFeatureDescriptors(
         fixedFrameRateProbe, fixedFrameRateProbe && fixedFrameRateAllowed,
         fixedFrameRateProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  static_cast<double>(minimumFPS) / 10.0,
-                  static_cast<double>(maximumFPS) / 10.0, 0.1})
+                  CameraFloatingPointRange{
+                      static_cast<double>(minimumFPS) / 10.0,
+                      static_cast<double>(maximumFPS) / 10.0, 0.1}})
             : std::nullopt,
         std::nullopt, {}
     });
@@ -949,7 +958,9 @@ buildAmcamFeatureDescriptors(
         speedProbe && speedLevelAllowed,
         speedProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  0.0, static_cast<double>(*maximumSpeedLevel), std::nullopt})
+                  CameraIntegerRange{
+                      0, static_cast<std::int64_t>(*maximumSpeedLevel),
+                      std::nullopt}})
             : std::nullopt,
         std::nullopt, {}
     });
@@ -1067,7 +1078,7 @@ buildAmcamFeatureDescriptors(
         CameraFeatureKind::Integer, std::string("0-100"),
         denoiseProbe && imageProcessingAllowed, denoiseProbe,
         denoiseProbe && imageProcessingAllowed && stopped,
-        CameraFeatureNumericRange{0.0, 100.0, 1.0},
+        CameraFeatureNumericRange{CameraIntegerRange{0, 100, 1}},
         std::nullopt, {},
         camera::CameraFeatureGroup::ImageProcessing
     });
@@ -1134,8 +1145,10 @@ buildAmcamFeatureDescriptors(
         tecTargetProbe && tecOnOffAllowed && stopped,
         tecTargetProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  static_cast<double>(tecTargetMinimum),
-                  static_cast<double>(tecTargetMaximum), 1.0})
+                  CameraIntegerRange{
+                      static_cast<std::int64_t>(tecTargetMinimum),
+                      static_cast<std::int64_t>(tecTargetMaximum),
+                      std::int64_t{1}}})
             : std::nullopt,
         std::nullopt, {},
         camera::CameraFeatureGroup::Hardware
@@ -1154,7 +1167,9 @@ buildAmcamFeatureDescriptors(
         fanProbe && fanAllowed && stopped,
         fanProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  -1.0, static_cast<double>(*maximumFanSpeed), 1.0})
+                  CameraIntegerRange{
+                      -1, static_cast<std::int64_t>(*maximumFanSpeed),
+                      std::int64_t{1}}})
             : std::nullopt,
         std::nullopt, {},
         camera::CameraFeatureGroup::Hardware
@@ -1166,7 +1181,9 @@ buildAmcamFeatureDescriptors(
         heatProbe && heatAllowed && stopped,
         heatProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
-                  0.0, static_cast<double>(heatMaximum), 1.0})
+                  CameraIntegerRange{
+                      0, static_cast<std::int64_t>(heatMaximum),
+                      std::int64_t{1}}})
             : std::nullopt,
         std::nullopt, {},
         camera::CameraFeatureGroup::Hardware
@@ -1256,7 +1273,7 @@ buildAmcamFeatureDescriptors(
         autoExposureThresholdProbe && exposureAutoAllowed,
         autoExposureThresholdProbe,
         autoExposureThresholdProbe && exposureAutoAllowed && stopped,
-        CameraFeatureNumericRange{2.0, 15.0, 1.0},
+        CameraFeatureNumericRange{CameraIntegerRange{2, 15, 1}},
         std::nullopt, {},
         camera::CameraFeatureGroup::Exposure
     });

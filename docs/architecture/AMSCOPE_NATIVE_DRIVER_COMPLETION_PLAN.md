@@ -446,6 +446,21 @@ Classify the remaining error, measured frame-rate, and image value models. Move 
 
 **Implementation started — common operation errors.** `CameraOperationError.h` now defines backend-neutral operation error categories, operation context, and optional native error identity (`domain` plus signed code). `CameraOperationResult<T>` carries either a successful value or that error. Feature access retains its separate `CameraFeatureAccessError`, because it has feature-specific identity and expected/actual value-kind semantics. The new contract has focused tests for success, typed failure, optional native details, and preservation of native error identity. An explicit `amscope::toCommonOperationError` adapter now maps native operation failures to the common `BackendFailure` category while preserving the original operation/message and the exact signed code in the `amcam.sdk` domain. Existing AmScope public method signatures and their `CameraError` out-parameters remain unchanged; migrating call sites to `CameraOperationResult<T>` is a later API-boundary task, not part of this first contract slice.
 
+**Current semantic ownership classification**
+
+| Type family | Ownership | Reason / boundary |
+|---|---|---|
+| `CameraIdentity`, `CameraDeviceInfo`, `CameraCapabilities`, `ImageResolution` | Common | Same identity/discovery meaning; opaque IDs and optional facts remain explicit; resolution is dimensions, not a backend table index |
+| `Frame`, `FramePtr`, `PixelFormatIdentifier`, `FrameTimestamp`, `FrameExposure` | Common | Payload layout, ownership lease, optional metadata and timebases are consumer-facing semantics |
+| `CameraFeatureKind`, `CameraFeatureValue`, descriptors, validation, feature errors | Common | Typed feature values and descriptor semantics are already shared; native feature identifiers remain backend-defined strings |
+| `CameraOperationError`, `CameraOperationResult<T>` | Common | Operation-level result semantics are backend-neutral; native codes remain qualified by domain |
+| `FrameRateEstimator` | Common | Host-monotonic frame-arrival estimate; explicitly not device-reported or configured FPS |
+| `CameraError` native code mapping | Adapter boundary | Keep the Amcam source error intact; common conversion currently classifies it as `BackendFailure` and preserves `amcam.sdk` plus the signed code |
+| `StillResolution`, Amcam exposure/white-balance settings, trigger/I/O enums, accessory states, lens/focuser values | AmScope-specific for now | They contain native indices, vendor enum identity, vendor-specific units, or device-specific operational semantics; promote only after a second backend demonstrates identical meaning |
+| `FrameRateStatistics` | Not yet classified as common | The native telemetry's measurement window, source and units must be established before treating it as equivalent to host estimates or another backend's device statistics |
+
+The ownership rule is semantic, not structural: two structs with similar fields are not common types unless their meaning, units, validity rules, and lifecycle behavior match.
+
 ### Work
 
 1. Classify every current public type by semantic ownership.

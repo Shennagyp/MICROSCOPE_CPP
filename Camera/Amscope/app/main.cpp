@@ -1658,8 +1658,11 @@ private:
             // sensor bit depth) can still be configured when the SDK exposes
             // a setter and exact legal values but does not implement readback.
             // In that case leave the selector unselected until the user chooses.
+            const bool isSensorBitDepth =
+                descriptor.name == std::string(camera::RawOutputBitDepthFeature);
             const bool valueIsKnown =
-                !descriptor.isReadable || entry.second.hasCurrentValue;
+                isSensorBitDepth || !descriptor.isReadable ||
+                entry.second.hasCurrentValue;
             entry.second.editor->setEnabled(
                 canEnable && descriptor.isAvailable &&
                 descriptor.isWritable && valueIsKnown);

@@ -442,15 +442,15 @@ buildAmcamFeatureDescriptors(
     // never a relative "maximum" mode. This backend can select only 8-bit or
     // the SDK's maximum; intermediate depths are not configurable through
     // AMCAM_OPTION_BITDEPTH and must not be advertised.
-    const bool rawBitDepthReadable = rawModeReadable &&
+    // Bit depth is a sensor precision control, not a RAW transport-mode
+    // control. Probe and expose it independently from AMCAM_OPTION_RAW and
+    // from the application's RAW-output policy. Otherwise a profile that
+    // disables RAW transport accidentally hides a separate sensor setting.
+    const bool rawBitDepthReadable =
         SUCCEEDED(rawBitDepthModeHr) &&
         (rawBitDepth == 0 ||
          (rawBitDepth == 1 && rawMaximumBitDepthValid));
-    // Bit depth is an independent stopped-state camera setting. It can be
-    // configured before RAW output is enabled; tying writability to the
-    // current RAW/RGB mode made the selector unusable in the normal default
-    // RGB state.
-    const bool rawBitDepthWritable = rawModeReadable &&
+    const bool rawBitDepthWritable =
         rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
     std::vector<std::int64_t> rawBitDepthValues{8};
     if (rawMaximumBitDepthValid && rawMaxBitDepth > 8U) {
@@ -846,9 +846,10 @@ buildAmcamFeatureDescriptors(
         std::string(camera::RawOutputBitDepthFeature),
         "RAW Output Bit Depth", CameraFeatureKind::Integer,
         std::string("significant bits"),
-        rawAvailable && rawOutputAllowed,
+        rawModelSupported && rawMaximumBitDepthValid && rawMaxBitDepth > 8U,
         rawBitDepthReadable,
-        rawAvailable && rawOutputAllowed && rawBitDepthWritable && stopped,
+        rawModelSupported && rawMaximumBitDepthValid &&
+            rawBitDepthWritable && stopped,
         std::nullopt, std::nullopt, {},
         camera::CameraFeatureGroup::ImageFormat,
         std::move(rawBitDepthValues)

@@ -8,7 +8,7 @@
 
 namespace amscope::detail {
 
-std::optional<unsigned> rawPixelFormatBitDepth(int pixelFormat) {
+inline std::optional<unsigned> rawPixelFormatBitDepth(int pixelFormat) {
     switch (pixelFormat) {
     case AMCAM_PIXELFORMAT_RAW8:
     case AMCAM_PIXELFORMAT_GMCY8: return 8U;
@@ -31,7 +31,7 @@ struct RawPixelFormatChoice {
     int legacyBitDepthMode = -1;
 };
 
-std::vector<RawPixelFormatChoice> rawPixelFormatChoices(
+inline std::vector<RawPixelFormatChoice> rawPixelFormatChoices(
     const std::vector<int>& supportedPixelFormats,
     unsigned maximumBitDepth) {
     // Prefer unpacked RAW12 when both representations are supported. The
@@ -88,7 +88,7 @@ std::vector<RawPixelFormatChoice> rawPixelFormatChoices(
     return choices;
 }
 
-std::optional<RawPixelFormatChoice> rawPixelFormatForBitDepth(
+inline std::optional<RawPixelFormatChoice> rawPixelFormatForBitDepth(
     const std::vector<RawPixelFormatChoice>& choices,
     unsigned bitDepth) {
     const auto found = std::find_if(
@@ -101,7 +101,7 @@ std::optional<RawPixelFormatChoice> rawPixelFormatForBitDepth(
         : std::optional<RawPixelFormatChoice>(*found);
 }
 
-std::optional<unsigned> rawBitDepthForLegacyMode(
+inline std::optional<unsigned> rawBitDepthForLegacyMode(
     const std::vector<RawPixelFormatChoice>& choices,
     int legacyMode,
     unsigned maximumBitDepth) {
@@ -118,7 +118,7 @@ std::optional<unsigned> rawBitDepthForLegacyMode(
         : std::optional<unsigned>(found->bitDepth);
 }
 
-std::optional<unsigned> rawBitDepthForPixelFormat(
+inline std::optional<unsigned> rawBitDepthForPixelFormat(
     const std::vector<RawPixelFormatChoice>& choices,
     const std::vector<int>& supportedPixelFormats,
     int pixelFormat) {

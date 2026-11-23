@@ -1141,11 +1141,13 @@ private:
                 rebuildAccessoryControls(descriptors, generation);
                 refreshFeatureValues(generation);
 
-                const auto availableCount = static_cast<std::size_t>(std::count_if(
-                    descriptors.begin(), descriptors.end(),
-                    [](const auto& descriptor) { return descriptor.isAvailable; }));
+                const auto availableControlCount = static_cast<std::size_t>(
+                    std::count_if(featureControls_.begin(), featureControls_.end(),
+                        [](const auto& entry) {
+                            return entry.second.descriptor.isAvailable;
+                        }));
                 const auto shownUnavailableCount =
-                    featureControls_.size() - availableCount;
+                    featureControls_.size() - availableControlCount;
                 QString status = QString("%1 available feature(s).")
                     .arg(static_cast<qulonglong>(availableCount));
                 if (shownUnavailableCount != 0) {

@@ -5300,10 +5300,11 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
                 supportedFormats.push_back(code);
             }
             const auto choices = rawPixelFormatChoices(supportedFormats);
-            const auto requestedFormat = selectedBitDepth >= 0
-                ? rawPixelFormatForBitDepth(
-                    choices, static_cast<unsigned>(selectedBitDepth))
-                : std::nullopt;
+            const auto requestedFormat =
+                selectedBitDepth >= 8 && selectedBitDepth <= 16
+                    ? rawPixelFormatForBitDepth(
+                        choices, static_cast<unsigned>(selectedBitDepth))
+                    : std::nullopt;
             if (!requestedFormat)
                 return featureError(
                     CameraFeatureAccessError::Code::InvalidValue,

@@ -39,10 +39,10 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    if (!selector->isEnabled() || !refresh->isEnabled() ||
+    if (!selector->isEnabled() || refresh->isEnabled() ||
         open->isEnabled() || start->isEnabled() ||
         stop->isEnabled() || close->isEnabled()) {
-        fail("Initial closed/no-device control state is incorrect.");
+        fail("Initial no-handler/no-device control state is incorrect.");
         return EXIT_FAILURE;
     }
 
@@ -62,6 +62,10 @@ int main(int argc, char** argv) {
     panel.setStopRequestedHandler([&]() { ++stopRequests; });
     panel.setCloseRequestedHandler([&]() { ++closeRequests; });
 
+    if (!refresh->isEnabled()) {
+        fail("Refresh remained disabled after its host callback was assigned.");
+        return EXIT_FAILURE;
+    }
     refresh->click();
     if (refreshRequests != 1) {
         fail("Refresh did not invoke the host callback.");

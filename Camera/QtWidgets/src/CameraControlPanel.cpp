@@ -107,26 +107,31 @@ void CameraControlPanel::setState(CameraControlPanelState state) {
 void CameraControlPanel::setRefreshRequestedHandler(
     std::function<void()> handler) {
     refreshRequestedHandler_ = std::move(handler);
+    updateControls();
 }
 
 void CameraControlPanel::setOpenRequestedHandler(
     std::function<void(const std::string&)> handler) {
     openRequestedHandler_ = std::move(handler);
+    updateControls();
 }
 
 void CameraControlPanel::setStartRequestedHandler(
     std::function<void()> handler) {
     startRequestedHandler_ = std::move(handler);
+    updateControls();
 }
 
 void CameraControlPanel::setStopRequestedHandler(
     std::function<void()> handler) {
     stopRequestedHandler_ = std::move(handler);
+    updateControls();
 }
 
 void CameraControlPanel::setCloseRequestedHandler(
     std::function<void()> handler) {
     closeRequestedHandler_ = std::move(handler);
+    updateControls();
 }
 
 void CameraControlPanel::updateControls() {
@@ -143,12 +148,18 @@ void CameraControlPanel::updateControls() {
         !state_.otherOperationPending;
 
     deviceSelector_->setEnabled(closed && idle);
-    refreshButton_->setEnabled(closed && idle);
-    openButton_->setEnabled(closed && idle && selectedDeviceId().has_value());
-    startButton_->setEnabled(open && idle);
-    stopButton_->setEnabled(streaming && idle);
+    refreshButton_->setEnabled(
+        closed && idle && static_cast<bool>(refreshRequestedHandler_));
+    openButton_->setEnabled(
+        closed && idle && selectedDeviceId().has_value() &&
+        static_cast<bool>(openRequestedHandler_));
+    startButton_->setEnabled(
+        open && idle && static_cast<bool>(startRequestedHandler_));
+    stopButton_->setEnabled(
+        streaming && idle && static_cast<bool>(stopRequestedHandler_));
     // Faulted is intentionally closeable, but is not startable/stoppable.
-    closeButton_->setEnabled(!closed && idle);
+    closeButton_->setEnabled(
+        !closed && idle && static_cast<bool>(closeRequestedHandler_));
 }
 
 } // namespace camera::qtwidgets

@@ -36,7 +36,7 @@ camera::FramePtr makeRaw8Frame() {
 }
 
 void fail(const char* message) {
-    std::cerr << message << '\\n';
+    std::cerr << message << '\n';
 }
 
 } // namespace
@@ -112,6 +112,6 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    std::cout << "All Qt Widgets frame view tests passed.\\n";
+    std::cout << "All Qt Widgets frame view tests passed.\n";
     return EXIT_SUCCESS;
 }

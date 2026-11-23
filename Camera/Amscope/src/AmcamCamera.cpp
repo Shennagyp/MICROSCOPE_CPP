@@ -32,6 +32,7 @@ using amscope::detail::RawPixelFormatChoice;
 using amscope::detail::rawBitDepthForLegacyMode;
 using amscope::detail::rawBitDepthForPixelFormat;
 using amscope::detail::rawPixelFormatChoices;
+using amscope::detail::rawPixelFormatMaximumBitDepth;
 using amscope::detail::rawPixelFormatForBitDepth;
 
 constexpr std::size_t kPoolSize = 4;
@@ -396,7 +397,9 @@ buildAmcamFeatureDescriptors(
             supportedPixelFormatCodes.push_back(code);
         }
     }
-    const unsigned rawMaxBitDepth = rawMaximumBitDepth(handle, modelFlags);
+    const unsigned rawMaxBitDepth = std::max(
+        rawMaximumBitDepth(handle, modelFlags),
+        rawPixelFormatMaximumBitDepth(supportedPixelFormatCodes));
     const auto rawPixelChoices =
         rawPixelFormatChoices(supportedPixelFormatCodes, rawMaxBitDepth);
     // Capability enumeration and current-value readback are independent.
@@ -4869,8 +4872,9 @@ AmcamCamera::readFeature(std::string_view name) {
                         std::string(name), "Amcam_get_PixelFormatSupport(entry)", pixelHr);
                 supportedFormats.push_back(code);
             }
-            const unsigned maximumBitDepth =
-                rawMaximumBitDepth(impl_->handle, impl_->modelFlags);
+            const unsigned maximumBitDepth = std::max(
+                rawMaximumBitDepth(impl_->handle, impl_->modelFlags),
+                rawPixelFormatMaximumBitDepth(supportedFormats));
             const auto choices =
                 rawPixelFormatChoices(supportedFormats, maximumBitDepth);
             int currentFormat = -1;

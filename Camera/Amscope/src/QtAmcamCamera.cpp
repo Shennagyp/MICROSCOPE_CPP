@@ -54,9 +54,9 @@ QtAmcamCamera::QtAmcamCamera(QObject* parent)
 QtAmcamCamera::QtAmcamCamera(
     AmcamCameraProfileRegistry profiles,
     QObject* parent)
-    : QObject(parent), camera_(std::move(profiles)) {
+    : QObject(parent), camera_(std::move(profiles)),
+      frameStream_(new camera::qt::FrameStream(this)) {
     qRegisterMetaType<amscope::CameraState>("amscope::CameraState");
-    qRegisterMetaType<amscope::FramePtr>("amscope::FramePtr");
     featureWorker_ = std::thread([this]() { runFeatureWorker(); });
 }
 
@@ -447,6 +447,10 @@ QtAmcamCamera::CameraRequestId QtAmcamCamera::requestStop(
         FeatureRequestSemantics::LifecycleMutation);
 }
 
+camera::qt::FrameStream& QtAmcamCamera::frameStream() noexcept {
+    return *frameStream_;
+}
+
 CameraState QtAmcamCamera::state() const noexcept { return camera_.state(); }
 
 std::uint64_t QtAmcamCamera::droppedFrames() const noexcept {
@@ -459,25 +463,6 @@ std::uint64_t QtAmcamCamera::framesPulled() const noexcept {
 
 std::uint64_t QtAmcamCamera::imageEventsReceived() const noexcept {
     return camera_.imageEventsReceived();
-}
-
-FramePtr QtAmcamCamera::takeLatestFrame() {
-    FramePtr frame = std::atomic_exchange_explicit(
-        &latestFrame_, FramePtr{}, std::memory_order_acq_rel);
-    notificationPending_.store(false, std::memory_order_release);
-
-    // A producer may publish after the exchange but before the notification
-    // flag is cleared. Re-arm exactly one wakeup if a newer frame is waiting.
-    if (std::atomic_load_explicit(&latestFrame_, std::memory_order_acquire)) {
-        bool expected = false;
-        if (notificationPending_.compare_exchange_strong(
-                expected, true,
-                std::memory_order_acq_rel,
-                std::memory_order_acquire)) {
-            queueFrameNotification();
-        }
-    }
-    return frame;
 }
 
 
@@ -1993,46 +1978,17 @@ void QtAmcamCamera::dispatchToOwnerThread(std::function<void()> callback) {
 void QtAmcamCamera::publishLatestFrame(
     FramePtr frame,
     const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate) {
-    if (!frameGate ||
-        !frameGate->accepts(
-            sessionGeneration_.load(std::memory_order_acquire))) {
-        return;
-    }
-
-    // The shared_ptr operation publishes only the lease, not a pixel copy.
-    // The UI and the worker own independent references to the same pool frame.
-    const FramePtr published = std::move(frame);
-    std::atomic_store_explicit(
-        &latestFrame_, published, std::memory_order_release);
-
-    // Close the race with Stop/Close invalidation: a frame whose acquisition
-    // generation was superseded must not remain visible in the new session.
-    if (!frameGate->accepts(
-            sessionGeneration_.load(std::memory_order_acquire))) {
-        FramePtr expected = published;
-        (void)std::atomic_compare_exchange_strong_explicit(
-            &latestFrame_, &expected, FramePtr{},
-            std::memory_order_acq_rel,
-            std::memory_order_acquire);
-        return;
-    }
-
-    if (!notificationPending_.exchange(true, std::memory_order_acq_rel))
-        queueFrameNotification();
-}
-
-void QtAmcamCamera::queueFrameNotification() {
-    // Avoid featureQueueMutex_: acquisition notification is independent of
-    // feature-request scheduling. Close joins acquisition before QObject dies.
-    QMetaObject::invokeMethod(this, [this]() {
-        emit frameAvailable();
-    }, Qt::QueuedConnection);
+    frameStream_->publishFrame(
+        std::move(frame),
+        [this, frameGate]() noexcept {
+            return frameGate &&
+                frameGate->accepts(
+                    sessionGeneration_.load(std::memory_order_acquire));
+        });
 }
 
 void QtAmcamCamera::clearFrameMailbox() {
-    std::atomic_store_explicit(
-        &latestFrame_, FramePtr{}, std::memory_order_release);
-    notificationPending_.store(false, std::memory_order_release);
+    frameStream_->clear();
 }
 
 void QtAmcamCamera::emitError(const CameraError& error) {

@@ -96,7 +96,7 @@ No more work is scheduled for comparing `WaitImageV3` against the production pat
 
 ### Phase 2 — Close the common camera contract
 
-**Status: IN PROGRESS; public type ownership audited; typed integer/floating ranges implemented and tested; MU503 RGB24 common frame physically verified; RAW qualification remains conditional on model/mode support**
+**Status: ACCEPTED TO PROCEED; RGB24 common-frame contract verified; production RAW common-frame hardware qualification explicitly bypassed by project owner and remains unverified**
 
 The common layer already contains discovery identity/capabilities, common frame/payload metadata, typed feature descriptors/values/errors/results, feature validation, and host frame-rate estimation. The public-type ownership decisions are recorded in [CAMERA_COMMON_TYPE_OWNERSHIP.md](CAMERA_COMMON_TYPE_OWNERSHIP.md).
 
@@ -114,7 +114,7 @@ Remaining work:
 
 1. Review the public contract and exact numeric-range API change before package stability; the v0.6 build/tests currently show no compile or unit-test regression.
 2. Keep AmScope SDK errors, camera states, trigger/I/O enums, accessory state, Amcam FourCC, and other vendor-specific concepts in `amscope` unless a second real backend demonstrates an exact shared meaning.
-3. Qualify a RAW frame through `AmcamCamera` only if MU503 exposes a usable RAW live mode and that mode is part of the intended support claim. Otherwise record that precise limitation. Do not use the vendor-only `WaitImageV3` result as evidence for the common frame adapter.
+3. Production RAW live common-frame hardware qualification was explicitly bypassed by the project owner when proceeding to Phase 3. The direct vendor-SDK RAW8 probe does not qualify the `AmcamCamera` adapter. Keep production RAW live-frame support marked hardware-unverified; do not claim qualification from the RGB24 test or direct SDK probe.
 
 **Exit criteria**
 
@@ -125,7 +125,7 @@ Remaining work:
 
 ### Phase 3 — Finalize native control and Qt streaming boundaries
 
-**Status: PARTIALLY PRESENT IN THE CURRENT DESIGN**
+**Status: IN PROGRESS; backend-neutral Qt frame delivery extracted; AmScope native session/control and Qt operation facade remain authoritative**
 
 The source already has the right ownership foundation:
 
@@ -134,12 +134,18 @@ The source already has the right ownership foundation:
 
 The revised implementation must preserve and formalize that model.
 
+Implemented in this Phase 3 slice:
+
+- Added `Camera::Qt` with backend-neutral `camera::qt::FrameStream`. It owns only the latest immutable frame lease and coalesced Qt notification; it has no camera/session state, Amcam dependency, or operation queue.
+- `QtAmcamCamera` exposes `frameStream()` and delegates frame publication/consumption to this component. Acquisition-generation validation and the sole `AmcamCamera` session owner remain in the AmScope adapter.
+- The preview connects to the stream object directly. `camera_qt_frame_stream_tests` covers producer-thread publication, latest-lease identity, notification re-arming, stale in-flight publication rejection, mailbox clear, and QObject affinity.
+
 Work:
 
 1. Keep `AmcamCamera` as the sole owner of the native session and the non-Qt control/command surface.
 2. Keep the Qt class as an adapter for QObject affinity, queued operations, coalesced frame notification, and latest-frame delivery.
-3. Separate the public streaming contract from feature/command APIs where this can be done without duplicating request queues, locks, or session ownership.
-4. Make the CMake targets independently consumable: non-Qt driver/control consumers must not require Qt; Qt consumers link the Qt adapter explicitly.
+3. Keep the public frame-delivery surface in `Camera::Qt` (`camera::qt::FrameStream`) and AmScope lifecycle/session-generation policy in `QtAmcamCamera`; do not duplicate the operation queue or camera owner.
+4. Preserve independent dependencies: `Amscope::Driver` remains non-Qt; `Camera::Qt` depends only on common frame contracts and Qt Core; `Amscope::Qt` composes the driver and generic Qt stream explicitly.
 5. Do **not** add a redundant `camera_amscope_control` wrapper if it simply forwards the existing `AmcamCamera` API. The existing class already provides the non-Qt programmatic surface.
 6. Preserve FIFO operation ordering, session/feature generations, callback shutdown synchronization, and one SDK-call serialization boundary.
 
@@ -148,6 +154,7 @@ Work:
 - A non-Qt client can enumerate/open/read/write/start/receive frames/stop/close through the native API.
 - A Qt client receives frames and uses queued requests through the adapter.
 - Both paths preserve one `HAmcam` session per opened camera.
+- `Camera::Qt` stream tests and AmScope Qt request tests cover their separate responsibilities.
 - Tests cover the adapter boundary and existing lifecycle/request semantics.
 
 ### Phase 4 — Extract reusable Qt camera UI
@@ -274,8 +281,8 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 |---|---|---|
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
-| 2 | Common camera contract closure | IN PROGRESS; exact integer ranges implemented and 11/11 tests passed; MU503 RGB24 common frame physically verified; RAW qualification conditional on model/mode support |
-| 3 | Native control / Qt streaming boundaries | PARTIALLY PRESENT; finalize and test without duplicate ownership |
+| 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
+| 3 | Native control / Qt streaming boundaries | IN PROGRESS; generic Qt frame stream extracted; focused build/tests pending |
 | 4 | Reusable Qt camera UI | OPEN |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |

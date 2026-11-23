@@ -67,7 +67,7 @@ No feature in this inventory is labeled **Hardware verified** because there is n
 | Behavior | Source state | Automated test evidence | Real-camera evidence |
 |---|---|---|---|
 | Packed RGB24 live frames | Source implemented/documented | Common frame model tests; v0.6 native probe reports first common frame | **Hardware verified on MU503:** 1280×960, RGB24, stride 3,840, payload 3,686,400 bytes; exact geometry match. See `docs/testing/hardware/phase-2-mu503-rgb24-2026-11-23.md` |
-| RAW8 and RAW16 live frame representation | Source implemented/documented | Camera type tests verify representation fields, not sensor payload bytes | Not recorded |
+| RAW8 and RAW16 live frame representation | Source implemented/documented | Camera type tests verify representation fields, not sensor payload bytes | Project owner bypassed production RAW common-frame hardware qualification in Phase 2; direct SDK-only probe is not adapter evidence |
 | Sensor FourCC and significant depth separate from storage container width | Source implemented | Camera type tests cover representation distinction | Not recorded |
 | Optional sequence/timestamp/exposure metadata | Source implemented; populated only when the corresponding Amcam `AMCAM_FRAMEINFO_FLAG_*` validity bit is set | Common frame tests cover optional-vs-zero semantics and timebases | MU503 RGB24 sample: all three reported unavailable; physical presence/zero-value behavior in other modes not established |
 | Amcam SDK flags, exposure gain percent, and black level | Source implemented in `amscope::AmcamFrame` extension, not in common frame | AmScope type test checks extension and retained values | Not recorded |
@@ -133,18 +133,18 @@ The Amcam implementation caches its full descriptor inventory per camera state; 
 
 | Behavior | Source state | Automated evidence | Remaining work |
 |---|---|---|---|
-| One bounded FIFO Qt camera-operation worker (256 pending requests) | Implemented | Qt request tests cover asynchronous closed-session errors, FIFO writes, callback thread, stale descriptor suppression | Preserve when control/streaming libraries are separated |
+| One bounded FIFO Qt camera-operation worker (256 pending requests) | Implemented in `Amscope::Qt` | Qt request tests cover asynchronous closed-session errors, FIFO writes, callback thread, stale descriptor suppression, and synchronous/queued mode conflict | Keep the FIFO here; `Camera::Qt` has no camera-operation queue |
 | Scheduled/active session generations | Implemented | Partially covered by Qt request tests | Expand for lifecycle interleavings and real device |
 | Feature-state generation | Implemented | Partially covered | Test feature descriptor invalidation after real dependent writes |
 | UI callback delivered on QObject affinity thread | Implemented | Qt request tests | Hardware regression |
-| Synchronous vs queued mode commitment | Implemented | Source contract; tests may cover closed-session use only | Add explicit mode-conflict test if absent |
-| Latest-frame mailbox | Implemented | Frame gate helpers tested; no real-frame test | Test high-rate frame delivery and retained frames on hardware |
+| Synchronous vs queued mode commitment | Implemented | Qt request tests verify a queued instance rejects synchronous feature access and a synchronous instance rejects queued requests | No additional Phase 3 work identified for mode exclusion |
+| Latest-frame mailbox / Qt notification | Extracted to backend-neutral `Camera::Qt` as `camera::qt::FrameStream` | Dedicated `camera_qt_frame_stream_tests` covers latest lease, notification coalescing/re-arm, in-flight publication guard, mailbox clear, and QObject affinity | Physical high-rate frame delivery remains part of integrated hardware qualification |
 | Descriptor-driven feature editor | Implemented | Preview compile; common validation tests | Extract reusable UI widgets |
 | Trigger panel | Implemented | Preview compile | Hardware UI test |
 | Lens focus/aperture panel | Implemented | Preview compile | Hardware/accessory test |
 | Accessory panels | Partial | Preview source | Add missing native I/O UI if required |
-| Separate `camera_amscope_control` | Not delivered | None | Extract non-Qt programmatic control |
-| Separate Qt streaming library | Not delivered | None | Extract frame delivery from broad `QtAmcamCamera` |
+| Separate `camera_amscope_control` | Intentionally not introduced | `AmcamCamera` already provides the non-Qt programmatic feature/command surface | A forwarding-only target would duplicate the existing API without establishing a new ownership boundary |
+| Separate Qt streaming library | Implemented in this Phase 3 slice as `Camera::Qt` / `camera::qt::FrameStream` | Dedicated unit test target; focused build/test pending | Owns only latest-frame handoff and QObject notification; no camera/session/request ownership |
 | Reusable `camera_ui_qt` | Not delivered | None | Extract widgets from `PreviewWindow` |
 
 ## 8. Explicitly deferred or absent
@@ -166,7 +166,7 @@ Additional target-architecture gaps:
 
 - Existing GenTL/GenApi C++ runtime dependency and CTI adapter are absent from this branch.
 - Backend-neutral camera identity/capability/frame models are not fully extracted from `amscope`.
-- Driver/control/Qt streaming target separation is incomplete.
+- `Amscope::Driver` remains a non-Qt target containing the native Amcam session and programmatic control/command API. `Camera::Qt` isolates backend-neutral Qt frame delivery; `Amscope::Qt` composes both. No forwarding-only control target is planned.
 - Reusable backend-neutral UI library is not delivered.
 - Exported CMake package and clean external-consumer qualification are missing.
 - Vendor SDK redistribution terms have not been established in this inventory.
@@ -181,7 +181,8 @@ Additional target-architecture gaps:
 | `amscope_event_queue_tests` | Event queue helper behavior | Full callback and PullImage acquisition |
 | `amscope_session_primitives_tests` | Production callback-drain tracker, retryable frame-cache flush obligation (including newer-generation preservation), and retained frame-slot lease selection | Full AmcamCamera Open/Start/Stop/Close fault injection, SDK callback ABI races, and hardware behavior |
 | `amscope_frame_stall_watchdog_tests` | Video/heartbeat timeout calculations | Actual SDK timeout and heartbeat behavior |
-| `amscope_qt_request_tests` | Qt worker request ordering, callback affinity, typed closed-session outcomes, request supersession | Real camera SDK operations |
+| `amscope_qt_request_tests` | Qt worker request ordering, callback affinity, typed closed-session outcomes, request supersession, synchronous/queued mode exclusion | Real camera SDK operations or physical frame delivery |
+| `camera_qt_frame_stream_tests` | Backend-neutral Qt frame coalescing, latest immutable lease identity, notification re-arm, in-flight publication guard, mailbox clear, QObject affinity | Real camera cadence or renderer/GPU behavior |
 | `camera_common_feature_tests` | Feature value type/range/increment/enumeration/vector validation | Native feature readback |
 | `camera_common_models_tests` | Optional camera identity fields, opaque-ID distinction, common resolution, and Unknown/Unsupported/Supported capability semantics | AmScope model-flag mapping on hardware or GenTL discovery |
 | `camera_common_frame_tests` | Common frame payload/layout, opaque pixel-format scheme/value, optional sequence/timestamp/exposure, explicit timebases, and backend extension support | Real SDK payload layout/metadata accuracy and physical RAW verification |

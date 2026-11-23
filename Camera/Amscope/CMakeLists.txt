@@ -173,6 +173,9 @@ endif()
 
 if(AMSCOPE_BUILD_QT_ADAPTER OR AMSCOPE_BUILD_PREVIEW_APP)
     find_package(Qt6 6.2 REQUIRED COMPONENTS Core)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../Qt"
+        "${CMAKE_CURRENT_BINARY_DIR}/camera_qt")
 endif()
 
 if(AMSCOPE_BUILD_QT_ADAPTER)
@@ -188,7 +191,7 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
         PUBLIC
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
             "$<INSTALL_INTERFACE:include>")
-    target_link_libraries(amscope_qt PUBLIC Amscope::Driver Qt6::Core)
+    target_link_libraries(amscope_qt PUBLIC Amscope::Driver Camera::Qt Qt6::Core)
 endif()
 
 if(BUILD_TESTING AND AMSCOPE_BUILD_QT_ADAPTER)

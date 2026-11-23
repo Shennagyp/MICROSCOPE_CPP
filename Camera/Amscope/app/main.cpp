@@ -1,5 +1,6 @@
 #include "amscope/QtAmcamCamera.h"
 #include "camera/FrameRateEstimator.h"
+#include "camera/qtwidgets/FrameView.h"
 
 #include <QByteArray>
 #include <QApplication>
@@ -15,9 +16,6 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QMetaObject>
-#include <QPainter>
-#include <QPaintEvent>
-#include <QColor>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QJsonDocument>
@@ -123,168 +121,6 @@ QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
     }, *descriptor.numericRange);
 }
 
-QString pixelFormatName(camera::PixelFormat format) {
-    switch (format) {
-    case camera::PixelFormat::Unknown: return QStringLiteral("Unknown");
-    case camera::PixelFormat::RGB24: return QStringLiteral("RGB24");
-    case camera::PixelFormat::Raw8: return QStringLiteral("Raw8");
-    case camera::PixelFormat::Raw16: return QStringLiteral("Raw16");
-    }
-    return QStringLiteral("Unknown");
-}
-
-QString pixelFormatIdentifierText(const camera::Frame& frame) {
-    if (!frame.pixelFormatIdentifier)
-        return QStringLiteral("unavailable");
-    return QStringLiteral("%1:0x%2")
-        .arg(QString::fromStdString(frame.pixelFormatIdentifier->scheme))
-        .arg(static_cast<qulonglong>(frame.pixelFormatIdentifier->value), 0, 16);
-}
-
-QJsonValue optionalUnsignedJson(
-    const std::optional<std::uint64_t>& value) {
-    if (!value)
-        return QJsonValue(QJsonValue::Null);
-    // Store unsigned 64-bit values as decimal strings to avoid JSON double
-    // precision loss and signed qint64 overflow.
-    return QJsonValue(QString::number(static_cast<qulonglong>(*value)));
-}
-
-QJsonValue optionalStringJson(const std::optional<std::string>& value) {
-    return value ? QJsonValue(QString::fromStdString(*value))
-                 : QJsonValue(QJsonValue::Null);
-}
-
-// FrameView holds the immutable frame lease while QImage references its pixel
-// buffer. Rendering reads the pooled storage directly: no detached QImage,
-// per-frame pixel copy, or intermediate QPixmap.
-class FrameView final : public QWidget {
-public:
-    explicit FrameView(QWidget* parent = nullptr) : QWidget(parent) {
-        setMinimumSize(640, 480);
-        setAttribute(Qt::WA_OpaquePaintEvent, true);
-    }
-
-    void setMessage(QString message) {
-        image_ = QImage{};
-        frame_.reset();
-        hasUnpaintedFrame_ = false;
-        message_ = std::move(message);
-        update();
-    }
-
-    void setFramePresentedCallback(std::function<void()> callback) {
-        framePresentedCallback_ = std::move(callback);
-    }
-
-    void setFrame(amscope::FramePtr frame) {
-        image_ = QImage{};
-        frame_ = std::move(frame);
-        message_.clear();
-
-        const bool validDimensions =
-            frame_ && frame_->data() && frame_->width > 0 && frame_->height > 0 &&
-            frame_->width <= static_cast<std::uint32_t>(std::numeric_limits<int>::max()) &&
-            frame_->height <= static_cast<std::uint32_t>(std::numeric_limits<int>::max()) &&
-            frame_->strideBytes <= static_cast<std::uint32_t>(std::numeric_limits<int>::max());
-
-        if (validDimensions) {
-            const std::uint64_t minimumRowBytes =
-                static_cast<std::uint64_t>(frame_->width) *
-                (frame_->pixelFormat == amscope::PixelFormat::RGB24 ? 3U :
-                 frame_->pixelFormat == amscope::PixelFormat::Raw16 ? 2U : 1U);
-            const std::uint64_t requiredBytes =
-                static_cast<std::uint64_t>(frame_->strideBytes) * frame_->height;
-            const bool validBuffer =
-                frame_->strideBytes >= minimumRowBytes &&
-                requiredBytes <= frame_->byteSize();
-
-            if (validBuffer) {
-                const int width = static_cast<int>(frame_->width);
-                const int height = static_cast<int>(frame_->height);
-                const int stride = static_cast<int>(frame_->strideBytes);
-                switch (frame_->pixelFormat) {
-                case amscope::PixelFormat::RGB24:
-                    image_ = QImage(frame_->data(), width, height, stride,
-                                    QImage::Format_RGB888);
-                    break;
-                case amscope::PixelFormat::Raw8:
-                    // Display the sensor mosaic as monochrome samples. This is
-                    // a preview-only interpretation; the leased RAW bytes remain
-                    // untouched for capture and downstream image processing.
-                    image_ = QImage(frame_->data(), width, height, stride,
-                                    QImage::Format_Grayscale8);
-                    break;
-                case amscope::PixelFormat::Raw16:
-                    // The SDK is configured for native byte order on this
-                    // platform. Keep the original 16-bit sample buffer intact.
-                    image_ = QImage(frame_->data(), width, height, stride,
-                                    QImage::Format_Grayscale16);
-                    break;
-                case amscope::PixelFormat::Unknown:
-                    break;
-                }
-            }
-        }
-
-        if (image_.isNull()) {
-            const QString frameDescription = frame_
-                ? QStringLiteral("%1, %2x%3, stride: %4")
-                      .arg(pixelFormatName(frame_->pixelFormat))
-                      .arg(frame_->width)
-                      .arg(frame_->height)
-                      .arg(frame_->strideBytes)
-                : QStringLiteral("invalid frame");
-            frame_.reset();
-            hasUnpaintedFrame_ = false;
-            message_ = QStringLiteral("No renderable frame (%1)").arg(frameDescription);
-        } else {
-            // Count a frame when this newly submitted image is actually painted.
-            // Do not use the SDK sequence field as a uniqueness token: some
-            // supported devices leave AmcamFrameInfoV3::seq at zero.
-            hasUnpaintedFrame_ = true;
-        }
-        update();
-    }
-
-protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        painter.fillRect(rect(), QColor(23, 25, 29));
-
-        if (image_.isNull()) {
-            painter.setPen(QColor(214, 217, 223));
-            painter.drawText(rect().adjusted(16, 16, -16, -16),
-                             Qt::AlignCenter | Qt::TextWordWrap,
-                             message_);
-            return;
-        }
-
-        QSize targetSize = image_.size();
-        targetSize.scale(size(), Qt::KeepAspectRatio);
-        const QRect targetRect(
-            (width() - targetSize.width()) / 2,
-            (height() - targetSize.height()) / 2,
-            targetSize.width(),
-            targetSize.height());
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-        painter.drawImage(targetRect, image_);
-
-        if (hasUnpaintedFrame_) {
-            hasUnpaintedFrame_ = false;
-            if (framePresentedCallback_)
-                framePresentedCallback_();
-        }
-    }
-
-private:
-    // frame_ owns external pixels for the lifetime of image_.
-    amscope::FramePtr frame_;
-    QImage image_;
-    QString message_ = QStringLiteral("Select a camera and press Open, then Start.");
-    std::function<void()> framePresentedCallback_;
-    bool hasUnpaintedFrame_ = false;
-};
 
 int listCameras() {
     amscope::CameraError error;
@@ -349,7 +185,7 @@ public:
         toolbar->addWidget(stillCaptureModeSelector_);
         toolbar->addWidget(captureStillButton_);
 
-        preview_ = new FrameView(central);
+        preview_ = new camera::qtwidgets::FrameView(central);
 
         featureStatus_ = new QLabel("Open a camera to inspect its available features.", central);
         featureStatus_->setWordWrap(true);
@@ -2928,7 +2764,7 @@ private:
     QLabel* stillPrecisionLabel_ = nullptr;
     QPushButton* captureStillButton_ = nullptr;
     QPushButton* refreshFeaturesButton_ = nullptr;
-    FrameView* preview_ = nullptr;
+    camera::qtwidgets::FrameView* preview_ = nullptr;
     QLabel* frameInfo_ = nullptr;
     QLabel* featureStatus_ = nullptr;
     QGroupBox* accessoryGroup_ = nullptr;

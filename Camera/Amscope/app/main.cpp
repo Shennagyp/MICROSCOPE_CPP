@@ -1025,6 +1025,7 @@ private:
 
         const std::uint64_t generation = ++featureUiGeneration_;
         pendingFeatureReads_ = 0;
+        featureReadbackReady_ = false;
         pendingFeatureWrite_ = false;
         embeddedLightSourceReadPending_ = false;
         filterWheelReadPending_ = false;
@@ -1347,7 +1348,8 @@ private:
 
         const auto& descriptor = found->second.descriptor;
         if (!descriptor.isAvailable || !descriptor.isReadable ||
-            !descriptor.isWritable || pendingFeatureWrite_ ||
+            !descriptor.isWritable || !featureReadbackReady_ ||
+            pendingFeatureWrite_ ||
             camera_.state() != amscope::CameraState::Open) {
             return;
         }
@@ -1509,6 +1511,7 @@ private:
         }
 
         if (pendingFeatureReads_ == 0) {
+            featureReadbackReady_ = true;
             setFeatureControlsEnabled(true);
             updateFrameInfoLabel();
             return;
@@ -1564,6 +1567,7 @@ private:
                         --pendingFeatureReads_;
                     }
                     if (pendingFeatureReads_ == 0) {
+                        featureReadbackReady_ = true;
                         setFeatureControlsEnabled(true);
                     }
                     updateFrameInfoLabel();
@@ -1574,6 +1578,7 @@ private:
                 // will obtain a consistent descriptor/value snapshot.
                 ++featureUiGeneration_;
                 pendingFeatureReads_ = 0;
+                featureReadbackReady_ = false;
                 setFeatureControlsEnabled(false);
                 featureStatus_->setText(
                     "Feature reads could not be queued; refresh the feature list to retry.");
@@ -1947,8 +1952,8 @@ private:
                 items.push_back({
                     "pixel-depth", "Depth",
                     QString("%1 significant / %2 stored")
-                        .arg(lastFrameSignificantBits_)
-                        .arg(lastFrameStorageBits_).toStdString(),
+                        .arg(static_cast<unsigned>(lastFrameSignificantBits_))
+                        .arg(static_cast<unsigned>(lastFrameStorageBits_)).toStdString(),
                     "bits/pixel", "Significant source depth and storage width are distinct.", false});
             }
             items.push_back({
@@ -2011,7 +2016,7 @@ private:
                 descriptor.kind == camera::CameraFeatureKind::Enumeration;
             const bool editable =
                 scalarEditable && descriptor.isWritable &&
-                !pendingFeatureWrite_ &&
+                featureReadbackReady_ && !pendingFeatureWrite_ &&
                 camera_.state() == amscope::CameraState::Open;
 
             std::string tooltip;
@@ -3112,6 +3117,7 @@ private:
     std::uint64_t cameraEnumerationGeneration_ = 0;
     bool cameraEnumerationPending_ = false;
     std::size_t pendingFeatureReads_ = 0;
+    bool featureReadbackReady_ = false;
     bool pendingFeatureWrite_ = false;
     bool embeddedLightSourceAvailable_ = false;
     bool filterWheelAvailable_ = false;

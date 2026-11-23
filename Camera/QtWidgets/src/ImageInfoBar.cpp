@@ -150,6 +150,7 @@ void ImageInfoBar::setItems(std::vector<ImageInfoBarItem> items) {
         }
     }
 
+    emptyLabel_->setVisible(active.empty());
     if (active.empty()) {
         layout_->addWidget(emptyLabel_);
     }

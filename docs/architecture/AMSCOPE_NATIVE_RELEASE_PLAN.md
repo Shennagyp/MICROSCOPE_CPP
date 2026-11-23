@@ -125,7 +125,7 @@ Remaining work:
 
 ### Phase 3 — Finalize native control and Qt streaming boundaries
 
-**Status: IN PROGRESS; header-only frame mailbox embedded at original member position; AmScope native session/control and original Qt signal/API remain authoritative**
+**Status: IN PROGRESS; mailbox and Qt request automated tests pass locally (12/12 CTest); physical Qt-to-MU503 preview smoke check remains**
 
 The source already has the right ownership foundation:
 
@@ -140,7 +140,7 @@ Implemented in this Phase 3 slice:
 - The original `QtAmcamCamera::frameAvailable()` signal and `takeLatestFrame()` API remain intact. Acquisition-generation validation, QObject notification, and the sole `AmcamCamera` session owner remain in the AmScope adapter.
 - The extraction preserves the v0.5 frame-publication mechanism: the former tail `FramePtr` slot and atomic notification flag are embedded in `FrameStreamMailbox`, and the same C++17 atomic-`shared_ptr` store/CAS/exchange algorithm remains in use. This is a structural extraction, not a new synchronization strategy. Do not claim those standard-library operations are lock-free.
 - The acquisition worker still pulls directly into a pre-sized frame-pool slot, or into its private discard buffer when all leases are retained. The Qt boundary transfers the immutable `FramePtr` lease; it does not copy or convert the pixel payload. Frame notification still bypasses the feature-request FIFO and coalesces wakeups.
-- The templated mailbox receives synchronous lifecycle and notification callbacks, allowing optimization/inlining into the existing adapter hot path. `camera_qt_frame_stream_tests` covers producer-thread publication, latest-lease identity, notification coalescing/re-arm, stale publication rejection, and clear; a deterministic concurrent producer/consumer overlap case has now been added and awaits local execution.
+- The templated mailbox receives synchronous lifecycle and notification callbacks, allowing optimization/inlining into the existing adapter hot path. `camera_qt_frame_stream_tests` covers producer-thread publication, latest-lease identity, notification coalescing/re-arm, stale publication rejection, clear, and deterministic producer/consumer overlap. The owner built the dedicated target and ran the full Release CTest suite at `8aa3b23`; all 12/12 tests passed, including `camera_qt_frame_stream_tests` (0.49 s).
 
 Work:
 
@@ -159,6 +159,7 @@ Work:
 - Both paths preserve one `HAmcam` session per opened camera.
 - `Camera::Qt` stream tests and AmScope Qt request tests cover their separate responsibilities.
 - Tests cover the adapter boundary and existing lifecycle/request semantics.
+- Physical Qt-to-MU503 smoke check: open the camera through the preview, start live acquisition, confirm `frameAvailable()` results in changing frames in `FrameView`, then Stop and Close. This is a functional boundary check, not an FPS benchmark; do not change resolution/exposure merely to maximize the observed rate.
 
 ### Phase 4 — Extract reusable Qt camera UI
 
@@ -285,7 +286,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
-| 3 | Native control / Qt streaming boundaries | IN PROGRESS; header-only mailbox embedded with original Qt API; focused build/tests pending |
+| 3 | Native control / Qt streaming boundaries | IN PROGRESS; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check remains |
 | 4 | Reusable Qt camera UI | OPEN |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |

@@ -3,6 +3,7 @@
 #include "camera/CameraFrames.h"
 
 #include <QImage>
+#include <QString>
 #include <QWidget>
 
 #include <functional>

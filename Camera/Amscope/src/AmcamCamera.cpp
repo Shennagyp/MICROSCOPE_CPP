@@ -543,14 +543,17 @@ buildAmcamFeatureDescriptors(
     const bool rawAvailable = rawModelSupported && rawModeReadable;
     const bool rawFormatReadable = rawModeReadable && rawMode == 1 &&
         SUCCEEDED(rawFormatHr) && rawBitsPerPixel > 0 && rawBitsPerPixel <= 16;
+    // When the SDK exposes its v20+ pixel-format enumeration, its supported
+    // RAW / sensor-mosaic formats are authoritative for selectable precision.
+    // Report the maximum from that list instead of a possibly stale or
+    // incomplete legacy model/MaxBitDepth result.
+    const bool modernPixelFormatApiAvailable = !supportedPixelFormatCodes.empty();
     const unsigned rawMaxBitDepth =
-        rawMaximumBitDepth(handle, modelFlags);
+        modernPixelFormatApiAvailable && !rawPixelChoices.empty()
+            ? rawPixelChoices.back().bitDepth
+            : rawMaximumBitDepth(handle, modelFlags);
     const bool rawMaximumBitDepthValid =
         rawMaxBitDepth >= 8U && rawMaxBitDepth <= 16U;
-    // When the SDK exposes its v20+ pixel-format enumeration, derive exact
-    // discrete bit-depth choices from the supported RAW formats. Only fall
-    // back to the legacy 8-bit/maximum switch when no modern list is exposed.
-    const bool modernPixelFormatApiAvailable = !supportedPixelFormatCodes.empty();
     const bool rawBitDepthHardwareSupported = modernPixelFormatApiAvailable
         ? !rawPixelChoices.empty()
         : rawMaximumBitDepthValid && rawMaxBitDepth > 8U;
@@ -5320,7 +5323,7 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
                 return featureError(
                     CameraFeatureAccessError::Code::InvalidValue,
                     std::string(name),
-                    "The requested significant bit depth is not represented by a supported RAW pixel format.");
+                    "The requested significant bit depth is not represented by a supported RAW or sensor-mosaic pixel format.");
 
             pixelHr = Amcam_put_Option(
                 impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, *requestedFormat);

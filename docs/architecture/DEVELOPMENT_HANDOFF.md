@@ -1,8 +1,8 @@
 # Development Continuation Handoff — AmScope Native Driver
 
-**Last reviewed:** 22 November 2026  
+**Last reviewed:** 23 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
-**Active branch:** `amscope-native-driver`  
+**Active branch:** `amscope-native-driver-v0.7`  
 **Physical run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
 **Phase 1 local-test revision:** `d2e5cb37b6c71ba494ff6805361fd94d83a38521`  
 **Phase 2.1 local/CI validation revision:** `03f35bf07d8236e5aab33aea0cde987155cf0425`  
@@ -10,14 +10,27 @@
 **Preview migration fix:** `609174c3ad56b50b25465e5688672627ce315a3f`  
 **Fixed-8-bit RAW correction:** `a16ae3bd77c56b14384736aa457e859c73a8072f`  
 **Common RAW 8/16-bit selector:** `3ef46d3a5b85aa7ae2e22d160d92f61aecace5bb`  
-**Latest implementation CI:** [run #45075496341](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45075496341) — in progress at handoff refresh  
-**Local validation head:** `7b81b5e639f8b8f4eae04f30c1145c975092073b` (clean Release build and 11/11 CTest passed)  
-**Current CI:** [run #45072725032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45072725032) — Apple Silicon arm64 passed; Intel x86_64 in progress  
+**Latest CI for active branch:** No CI result has been reported for the v0.7 Phase 4 source commit; earlier workflow runs in the historical notes below predate this extraction.  
+**Latest local validation source commit:** `892b91a57016e570a1e972343f78ed7c42be801c` (Release configure/build including `amscope_preview`; 13/13 CTest passed, including the new FrameView tests)  
+**Current CI:** Not reported for the active v0.7 Phase 4 source commit.  
 **Latest physical-run source revision:** `2da3f5d3503f7bf6494801b8876c96a710f0f240`  
-**Current phase:** Phase 2.2 — common frame and image-layout model  
-**Phase status:** Phase 0 and Phase 1 are **ACCEPTED BY THE PROJECT OWNER**. Phase 2.1 passed the user's clean local build and 10/10 CTest suite, plus GitHub Actions on Intel x86_64 and Apple Silicon arm64. Phase 2.2's common frame/payload/layout model, optional timing metadata, opaque pixel-format identifier, Amcam-specific frame extension, and preview migration are implemented. The user then pulled branch head `9daf193c7a107ae93984f5bf00f56d0dfbd66b3b`, completed a clean Release build of the driver, Qt adapter, hardware-rate executable, preview app, and test targets, and passed all 11/11 CTest tests. GitHub Actions run [#45070941692](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45070941692) passed on Intel x86_64 and Apple Silicon arm64 for that exact head. Phase 2.2's original software revision remains validated. The fixed-8-bit RAW correction in `a16ae3bd77c56b14384736aa457e859c73a8072f` was then built by the user at branch head `7b81b5e639f8b8f4eae04f30c1145c975092073b`: the clean Release build completed and all 11/11 CTest tests passed. Current-head CI run [#45072725032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45072725032) has passed Apple Silicon arm64; Intel x86_64 is still running. The correction uses `Amcam_get_MaxBitDepth` to skip `AMCAM_OPTION_BITDEPTH` on fixed 8-bit sensors and retains the option query for sensors above 8 bits; it is applied to RAW still capture and RAW live startup. Physical-camera validation of frame layout/payload, optional metadata, and RAW format identity/depth remains open. The two earlier MU503 performance runs and residual 15-minute/fault-injection follow-ups remain recorded below.
+**Current phase:** Phase 4 — extract reusable Qt camera UI  
+**Phase status:** Phases 0–3 are accepted by the project owner. Phase 4 is in progress on `amscope-native-driver-v0.7`: `Camera::QtWidgets` and `camera::qtwidgets::FrameView` have been added, the AmScope preview composes the extracted widget, the owner completed the Release build including `amscope_preview`, and all 13/13 CTest tests passed at source commit `892b91a`. The new offscreen FrameView tests cover RGB24/RAW8/RAW16 presentation, lease lifetime, malformed payload rejection and paint notification. The remaining Phase 4 gate is a physical MU503 preview smoke check after this extraction; no FPS benchmark or additional hardware feature test is implied. See `AMSCOPE_NATIVE_RELEASE_PLAN.md` and `AMSCOPE_IMPLEMENTATION_INVENTORY.md` for the governing state.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
+
+## Current continuation state — 23 November 2026
+
+- Active branch: `amscope-native-driver-v0.7`.
+- Current branch head after documentation refresh: `d8fbbd0a483f1fa15829805b52c24aff8e1e4842`. The tested implementation source is `892b91a57016e570a1e972343f78ed7c42be801c`; the commits after it update documentation only.
+- The owner completed the v0.7 Release configure and full build in `build/amscope-v07`. The native driver, Qt adapter, `Camera::QtWidgets`, probes, tests, and `amscope_preview` all built successfully. CTest passed **13/13** in 0.32 seconds.
+- Phase 4's first reusable UI component is `camera::qtwidgets::FrameView`, in the standalone `Camera::QtWidgets` target. Its dependency boundary is `Camera::Common` + Qt Widgets. It wraps retained frame memory through `QImage`; it does not add a per-frame pixel copy, GPU renderer, acquisition queue, or camera ownership.
+- The offscreen FrameView test passed for RGB24, RAW8 and RAW16 rendering, retained-lease lifetime, malformed payload rejection and paint callback. These are software/widget tests, not physical-camera integration evidence.
+- **Next gate:** launch `./build/amscope-v07/amscope_preview`, select the MU503, Open, Start, confirm that changing live frames are rendered by the extracted FrameView, then Stop and Close. This is a focused functional smoke check, not an FPS benchmark. Do not change camera settings just to maximize the observed rate.
+- Once that smoke check is accepted, continue Phase 4 by extracting the next reusable UI component. Keep AmScope-specific lifecycle/request scheduling, still capture, telemetry and accessory behavior in the application composition layer unless a genuinely backend-neutral contract is identified.
+- No CI result or post-extraction physical MU503 preview result has been reported for this source revision. Do not mark Phase 4 complete until its remaining exit criteria in the release plan are met.
+
+> The sections below retain the earlier v0.6 handoff snapshot and historical evidence. Where their branch, phase, or next-action statements conflict with the current continuation state above, this current section and the revised release plan take precedence. The acquisition, session-ownership, frame-lease and performance invariants remain applicable unless the current source and governing plan explicitly supersede them.
 
 ---
 

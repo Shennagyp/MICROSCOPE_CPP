@@ -125,14 +125,14 @@ Remaining work:
 
 ### Phase 3 — Finalize native control and Qt streaming boundaries
 
-**Status: IN PROGRESS; mailbox and Qt request automated tests pass locally (12/12 CTest); physical Qt-to-MU503 preview smoke check remains**
+**Status: ACCEPTED BY OWNER; local Release build and 12/12 CTest passed; physical Qt-to-MU503 streaming smoke check confirmed valid by owner**
 
 The source already has the right ownership foundation:
 
 - `AmcamCamera` is the non-Qt driver/session owner and implements the common feature-access interface.
 - `QtAmcamCamera` composes one `AmcamCamera` instance, adds Qt request scheduling and frame notification, and does not create a second native SDK handle.
 
-The revised implementation must preserve and formalize that model.
+The revised implementation must preserve and formalize that model. The owner confirmed the physical Qt-to-MU503 preview smoke check as valid on 23 November 2026.
 
 Implemented in this Phase 3 slice:
 
@@ -286,7 +286,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
-| 3 | Native control / Qt streaming boundaries | IN PROGRESS; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check remains |
+| 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
 | 4 | Reusable Qt camera UI | OPEN |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |

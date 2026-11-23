@@ -89,7 +89,8 @@ The Amcam implementation caches its full descriptor inventory per camera state; 
 | Feature family | Current source coverage | Key semantics/constraints | Test/UI coverage | Hardware evidence |
 |---|---|---|---|---|
 | Exposure auto | `ExposureAuto` | Off/Once/Continuous maps native values 0/2/1 as declared; Once is native one-shot, not emulated | Feature validator and type tests; descriptor-driven UI | Not recorded |
-| Integer numeric range semantics | `CameraIntegerRange` | Exact int64 bounds and increments; no conversion through double | Common feature tests include adjacent values above `2^53`, mismatched range kind, invalid increments, and full int64-domain arithmetic | Software verification pending on v0.6 |\n| Exposure time | `ExposureTime` | Integer microseconds; writable only when current exposure mode permits | Feature validator; descriptor UI | Not recorded |
+| Integer numeric range semantics | `CameraIntegerRange` | Exact int64 bounds and increments; no conversion through double | Common feature tests include adjacent values above `2^53`, mismatched range kind, invalid increments, and full int64-domain arithmetic | Software verification pending on v0.6 |
+| Exposure time | `ExposureTime` | Integer microseconds; writable only when current exposure mode permits | Feature validator; descriptor UI | Not recorded |
 | Analog gain | `AmcamAnalogGainPercent` | Percentage, not GenICam dB | Descriptor UI | Not recorded |
 | Color matrix | `AmcamColorMatrixEnabled` | SDK/model-probed setting | Descriptor UI | Not recorded |
 | Pixel format | `AmcamPixelFormat` | Native SDK format codes; not automatically PFNC | Descriptor UI | Not recorded |

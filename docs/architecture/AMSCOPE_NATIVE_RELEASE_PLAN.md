@@ -96,18 +96,25 @@ No more work is scheduled for comparing `WaitImageV3` against the production pat
 
 ### Phase 2 — Close the common camera contract
 
-**Status: IN PROGRESS; public type ownership audit documented; typed numeric ranges implemented on v0.6; automated verification and physical frame verification pending**
+**Status: IN PROGRESS; public type ownership audited; typed integer/floating ranges implemented and tested; MU503 RGB24 common frame physically verified; RAW qualification remains conditional on model/mode support**
 
 The common layer already contains discovery identity/capabilities, common frame/payload metadata, typed feature descriptors/values/errors/results, feature validation, and host frame-rate estimation. The public-type ownership decisions are recorded in [CAMERA_COMMON_TYPE_OWNERSHIP.md](CAMERA_COMMON_TYPE_OWNERSHIP.md).
 
 The v0.6 implementation corrects a type mismatch in common feature ranges: integer feature bounds/increments now use exact `int64_t` values, while floating-point features retain `double` ranges. Validation requires the range alternative to match the descriptor kind and avoids signed overflow during integer increment alignment. The Qt editor and Amcam descriptor construction use the corresponding typed range.
 
+Verification completed on v0.6:
+
+- Release build completed for the native driver, Qt adapter, preview, both probes, and test executables.
+- All 11/11 CTest tests passed, including exact integer feature range checks.
+- A physical MU503 RGB24 frame was recorded at 1280 × 960: stride 3,840 bytes and payload 3,686,400 bytes. The geometry matches packed RGB24 exactly.
+- The frame reported `isStill=false`, 24 significant/storage bits per pixel, no native RGB format identifier, and sequence/timestamp/exposure unavailable. Those absent optional fields were preserved as unavailable, not replaced with zero.
+- The exact record is [phase-2-mu503-rgb24-2026-11-23.md](../testing/hardware/phase-2-mu503-rgb24-2026-11-23.md).
+
 Remaining work:
 
-1. Build the v0.6 branch and run the common feature/model/frame tests plus the full CTest suite.
-2. Review any regression caused by the public numeric-range type change; it is an intentional v0.6 API change before package stability.
-3. Keep AmScope SDK errors, camera states, trigger/I/O enums, accessory state, Amcam FourCC, and other vendor-specific concepts in `amscope` unless a second real backend demonstrates an exact shared meaning.
-4. Verify the common frame adapter with a real MU503 frame: dimensions, pixel layout, stride, byte count, and the availability/absence of optional sequence, timestamp, and exposure fields. The native-only probe now reports the first delivered common frame's metadata. Verify RAW identity/significant depth/storage width only if the tested device and selected mode actually support it. Record unsupported or unavailable fields honestly.
+1. Review the public contract and exact numeric-range API change before package stability; the v0.6 build/tests currently show no compile or unit-test regression.
+2. Keep AmScope SDK errors, camera states, trigger/I/O enums, accessory state, Amcam FourCC, and other vendor-specific concepts in `amscope` unless a second real backend demonstrates an exact shared meaning.
+3. Qualify a RAW frame through `AmcamCamera` only if MU503 exposes a usable RAW live mode and that mode is part of the intended support claim. Otherwise record that precise limitation. Do not use the vendor-only `WaitImageV3` result as evidence for the common frame adapter.
 
 **Exit criteria**
 
@@ -267,7 +274,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 |---|---|---|
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
-| 2 | Common camera contract closure | IN PROGRESS; public type ownership documented; exact integer ranges and first-frame metadata reporting committed; v0.6 build/CTest and physical frame verification pending |
+| 2 | Common camera contract closure | IN PROGRESS; exact integer ranges implemented and 11/11 tests passed; MU503 RGB24 common frame physically verified; RAW qualification conditional on model/mode support |
 | 3 | Native control / Qt streaming boundaries | PARTIALLY PRESENT; finalize and test without duplicate ownership |
 | 4 | Reusable Qt camera UI | OPEN |
 | 5 | AmScope feature/model claim reconciliation | OPEN |

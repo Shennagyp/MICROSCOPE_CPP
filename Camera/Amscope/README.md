@@ -7,7 +7,7 @@ integration and does not modify vendor sample code.
 
 ## Development roadmap
 
-The current AmScope-native release scope, revised implementation phases, and release acceptance criteria are maintained in [AMSCOPE_NATIVE_RELEASE_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md). The previous [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is retained as a historical technical reference; its original phase sequence is superseded.
+The current AmScope-native release scope, revised implementation phases, and release acceptance criteria are maintained in [AMSCOPE_NATIVE_RELEASE_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md). The previous [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is retained as a historical technical reference; its original phase sequence is superseded. Common/backend-specific public type ownership and Phase 2 semantic decisions are recorded in [CAMERA_COMMON_TYPE_OWNERSHIP.md](../../docs/architecture/CAMERA_COMMON_TYPE_OWNERSHIP.md).
 The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/architecture/DEVELOPMENT_HANDOFF.md), the source/test mapping is in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md), the GenTL/GenApi dependency assessment is in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md), and the per-phase hardware record template is in [PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md](../../docs/testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
 
 ## Implemented
@@ -443,9 +443,14 @@ bash scripts/run-amscope-native-probe.sh --device-id "CAMERA_ID" --seconds 60
 ```
 
 The probe reports one-second frame-delivery counts, optional sequence values,
-dropped frames, native camera state, last-frame age, and acquisition errors.
-It also treats failed Stop/Close cleanup as a failed probe. The default sample
-duration is 30 seconds; supported values are 5–3600 seconds.
+dropped frames, native camera state, last-frame age, and acquisition errors. It
+also prints one `FRAME` record from the first delivered common frame: dimensions,
+stride, payload byte count, buffer pixel layout, optional format identity,
+significant/storage bit depths, and the availability and timebases of sequence,
+timestamp, and exposure metadata. This record is intended for Phase 2 common
+frame-contract verification; it is not an FPS benchmark. It also treats failed
+Stop/Close cleanup as a failed probe. The default sample duration is 30 seconds;
+supported values are 5–3600 seconds.
 
 ### Vendor SDK reference path, without AmcamCamera or Qt
 

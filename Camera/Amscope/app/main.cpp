@@ -1149,7 +1149,7 @@ private:
                 const auto shownUnavailableCount =
                     featureControls_.size() - availableControlCount;
                 QString status = QString("%1 available feature(s).")
-                    .arg(static_cast<qulonglong>(availableCount));
+                    .arg(static_cast<qulonglong>(availableControlCount));
                 if (shownUnavailableCount != 0) {
                     status += QString(
                         " %1 unavailable diagnostic feature(s) shown disabled.")

@@ -457,7 +457,23 @@ buildAmcamFeatureDescriptors(
         rawBitDepthValues.push_back(
             static_cast<std::int64_t>(rawMaxBitDepth));
     }
-
+    std::optional<std::string> rawBitDepthDisabledReason;
+    if (!hasModelDescriptor) {
+        rawBitDepthDisabledReason =
+            "The SDK did not provide a model descriptor for this camera.";
+    } else if (!rawModelSupported) {
+        rawBitDepthDisabledReason =
+            "The camera model does not advertise a supported RAW sensor depth.";
+    } else if (!rawMaximumBitDepthValid) {
+        rawBitDepthDisabledReason =
+            "The SDK did not report a valid maximum sensor bit depth.";
+    } else if (rawMaxBitDepth <= 8U) {
+        rawBitDepthDisabledReason =
+            "The camera reports 8-bit maximum output; no higher bit depth is selectable.";
+    } else if (state != amscope::CameraState::Open) {
+        rawBitDepthDisabledReason =
+            "Stop acquisition before changing sensor output bit depth.";
+    }
 
     const bool hasColorRawSensor =
         (modelFlags & (AMCAM_FLAG_RAW8 | AMCAM_FLAG_RAW10 | AMCAM_FLAG_RAW11 |
@@ -852,7 +868,8 @@ buildAmcamFeatureDescriptors(
             rawBitDepthWritable && stopped,
         std::nullopt, std::nullopt, {},
         camera::CameraFeatureGroup::Sensor,
-        std::move(rawBitDepthValues)
+        std::move(rawBitDepthValues),
+        std::move(rawBitDepthDisabledReason)
     });
     descriptors.push_back({
         "AmcamRawSensorFormat", "RAW Sensor Format", CameraFeatureKind::Enumeration,

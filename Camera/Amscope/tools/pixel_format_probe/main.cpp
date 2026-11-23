@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -180,6 +181,7 @@ struct RawFrameCapture {
     unsigned disconnectedEvents = 0;
     unsigned timeoutEvents = 0;
     unsigned terminalEvent = 0;
+    std::map<unsigned, unsigned> eventCounts;
     HRESULT lastPullResult = 0;
     bool completed = false;
     bool invalidFrameLayout = false;
@@ -188,6 +190,11 @@ struct RawFrameCapture {
 void __stdcall rawFrameEventCallback(unsigned event, void* context) {
     if (!context) return;
     auto& capture = *static_cast<RawFrameCapture*>(context);
+
+    {
+        std::lock_guard<std::mutex> lock(capture.mutex);
+        ++capture.eventCounts[event];
+    }
 
     if (event != AMCAM_EVENT_IMAGE) {
         if (event != AMCAM_EVENT_ERROR &&
@@ -408,6 +415,44 @@ bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
         return false;
     }
 
+    int triggerMode = -1;
+    const HRESULT triggerModeResult =
+        Amcam_get_Option(camera, AMCAM_OPTION_TRIGGER, &triggerMode);
+    printHresult("Read trigger mode before acquisition", triggerModeResult);
+    if (SUCCEEDED(triggerModeResult)) {
+        const char* triggerName = triggerMode == 0 ? "video" :
+            triggerMode == 1 ? "software/simulated trigger" :
+            triggerMode == 2 ? "external trigger" :
+            triggerMode == 3 ? "external + software trigger" : "unknown";
+        std::cout << "    trigger mode: " << triggerMode
+                  << " (" << triggerName << ")\n";
+    }
+
+    unsigned configuredExposureUs = 0;
+    const HRESULT configuredExposureResult =
+        Amcam_get_ExpoTime(camera, &configuredExposureUs);
+    printHresult("Read configured exposure time", configuredExposureResult);
+    if (SUCCEEDED(configuredExposureResult)) {
+        std::cout << "    configured exposure: " << configuredExposureUs
+                  << " us\n";
+    }
+    unsigned realExposureUs = 0;
+    const HRESULT realExposureResult =
+        Amcam_get_RealExpoTime(camera, &realExposureUs);
+    printHresult("Read actual exposure time", realExposureResult);
+    if (SUCCEEDED(realExposureResult)) {
+        std::cout << "    actual exposure: " << realExposureUs << " us\n";
+    }
+
+    int callbackThread = -1;
+    const HRESULT callbackThreadResult = Amcam_get_Option(
+        camera, AMCAM_OPTION_CALLBACK_THREAD, &callbackThread);
+    printHresult("Read callback-thread option", callbackThreadResult);
+    if (SUCCEEDED(callbackThreadResult)) {
+        std::cout << "    dedicated callback thread: "
+                  << callbackThread << '\n';
+    }
+
     int droppedFramesBefore = -1;
     const HRESULT droppedBeforeResult = Amcam_get_Option(
         camera, AMCAM_OPTION_NUMBER_DROP_FRAME, &droppedFramesBefore);
@@ -468,6 +513,16 @@ bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
                       << std::hex << std::uppercase << capture.terminalEvent
                       << std::dec << std::nouppercase << '\n';
         }
+        std::cout << "Callback event histogram:";
+        if (capture.eventCounts.empty()) {
+            std::cout << " none";
+        } else {
+            for (const auto& [eventCode, count] : capture.eventCounts) {
+                std::cout << " 0x" << std::hex << std::uppercase << eventCode
+                          << std::dec << std::nouppercase << '=' << count;
+            }
+        }
+        std::cout << '\n';
         if (capture.lastPullResult != 0 || !capture.records.empty()) {
             printHresult("Last Amcam_PullImageV4 result",
                          capture.lastPullResult);
@@ -479,11 +534,21 @@ bool captureRawFrames(HAmcam camera, unsigned targetFrameCount) {
         for (std::size_t i = 0; i < capture.records.size(); ++i) {
             const auto& record = capture.records[i];
             std::cout << "Frame[" << i << "]"
+                      << " frameinfo_flags=0x" << std::hex
+                      << record.info.v3.flag << std::dec
                       << " seq=" << record.info.v3.seq
-                      << " timestamp_us=" << record.info.v3.timestamp
-                      << " framecount=" << record.info.framecount
+                      << "(valid="
+                      << ((record.info.v3.flag & AMCAM_FRAMEINFO_FLAG_SEQ) != 0)
+                      << ") timestamp_us=" << record.info.v3.timestamp
+                      << "(valid="
+                      << ((record.info.v3.flag & AMCAM_FRAMEINFO_FLAG_TIMESTAMP) != 0)
+                      << ") framecount=" << record.info.framecount
                       << " timecount=" << record.info.timecount
+                      << " count_metadata_valid="
+                      << ((record.info.v3.flag & AMCAM_FRAMEINFO_FLAG_COUNT) != 0)
                       << " uFV=" << record.info.uFV
+                      << " autofocus_metadata_valid="
+                      << ((record.info.v3.flag & AMCAM_FRAMEINFO_FLAG_AUTOFOCUS) != 0)
                       << " dimensions=" << record.info.v3.width << 'x'
                       << record.info.v3.height
                       << " bytes=" << record.byteCount

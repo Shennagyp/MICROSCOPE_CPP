@@ -32,4 +32,9 @@ if(BUILD_TESTING)
         tests/CameraOperationErrorTests.cpp)
     target_link_libraries(camera_common_operation_error_tests PRIVATE Camera::Common)
     add_test(NAME camera_common_operation_error_tests COMMAND camera_common_operation_error_tests)
+
+    add_executable(camera_common_frame_rate_measurement_tests
+        tests/CameraFrameRateMeasurementTests.cpp)
+    target_link_libraries(camera_common_frame_rate_measurement_tests PRIVATE Camera::Common)
+    add_test(NAME camera_common_frame_rate_measurement_tests COMMAND camera_common_frame_rate_measurement_tests)
 endif()

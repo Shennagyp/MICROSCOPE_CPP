@@ -18,6 +18,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QColor>
+#include <QClipboard>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QJsonDocument>
@@ -343,8 +344,13 @@ public:
 
         featureStatus_ = new QLabel("Open a camera to inspect its available features.", central);
         featureStatus_->setWordWrap(true);
+        featureStatus_->setTextInteractionFlags(
+            Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
 
         refreshFeaturesButton_ = new QPushButton("Refresh features", central);
+        copyFeatureStatusButton_ = new QPushButton("Copy diagnostic", central);
+        copyFeatureStatusButton_->setToolTip(
+            "Copy the complete camera diagnostic text above to the clipboard.");
         featureTabs_ = new QTabWidget(central);
         featureTabs_->setMinimumWidth(460);
         featureTabs_->setMaximumWidth(620);
@@ -490,7 +496,11 @@ public:
 
         auto* settingsColumn = new QVBoxLayout();
         settingsColumn->addWidget(featureStatus_);
-        settingsColumn->addWidget(refreshFeaturesButton_);
+        auto* featureStatusActions = new QHBoxLayout();
+        featureStatusActions->addWidget(refreshFeaturesButton_);
+        featureStatusActions->addWidget(copyFeatureStatusButton_);
+        featureStatusActions->addStretch(1);
+        settingsColumn->addLayout(featureStatusActions);
         settingsColumn->addWidget(triggerGroup_);
         settingsColumn->addWidget(accessoryGroup_);
         settingsColumn->addWidget(astroAutoFocuserGroup_);
@@ -542,6 +552,10 @@ public:
         });
         connect(refreshFeaturesButton_, &QPushButton::clicked, this, [this]() {
             refreshFeatureDescriptors();
+        });
+        connect(copyFeatureStatusButton_, &QPushButton::clicked, this, [this]() {
+            QApplication::clipboard()->setText(featureStatus_->text());
+            statusBar()->showMessage("Camera diagnostic copied to clipboard.", 2500);
         });
 
         connect(embeddedLightSourceSlider_, &QSlider::valueChanged,
@@ -2913,6 +2927,7 @@ private:
     QLabel* stillPrecisionLabel_ = nullptr;
     QPushButton* captureStillButton_ = nullptr;
     QPushButton* refreshFeaturesButton_ = nullptr;
+    QPushButton* copyFeatureStatusButton_ = nullptr;
     FrameView* preview_ = nullptr;
     QLabel* frameInfo_ = nullptr;
     QLabel* featureStatus_ = nullptr;

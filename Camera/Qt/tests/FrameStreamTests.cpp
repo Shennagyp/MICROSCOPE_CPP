@@ -5,7 +5,6 @@
 #include <QObject>
 #include <QThread>
 #include <QTimer>
-#include <atomic>
 #include <cstdlib>
 #include <functional>
 #include <iostream>

@@ -1150,9 +1150,16 @@ struct AmcamCamera::Impl {
 
         if (hasModelDescriptor &&
             (modelFlags & AMCAM_FLAG_PRECISE_FRAMERATE) != 0) {
+            // Bandwidth changes the camera's available precise-FPS range.
+            // Set it first, then query the range that applies to the new
+            // bandwidth/resolution/bit-depth/ROI combination.
+            HRESULT hr = Amcam_put_Option(handle, AMCAM_OPTION_BANDWIDTH, 100);
+            if (FAILED(hr))
+                return failHr(error, "Amcam_put_Option(BANDWIDTH, 100)", hr);
+
             int minimumFPS = 0;
             int maximumFPS = 0;
-            HRESULT hr = Amcam_get_Option(
+            hr = Amcam_get_Option(
                 handle, AMCAM_OPTION_MIN_PRECISE_FRAMERATE, &minimumFPS);
             if (FAILED(hr))
                 return failHr(error,
@@ -1164,11 +1171,8 @@ struct AmcamCamera::Impl {
                               "Amcam_get_Option(MAX_PRECISE_FRAMERATE)", hr);
             if (minimumFPS <= 0 || maximumFPS < minimumFPS)
                 return fail(error, "configureMaximumFrameRate", -1,
-                            "The SDK returned an invalid precise frame-rate range.");
+                            "The SDK returned an invalid precise frame-rate range after setting bandwidth.");
 
-            hr = Amcam_put_Option(handle, AMCAM_OPTION_BANDWIDTH, 100);
-            if (FAILED(hr))
-                return failHr(error, "Amcam_put_Option(BANDWIDTH, 100)", hr);
             hr = Amcam_put_Option(
                 handle, AMCAM_OPTION_PRECISE_FRAMERATE, maximumFPS);
             if (FAILED(hr))

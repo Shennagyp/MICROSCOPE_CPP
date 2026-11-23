@@ -4,8 +4,9 @@ This is a standalone C++ executable that includes the vendor's `amcam.h` and lin
 
 ## What it reads
 
-- SDK version and enumerated device/model identity.
+- SDK version, enumerated device/model identity, and camera revision, firmware, hardware, production-date, and FPGA metadata (where supported).
 - Complete model flag value and RAW-related model capability flags.
+- The SDK model's USB transport classification flag, explicitly distinguished from the negotiated physical USB link.
 - `Amcam_get_MaxBitDepth` result, interpreted as the maximum depth when its successful return value is between 8 and 16.
 - Current `AMCAM_OPTION_RAW`, `AMCAM_OPTION_BITDEPTH`, and `AMCAM_OPTION_PIXEL_FORMAT` values.
 - Count and entries returned by `Amcam_get_PixelFormatSupport`.
@@ -46,6 +47,11 @@ This opt-in mode temporarily requests `AMCAM_OPTION_RAW=1`, reads maximum bit de
 
 The default run remains strictly read-only. The RAW-mode run intentionally changes one setting temporarily and must be used only when the camera is stopped.
 
+
+## Interpreting the generic MU Series bit-depth manual
+
+The MU Series Windows manual documents an 8-bit/16-bit **software control**, but it is a series-wide manual and does not establish that every MU model supports 16-bit sensor output. In particular, a 16-bit image/storage representation is not proof of 16-bit source samples. For this camera, distinguish the manual's application control from the connected device's live SDK capabilities: model flags, `Amcam_get_MaxBitDepth`, RAW-mode pixel-format enumeration, and actual captured sample values. The manual's generic UI screenshot must not override a model-specific SDK result.
+
 ## Compare with the application
 
 Run the probe with the application closed, then run the application and use **Refresh camera features**. Compare the enumerated model name and flags, `Amcam_get_MaxBitDepth`, legacy `AMCAM_OPTION_BITDEPTH`, pixel-format count and entries, current `AMCAM_OPTION_PIXEL_FORMAT`, and RAW mode/format.
@@ -55,4 +61,4 @@ Run the probe with the application closed, then run the application and use **Re
 - If both report only `RAW8` and the model flags contain only `AMCAM_FLAG_RAW8` among the RAW precision flags, the installed SDK does not advertise a higher precision mode for this connected device.
 - Different model flags between direct enumeration and the application indicate a model-descriptor discrepancy to investigate separately from the selector.
 
-Save both complete terminal outputs and provide them alongside the application's diagnostic text. Compare the USB connection flag as well: `AMCAM_FLAG_USB30_OVER_USB20` indicates a USB 3.0 camera connected over USB 2.0. Re-run after connecting directly through a known USB 3-capable port and cable, with no USB 2.0 hub or adapter in the path. This probe establishes what the installed vendor SDK advertises and returns; it does not independently establish the sensor's physical ADC depth.
+Save both complete terminal outputs and provide them alongside the application's diagnostic text. The `AMCAM_FLAG_USB30_OVER_USB20` bit is an SDK model-descriptor classification, not a measurement of the negotiated USB link. The SDK display name may also include a transport suffix that conflicts with the operating system's live topology. Verify physical link speed independently through the host OS; do not infer USB2 fallback from this flag alone. This probe establishes what the installed vendor SDK advertises and returns; it does not independently establish the sensor's physical ADC depth.

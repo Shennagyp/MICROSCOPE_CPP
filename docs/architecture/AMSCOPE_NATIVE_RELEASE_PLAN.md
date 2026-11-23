@@ -163,7 +163,7 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; `FrameView` extracted; owner-reported Release build and 13/13 CTest pass at `892b91a`; post-extraction MU503 preview smoke check pending**
+**Status: IN PROGRESS; `FrameView` extracted; owner-reported Release build and 13/13 CTest pass at `892b91a`; post-extraction MU503 preview smoke passed on checkout `5339c44`**
 
 Implemented in this Phase 4 slice:
 
@@ -174,7 +174,7 @@ Implemented in this Phase 4 slice:
 - The owner completed a Release configure and full build on `amscope-native-driver-v0.7` at `892b91a57016e570a1e972343f78ed7c42be801c`. The `amscope_preview` executable linked successfully, and all 13/13 CTest tests passed (0.32 seconds), including `camera_qt_widgets_frame_view_tests`.
 - The focused offscreen test covers RGB24, RAW8 and RAW16 paint paths, retention/release of the immutable `FramePtr` lease, invalid/truncated payload rejection, and the post-paint callback.
 
-This verifies compilation and the isolated widget behavior. It does not yet verify the physical camera-to-Qt-preview integration after the extraction; that focused MU503 smoke check remains the next Phase 4 gate.
+The owner subsequently confirmed that the post-extraction MU503 preview sequence passed on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`: launch preview, discover/select the camera, Open, Start and observe changing frames in the extracted `FrameView`, Stop, and Close. The focused record is `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This closes the physical FrameView integration gate only; it does not establish FPS, sustained acquisition, still capture, feature readback, or the separate supported-feature UI exit criterion.
 
 Extract only the components needed to turn the preview into a reusable library:
 
@@ -298,7 +298,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
 | 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView extracted; Release build and 13/13 CTest passed at `892b91a`; post-extraction MU503 preview smoke check pending |
+| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView extracted; Release build and 13/13 CTest passed at `892b91a`; MU503 FrameView smoke passed; discovery/lifecycle controls and generic feature editor remain |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |
 | 7 | Integrated AmScope release qualification | OPEN |

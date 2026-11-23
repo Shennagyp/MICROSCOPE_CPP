@@ -82,6 +82,30 @@ QString featureNameText(const camera::CameraFeatureDescriptor& descriptor) {
     return result;
 }
 
+QString amcamPixelFormatLabel(const std::string& symbol) {
+    if (symbol == "0") return QStringLiteral("RAW8");
+    if (symbol == "1") return QStringLiteral("RAW10");
+    if (symbol == "2") return QStringLiteral("RAW12");
+    if (symbol == "3") return QStringLiteral("RAW14");
+    if (symbol == "4") return QStringLiteral("RAW16");
+    if (symbol == "5") return QStringLiteral("YUV411");
+    if (symbol == "6") return QStringLiteral("VUYY");
+    if (symbol == "7") return QStringLiteral("YUV444");
+    if (symbol == "8") return QStringLiteral("RGB888");
+    if (symbol == "9") return QStringLiteral("GMCY8");
+    if (symbol == "10") return QStringLiteral("GMCY12");
+    if (symbol == "11") return QStringLiteral("UYVY");
+    if (symbol == "12") return QStringLiteral("RAW12PACK");
+    if (symbol == "13") return QStringLiteral("RAW11");
+    if (symbol == "14") return QStringLiteral("HDR8HL");
+    if (symbol == "15") return QStringLiteral("HDR10HL");
+    if (symbol == "16") return QStringLiteral("HDR11HL");
+    if (symbol == "17") return QStringLiteral("HDR12HL");
+    if (symbol == "18") return QStringLiteral("HDR14HL");
+    return QStringLiteral("Unknown format (%1)")
+        .arg(QString::fromStdString(symbol));
+}
+
 QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
     if (!descriptor.numericRange) return {};
     return QStringLiteral("%1 … %2")
@@ -1177,6 +1201,30 @@ private:
                 } else {
                     status += " Sensor Output Bit Depth descriptor is missing.";
                 }
+                const auto pixelFormat = std::find_if(
+                    descriptors.begin(), descriptors.end(),
+                    [](const camera::CameraFeatureDescriptor& descriptor) {
+                        return descriptor.name == "AmcamPixelFormat";
+                    });
+                if (pixelFormat != descriptors.end()) {
+                    QStringList formats;
+                    for (const auto& code : pixelFormat->enumerationValues) {
+                        formats.push_back(
+                            code + ":" + amcamPixelFormatLabel(code));
+                    }
+                    status += QString(
+                        " Pixel Format: available=%1, writable=%2, readable=%3, supported=[%4].")
+                        .arg(pixelFormat->isAvailable ? "yes" : "no")
+                        .arg(pixelFormat->isWritable ? "yes" : "no")
+                        .arg(pixelFormat->isReadable ? "yes" : "no")
+                        .arg(formats.join(", "));
+                    if (pixelFormat->disabledReason) {
+                        status += " " +
+                            QString::fromStdString(*pixelFormat->disabledReason);
+                    }
+                } else {
+                    status += " Pixel Format descriptor is missing.";
+                }
                 if (shownUnavailableCount != 0) {
                     status += QString(
                         " %1 unavailable diagnostic feature(s) shown disabled.")
@@ -1224,6 +1272,7 @@ private:
             const bool showRawDiagnostic =
                 descriptor.name == "AmcamRawOutputEnabled" ||
                 descriptor.name == "AmcamRawSensorFormat" ||
+                descriptor.name == "AmcamPixelFormat" ||
                 descriptor.name == std::string(camera::RawOutputBitDepthFeature);
             if (!descriptor.isAvailable && !showRawDiagnostic) continue;
 
@@ -1345,8 +1394,11 @@ private:
             } else {
                 auto* control = new QComboBox(featureTabs_);
                 for (const auto& symbol : descriptor.enumerationValues) {
-                    const QString item = QString::fromStdString(symbol);
-                    control->addItem(item, item);
+                    const QString value = QString::fromStdString(symbol);
+                    const QString label = descriptor.name == "AmcamPixelFormat"
+                        ? amcamPixelFormatLabel(symbol)
+                        : value;
+                    control->addItem(label, value);
                 }
                 connect(control, qOverload<int>(&QComboBox::currentIndexChanged),
                         this, [this, name = descriptor.name](int index) {
@@ -1680,15 +1732,17 @@ private:
                                 camera_.state() == amscope::CameraState::Open;
         for (auto& entry : featureControls_) {
             const auto& descriptor = entry.second.descriptor;
-            // A readable current value is required only when the editor
-            // needs one to be safe. Discrete integer selectors (including
-            // sensor bit depth) can still be configured when the SDK exposes
-            // a setter and exact legal values but does not implement readback.
-            // In that case leave the selector unselected until the user chooses.
-            const bool isSensorBitDepth =
-                descriptor.name == std::string(camera::RawOutputBitDepthFeature);
+            // A readable current value is not required to configure a
+            // selector when its descriptor already supplies the exact legal
+            // choices. Leave it unselected until the user chooses if readback
+            // is unavailable; never invent a current value.
+            const bool hasExplicitChoices =
+                (descriptor.kind == camera::CameraFeatureKind::Integer &&
+                 !descriptor.discreteIntegerValues.empty()) ||
+                (descriptor.kind == camera::CameraFeatureKind::Enumeration &&
+                 !descriptor.enumerationValues.empty());
             const bool valueIsKnown =
-                isSensorBitDepth || !descriptor.isReadable ||
+                hasExplicitChoices || !descriptor.isReadable ||
                 entry.second.hasCurrentValue;
             entry.second.editor->setEnabled(
                 canEnable && descriptor.isAvailable &&

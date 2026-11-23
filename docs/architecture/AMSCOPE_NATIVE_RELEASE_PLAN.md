@@ -1,6 +1,6 @@
 # AmScope Native Camera Module — Revised Implementation and Release Plan
 
-**Revision date:** 23 November 2026  
+**Revision date:** 24 November 2026  
 **Target branch:** `amscope-native-driver-0.7`  
 **Revision baseline:** `03417b3a0dbd3b846500bed7fc2417f0a7082057` (accepted v0.6 head from which v0.7 was branched)  
 **Language/runtime:** C++17, Qt 6, macOS  
@@ -163,7 +163,7 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; `FrameView` extracted; owner-reported Release build and 13/13 CTest pass at `892b91a`; post-extraction MU503 preview smoke passed on checkout `5339c44`**
+**Status: IN PROGRESS; FrameView build/tests and MU503 smoke passed; CameraControlPanel implementation added at `17d6b0a`; its Release build/CTest and post-extraction smoke are pending**
 
 Implemented in this Phase 4 slice:
 
@@ -176,11 +176,22 @@ Implemented in this Phase 4 slice:
 
 The owner subsequently confirmed that the post-extraction MU503 preview sequence passed on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`: launch preview, discover/select the camera, Open, Start and observe changing frames in the extracted `FrameView`, Stop, and Close. The focused record is `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This closes the physical FrameView integration gate only; it does not establish FPS, sustained acquisition, still capture, feature readback, or the separate supported-feature UI exit criterion.
 
+### Camera discovery and lifecycle control panel — implemented, verification pending
+
+- Added `camera::qtwidgets::CameraControlPanel` to backend-neutral `Camera::QtWidgets`. It consumes common `camera::CameraDeviceInfo` values and retains opaque device IDs.
+- The panel reports Refresh/Open/Start/Stop/Close intent through host-supplied callbacks. The host supplies the coarse presentation state and discovery/lifecycle/other-operation pending flags.
+- The panel owns no enumeration, camera session, vendor error, asynchronous request queue, generation, or backend lifecycle operation. The AmScope preview retains those responsibilities and converts discovered AmScope records to their common base values at the composition boundary.
+- It disables buttons until the corresponding host callback is installed. A faulted session permits Close only.
+- Added `camera_qt_widgets_camera_control_panel_tests` for labels/opaque IDs, callbacks, empty discovery, pending-state gating, and Closed/Open/Streaming/Faulted action availability.
+- The implementation is committed at `17d6b0a7076e140c57fc3760fcde1f3eec2915a0`. It has **not** yet been built or tested locally. It adds one CTest target, bringing the expected suite from 13 to 14.
+- After local Release build and 14/14 CTest pass, repeat the MU503 discovery/Open/Start/changing-frame/Stop/Close smoke using the new panel. The earlier FrameView smoke does not validate this later panel change.
+
+
 Extract only the components needed to turn the preview into a reusable library:
 
-1. Camera discovery and selection.
-2. Open/close/start/stop controls.
-3. Descriptor-driven feature editors, including current-value loading and disabled/unavailable states.
+1. Camera discovery and selection — implemented in `CameraControlPanel`; build/test pending.
+2. Open/close/start/stop controls — implemented in `CameraControlPanel`; build/test pending.
+3. Descriptor-driven feature editors, including current-value loading and disabled/unavailable states — next extraction slice.
 4. Command controls kept separate from setting writes.
 5. Telemetry presentation with explicit units.
 6. Live frame view and still-capture interaction.
@@ -298,7 +309,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
 | 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView extracted; Release build and 13/13 CTest passed at `892b91a`; MU503 FrameView smoke passed; discovery/lifecycle controls and generic feature editor remain |
+| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView build/tests and MU503 smoke passed; CameraControlPanel added at `17d6b0a`, build/CTest and its MU503 smoke pending; generic feature editor remains |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |
 | 7 | Integrated AmScope release qualification | OPEN |

@@ -415,8 +415,7 @@ buildAmcamFeatureDescriptors(
     const std::optional<std::uint32_t>& maximumFanSpeed,
     const std::vector<amscope::Resolution>& previewResolutions,
     const amscope::AmcamCameraProfileRegistry& profileRegistry,
-    const std::string& modelCode,
-    int requestedRawBitDepthModeFallback) {
+    const std::string& modelCode) {
     using camera::CameraFeatureDescriptor;
     using camera::CameraFeatureKind;
     using camera::CameraFeatureNumericRange;
@@ -530,10 +529,6 @@ buildAmcamFeatureDescriptors(
     int rawMode = 0;
     const HRESULT rawModeHr =
         Amcam_get_Option(handle, AMCAM_OPTION_RAW, &rawMode);
-    int rawBitDepth = -1;
-    const HRESULT rawBitDepthModeHr = getRawBitDepthMode(
-        handle, modelFlags, rawBitDepth, nullptr,
-        requestedRawBitDepthModeFallback);
     unsigned rawFourCC = 0;
     unsigned rawBitsPerPixel = 0;
     const HRESULT rawFormatHr =
@@ -552,8 +547,6 @@ buildAmcamFeatureDescriptors(
         modernPixelFormatApiAvailable && !rawPixelChoices.empty()
             ? rawPixelChoices.back().bitDepth
             : rawMaximumBitDepth(handle, modelFlags);
-    const bool rawMaximumBitDepthValid =
-        rawMaxBitDepth >= 8U && rawMaxBitDepth <= 16U;
     // This feature promises an exact, freely selectable set of discrete
     // precisions. The legacy BITDEPTH switch cannot satisfy that contract: it
     // exposes only 8-bit and maximum. Do not present those two legacy modes as
@@ -4663,8 +4656,7 @@ AmcamCamera::featureDescriptors() {
         impl_->maximumFanSpeed,
         impl_->previewResolutions,
         impl_->profileRegistry,
-        impl_->modelCode,
-        impl_->requestedRawBitDepthMode.load(std::memory_order_acquire));
+        impl_->modelCode);
 
     if (auto* descriptors =
             std::get_if<std::vector<camera::CameraFeatureDescriptor>>(&result)) {

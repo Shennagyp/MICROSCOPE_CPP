@@ -2,7 +2,7 @@
 
 #include "amscope/AmcamCamera.h"
 #include "amscope/detail/AcquisitionFrameGate.h"
-#include "camera/qt/FrameStream.h"
+#include "camera/qt/FrameStreamMailbox.h"
 
 #include <QMetaType>
 #include <QObject>
@@ -306,12 +306,12 @@ private:
         FramePtr frame,
         const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate);
     void queueFrameNotification();
-    void clearFrameMailbox();    void emitError(const CameraError& error);
+    void clearFrameMailbox();
+    void emitError(const CameraError& error);
 
     static constexpr std::size_t kMaximumPendingFeatureRequests = 256;
 
     AmcamCamera camera_;
-    camera::qt::FrameStreamMailbox frameStreamMailbox_;
     std::shared_ptr<detail::AcquisitionFrameGate> acquisitionFrameGate_;
 
     // All calls into camera_ are serialized at this facade boundary. The
@@ -331,6 +331,9 @@ private:
     std::thread featureWorker_;
     FeatureRequestId nextFeatureRequestId_ = 1;
     bool stoppingFeatureWorker_ = false;
+
+    // Preserve the original mailbox-at-tail placement in this facade.
+    camera::qt::FrameStreamMailbox frameStreamMailbox_;
 
 };
 } // namespace amscope

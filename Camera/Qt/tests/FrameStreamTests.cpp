@@ -1,4 +1,4 @@
-#include "camera/qt/FrameStream.h"
+#include "camera/qt/FrameStreamMailbox.h"
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QMetaObject>

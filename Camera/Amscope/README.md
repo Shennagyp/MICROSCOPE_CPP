@@ -44,8 +44,9 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   The Qt frame-delivery gate is reactivated for that same acquisition after a
   recoverable Stop failure; a successful Stop/Close leaves the old gate invalid.
   Fatal acquisition callbacks immediately invalidate their frame gate and
-  clear the latest-frame mailbox; the gate check and mailbox publication share
-  the mailbox lock, so an old frame cannot appear after that clear. The fatal
+  clear the latest-frame mailbox. Publication checks the generation before and
+  after its atomic store; if the generation changed during publication, a CAS
+  removes that stale lease without clearing a newer frame. The mailbox uses no lock. The fatal
   session transition is then enqueued into the same FIFO as Stop/Close and feature
   requests. Earlier accepted lifecycle operations run first and may supersede
   the fault notification; later requests bind to the post-fault generation. The
@@ -212,7 +213,8 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
 - `Camera::Qt` provides the header-only `camera::qt::FrameStreamMailbox`
   primitive used by Qt adapters. The mailbox owns only the immutable latest-frame
   lease and notification-pending state; QObject notification remains with the
-  adapter. It adds no camera, session, worker, or operation-queue ownership.
+  adapter. It adds no camera, session, worker, or operation-queue ownership and
+  has no Qt runtime dependency itself.
 - `QtAmcamCamera` composes one `AmcamCamera` and embeds this mailbox by value. It
   executes device enumeration, lifecycle, and feature descriptor/read/write
   requests on one bounded, serialized worker and delivers

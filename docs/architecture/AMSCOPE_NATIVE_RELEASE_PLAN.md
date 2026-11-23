@@ -125,7 +125,7 @@ Remaining work:
 
 ### Phase 3 — Finalize native control and Qt streaming boundaries
 
-**Status: IN PROGRESS; header-only frame mailbox embedded; AmScope native session/control and original Qt signal/API remain authoritative**
+**Status: IN PROGRESS; header-only frame mailbox embedded at original member position; AmScope native session/control and original Qt signal/API remain authoritative**
 
 The source already has the right ownership foundation:
 
@@ -136,7 +136,7 @@ The revised implementation must preserve and formalize that model.
 
 Implemented in this Phase 3 slice:
 
-- Added `Camera::Qt` with the header-only `camera::qt::FrameStreamMailbox`. The mailbox is embedded by value in `QtAmcamCamera`; it adds no runtime QObject, heap allocation, worker, or queue.
+- Added `Camera::Qt` with the header-only `camera::qt::FrameStreamMailbox`. The mailbox is embedded by value at the original end-of-object position in `QtAmcamCamera`; it adds no runtime QObject, heap allocation, worker, or queue.
 - The original `QtAmcamCamera::frameAvailable()` signal and `takeLatestFrame()` API remain intact. Acquisition-generation validation, QObject notification, and the sole `AmcamCamera` session owner remain in the AmScope adapter.
 - The templated mailbox receives synchronous lifecycle and notification callbacks, allowing optimization/inlining into the existing adapter hot path. `camera_qt_frame_stream_tests` covers producer-thread publication, latest-lease identity, notification coalescing/re-arm, stale publication rejection, and clear.
 
@@ -145,7 +145,7 @@ Work:
 1. Keep `AmcamCamera` as the sole owner of the native session and the non-Qt control/command surface.
 2. Keep the Qt class as an adapter for QObject affinity, queued operations, coalesced frame notification, and latest-frame delivery.
 3. Keep `FrameStreamMailbox` as embedded frame-delivery state; keep the QObject signal and scheduling target on `QtAmcamCamera`. Do not add a second runtime object, operation queue, or camera owner.
-4. Preserve independent dependencies: `Amscope::Driver` remains non-Qt; `Camera::Qt` depends only on common frame contracts and Qt Core; `Amscope::Qt` composes the driver and generic Qt stream explicitly.
+4. Preserve independent dependencies: `Amscope::Driver` remains non-Qt; `Camera::Qt` is a header-only mailbox over common frame contracts with no Qt runtime dependency; Qt Core is used by the mailbox test and the `Amscope::Qt` QObject adapter.
 5. Do **not** add a redundant `camera_amscope_control` wrapper if it simply forwards the existing `AmcamCamera` API. The existing class already provides the non-Qt programmatic surface.
 6. Preserve FIFO operation ordering, session/feature generations, callback shutdown synchronization, and one SDK-call serialization boundary.
 

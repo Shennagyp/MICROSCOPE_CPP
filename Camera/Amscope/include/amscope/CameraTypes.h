@@ -8,6 +8,7 @@
 #include <vector>
 #include "camera/CameraModels.h"
 #include "camera/CameraFrames.h"
+#include "camera/CameraOperationError.h"
 
 namespace amscope {
 enum class CameraState : std::uint8_t { Closed, Open, Starting, Streaming, Stopping, Faulted };
@@ -38,6 +39,18 @@ struct CameraError {
     std::string operation;
     std::string message;
 };
+
+// Explicit boundary conversion for operation-level APIs. The native code is
+// preserved in its Amcam domain; it is not reinterpreted as a common code.
+[[nodiscard]] inline camera::CameraOperationError toCommonOperationError(
+    const CameraError& error) {
+    camera::CameraOperationError common;
+    common.code = camera::CameraErrorCode::BackendFailure;
+    common.operation = error.operation;
+    common.message = error.message;
+    common.native = camera::CameraNativeError{"amcam.sdk", error.vendorCode};
+    return common;
+}
 using PixelFormat = camera::PixelFormat;
 using Frame = camera::Frame;
 using FramePtr = camera::FramePtr;

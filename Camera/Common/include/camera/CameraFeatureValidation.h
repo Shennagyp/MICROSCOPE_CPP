@@ -119,8 +119,104 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
     }
 
     if (descriptor.numericRange) {
-        if (descriptor.kind != CameraFeatureKind::Integer &&
-            descriptor.kind != CameraFeatureKind::FloatingPoint) {
+        if (descriptor.kind == CameraFeatureKind::Integer) {
+            const auto* range =
+                std::get_if<CameraIntegerRange>(&*descriptor.numericRange);
+            if (!range) {
+                return CameraFeatureAccessError{
+                    CameraFeatureAccessError::Code::BackendFailure,
+                    descriptor.name,
+                    "Invalid descriptor: integer features require an integer range.",
+                    0, std::nullopt, std::nullopt
+                };
+            }
+
+            if (range->minimum > range->maximum ||
+                (range->increment && *range->increment <= 0)) {
+                return CameraFeatureAccessError{
+                    CameraFeatureAccessError::Code::BackendFailure,
+                    descriptor.name,
+                    "Camera returned an invalid integer range or increment.",
+                    0, std::nullopt, std::nullopt
+                };
+            }
+
+            const std::int64_t number = std::get<std::int64_t>(value);
+            if (number < range->minimum || number > range->maximum) {
+                return CameraFeatureAccessError{
+                    CameraFeatureAccessError::Code::InvalidValue,
+                    descriptor.name,
+                    "Value is outside the current feature range.",
+                    0, std::nullopt, std::nullopt
+                };
+            }
+
+            if (range->increment) {
+                // Unsigned subtraction preserves the exact mathematical
+                // difference across the complete int64 domain without
+                // overflowing signed arithmetic.
+                const auto offset =
+                    static_cast<std::uint64_t>(number) -
+                    static_cast<std::uint64_t>(range->minimum);
+                if (offset % static_cast<std::uint64_t>(*range->increment) != 0) {
+                    return CameraFeatureAccessError{
+                        CameraFeatureAccessError::Code::InvalidValue,
+                        descriptor.name,
+                        "Value does not satisfy the feature increment.",
+                        0, std::nullopt, std::nullopt
+                    };
+                }
+            }
+        } else if (descriptor.kind == CameraFeatureKind::FloatingPoint) {
+            const auto* range =
+                std::get_if<CameraFloatingPointRange>(&*descriptor.numericRange);
+            if (!range) {
+                return CameraFeatureAccessError{
+                    CameraFeatureAccessError::Code::BackendFailure,
+                    descriptor.name,
+                    "Invalid descriptor: floating-point features require a floating-point range.",
+                    0, std::nullopt, std::nullopt
+                };
+            }
+
+            if (!std::isfinite(range->minimum) ||
+                !std::isfinite(range->maximum) ||
+                range->minimum > range->maximum ||
+                (range->increment &&
+                 (!std::isfinite(*range->increment) || *range->increment <= 0.0))) {
+                return CameraFeatureAccessError{
+                    CameraFeatureAccessError::Code::BackendFailure,
+                    descriptor.name,
+                    "Camera returned an invalid floating-point range or increment.",
+                    0, std::nullopt, std::nullopt
+                };
+            }
+
+            const double number = std::get<double>(value);
+            if (!std::isfinite(number) ||
+                number < range->minimum || number > range->maximum) {
+                return CameraFeatureAccessError{
+                    CameraFeatureAccessError::Code::InvalidValue,
+                    descriptor.name,
+                    "Value is outside the current feature range.",
+                    0, std::nullopt, std::nullopt
+                };
+            }
+
+            if (range->increment) {
+                const double steps =
+                    (number - range->minimum) / *range->increment;
+                if (!std::isfinite(steps) ||
+                    std::abs(steps - std::round(steps)) > 1e-7) {
+                    return CameraFeatureAccessError{
+                        CameraFeatureAccessError::Code::InvalidValue,
+                        descriptor.name,
+                        "Value does not satisfy the feature increment.",
+                        0, std::nullopt, std::nullopt
+                    };
+                }
+            }
+        } else {
             return CameraFeatureAccessError{
                 CameraFeatureAccessError::Code::BackendFailure,
                 descriptor.name,
@@ -128,49 +224,7 @@ inline CameraFeatureResult<std::monostate> validateFeatureWrite(
                 0, std::nullopt, std::nullopt
             };
         }
-
-        const auto& range = *descriptor.numericRange;
-        if (!std::isfinite(range.minimum) ||
-            !std::isfinite(range.maximum) ||
-            range.minimum > range.maximum ||
-            (range.increment &&
-             (!std::isfinite(*range.increment) || *range.increment <= 0.0))) {
-            return CameraFeatureAccessError{
-                CameraFeatureAccessError::Code::BackendFailure,
-                descriptor.name,
-                "Camera returned an invalid numeric range or increment.",
-                0, std::nullopt, std::nullopt
-            };
-        }
-
-        const double number = descriptor.kind == CameraFeatureKind::Integer
-            ? static_cast<double>(std::get<std::int64_t>(value))
-            : std::get<double>(value);
-
-        if (!std::isfinite(number) ||
-            number < range.minimum || number > range.maximum) {
-            return CameraFeatureAccessError{
-                CameraFeatureAccessError::Code::InvalidValue,
-                descriptor.name,
-                "Value is outside the current feature range.",
-                0, std::nullopt, std::nullopt
-            };
-        }
-
-        if (range.increment) {
-            const double steps = (number - range.minimum) / *range.increment;
-            if (!std::isfinite(steps) ||
-                std::abs(steps - std::round(steps)) > 1e-7) {
-                return CameraFeatureAccessError{
-                    CameraFeatureAccessError::Code::InvalidValue,
-                    descriptor.name,
-                    "Value does not satisfy the feature increment.",
-                    0, std::nullopt, std::nullopt
-                };
-            }
-        }
     }
-
     return std::monostate{};
 }
 

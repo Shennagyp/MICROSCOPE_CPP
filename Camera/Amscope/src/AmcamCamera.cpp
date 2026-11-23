@@ -582,11 +582,6 @@ buildAmcamFeatureDescriptors(
     const bool rawAvailable = rawModelSupported && rawModeReadable;
     const bool rawFormatReadable = rawModeReadable && rawMode == 1 &&
         SUCCEEDED(rawFormatHr) && rawBitsPerPixel > 0 && rawBitsPerPixel <= 16;
-    // When the SDK exposes its v20+ pixel-format enumeration, its supported
-    // RAW / sensor-mosaic formats are authoritative for selectable precision.
-    // Report the maximum from that list instead of a possibly stale or
-    // incomplete legacy model/MaxBitDepth result.
-    const bool modernPixelFormatApiAvailable = !supportedPixelFormatCodes.empty();
     // The selectable depth set is the union of exact SDK pixel formats and
     // the legacy 8-bit/maximum modes. Neither API is sufficient by itself:
     // the modern API exposes intermediate precisions, while the legacy API

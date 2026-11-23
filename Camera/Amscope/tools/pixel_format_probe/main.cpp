@@ -124,6 +124,27 @@ void printOptionInt(HAmcam camera, const char* label, unsigned option) {
     if (SUCCEEDED(result)) std::cout << "    value: " << value << '\n';
 }
 
+void printRgbOutputMode(HAmcam camera) {
+    int value = std::numeric_limits<int>::min();
+    const HRESULT result = Amcam_get_Option(
+        camera, AMCAM_OPTION_RGB, &value);
+    printHresult("Amcam_get_Option(AMCAM_OPTION_RGB)", result);
+    if (FAILED(result)) return;
+
+    const char* name = nullptr;
+    switch (value) {
+    case 0: name = "RGB24"; break;
+    case 1: name = "RGB48 (requires camera bit depth > 8)"; break;
+    case 2: name = "RGB32"; break;
+    case 3: name = "Grey8 (monochrome cameras only)"; break;
+    case 4: name = "Grey16 (monochrome cameras with bit depth > 8 only)"; break;
+    case 5: name = "RGB64 (requires camera bit depth > 8)"; break;
+    default: name = "unknown SDK value"; break;
+    }
+    std::cout << "    processed-output mode: " << name
+              << " (value " << value << ")\\n";
+}
+
 void printFirmwareIdentity(HAmcam camera) {
     std::cout << "\n--- Camera hardware/firmware identity ---\n";
 
@@ -208,6 +229,7 @@ void probeCamera(HAmcam camera, const AmcamDeviceV2& selectedDevice) {
                    AMCAM_OPTION_RAW);
     printOptionInt(camera, "Amcam_get_Option(AMCAM_OPTION_BITDEPTH)",
                    AMCAM_OPTION_BITDEPTH);
+    printRgbOutputMode(camera);
 
     int currentPixelFormat = -1;
     const HRESULT currentPixelFormatResult = Amcam_get_Option(

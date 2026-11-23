@@ -668,6 +668,9 @@ int main(int argc, char** argv) {
                      "--probe-raw-mode temporarily enables RAW mode while "
                      "the camera is stopped, reads RAW output capabilities, "
                      "and restores the original RAW mode.\n"
+                     "--capture-raw-frame captures one RAW frame, writes "
+                     "amscope-raw-frame.raw, reports payload size and sample "
+                     "statistics, then restores the original RAW mode.\n"
                      "A single connected camera is selected automatically. "
                      "With multiple cameras, choose an index interactively "
                      "or pass --index N.\n";

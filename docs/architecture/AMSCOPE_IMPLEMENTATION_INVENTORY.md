@@ -1,7 +1,7 @@
 # AmScope Implementation Inventory
 
 **Source snapshot:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (v0.6 common integer-range typing, exact validation, first-frame common metadata reporting, and ownership audit)  
-**Branch head reviewed for this inventory refresh:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (source review only; v0.6 local build/CTest and CI verification pending)  
+**Branch head reviewed for this inventory refresh:** `769c26e0d123fd868d91bad75ca8ad7237dbfa23` (source review only; v0.6 local build/CTest and CI verification pending)  
 **Purpose:** source-to-test-to-UI inventory. This document records source claims, automated coverage, and separately classified user-reported physical-camera observations. Owner acceptance of Phases 0 and 1 is recorded in the completion plan; acceptance does not retroactively promote unrecorded hardware checks to Hardware verified.
 
 ---

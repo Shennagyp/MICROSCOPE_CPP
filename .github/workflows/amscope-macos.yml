@@ -74,6 +74,25 @@ jobs:
       - name: Compile
         run: cmake --build build/amscope --config Release --parallel
 
+      - name: Configure standalone vendor-SDK probe
+        run: |
+          cmake -S Camera/Amscope/tools/pixel_format_probe -B build/amscope-sdk-probe \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
+            -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}"
+
+      - name: Build standalone vendor-SDK probe
+        run: cmake --build build/amscope-sdk-probe --config Release --parallel
+
+      - name: Verify standalone probe architecture and dependencies
+        run: |
+          test -x build/amscope-sdk-probe/amscope_sdk_pixel_format_probe
+          test -f build/amscope-sdk-probe/libamcam.dylib
+          lipo build/amscope-sdk-probe/amscope_sdk_pixel_format_probe -verify_arch "${{ matrix.architecture }}"
+          lipo build/amscope-sdk-probe/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
+          otool -L build/amscope-sdk-probe/amscope_sdk_pixel_format_probe
+          ! otool -L build/amscope-sdk-probe/amscope_sdk_pixel_format_probe | grep -E 'camera_amscope_driver|camera_amscope_qt|Qt'
+
       - name: Run common camera contract tests
         run: ctest --test-dir build/amscope --output-on-failure
 

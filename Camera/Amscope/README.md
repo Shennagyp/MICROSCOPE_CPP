@@ -61,10 +61,15 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   payload representation from the stopped-state stream configuration; it does
   not introduce another callback, polling loop, or acquisition worker.
 - Processed live frames remain packed RGB24 (rowPitch = -1, stride = width * 3).
-  RAW live mode uses Amcam_get_RawFormat for sensor FourCC/significant bit
-  depth and AMCAM_OPTION_BITDEPTH for the returned storage container: one byte
-  per pixel in 8-bit mode or two bytes per pixel in 16-bit mode, with no row
-  padding. Frame metadata keeps both values distinct.
+  RAW live mode uses Amcam_get_RawFormat for the active RAW FourCC and
+  significant bits per pixel. The selected RAW sensor precision determines the
+  payload word width: 8-bit samples use one byte per pixel; depths above 8 bits
+  use 16-bit words (two bytes per pixel), with no row padding. This is not a
+  storage-only toggle. The legacy AMCAM_OPTION_BITDEPTH contract is described
+  inconsistently by the bundled SDK header (0 = 8, 1 = 16) and HTML guide
+  (0 = 8, 1 = camera maximum); model-specific format enumeration and verified
+  readback take precedence. Frame metadata keeps significant depth and storage
+  width distinct.
 - RAW output enablement remains an Amcam-specific feature. RAW output
   precision is exposed through the backend-neutral
   `camera::RawOutputBitDepthFeature`. It is an integer feature with an
@@ -194,8 +199,10 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   preview dimensions. No sentinel is passed directly to the SDK.
   AMCAM_EVENT_STILLIMAGE is routed to a dedicated waiter and never enters the
   live event FIFO. The result is pulled with Amcam_PullImageV4(bStill=1).
-  RAW stills preserve sensor significant depth separately from the BITDEPTH-
-  selected 8/16-bit storage container. A timed-out or failed capture quarantines
+  RAW stills preserve sensor significant depth separately from payload word
+  width. Samples above 8 significant bits are carried in 16-bit words; that
+  container width must not be mistaken for 16 bits of measured sensor precision.
+  A timed-out or failed capture quarantines
   further still requests until a successful Stop/Start callback-drain boundary;
   the live acquisition queue, worker and pull path are unchanged.
 - Callback-to-pull execution now follows the Swift model and the vendor's

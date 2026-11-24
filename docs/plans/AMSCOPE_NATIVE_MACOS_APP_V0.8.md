@@ -22,10 +22,11 @@
 - [x] Add the Objective-C++ bridge and Swift bridging header.
 - [x] Add camera enumeration and lifecycle actions (open, close, start, stop) to the controls window.
 - [x] Add the AppKit preview surface and connect it to the shared latest-frame lease.
-- [ ] Build and launch the native app on the user's Mac using the standalone Command Line Tools toolchain.
-- [ ] Verify a native-only configuration with Qt disabled; do not remove the Qt targets from the repository.
+- [x] Configure and build the native app on the user's Mac using the standalone Command Line Tools toolchain and Ninja.
+- [ ] Launch the generated app bundle and verify the native windows/menu.
+- [x] Verify a native-only configuration with Qt disabled; do not remove the Qt targets from the repository.
 
-**Current Phase 1 note:** The application is connected to the real C++ camera controller, but has not yet been built or run on the user's Mac. CMake Swift support is used with Ninja, avoiding the Xcode generator and its `xcodebuild` dependency.
+**Current Phase 1 note:** On 2026-11-24, the user's Mac successfully configured the native-only build with Ninja, Swift 6.4.2, AppleClang 21, Objective-C++, and Qt adapter/preview disabled. The `amscope_native_mac_app` target linked successfully. The linker emitted only a non-fatal duplicate `-lc++` warning. Launch and visual inspection remain pending. CMake Swift support is used with Ninja, avoiding the Xcode generator and its `xcodebuild` dependency.
 
 **Gate:** The native application bundle builds and launches independently of Qt, without changing existing driver code.
 
@@ -164,6 +165,29 @@ frame leases, or latest-frame mailbox.
 because of the `NSLog` compile error. The changes above have been committed,
 but the native target must be rebuilt on the user's Mac to verify them. No
 application launch or camera-streaming result is claimed.
+
+
+## Native target build result (2026-11-24)
+
+User-reported command:
+
+```sh
+cmake --build build/amscope-native-mac \
+  --target amscope_native_mac_app \
+  --parallel
+```
+
+Result: `[1/1] Linking Swift executable amscope_native_mac_app.app/Contents/MacOS/amscope_native_mac_app`
+completed successfully. The linker printed `ld: warning: ignoring duplicate libraries: '-lc++'`.
+This is a warning, not a failed build. Do not change link dependencies solely to
+silence it; first verify app launch and runtime behavior.
+
+The configuration used `AMSCOPE_BUILD_NATIVE_MAC_APP=ON`,
+`AMSCOPE_BUILD_QT_ADAPTER=OFF`, and
+`AMSCOPE_BUILD_PREVIEW_APP=OFF`. No Qt target was required to build the native
+application. The app has not yet been launched, and the build result does not
+establish camera connectivity, frame rendering correctness, lease lifetime,
+pool availability, or streaming performance parity.
 
 ## Implementation rules
 

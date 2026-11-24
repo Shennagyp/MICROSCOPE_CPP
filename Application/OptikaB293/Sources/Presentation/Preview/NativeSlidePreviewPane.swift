@@ -391,7 +391,7 @@ final class NativeSlidePreviewPane: NSView {
         }
 
         let host = NSHostingView(
-            rootView: NativeMicroscopePaneControls(model: model, workspace: workspace, slide: slide)
+            rootView: NativeMicroscopePaneControls(model: model, workspace: workspace, microscope: microscope, slide: slide)
         )
         host.translatesAutoresizingMaskIntoConstraints = false
         host.setContentHuggingPriority(.required, for: .horizontal)

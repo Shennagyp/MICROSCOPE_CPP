@@ -160,7 +160,7 @@ struct NativeWorkspaceDockTabRail: View {
         .foregroundColor(isSelected ? .white : Color(nsColor: NSColor.labelColor))
         .help(tab.title)
         .accessibilityLabel(tab.title)
-        .accessibilityHint("Shows the \\(tab.title) dock")
+        .accessibilityHint("Shows the \(tab.title) dock")
     }
 }
 

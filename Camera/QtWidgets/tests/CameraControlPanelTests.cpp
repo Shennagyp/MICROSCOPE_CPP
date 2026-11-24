@@ -118,6 +118,23 @@ int main(int argc, char** argv) {
     }
 
     state = {};
+    state.lifecycle = camera::qtwidgets::CameraPanelLifecycleState::Starting;
+    panel.setState(state);
+    if (selector->isEnabled() || refresh->isEnabled() || open->isEnabled() ||
+        start->isEnabled() || stop->isEnabled() || close->isEnabled()) {
+        fail("Starting state did not block all camera controls.");
+        return EXIT_FAILURE;
+    }
+
+    state.lifecycle = camera::qtwidgets::CameraPanelLifecycleState::Stopping;
+    panel.setState(state);
+    if (selector->isEnabled() || refresh->isEnabled() || open->isEnabled() ||
+        start->isEnabled() || stop->isEnabled() || close->isEnabled()) {
+        fail("Stopping state did not block all camera controls.");
+        return EXIT_FAILURE;
+    }
+
+    state = {};
     state.lifecycle = camera::qtwidgets::CameraPanelLifecycleState::Open;
     panel.setState(state);
     if (selector->isEnabled() || refresh->isEnabled() || open->isEnabled() ||

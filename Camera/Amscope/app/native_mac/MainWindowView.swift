@@ -148,7 +148,7 @@ struct DockCameraFeatureControl: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             Text(descriptor.displayName)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -200,7 +200,7 @@ struct DockCameraFeatureControl: View {
     private var editor: some View {
         if !descriptor.isWritable && !isResolutionControl {
             Text(model.displayValue(for: descriptor))
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .multilineTextAlignment(.leading)
@@ -241,7 +241,7 @@ struct DockCameraFeatureControl: View {
             case .enumeration:
                 if descriptor.enumerationValues.isEmpty {
                     Text("No options")
-                        .font(.system(size: 9))
+                        .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 } else {
                     Picker(
@@ -297,7 +297,7 @@ struct DockCameraFeatureControl: View {
             )
             .textFieldStyle(RoundedBorderTextFieldStyle())
             .font(.system(size: 9, design: .monospaced))
-            .frame(width: 64)
+            .frame(width: 78)
             .disabled(editingDisabled)
 
             Button("Set") {

@@ -148,6 +148,18 @@ private final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelega
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+
+        guard window != nil else {
+            model.isWorkspaceDockFloating = false
+            model.isWorkspaceDockVisible = false
+            if let panel = floatingPanel {
+                panel.delegate = nil
+                panel.close()
+                floatingPanel = nil
+            }
+            return
+        }
+
         synchronize()
     }
 
@@ -159,7 +171,9 @@ private final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelega
 
         guard model.isWorkspaceDockVisible && model.isWorkspaceDockFloating else {
             if let panel = floatingPanel {
-                mainWindow.removeChildWindow(panel)
+                if panel.parent === mainWindow {
+                    mainWindow.removeChildWindow(panel)
+                }
                 panel.orderOut(nil)
             }
             return
@@ -575,14 +589,22 @@ private struct NativeSmartGalleryDock: View {
             HStack {
                 Image(systemName: "folder")
                     .foregroundColor(.secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Pictures / AmScope Captures")
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                    Text("Shows the latest 80; older PNG files remain on disk.")
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
+                Button {
+                    gallery.revealCaptureFolder()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "folder")
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Pictures / AmScope Captures")
+                                .font(.system(size: 9))
+                            Text("Latest 80 shown; older PNGs stay on disk.")
+                                .font(.system(size: 8))
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
+                .buttonStyle(BorderlessButtonStyle())
+                .help("Open the complete capture folder in Finder")
                 Spacer()
             }
             .padding(.horizontal, 10)

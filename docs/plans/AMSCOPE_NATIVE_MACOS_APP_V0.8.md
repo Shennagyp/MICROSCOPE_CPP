@@ -162,19 +162,29 @@ states, divider resizing, camera mode changes, and Retina backing-scale changes.
 No local build or hardware test is claimed.
 ## Transparent upper and lower bar surfaces (2026-11-24)
 
-The main window's native title-bar background, each slide's upper control
-header background, and the bottom camera-dock background are transparent.
-Only those bar surfaces are cleared. Their child content is not faded:
-native window controls, labels, status text, symbols, buttons, and feature
-controls retain their normal foreground opacity and control styling.
-Individual feature-control cards keep their own control-background surfaces.
-The bottom dock remains a separate reserved layout region below the slide
-workspace; transparency does not turn it into an overlay or allow it to cover
-the specimen viewport.
+Transparency is implemented at the actual window and content-surface level,
+not only by assigning a clear fill to an inner control stack.
+
+- The main window uses a transparent title bar with
+  `.fullSizeContentView`.
+- The main `NSWindow` is non-opaque with a clear background.
+- The `NSHostingView` and native window content view use clear, non-opaque
+  backing layers.
+- Each slide pane and its upper control header use clear, non-opaque layers.
+- The bottom dock's outer stack and control row use clear SwiftUI backgrounds.
+
+Only the bar and parent surfaces are transparent. Native buttons, symbols,
+labels, status text, toggles, and feature controls retain their normal
+foreground opacity and native styling. Feature-control cards retain their
+own control-background fills.
+
+The bottom dock remains a separate reserved layout row. Transparency does
+not turn it into an overlay or allow it to cover the specimen viewport.
 
 **Verification pending:** inspect the main window on macOS in light and dark
-appearance; confirm bar backgrounds reveal the underlying window surface while
-all labels, symbols, and controls remain fully legible and interactive.
+appearance; confirm both bar backgrounds reveal the transparent window surface
+while every control remains fully legible and interactive. Verify the native
+title-bar controls remain visible and operable. No local visual test is claimed.
 
 ## Two-slide workspace and compact camera dock (2026-11-24)
 

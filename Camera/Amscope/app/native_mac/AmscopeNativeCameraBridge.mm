@@ -77,7 +77,7 @@ std::string utf8String(NSString *value) {
     if (!value)
         return {};
     NSData *bytes = [value dataUsingEncoding:NSUTF8StringEncoding];
-    if (!bytes)
+    if (!bytes || bytes.length == 0)
         return {};
     return std::string(
         static_cast<const char *>(bytes.bytes),
@@ -488,30 +488,36 @@ const camera::Frame *frameFromStorage(void *storage) {
         return nil;
 
     __weak AmscopeNativeCameraBridge *weakSelf = self;
-    auto *controller = new (std::nothrow) amscope::native_mac::NativeCameraController(
-        [weakSelf]() {
-            AmscopeNativeCameraBridge *strongSelf = weakSelf;
-            if (!strongSelf)
-                return;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                AmscopeNativeCameraBridge *target = strongSelf;
-                if (target.onFrameAvailable)
-                    target.onFrameAvailable();
-            });
-        },
-        [weakSelf](std::uint64_t, const amscope::CameraError& error) {
-            NSError *nativeError = errorFromCameraError(error);
-            AmscopeNativeCameraBridge *strongSelf = weakSelf;
-            if (!strongSelf)
-                return;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                AmscopeNativeCameraBridge *target = strongSelf;
-                if (target.onAcquisitionError &&
-                    target.state == AmscopeNativeCameraStateFaulted) {
-                    target.onAcquisitionError(nativeError);
-                }
-            });
-        });
+    amscope::native_mac::NativeCameraController *controller = nullptr;
+    try {
+        controller = new (std::nothrow)
+            amscope::native_mac::NativeCameraController(
+                [weakSelf]() {
+                    AmscopeNativeCameraBridge *strongSelf = weakSelf;
+                    if (!strongSelf)
+                        return;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        AmscopeNativeCameraBridge *target = strongSelf;
+                        if (target.onFrameAvailable)
+                            target.onFrameAvailable();
+                    });
+                },
+                [weakSelf](std::uint64_t, const amscope::CameraError& error) {
+                    NSError *nativeError = errorFromCameraError(error);
+                    AmscopeNativeCameraBridge *strongSelf = weakSelf;
+                    if (!strongSelf)
+                        return;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        AmscopeNativeCameraBridge *target = strongSelf;
+                        if (target.onAcquisitionError &&
+                            target.state == AmscopeNativeCameraStateFaulted) {
+                            target.onAcquisitionError(nativeError);
+                        }
+                    });
+                });
+    } catch (...) {
+        return nil;
+    }
 
     if (!controller)
         return nil;

@@ -78,11 +78,17 @@
 - [x] Prevent overlapping lifecycle requests and selection changes while a camera session is active.
 - [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
 - [x] Render all available generic feature descriptors in the bottom dock: writable boolean, integer, floating-point, string, integer-vector, and enumeration controls; read-only descriptor values remain visible.
+- [x] Separate exposure range/capability from the current exposure readback so manual Exposure Time remains available when Auto Exposure is switched to Off; validate each requested value against the current SDK range.
+- [x] Expose the camera-reported preview resolution choices in the dock and route selection through the native bridge and serialized controller.
+- [x] When resolution changes during streaming, clear the pending old-size frame, stop acquisition, apply the resolution through the existing `AmcamCamera` feature API, and restart under a new session generation.
+- [x] Size read-only numeric values to their content instead of reserving a wide editor region around each value.
+- [ ] Verify manual Exposure Time and Analog Gain changes after switching Auto Exposure to Off; verify the reported ranges and readback.
+- [ ] Verify preview-resolution selection with acquisition both stopped and running, including successful restart and Stop/restart failure handling.
 - [ ] Port dedicated accessory workflows and telemetry from the existing Qt/native contract.
 - [x] Queue camera Close and wait for completion before application termination.
 - [ ] Verify window detach/close, disconnect/reconnect, and still-running camera behavior on hardware.
 
-**Current limitation:** The two-slide UI currently changes only the destination pane for incoming frames. It does not move a physical stage or operate a slide changer; this must be added through the controller later. Dedicated accessory workflows, post-change compile/visual validation, frame-pool validation, and hardware performance validation remain outstanding.
+**Current limitation:** The two-slide UI currently changes only the destination pane for incoming frames. It does not move a physical stage or operate a slide changer; this must be added through the controller later. Dedicated accessory workflows, post-change compile/visual validation, frame-pool validation, and hardware performance validation remain outstanding. Preview-resolution changes can stop and restart acquisition, so the local UI and hardware checks must confirm that the selected dimensions are actually applied and that the stream recovers correctly.
 
 **Gate:** All controls use asynchronous controller requests; no camera call blocks the main actor; UI state cannot issue stale commands to a newly selected device.
 
@@ -276,6 +282,26 @@ The dock can collapse, detach into a floating utility panel, and re-dock. The
 current selection changes frame routing only; physical microscope slide/stage
 movement remains a future controller operation. Updated compile, visual, and
 hardware validation are pending.
+
+**Exposure control correction:** the Exposure Time descriptor no longer uses a
+single combined probe that requires the current exposure readback to fall inside
+the SDK-reported range. Range validity, readback availability, and manual-mode
+writability are reported independently. The field becomes writable in `Off` mode,
+while the driver still validates requested microseconds against the current range
+and rejects writes in automatic modes.
+
+**Preview resolution:** the dock's `Resolution` feature is a selectable setting,
+not a duplicate read-only resolution property. Its choices are populated from
+the model's supported preview modes. The native controller serializes the
+selection and, when streaming, performs Stop → apply → Start on its existing
+camera owner and mailbox path. A new session generation prevents frames from
+the old acquisition from being accepted after the change. Stop/restart failure
+handling is implemented; its camera-specific behavior still requires local
+verification.
+
+**Numeric layout:** read-only feature values now use intrinsic content width
+instead of the same fixed-width editor slot used by writable fields, removing
+the excessive whitespace around short numeric readouts.
 
 **Scope limit:** this maps every generic feature descriptor currently exposed by
 the native bridge. Separate camera commands already defined in the Qt/native driver

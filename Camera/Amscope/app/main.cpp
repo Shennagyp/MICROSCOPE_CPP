@@ -3535,7 +3535,7 @@ void applyProfessionalStyle(QApplication& application) {
     }
 
     QFont font = application.font();
-    font.setPointSizeF(10.0);
+    font.setPointSizeF(9.0);
     application.setFont(font);
 
     application.setStyleSheet(QStringLiteral(R"(
@@ -3710,6 +3710,20 @@ void applyProfessionalStyle(QApplication& application) {
             background: #c5ced9;
             width: 1px;
             margin: 3px 5px;
+        }
+        QToolButton {
+            color: #344054;
+            padding: 4px 9px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 3px;
+        }
+        QToolButton:hover {
+            background: #e4ebf3;
+            border-color: #c8d2df;
+        }
+        QToolButton:pressed {
+            background: #d8e4f1;
         }
         QMenuBar::item {
             padding: 4px 9px;

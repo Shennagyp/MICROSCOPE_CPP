@@ -287,7 +287,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
               pixelSize.height.isFinite,
               pixelSize.width > 0,
               pixelSize.height > 0,
-              let window = window,
+              let window = self.window,
               let screen = window.screen ?? NSScreen.main else {
             return
         }

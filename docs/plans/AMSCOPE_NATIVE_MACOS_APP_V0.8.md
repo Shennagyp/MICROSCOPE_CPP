@@ -73,7 +73,9 @@
 - [x] Add detected-camera actions that open the selected device and start acquisition through the existing serialized controller.
 - [ ] Verify the dual-pane layout, active-slide routing, image persistence, and compact dock on macOS.
 - [x] Keep camera discovery and lifecycle controls accessible through the File menu.
-- [x] Add one compact bottom dock with camera connection indicator and lifecycle actions, slide target selection, and horizontally scrollable generic camera feature controls.
+- [x] Replace the single-row bottom strip with a resizable, tabbed right-side workspace dock for Camera Controls and Smart Gallery; support hide/show and float/re-dock as a utility panel.
+- [x] Add per-slide floating toolbars for still capture, pointer/pan, distance measurement, text annotation, and clearing slide overlays.
+- [ ] Verify dock resizing, float/re-dock, capture file output, gallery recovery/retention, tool selection, image-coordinate overlays, and measurement/annotation rendering on macOS.
 - [x] Remove the duplicate Camera, Resolution, Format, State, and Live read-only property fields and their unused observable frame-metadata properties; show camera identity/state only beside lifecycle controls on the left.
 - [x] Prevent overlapping lifecycle requests and selection changes while a camera session is active.
 - [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
@@ -103,12 +105,14 @@
 
 ## Slide workspace, dock separation, and image document sizing (2026-11-24)
 
-The slide workspace and camera dock are separate vertically arranged siblings.
-The dock owns its own reserved height at the bottom of the window; it is never
-painted over the specimen viewport. The SwiftUI workspace is clipped to its
-allocated area, and the native AppKit preview/split-view hierarchy has matching
-clipping boundaries. An oversized image document may be clipped by its own
-slide viewport, but it cannot draw into the dock.
+The slide workspace and tool dock are separate siblings in a horizontally
+resizable `HSplitView`. The preview owns the left canvas; the Camera Controls
+/ Smart Gallery tab group occupies the right dock. The right dock can be hidden,
+floated into an independent utility panel, and re-docked. It is never painted
+over a slide viewport. The SwiftUI preview region is clipped to its allocated
+canvas, and the native AppKit preview/split-view hierarchy has matching clipping
+boundaries. An oversized image document is clipped by its own slide viewport,
+not by or into the tool dock.
 
 The two existing slide panes, divider, and window remain unchanged. The
 former upper header row is removed and replaced by specimen-view annotations
@@ -188,42 +192,76 @@ toggles, and feature controls retain their normal foreground opacity and
 native styling. Feature-control cards retain their own control-background
 fills.
 
-The bottom dock remains a separate reserved layout row. Transparency does
-not turn it into an overlay or allow it to cover the specimen viewport.
+The right-side dock remains a separate split-view sibling. When floated, it
+uses its own utility panel. Neither state overlays or covers a specimen viewport.
 
 **Verification pending:** inspect the main window on macOS in light and dark
 appearance; confirm both bar backgrounds reveal the transparent window surface
 while every control remains fully legible and interactive. Verify the native
 title-bar controls remain visible and operable. No local visual test is claimed.
 
-## Two-slide workspace and compact camera dock (2026-11-24)
+## Two-slide workspace and Visual Studio-style tool docking (2026-11-24)
 
-The main window now has two side-by-side slide panes and one thin bottom dock; the
-separate camera row above the preview has been removed. The dock contains camera connection/lifecycle actions, a Slide 1/Slide 2 target
-selector, and the complete currently exposed generic feature descriptor list in one
-horizontally scrollable strip. The dock can collapse or detach into a floating
-utility panel and re-dock; duplicated camera/resolution/format/state property
-readouts have been removed. Each slide pane has a persistent Switch Live control,
-its own maximize/restore control, and a thin 1-point red outer border only while selected as the
-UI live target. A new frame is routed only to the selected pane; the other retains
-its last displayed image.
+The main canvas retains the two side-by-side AppKit slide panes and draggable
+divider. The former full-width bottom feature strip has been replaced by a
+right-side, horizontally resizable tool dock.
 
-Each detected camera button runs Open followed by Start using the existing
-serialized C++ controller. This is still one camera session, not one session per
-slide. The active-slide choice is a UI routing intent pending future controller
-support for physical slide/stage switching.
+The shared dock is a tab group with:
 
-The AppKit preview parent is the only consumer of the bridge's frame callback and
-mailbox. Do not add one bridge listener or mailbox consumer per pane. Each pane
-retains at most one provider-backed image lease. With the existing four-slot frame
-pool, the two retained slide images plus a mailbox frame leave one slot for the
-acquisition worker; sustained pool availability and camera drop counts must be
-verified before acceptance.
+- **Camera Controls:** camera discovery, open/start, Stop and Close through the
+  camera-name context menu, state, microscope objective, Auto Res, live-frame
+  destination, and all generic feature descriptors with adjacent labels.
+- **Smart Gallery:** saved preview captures with thumbnails, source dimensions,
+  capture date/time, open-in-viewer, Show in Finder, and Delete.
 
-**Verification pending:** build and launch on macOS; resize the pane divider;
-maximize and restore each pane; switch the live destination repeatedly; confirm
-the inactive slide image does not change; Stop and Close must not erase either
-image; and verify no frame-pool starvation, unexpected drops, or memory growth.
+The dock can be hidden, shown, floated as a resizable utility panel, and
+re-docked into the main window. Its two tools are tabs in one shared dock group;
+independent free-form tab dragging/rearrangement and docking to arbitrary
+window edges are not part of this increment.
+
+Each slide owns a separate floating overlay toolbar. It contains capture,
+pointer/pan, distance measurement, text annotation, and clear-overlay actions.
+Tool selection is local to its slide pane; changing the tool on Slide 1 does not
+change Slide 2's tool state. Existing zoom, pan, sizing, live-target, and
+maximize actions remain per pane.
+
+A distance measurement is made by dragging between two points. Its endpoints
+are converted from viewport coordinates into the original image's pixel grid,
+and the line follows image zoom and pan. The displayed length is explicitly
+in source pixels. Physical units (µm/mm) are not displayed because no complete
+stage-micrometer calibration for the current objective/camera/adapter path is
+yet attached to this measurement model.
+
+A text annotation is placed at a source-image coordinate and entered through
+a native text prompt. Measurements and notes are in-memory overlays belonging
+to the pane. They survive zooming and panning but are cleared when the source
+image dimensions change, because the prior pixel coordinate system can no
+longer be assumed to describe the new frame. They are not yet persisted across
+application restart or included in the PNG capture; captures currently preserve
+the raw displayed camera image without overlay burn-in.
+
+The capture button saves the current pane image as a PNG under
+`~/Pictures/AmScope Captures`. Encoding and thumbnail creation run away from
+the UI thread. A single capture is processed at a time; the gallery retains at
+most 80 PNGs on disk and loads thumbnails capped at 320 pixels. It uses the
+existing pane image as its source; it does not add a mailbox consumer or claim
+the camera driver's separate hardware still-capture API.
+
+The AppKit preview parent remains the only consumer of the bridge's frame
+callback and mailbox. Each pane retains at most one provider-backed live image.
+The explicit capture path copies the selected image's pixel data before PNG
+encoding so the acquisition frame lease is not retained as gallery history.
+The capture operation remains user-triggered and bounded; the regular frame
+path has no new consumer, queue, or per-frame SwiftUI observation.
+
+**Verification pending:** rebuild and inspect on macOS; resize the main dock;
+float and re-dock it; switch Camera Controls / Smart Gallery; capture from both
+slides; confirm output files and startup recovery; verify one-at-a-time capture
+behavior and 80-item disk retention; select tools independently on both slides;
+drag distance measurements and add notes; pan/zoom and verify overlays remain
+at their original image coordinates; confirm overlays clear on a source
+dimension change; and monitor frame-pool availability, drops, and memory.
+No local build or visual/hardware result is claimed.
 
 ## Deferred comparison workflow roadmap (not part of current implementation)
 
@@ -385,55 +423,37 @@ remain reachable by vertical scrolling at the minimum size and when maximized.
 - Do not mark a performance gate complete without user-run hardware evidence.
 
 
-## Compact camera dock and all-feature mapping (2026-11-24)
+## Workspace dock and all-feature mapping (2026-11-24)
 
-The bottom dock is a single 50-point expanded row (28 points collapsed) below the
-two slide previews. It is not split into an editable pane and a read-only property
-pane. Camera identity and connection state are shown beside the camera selector
-and lifecycle actions at the left. Camera, Resolution, Format, State, and Live
-property fields were removed from the dock.
+The right dock is a resizable tab group, not a single-row control strip. The
+Camera Controls tab lists camera connection/state and lifecycle actions,
+microscope objective, Auto Res, live frame destination, and the generic feature
+descriptor list. Feature controls retain their names beside their editors.
+Smart Gallery is a separate tab showing persisted PNG preview captures.
 
-Every available generic `featureDescriptors` entry is mapped in the dock's
-horizontally scrollable strip. Writable descriptors use type-appropriate controls:
-boolean Toggle, discrete integer Picker, enumeration Picker, or text entry for
-continuous integer, floating-point, string, and integer-vector values. Read-only
-descriptors display their current values. A segmented Slide 1 / Slide 2 selector
-and per-pane Switch Live actions control the UI live destination. The active pane
-uses a 1-point red outline.
+The dock is hideable and can float in a resizable utility panel or return to
+the main window. The group currently contains two tabs; arbitrary docking
+layouts and independent tab dragging are deferred.
 
-The dock can collapse, detach into a floating utility panel, and re-dock. The
-current selection changes frame routing only; physical microscope slide/stage
-movement remains a future controller operation. Updated compile, visual, and
-hardware validation are pending.
+The preview image is captured from the pane's current `CGImage`, not by calling
+the vendor SDK's dedicated still-capture operation. Captures are PNG files in
+the user's Pictures/AmScope Captures folder. Gallery retention is bounded to
+80 files, only one capture is processed at a time, and thumbnails are generated
+asynchronously. The capture path copies image pixels before encoding, avoiding
+long retention of a frame-pool lease.
 
-**Exposure control correction:** the Exposure Time descriptor no longer uses a
-single combined probe that requires the current exposure readback to fall inside
-the SDK-reported range. Range validity, readback availability, and manual-mode
-writability are reported independently. The field becomes writable in `Off` mode,
-while the driver still validates requested microseconds against the current range
-and rejects writes in automatic modes.
+Per-slide tool overlays store points in source-image pixel coordinates. The
+current ruler measures straight-line pixel distance only. Text notes are
+anchored to the image grid. Both stay aligned through pan/zoom, clear when the
+source dimensions change, and are session-only. They are not yet saved into
+capture metadata or burned into PNGs. Calibrated physical units, angles/areas,
+editable overlay objects, and annotation persistence remain future work.
 
-**Preview resolution:** the dock's `Resolution` feature is a selectable setting,
-not a duplicate read-only resolution property. Its choices are populated from
-the model's supported preview modes. The native controller serializes the
-selection and, when streaming, performs Stop → apply → Start on its existing
-camera owner and mailbox path. A new session generation prevents frames from
-the old acquisition from being accepted after the change. Stop/restart failure
-handling is implemented; its camera-specific behavior still requires local
-verification.
-
-**Numeric layout:** read-only feature values now use intrinsic content width
-instead of the same fixed-width editor slot used by writable fields, removing
-the excessive whitespace around short numeric readouts.
-
-**Scope limit:** this maps every generic feature descriptor currently exposed by
-the native bridge. Separate camera commands already defined in the Qt/native driver
-facade (auto white balance, trigger/I/O configuration, frame-rate telemetry, still
-capture, embedded light source, filter wheel, ST4, focuser, lens focus/aperture)
-are not yet connected to the native bridge/controller and are not claimed as
-available dock controls.
-
-
+**Verification pending:** rebuild/launch on macOS; verify feature labels and
+control editing, camera state actions, main dock resize, floating-panel
+lifecycle, capture/save/retention, per-slide tool isolation, overlay coordinate
+mapping, source-size reset behavior, and memory/frame-pool behavior. No local
+build, visual test, or hardware verification is claimed.
 
 ## Phase 5 addition — microscope optics and automatic resolution (2026-11-24)
 

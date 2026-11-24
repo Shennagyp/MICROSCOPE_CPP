@@ -502,7 +502,7 @@ private final class NativeSlideImageView: NSView {
 
         switch sizingMode {
         case .resizable:
-            updateImageContainer(scale: automaticFillScale, origin: nil)
+            updateImageContainer(scale: automaticFitScale, origin: nil)
         case .lockedScale, .fullResolution:
             updateImageContainer(
                 scale: currentScale,
@@ -528,7 +528,7 @@ private final class NativeSlideImageView: NSView {
         imageContainer.display(image)
 
         if sizingMode == .resizable {
-            updateImageContainer(scale: automaticFillScale, origin: nil)
+            updateImageContainer(scale: automaticFitScale, origin: nil)
         } else if dimensionsChanged {
             // Camera mode changes replace the source document dimensions.
             // Keep the selected display scale; Full Resolution remains 1:1
@@ -550,7 +550,7 @@ private final class NativeSlideImageView: NSView {
     /// Largest aspect-preserving scale that keeps the complete source image
     /// inside the viewer viewport. Diagnostic content is never cropped just
     /// to eliminate margins. Upscaling beyond native 1:1 is not permitted.
-    private var automaticFillScale: CGFloat {
+    private var automaticFitScale: CGFloat {
         guard let image = currentImage,
               image.width > 0,
               image.height > 0,
@@ -567,9 +567,9 @@ private final class NativeSlideImageView: NSView {
     private var currentScale: CGFloat {
         switch sizingMode {
         case .resizable:
-            return automaticFillScale
+            return automaticFitScale
         case .lockedScale:
-            return min(lockedScale ?? automaticFillScale, actualPixelScale)
+            return min(lockedScale ?? automaticFitScale, actualPixelScale)
         case .fullResolution:
             return actualPixelScale
         }
@@ -683,7 +683,7 @@ private final class NativeSlideImageView: NSView {
 
         let oldScale = currentScale
         let maximumScale = actualPixelScale
-        let minimumScale = min(automaticFillScale, maximumScale)
+        let minimumScale = min(automaticFitScale, maximumScale)
         let oldOrigin = imageOrigin ?? centeredOrigin(
             for: imageContainerSize(at: oldScale)
         )

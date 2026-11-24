@@ -22,14 +22,14 @@ This is the continuation entrypoint for subsequent development sessions. It is a
 ## Current continuation state — 24 November 2026
 
 - Active branch: `amscope-native-driver-v0.7`.
-- Latest Phase 4 UI source commit: `a5ce4c64b203259020c409c9a6cbfc5b86ed2822`. The final source follow-up snapshots the current feature descriptor/value before opening the modal editor so asynchronous refreshes cannot invalidate references. Commits after this source revision update documentation only.
+- Latest Phase 4 UI source commit: `e06cb6a0acc996889313f23e3f638f3cf91c5f3c`. The final source follow-ups snapshot the current feature descriptor/value before opening the modal editor and initialize the bottom information bar before the first frame arrives. Commits after this source revision update documentation only.
 - Latest locally validated source remains `892b91a57016e570a1e972343f78ed7c42be801c`: Release build including `amscope_preview`, 13/13 CTest passed. This validation predates the File-menu controls-window and ImageInfoBar change; do not claim the current UI source is built.
 - Previously accepted FrameView physical check: owner confirmed the MU503 live preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This validates the earlier FrameView extraction only, not the new window/info-bar composition.
 - Main UI architecture now in source: main window contains only the FrameView and bottom ImageInfoBar; **File → Camera Controls…** opens a modeless controls window. Camera selection/discovery, Open/Start/Stop/Close, still capture, feature tabs, trigger and accessory controls are all in that window. Discovery is initiated when the window is opened.
 - `camera::qtwidgets::ImageInfoBar` is a backend-neutral display component. The host supplies frame metadata and existing feature values. It does not query the camera, know about feature descriptors, write settings or add backend capability.
 - The info bar shows frame dimensions, pixel format/depth, payload bytes, sequence, frame exposure metadata, event/pull/paint rates, dropped frames, and existing readable image-related feature values. Double-clicking an editable item opens a typed editor; the host requires a complete readback plus an available/readable/writable descriptor, validates with the existing common validator, submits through the existing queued feature-write path, and refreshes values after the write so the display changes from confirmed readback rather than optimistic input.
 - Only already-existing descriptors are exposed. Saturation was an example, not an implementation request: no saturation descriptor or SDK call was added, and no `AmcamCamera`, vendor SDK or other backend source was changed.
-- Added `camera_qt_widgets_image_info_bar_tests`; the current CMake configuration registers **15 CTest tests** in total. The current source has not yet been built/tested locally, and no CI result is recorded for source commit `a5ce4c6`.
+- Added `camera_qt_widgets_image_info_bar_tests`; the current CMake configuration registers **15 CTest tests** in total. The current source has not yet been built/tested locally, and no CI result is recorded for source commit `e06cb6a`.
 - **Next local gate:**
 
 ```sh

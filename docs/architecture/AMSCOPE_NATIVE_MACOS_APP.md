@@ -138,7 +138,7 @@ Camera lifecycle and feature operations execute on one serialized non-UI command
 - The native target links `Amscope::Driver` and the minimal Apple frameworks it uses.
 - The native target does not link Qt Core, Qt Widgets, `Amscope::Qt`, or `Camera::QtWidgets`.
 - Existing Qt options and targets remain available and unchanged until native parity is established.
-- Keep Swift/Objective-C++ enabled only for the native target configuration. CMake has supported Swift since 3.15 and Objective-C++ since 3.16; the existing project minimum is 3.21. The first app integration uses the Xcode generator. The shell currently targets macOS 10.15 and uses an AppKit `NSApplicationDelegate` / `NSWindow` lifecycle with SwiftUI hosted by `NSHostingController`, avoiding the macOS 13 SwiftUI `Window` scene requirement. Add the explicit Objective-C++ bridge when camera-controller integration begins.
+- Keep Swift/Objective-C++ enabled only for the native target configuration. CMake has supported Swift with the Ninja generator since 3.15; the project's 3.21 minimum is sufficient. The native app deliberately requires Ninja rather than the Xcode generator, so the standalone Command Line Tools package is enough and full Xcode / `xcodebuild` is not required. The shell targets macOS 10.15 and uses an AppKit `NSApplicationDelegate` / `NSWindow` lifecycle with SwiftUI hosted by `NSHostingController`, avoiding the macOS 13 SwiftUI `Window` scene requirement. Add the explicit Objective-C++ bridge when camera-controller integration begins.
 - Prefer the narrow Objective-C++ facade over exposing the complete C++ type graph to Swift. This keeps C++ templates, STL ownership, and vendor types out of Swift's source interface.
 
 ## 7. Performance acceptance gates

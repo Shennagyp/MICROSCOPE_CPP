@@ -3,9 +3,14 @@ import SwiftUI
 
 @main
 struct AmscopeNativeApp {
+    // NSApplication.delegate is not the owner. Retain it for the complete
+    // application lifetime rather than relying on a local variable's lifetime.
+    private static var applicationDelegate: AmscopeApplicationDelegate?
+
     static func main() {
         let application = NSApplication.shared
         let delegate = AmscopeApplicationDelegate()
+        applicationDelegate = delegate
         application.delegate = delegate
         application.run()
     }

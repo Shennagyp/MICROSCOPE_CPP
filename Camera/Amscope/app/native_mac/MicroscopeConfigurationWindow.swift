@@ -146,65 +146,34 @@ struct MicroscopeConfigurationWindow: View {
                 GroupBox(label: Text("Camera imaging path")) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Camera sensor")
+                            Text("Sensor pixel pitch (µm)")
                             Spacer()
-                            Picker(
-                                "Camera sensor",
-                                selection: Binding(
-                                    get: { draftStore.configuration.cameraSensorPreset },
-                                    set: { preset in
-                                        draftStore.update { $0.cameraSensorPreset = preset }
-                                    }
+                            TextField(
+                                "Pixel pitch",
+                                text: configurationNumberBinding(
+                                    \.cameraPixelPitchMicrometers,
+                                    precision: 3
                                 )
-                            ) {
-                                ForEach(NativeCameraSensorPreset.allCases) { preset in
-                                    Text(preset.title).tag(preset)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(width: 260)
+                            )
+                            .frame(width: 90)
                         }
 
-                        if draftStore.configuration.cameraSensorPreset == .amscopeMU503 {
-                            Text("Aptina MT9P006 · 2.2 µm sensor pixels · documented 1×1, 2×2 and 4×4 readout modes are calibrated by frame dimensions.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        } else {
-                            HStack {
-                                Text("Sensor pixel pitch (µm)")
-                                Spacer()
-                                TextField(
-                                    "Pixel pitch",
-                                    text: configurationNumberBinding(
-                                        \.cameraPixelPitchMicrometers,
-                                        precision: 2
-                                    )
+                        HStack {
+                            Text("Output pixel factor")
+                            Spacer()
+                            TextField(
+                                "Factor",
+                                text: configurationNumberBinding(
+                                    \.cameraOutputPixelFactor,
+                                    precision: 3
                                 )
-                                .frame(width: 90)
-                            }
-                            HStack {
-                                Text("Current output binning")
-                                Spacer()
-                                Picker(
-                                    "Current output binning",
-                                    selection: Binding(
-                                        get: { draftStore.configuration.cameraCustomBinningFactor },
-                                        set: { value in
-                                            draftStore.update { $0.cameraCustomBinningFactor = value }
-                                        }
-                                    )
-                                ) {
-                                    Text("1×1").tag(1.0)
-                                    Text("2×2").tag(2.0)
-                                    Text("4×4").tag(4.0)
-                                }
-                                .labelsHidden()
-                                .frame(width: 90)
-                            }
-                            Text("For custom cameras, set the sensor pixel pitch and the binning used by the current camera output mode. Update the binning setting when you switch to a different readout mode.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            )
+                            .frame(width: 90)
                         }
+
+                        Text("Use 1.0 for native sensor readout. For binning or camera-side resampling, enter the linear factor by which one output pixel represents sensor pixels (for example 2.0 for 2×). Cropping or ROI alone remains 1.0. This value is explicit camera configuration; the app does not guess it from the camera model or image dimensions.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
 
                         HStack {
                             Text("Reduction lens")
@@ -232,7 +201,7 @@ struct MicroscopeConfigurationWindow: View {
                         }
                         if draftStore.configuration.cameraRelayPreset == .custom {
                             HStack {
-                                Text("Custom optical path")
+                                Text("Optical path name")
                                 Spacer()
                                 TextField(
                                     "Reduction lens / combined path",
@@ -260,7 +229,16 @@ struct MicroscopeConfigurationWindow: View {
                                     .monospacedDigit()
                             }
                         }
-                        Text("Specimen scale is calculated from sensor pixel pitch × binning, divided by objective magnification × reduction-lens magnification. The reduction value represents the combined installed optical path; do not multiply the same reducer twice.")
+
+                        let effectiveScale = currentDraftScale
+                        HStack {
+                            Text("Calculated specimen scale")
+                            Spacer()
+                            Text(effectiveScale.map { String(format: "%.4f µm/px", $0) } ?? "Unavailable")
+                                .monospacedDigit()
+                                .foregroundColor(effectiveScale == nil ? .secondary : .primary)
+                        }
+                        Text("µm/source-pixel = sensor pixel pitch × output pixel factor ÷ (objective magnification × reduction-lens magnification). The application performs this calculation. The reduction value must represent the combined installed optical path, without counting any element twice.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -354,12 +332,25 @@ struct MicroscopeConfigurationWindow: View {
         }
     }
 
+    private var currentDraftScale: Double? {
+        guard let objective = draftStore.configuration.objectives.first(where: {
+            $0.id == model.microscopeConfiguration.activeObjectiveID
+        }) else { return nil }
+
+        return NativeMicroscopeMeasurementCalibration(
+            sensorPixelPitchMicrometers: draftStore.configuration.cameraPixelPitchMicrometers,
+            outputPixelFactor: draftStore.configuration.cameraOutputPixelFactor,
+            objectiveMagnification: objective.magnification,
+            reductionLensMagnification: draftStore.configuration.cameraRelayMagnification
+        ).micrometersPerSourcePixel
+    }
+
     private var isDraftValid: Bool {
         let candidate = draftStore.configuration
         return candidate.cameraPixelPitchMicrometers.isFinite &&
             candidate.cameraPixelPitchMicrometers > 0 &&
-            candidate.cameraCustomBinningFactor.isFinite &&
-            candidate.cameraCustomBinningFactor > 0 &&
+            candidate.cameraOutputPixelFactor.isFinite &&
+            candidate.cameraOutputPixelFactor > 0 &&
             candidate.cameraRelayMagnification.isFinite &&
             candidate.cameraRelayMagnification > 0 &&
             candidate.chromatinBandLowerNanometers.isFinite &&
@@ -480,7 +471,6 @@ struct MicroscopeObjective: Codable, Equatable, Identifiable {
 }
 
 enum CameraRelayPreset: String, Codable, CaseIterable, Identifiable, Hashable {
-    case amscopeMU503Included
     case touptekFMA050
     case optikaM115
     case optikaM114
@@ -490,7 +480,6 @@ enum CameraRelayPreset: String, Codable, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .amscopeMU503Included: return "AmScope MU503 included reducer (0.50×)"
         case .touptekFMA050: return "ToupTek FMA050 (0.50×)"
         case .optikaM115: return "OPTIKA M-115 (0.35×)"
         case .optikaM114: return "OPTIKA M-114 (0.50×)"
@@ -500,7 +489,7 @@ enum CameraRelayPreset: String, Codable, CaseIterable, Identifiable, Hashable {
 
     var nominalMagnification: Double? {
         switch self {
-        case .amscopeMU503Included, .touptekFMA050, .optikaM114: return 0.5
+        case .touptekFMA050, .optikaM114: return 0.5
         case .optikaM115: return 0.35
         case .custom: return nil
         }
@@ -514,7 +503,7 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         case opticalTubeSystem
         case condenserNumericalAperture
         case cameraPixelPitchMicrometers
-        case cameraSensorPreset
+        case cameraOutputPixelFactor
         case cameraCustomBinningFactor
         case cameraRelayPreset
         case cameraRelayCustomName
@@ -531,8 +520,7 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
     var opticalTubeSystem: String
     var condenserNumericalAperture: Double
     var cameraPixelPitchMicrometers: Double
-    var cameraSensorPreset: NativeCameraSensorPreset
-    var cameraCustomBinningFactor: Double
+    var cameraOutputPixelFactor: Double
     var cameraRelayPreset: CameraRelayPreset
     var cameraRelayCustomName: String
     var cameraRelayMagnification: Double
@@ -548,9 +536,8 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         opticalTubeSystem: "Finite, 160 mm",
         condenserNumericalAperture: 1.25,
         cameraPixelPitchMicrometers: 2.2,
-        cameraSensorPreset: .amscopeMU503,
-        cameraCustomBinningFactor: 1,
-        cameraRelayPreset: .amscopeMU503Included,
+        cameraOutputPixelFactor: 1,
+        cameraRelayPreset: .touptekFMA050,
         cameraRelayCustomName: "",
         cameraRelayMagnification: 0.5,
         chromatinBandLowerNanometers: 540,
@@ -604,22 +591,21 @@ extension MicroscopeOpticalConfiguration {
             Double.self,
             forKey: .cameraPixelPitchMicrometers
         )
-        cameraSensorPreset = try container.decodeIfPresent(
-            NativeCameraSensorPreset.self,
-            forKey: .cameraSensorPreset
-        ) ?? .amscopeMU503
-        cameraCustomBinningFactor = try container.decodeIfPresent(
+        cameraOutputPixelFactor = try container.decodeIfPresent(
+            Double.self,
+            forKey: .cameraOutputPixelFactor
+        ) ?? (try container.decodeIfPresent(
             Double.self,
             forKey: .cameraCustomBinningFactor
-        ) ?? 1
+        ) ?? 1)
         cameraRelayMagnification = try container.decode(
             Double.self,
             forKey: .cameraRelayMagnification
         )
-        cameraRelayPreset = try container.decodeIfPresent(
+        cameraRelayPreset = (try? container.decode(
             CameraRelayPreset.self,
             forKey: .cameraRelayPreset
-        ) ?? .custom
+        )) ?? .custom
         cameraRelayCustomName = try container.decodeIfPresent(
             String.self,
             forKey: .cameraRelayCustomName

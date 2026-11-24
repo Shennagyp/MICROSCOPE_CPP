@@ -112,26 +112,33 @@ struct NativeWorkspaceDock: View {
             .padding(.horizontal, 11)
             .frame(minHeight: 32)
             .background(
-                RoundedRectangle(cornerRadius: 5)
+                RoundedRectangle(cornerRadius: 6)
                     .fill(
                         model.selectedWorkspaceDockTab == tab
-                            ? Color.accentColor.opacity(0.16)
-                            : Color.clear
+                            ? Color.accentColor
+                            : Color(nsColor: NSColor.windowBackgroundColor).opacity(0.96)
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 5)
+                RoundedRectangle(cornerRadius: 6)
                     .stroke(
                         model.selectedWorkspaceDockTab == tab
-                            ? Color.accentColor.opacity(0.38)
-                            : Color.clear,
-                        lineWidth: 0.9
+                            ? Color.white.opacity(0.32)
+                            : Color(nsColor: NSColor.separatorColor).opacity(0.85),
+                        lineWidth: model.selectedWorkspaceDockTab == tab ? 1 : 0.8
                     )
             )
-            .shadow(color: .black.opacity(model.selectedWorkspaceDockTab == tab ? 0.14 : 0.08), radius: 3, x: 0, y: 1)
+            .shadow(
+                color: model.selectedWorkspaceDockTab == tab
+                    ? Color.accentColor.opacity(0.34)
+                    : Color.black.opacity(0.12),
+                radius: model.selectedWorkspaceDockTab == tab ? 5 : 3,
+                x: 0,
+                y: 1
+            )
         }
         .buttonStyle(PlainButtonStyle())
-        .foregroundColor(model.selectedWorkspaceDockTab == tab ? .primary : .secondary)
+        .foregroundColor(model.selectedWorkspaceDockTab == tab ? .white : .primary)
         .help(tab.title)
         .accessibilityLabel(tab.title)
     }

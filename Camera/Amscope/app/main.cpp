@@ -1979,7 +1979,17 @@ private:
         const QString name = QString::fromStdString(descriptor.displayName).toLower();
         return name.contains("exposure") ||
                name.contains("gain") ||
-               name.contains("white balance");
+               name.contains("white balance") ||
+               name.contains("color") ||
+               name.contains("hue") ||
+               name.contains("saturation") ||
+               name.contains("brightness") ||
+               name.contains("contrast") ||
+               name.contains("gamma") ||
+               name.contains("tone") ||
+               name.contains("denoise") ||
+               name.contains("sharpen") ||
+               name.contains("demosaic");
     }
 
     void updateFrameInfoLabel() {

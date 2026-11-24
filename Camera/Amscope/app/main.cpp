@@ -1349,7 +1349,11 @@ private:
         const auto found = featureControls_.find(featureName);
         if (found == featureControls_.end() || !found->second.currentValue) return;
 
-        const auto& descriptor = found->second.descriptor;
+        // The modal dialog runs a nested Qt event loop. Copy the descriptor
+        // and readback so an asynchronous descriptor refresh cannot invalidate
+        // references into featureControls_ while the dialog is open.
+        const auto descriptor = found->second.descriptor;
+        const auto currentValue = currentValue;
         if (!descriptor.isAvailable || !descriptor.isReadable ||
             !descriptor.isWritable || !featureReadbackReady_ ||
             pendingFeatureWrite_ ||
@@ -1367,12 +1371,12 @@ private:
         switch (descriptor.kind) {
         case camera::CameraFeatureKind::Boolean: {
             auto* check = new QCheckBox(&dialog);
-            check->setChecked(std::get<bool>(*found->second.currentValue));
+            check->setChecked(std::get<bool>(currentValue));
             editor = check;
             break;
         }
         case camera::CameraFeatureKind::Integer: {
-            const auto current = std::get<std::int64_t>(*found->second.currentValue);
+            const auto current = std::get<std::int64_t>(currentValue);
             if (!descriptor.discreteIntegerValues.empty()) {
                 auto* combo = new QComboBox(&dialog);
                 for (const auto choice : descriptor.discreteIntegerValues) {
@@ -1392,7 +1396,7 @@ private:
             break;
         }
         case camera::CameraFeatureKind::FloatingPoint: {
-            const double current = std::get<double>(*found->second.currentValue);
+            const double current = std::get<double>(currentValue);
             const auto* range = descriptor.numericRange
                 ? std::get_if<camera::CameraFloatingPointRange>(
                       &*descriptor.numericRange)
@@ -1419,14 +1423,14 @@ private:
                     QString::fromStdString(symbol));
             }
             const auto& current =
-                std::get<camera::FeatureEnumeration>(*found->second.currentValue).symbol;
+                std::get<camera::FeatureEnumeration>(currentValue).symbol;
             combo->setCurrentIndex(combo->findData(QString::fromStdString(current)));
             editor = combo;
             break;
         }
         case camera::CameraFeatureKind::IntegerVector: {
             const auto& current =
-                std::get<std::vector<std::int64_t>>(*found->second.currentValue);
+                std::get<std::vector<std::int64_t>>(currentValue);
             QStringList parts;
             for (const auto value : current) {
                 parts.push_back(QString::number(static_cast<qlonglong>(value)));
@@ -1442,7 +1446,7 @@ private:
         }
         case camera::CameraFeatureKind::String: {
             const auto& current =
-                std::get<std::string>(*found->second.currentValue);
+                std::get<std::string>(currentValue);
             editor = new QLineEdit(QString::fromStdString(current), &dialog);
             break;
         }

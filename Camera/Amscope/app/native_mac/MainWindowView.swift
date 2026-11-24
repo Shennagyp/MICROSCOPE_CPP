@@ -4,35 +4,42 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
 
+    @State private var selectedDockTab: NativeWorkspaceDockTab = .cameraControls
+    @State private var isDockVisible = true
+
     var body: some View {
         VStack(spacing: 0) {
-            NativeDualPreviewSurface(
-                bridge: model.bridge,
-                activeSlide: model.activeSlide,
-                onActiveSlideChanged: model.selectActiveSlide
-            )
-            // The slide workspace owns only the space above the dock.
-            // Clip the representable at this boundary so a native child view
-            // can never paint over the pathologist's control strip.
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .layoutPriority(1)
+            workspaceToolbar
+            Divider()
 
-            if !model.isBottomDockDetached {
-                // The dock is a separate, vertically reserved sibling, never
-                // an overlay on either specimen viewport.
-                BottomControlDock(model: model, isDetached: false)
-                    .fixedSize(horizontal: false, vertical: true)
+            HSplitView {
+                NativeDualPreviewSurface(
+                    bridge: model.bridge,
+                    activeSlide: model.activeSlide,
+                    onActiveSlideChanged: model.selectActiveSlide,
+                    onCapture: { slide, image in
+                        model.captureGallery.capture(image, for: slide)
+                    }
+                )
+                .frame(minWidth: 500, minHeight: 460)
+                .clipped()
+                .layoutPriority(1)
+
+                if isDockVisible {
+                    NativeWorkspaceDock(
+                        model: model,
+                        selectedTab: $selectedDockTab,
+                        onClose: { isDockVisible = false }
+                    )
+                    .frame(minWidth: 270, idealWidth: 340, maxWidth: 460)
+                    .frame(maxHeight: .infinity)
                     .layoutPriority(0)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 960, minHeight: 560)
+        .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)
-        .background(
-            BottomDockPanelAnchor(model: model)
-                .frame(width: 1, height: 1)
-                .opacity(0)
-        )
         .onAppear {
             if model.cameras.isEmpty {
                 model.refreshCameras()
@@ -46,306 +53,56 @@ struct MainWindowView: View {
             )
         }
     }
-}
 
-private struct BottomControlDock: View {
-    @ObservedObject var model: NativeCameraModel
-    let isDetached: Bool
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack(spacing: 7) {
-                CameraConnectionControl(model: model)
-
-                Rectangle()
-                    .fill(Color(nsColor: NSColor.separatorColor))
-                    .frame(width: 1, height: 28)
-
-                SlideNavigationControl(model: model)
-
-                Rectangle()
-                    .fill(Color(nsColor: NSColor.separatorColor))
-                    .frame(width: 1, height: 28)
-
-                ObjectiveDockControl(model: model)
-
-                Toggle(
-                    "Auto Res",
-                    isOn: Binding(
-                        get: { model.isAutomaticResolutionEnabled },
-                        set: { model.setAutomaticResolutionEnabled($0) }
-                    )
-                )
-                .toggleStyle(CheckboxToggleStyle())
-                .font(.system(size: 9))
-                .help(model.automaticResolutionHelp)
-
-                if model.isBottomDockCollapsed {
-                    Spacer(minLength: 0)
-                    Text("CONTROLS")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.secondary)
-                } else {
-                    Rectangle()
-                        .fill(Color(nsColor: NSColor.separatorColor))
-                        .frame(width: 1, height: 28)
-
-                    featureControls
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-
-                Button {
-                    model.setBottomDockCollapsed(!model.isBottomDockCollapsed)
-                } label: {
-                    Image(systemName: model.isBottomDockCollapsed ? "chevron.up" : "chevron.down")
-                        .frame(width: 20, height: 24)
-                }
-                .buttonStyle(.borderless)
-                .help(model.isBottomDockCollapsed ? "Expand camera controls" : "Collapse camera controls")
-
-                Button {
-                    model.setBottomDockDetached(!isDetached)
-                } label: {
-                    Image(systemName: isDetached ? "pin.fill" : "arrow.up.right.and.arrow.down.left")
-                        .frame(width: 20, height: 24)
-                }
-                .buttonStyle(.borderless)
-                .help(isDetached ? "Dock controls below the camera views" : "Detach controls into a floating panel")
-                .padding(.trailing, 7)
-            }
-            .frame(height: model.isBottomDockCollapsed ? 28 : 50)
-            .background(Color.clear)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color.clear)
-    }
-
-    private var dockFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
-        let primaryNames = [
-            "ExposureAuto",
-            "ExposureTime",
-            "AmcamAnalogGainPercent",
-            "AmcamResolutionIndex"
-        ]
-        let primarySet = Set(primaryNames)
-        let primary = primaryNames.compactMap { name in
-            model.featureDescriptors.first(where: { $0.name == name })
-        }
-        return primary + model.featureDescriptors.filter {
-            !primarySet.contains($0.name)
-        }
-    }
-
-    private var featureControls: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                if model.canAccessFeatures {
-                    Button {
-                        model.refreshFeatures()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Refresh camera feature values")
-                    .disabled(model.isFeatureSnapshotLoading ||
-                              model.isFeatureWritePending ||
-                              model.isCameraOperationPending)
-
-                    if model.featureDescriptors.isEmpty {
-                        Text(model.isFeatureSnapshotLoading ? "Loading controls…" : "No feature controls reported")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(
-                            Array(dockFeatureDescriptors.enumerated()),
-                            id: \.element.name
-                        ) { index, descriptor in
-                            if index > 0 &&
-                               dockFeatureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
-                                Rectangle()
-                                    .fill(Color(nsColor: NSColor.separatorColor))
-                                    .frame(width: 1, height: 30)
-                            }
-                            DockCameraFeatureControl(
-                                model: model,
-                                descriptor: descriptor
-                            )
-                        }
-                    }
-                } else {
-                    Text("Connect a camera to load its controls")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.horizontal, 7)
-            .frame(height: 46)
-        }
-    }
-}
-
-private struct CameraConnectionControl: View {
-    @ObservedObject var model: NativeCameraModel
-
-    private var isConnected: Bool {
-        model.openedCameraDeviceID != nil && model.cameraState != .closed
-    }
-
-    private var indicatorColor: Color {
-        switch model.cameraState {
-        case .open, .streaming:
-            return .green
-        case .starting, .stopping:
-            return .orange
-        case .faulted:
-            return .red
-        case .closed:
-            return .secondary
-        @unknown default:
-            return .secondary
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(indicatorColor)
-                .frame(width: 7, height: 7)
-
-            if isConnected {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(model.activeCameraName)
-                        .font(.system(size: 10, weight: .medium))
-                        .lineLimit(1)
-                        .help("Right-click for camera actions")
-                        .contextMenu {
-                            if model.cameraState == .streaming {
-                                Button {
-                                    model.stopAcquisition()
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "stop.fill")
-                                        Text("Stop")
-                                    }
-                                }
-                                .disabled(!model.canStop)
-                            }
-
-                            if model.canClose {
-                                Button {
-                                    model.closeCamera()
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "xmark.circle")
-                                        Text("Close")
-                                    }
-                                }
-                                .disabled(!model.canClose)
-                            }
-                        }
-
-                    Text(model.cameraStateText.uppercased())
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: 112, alignment: .leading)
-            } else if model.cameras.isEmpty {
-                Text(model.isEnumeratingCameras ? "Detecting…" : "No camera")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
-            } else {
-                Picker(
-                    "Camera",
-                    selection: $model.selectedDeviceID
-                ) {
-                    ForEach(model.cameras, id: \.deviceID) { camera in
-                        Text(camera.displayName).tag(camera.deviceID)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(PopUpButtonPickerStyle())
-                .frame(width: 136)
-                .disabled(!model.canConnectDetectedCamera)
-
-                Button("Open + Start") {
-                    model.openAndStartCamera(deviceID: model.selectedDeviceID)
-                }
-                .font(.system(size: 9, weight: .medium))
-                .disabled(!model.canConnectDetectedCamera || model.selectedDeviceID.isEmpty)
-            }
-
-            Button {
-                model.refreshCameras()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .help("Refresh detected cameras")
-            .disabled(model.isEnumeratingCameras || model.isCameraOperationPending)
-        }
-        .padding(.leading, 10)
-    }
-}
-
-private struct SlideNavigationControl: View {
-    @ObservedObject var model: NativeCameraModel
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text("LIVE")
-                .font(.system(size: 8, weight: .semibold))
+    private var workspaceToolbar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "microscope")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.secondary)
 
-            Picker(
-                "Live slide",
-                selection: Binding(
-                    get: { model.activeSlide },
-                    set: { model.selectActiveSlide($0) }
-                )
-            ) {
-                Text("1").tag(NativeSlideID.slide1)
-                Text("2").tag(NativeSlideID.slide2)
+            Text("MICROSCOPE WORKSPACE")
+                .font(.system(size: 10, weight: .bold))
+                .tracking(0.7)
+
+            Spacer()
+
+            Button {
+                selectedDockTab = .cameraControls
+                isDockVisible = true
+            } label: {
+                Label("Camera Controls", systemImage: "slider.horizontal.3")
             }
-            .labelsHidden()
-            .pickerStyle(SegmentedPickerStyle())
-            .frame(width: 76)
-            .help("Select which slide receives the live camera frames")
+            .buttonStyle(.borderless)
+            .font(.system(size: 10, weight: .medium))
+            .help("Show Camera Controls dock")
+
+            Button {
+                selectedDockTab = .smartGallery
+                isDockVisible = true
+            } label: {
+                Label("Smart Gallery", systemImage: "rectangle.stack")
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 10, weight: .medium))
+            .help("Show Smart Gallery dock")
+
+            Button {
+                isDockVisible.toggle()
+            } label: {
+                Image(systemName: isDockVisible ? "sidebar.right" : "sidebar.left")
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .help(isDockVisible ? "Hide dock panel" : "Show dock panel")
+            .accessibilityLabel(isDockVisible ? "Hide dock panel" : "Show dock panel")
         }
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        .background(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.55))
     }
 }
 
-private struct ObjectiveDockControl: View {
-    @ObservedObject var model: NativeCameraModel
-
-    var body: some View {
-        Picker(
-            "Objective",
-            selection: Binding(
-                get: { model.microscopeConfiguration.activeObjectiveID },
-                set: { model.selectMicroscopeObjective($0) }
-            )
-        ) {
-            ForEach(model.microscopeConfiguration.objectives) { objective in
-                Text(String(format: "%.0f×", objective.magnification))
-                    .tag(objective.id)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(MenuPickerStyle())
-        .frame(width: 68)
-        .disabled(model.isCameraOperationPending)
-        .help(
-            "Current manually selected microscope objective. Numerical aperture: " +
-            (model.microscopeConfiguration.objectives.first(where: {
-                $0.id == model.microscopeConfiguration.activeObjectiveID
-            }).map { String(format: "%.2f", $0.numericalAperture) } ?? "unknown") +
-            ". Configure objectives in File → Microscope Configuration."
-        )
-    }
-}
-
-private struct DockCameraFeatureControl: View {
+struct DockCameraFeatureControl: View {
     @ObservedObject var model: NativeCameraModel
     let descriptor: AmscopeCameraFeatureDescriptor
 
@@ -545,7 +302,7 @@ private struct DockCameraFeatureControl: View {
     }
 }
 
-private func featureGroupTitle(_ rawValue: Int) -> String {
+func featureGroupTitle(_ rawValue: Int) -> String {
     switch rawValue {
     case 0: return "General"
     case 1: return "Exposure"

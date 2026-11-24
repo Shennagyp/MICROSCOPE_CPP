@@ -236,8 +236,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 private enum NativeSlideImageSizingMode {
     /// Recalculate image scale whenever this pane's viewport changes.
     case resizable
-    /// Keep a manually selected scale independent of viewport resizing.
-    case fullResolution
+    /// Keep the current/manual scale independent of viewport resizing.
+    case manualScale
 }
 
 private final class NativeSlidePreviewPane: NSView {
@@ -248,6 +248,7 @@ private final class NativeSlidePreviewPane: NSView {
     private let frameStatisticsLabel = NSTextField(labelWithString: "FRAMES 0 · VIEWED 0 · DROPS 0")
     private let selectButton = NSButton(title: "Set Live Target", target: nil, action: nil)
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
+    private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "Maximize", target: nil, action: nil)
     private let headerStack = NSStackView()
 
@@ -299,6 +300,28 @@ private final class NativeSlidePreviewPane: NSView {
             imageSizingButton.widthAnchor.constraint(equalToConstant: 24),
             imageSizingButton.heightAnchor.constraint(equalToConstant: 22)
         ])
+
+        fullResolutionButton.bezelStyle = .rounded
+        fullResolutionButton.controlSize = .small
+        fullResolutionButton.font = NSFont.monospacedDigitSystemFont(
+            ofSize: 10,
+            weight: .semibold
+        )
+        fullResolutionButton.target = self
+        fullResolutionButton.action = #selector(showFullResolutionAction(_:))
+        fullResolutionButton.toolTip =
+            "View the original camera image at 1:1: one camera pixel per physical display pixel."
+        fullResolutionButton.setAccessibilityLabel(
+            "View image at full resolution, 1:1"
+        )
+        fullResolutionButton.setContentHuggingPriority(.required, for: .horizontal)
+        fullResolutionButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        fullResolutionButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            fullResolutionButton.widthAnchor.constraint(equalToConstant: 36),
+            fullResolutionButton.heightAnchor.constraint(equalToConstant: 22)
+        ])
+
         imageView.onSizingModeChanged = { [weak self] in
             self?.updateImageSizingButton()
         }
@@ -321,6 +344,7 @@ private final class NativeSlidePreviewPane: NSView {
         headerStack.addArrangedSubview(spacer)
         headerStack.addArrangedSubview(selectButton)
         headerStack.addArrangedSubview(imageSizingButton)
+        headerStack.addArrangedSubview(fullResolutionButton)
         headerStack.addArrangedSubview(maximizeButton)
 
         // The viewer remains the same fixed-size pane. Only the image
@@ -343,10 +367,10 @@ private final class NativeSlidePreviewPane: NSView {
 
     private func updateImageSizingButton() {
         let isResizable = imageView.sizingMode == .resizable
-        let symbolName = isResizable ? "arrow.left.and.right" : "viewfinder"
+        let symbolName = isResizable ? "lock.open" : "lock.fill"
         let description = isResizable
-            ? "Resizable image mode"
-            : "Full-resolution image mode"
+            ? "Lock current image scale"
+            : "Resume automatic image resizing"
         if #available(macOS 11.0, *) {
             imageSizingButton.image = NSImage(
                 systemSymbolName: symbolName,
@@ -356,13 +380,14 @@ private final class NativeSlidePreviewPane: NSView {
         } else {
             imageSizingButton.image = nil
             imageSizingButton.imagePosition = .noImage
-            imageSizingButton.title = isResizable ? "↔" : "1:1"
+            imageSizingButton.title = isResizable ? "Lock" : "Auto"
         }
         imageSizingButton.toolTip = isResizable
-            ? "Resizable: image follows viewer size. Click to lock the current scale and preserve source resolution."
-            : "Full Resolution: preserve the manual image scale when the viewer changes size. Click to resume automatic resizing."
+            ? "Lock Current Scale: preserve the current image scale when this viewer is resized."
+            : "Auto Resize: resume resizing the image automatically with this viewer."
         imageSizingButton.setAccessibilityLabel(description)
         imageSizingButton.isEnabled = imageView.hasImage
+        fullResolutionButton.isEnabled = imageView.hasImage
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
@@ -414,6 +439,11 @@ private final class NativeSlidePreviewPane: NSView {
         updateImageSizingButton()
     }
 
+    @objc private func showFullResolutionAction(_ sender: NSButton) {
+        imageView.showFullResolution()
+        updateImageSizingButton()
+    }
+
     @objc private func toggleMaximizeAction(_ sender: NSButton) {
         onToggleMaximize?()
     }
@@ -442,7 +472,7 @@ private final class NativeSlideImageView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
         addSubview(imageContainer)
-        toolTip = "Scroll or pinch to zoom · Drag to pan · Double-click toggles image sizing mode"
+        toolTip = "Scroll or pinch to zoom · Drag to pan · Double-click toggles automatic/manual sizing · 1:1 shows full resolution"
     }
 
     required init?(coder: NSCoder) {
@@ -461,7 +491,7 @@ private final class NativeSlideImageView: NSView {
         switch sizingMode {
         case .resizable:
             updateImageContainer(scale: automaticFillScale, origin: nil)
-        case .fullResolution:
+        case .manualScale:
             updateImageContainer(
                 scale: currentScale,
                 origin: imageOrigin
@@ -471,7 +501,7 @@ private final class NativeSlideImageView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        if sizingMode == .fullResolution {
+        if sizingMode == .manualScale {
             lockedScale = actualPixelScale
         }
         updateImageContainer(
@@ -527,7 +557,7 @@ private final class NativeSlideImageView: NSView {
         switch sizingMode {
         case .resizable:
             return automaticFillScale
-        case .fullResolution:
+        case .manualScale:
             return min(lockedScale ?? actualPixelScale, actualPixelScale)
         }
     }
@@ -593,14 +623,27 @@ private final class NativeSlideImageView: NSView {
 
         switch sizingMode {
         case .resizable:
-            sizingMode = .fullResolution
-            lockedScale = actualPixelScale
-            updateImageContainer(scale: currentScale, origin: nil)
-        case .fullResolution:
+            // Lock the scale currently on screen; this is not the same as
+            // switching to native 1:1 resolution.
+            let scaleToLock = currentScale
+            sizingMode = .manualScale
+            lockedScale = scaleToLock
+            updateImageContainer(scale: scaleToLock, origin: imageOrigin)
+        case .manualScale:
             sizingMode = .resizable
             lockedScale = nil
             updateImageContainer(scale: currentScale, origin: nil)
         }
+        onSizingModeChanged?()
+    }
+
+    /// Show the original camera pixels at physical 1:1 scale. This is a
+    /// separate command from locking the current scale.
+    func showFullResolution() {
+        guard currentImage != nil else { return }
+        sizingMode = .manualScale
+        lockedScale = actualPixelScale
+        updateImageContainer(scale: actualPixelScale, origin: nil)
         onSizingModeChanged?()
     }
 
@@ -624,14 +667,6 @@ private final class NativeSlideImageView: NSView {
             y: (anchor.y - oldOrigin.y) / oldScale
         )
 
-        // Manual zoom locks this pane against later automatic resizing when
-        // the split divider changes its viewport dimensions.
-        if sizingMode == .resizable {
-            sizingMode = .fullResolution
-            lockedScale = oldScale
-            onSizingModeChanged?()
-        }
-
         let factor = pow(2, delta)
         let nextScale = min(
             maximumScale,
@@ -639,10 +674,10 @@ private final class NativeSlideImageView: NSView {
         )
         guard abs(nextScale - oldScale) > 0.000001 else { return }
 
-        // Lock only after the scale actually changes. A scroll-down gesture
-        // at the automatic minimum must not disable Resizable mode.
+        // Manual zoom locks this pane only when the scale actually changes.
+        // A scroll-down gesture at the automatic minimum leaves Auto Resize on.
         if sizingMode == .resizable {
-            sizingMode = .fullResolution
+            sizingMode = .manualScale
             onSizingModeChanged?()
         }
         lockedScale = nextScale
@@ -732,13 +767,22 @@ private final class NativeSlideImageView: NSView {
         resizableItem.isEnabled = currentImage != nil
         menu.addItem(resizableItem)
 
+        let manualScaleItem = NSMenuItem(
+            title: "Lock Current Scale",
+            action: #selector(selectManualScaleMode(_:)),
+            keyEquivalent: ""
+        )
+        manualScaleItem.target = self
+        manualScaleItem.state = sizingMode == .manualScale ? .on : .off
+        manualScaleItem.isEnabled = currentImage != nil
+        menu.addItem(manualScaleItem)
+
         let fullResolutionItem = NSMenuItem(
-            title: "Full Resolution / Manual Scale (maximum 1:1)",
-            action: #selector(selectFullResolutionMode(_:)),
+            title: "View Full Resolution (1:1)",
+            action: #selector(showFullResolutionFromMenu(_:)),
             keyEquivalent: ""
         )
         fullResolutionItem.target = self
-        fullResolutionItem.state = sizingMode == .fullResolution ? .on : .off
         fullResolutionItem.isEnabled = currentImage != nil
         menu.addItem(fullResolutionItem)
         return menu
@@ -751,13 +795,15 @@ private final class NativeSlideImageView: NSView {
         }
     }
 
-    @objc private func selectFullResolutionMode(_ sender: Any?) {
+    @objc private func selectManualScaleMode(_ sender: Any?) {
         guard currentImage != nil else { return }
-        if sizingMode != .fullResolution {
+        if sizingMode != .manualScale {
             toggleSizingMode()
         }
-        lockedScale = actualPixelScale
-        updateImageContainer(scale: actualPixelScale, origin: nil)
+    }
+
+    @objc private func showFullResolutionFromMenu(_ sender: Any?) {
+        showFullResolution()
     }
 
     // MARK: - Rendering

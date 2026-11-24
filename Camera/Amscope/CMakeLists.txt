@@ -91,6 +91,20 @@ add_custom_command(TARGET amscope_driver POST_BUILD
 
 option(AMSCOPE_BUILD_QT_ADAPTER "Build the Qt 6 Core adapter" ON)
 option(AMSCOPE_BUILD_PREVIEW_APP "Build the Qt Widgets preview application" ON)
+option(AMSCOPE_BUILD_NATIVE_MAC_APP
+    "Build the native SwiftUI/AppKit macOS application" OFF)
+
+if(AMSCOPE_BUILD_NATIVE_MAC_APP)
+    if(NOT APPLE)
+        message(FATAL_ERROR "The native macOS application can only be built on Apple platforms.")
+    endif()
+    if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+        message(FATAL_ERROR
+            "AMSCOPE_BUILD_NATIVE_MAC_APP requires the Xcode generator. "
+            "Configure a separate build directory with -G Xcode.")
+    endif()
+    enable_language(Swift)
+endif()
 
 # Standalone diagnostics. These tools intentionally use different acquisition
 # paths and are never part of the production camera session or Qt preview.
@@ -192,6 +206,29 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
             "$<INSTALL_INTERFACE:include>")
     target_link_libraries(amscope_qt PUBLIC Amscope::Driver Camera::Qt Qt6::Core)
+endif()
+
+if(AMSCOPE_BUILD_NATIVE_MAC_APP)
+    find_library(AMSCOPE_SWIFTUI_FRAMEWORK SwiftUI REQUIRED)
+    find_library(AMSCOPE_APPKIT_FRAMEWORK AppKit REQUIRED)
+    find_library(AMSCOPE_COREGRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
+
+    add_executable(amscope_native_mac_app MACOSX_BUNDLE
+        app/native_mac/AmscopeNativeApp.swift
+        app/native_mac/MainWindowView.swift
+        app/native_mac/NativePreviewSurface.swift
+        app/native_mac/CameraControlsWindow.swift)
+    target_link_libraries(amscope_native_mac_app PRIVATE
+        Amscope::Driver
+        "${AMSCOPE_SWIFTUI_FRAMEWORK}"
+        "${AMSCOPE_APPKIT_FRAMEWORK}"
+        "${AMSCOPE_COREGRAPHICS_FRAMEWORK}")
+    set_target_properties(amscope_native_mac_app PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.shennagyp.amscope.native"
+        MACOSX_BUNDLE_BUNDLE_VERSION "0.8.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.8.0"
+        XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "13.0"
+        XCODE_ATTRIBUTE_SWIFT_VERSION "5.0")
 endif()
 
 if(BUILD_TESTING AND AMSCOPE_BUILD_QT_ADAPTER)

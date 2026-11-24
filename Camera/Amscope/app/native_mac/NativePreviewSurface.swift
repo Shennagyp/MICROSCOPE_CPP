@@ -847,7 +847,7 @@ private final class NativeSlidePreviewPane: NSView {
         super.layout()
         // At minimum preview width with the dock open, each pane can become
         // too narrow for both bottom plates. The dock retains the controls.
-        microscopeControlsPlate.isHidden = bounds.width < 410
+        microscopeControlsPlate.isHidden = bounds.width < 435
     }
 
     func display(_ image: CGImage) {

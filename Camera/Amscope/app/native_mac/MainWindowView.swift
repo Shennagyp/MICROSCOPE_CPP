@@ -234,17 +234,10 @@ struct DockCameraFeatureControl: View {
     @ObservedObject var model: NativeCameraModel
     let descriptor: AmscopeCameraFeatureDescriptor
 
-    private var isResolutionControl: Bool {
-        descriptor.name == "AmcamResolutionIndex"
-    }
-
     private var editingDisabled: Bool {
         !model.canAccessFeatures ||
         !descriptor.isAvailable ||
-        (isResolutionControl && model.isAutomaticResolutionEnabled) ||
-        !(isResolutionControl
-            ? model.canChangePreviewResolution
-            : descriptor.isWritable) ||
+        !descriptor.isWritable ||
         model.isFeatureWritePending ||
         model.isFeatureSnapshotLoading ||
         model.isCameraOperationPending
@@ -297,16 +290,13 @@ struct DockCameraFeatureControl: View {
             }
         }
         if let reason = descriptor.disabledReason, !reason.isEmpty { parts.append(reason) }
-        if isResolutionControl {
-            parts.append("Changing resolution briefly stops and restarts acquisition")
-        }
         if let error = model.featureError(for: descriptor) { parts.append(error) }
         return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
     private var editor: some View {
-        if !descriptor.isWritable && !isResolutionControl {
+        if !descriptor.isWritable {
             Text(model.displayValue(for: descriptor))
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(.secondary)
@@ -356,17 +346,11 @@ struct DockCameraFeatureControl: View {
                         "",
                         selection: Binding(
                             get: { model.enumerationValue(for: descriptor) },
-                            set: { symbol in
-                                if isResolutionControl {
-                                    model.selectManualPreviewResolution(to: symbol)
-                                } else {
-                                    model.writeEnumeration(symbol, for: descriptor)
-                                }
-                            }
+                            set: { model.writeEnumeration($0, for: descriptor) }
                         )
                     ) {
                         ForEach(descriptor.enumerationValues, id: \.self) { symbol in
-                            Text(displayOption(symbol)).tag(symbol)
+                            Text(symbol).tag(symbol)
                         }
                     }
                     .labelsHidden()
@@ -383,15 +367,6 @@ struct DockCameraFeatureControl: View {
                     .foregroundColor(.secondary)
             }
         }
-    }
-
-    private func displayOption(_ symbol: String) -> String {
-        guard isResolutionControl,
-              let separator = symbol.firstIndex(of: ":") else {
-            return symbol
-        }
-        let dimensions = symbol[symbol.index(after: separator)...]
-        return String(dimensions).replacingOccurrences(of: "x", with: " × ")
     }
 
     private var textEditor: some View {

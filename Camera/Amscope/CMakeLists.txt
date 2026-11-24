@@ -1,4 +1,12 @@
 cmake_minimum_required(VERSION 3.21)
+
+# Use the same deployment target for Ninja builds; XCODE_ATTRIBUTE_* only
+# affects Xcode-generated projects and is ignored by the selected generator.
+if(APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING
+        "Minimum macOS version for Amscope targets")
+endif()
+
 project(AmscopeCameraDriver VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT APPLE)
@@ -229,8 +237,10 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.shennagyp.amscope.native"
         MACOSX_BUNDLE_BUNDLE_VERSION "0.8.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "0.8.0"
-        XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "10.15"
-        XCODE_ATTRIBUTE_SWIFT_VERSION "5.0")
+        OSX_DEPLOYMENT_TARGET "10.15")
+    target_compile_options(amscope_native_mac_app PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
+        "$<$<COMPILE_LANGUAGE:Swift>:5>")
 endif()
 
 if(BUILD_TESTING AND AMSCOPE_BUILD_QT_ADAPTER)

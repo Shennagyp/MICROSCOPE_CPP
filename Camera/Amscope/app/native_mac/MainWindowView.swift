@@ -218,27 +218,32 @@ private struct CameraConnectionControl: View {
                     Text(model.activeCameraName)
                         .font(.system(size: 10, weight: .medium))
                         .lineLimit(1)
+                        .help("Right-click for camera actions")
+                        .contextMenu {
+                            if model.cameraState == .streaming {
+                                Button {
+                                    model.stopAcquisition()
+                                } label: {
+                                    Label("Stop", systemImage: "stop.fill")
+                                }
+                                .disabled(!model.canStop)
+                            }
+
+                            if model.canClose {
+                                Button {
+                                    model.closeCamera()
+                                } label: {
+                                    Label("Close", systemImage: "xmark.circle")
+                                }
+                                .disabled(!model.canClose)
+                            }
+                        }
+
                     Text(model.cameraStateText.uppercased())
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: 112, alignment: .leading)
-
-                if model.cameraState == .open {
-                    Button("Start") { model.startAcquisition() }
-                        .font(.system(size: 9))
-                        .disabled(!model.canStart)
-                }
-                if model.cameraState == .streaming {
-                    Button("Stop") { model.stopAcquisition() }
-                        .font(.system(size: 9))
-                        .disabled(!model.canStop)
-                }
-                if model.canClose {
-                    Button("Close") { model.closeCamera() }
-                        .font(.system(size: 9))
-                        .disabled(!model.canClose)
-                }
             } else if model.cameras.isEmpty {
                 Text(model.isEnumeratingCameras ? "Detecting…" : "No camera")
                     .font(.system(size: 10, weight: .medium))
@@ -263,7 +268,6 @@ private struct CameraConnectionControl: View {
                 .font(.system(size: 9, weight: .medium))
                 .disabled(!model.canConnectDetectedCamera || model.selectedDeviceID.isEmpty)
             }
-
 
             Button {
                 model.refreshCameras()
@@ -356,54 +360,37 @@ private struct DockCameraFeatureControl: View {
     }
 
     private var editorWidth: CGFloat {
-        isResolutionControl ? 118 : 94
+        isResolutionControl ? 128 : 110
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Text(featureGroupTitle(descriptor.group.rawValue))
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundColor(.secondary)
-                if let unit = descriptor.unit, !unit.isEmpty {
-                    Text(unit)
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                if model.featureError(for: descriptor) != nil {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 5, height: 5)
-                }
-            }
-
-            HStack(spacing: 4) {
-                Text(descriptor.displayName)
-                    .font(.system(size: 9, weight: .medium))
-                    .lineLimit(1)
-                    .frame(width: 76, alignment: .leading)
-                if descriptor.isWritable || isResolutionControl {
-                    editor
-                        .frame(width: editorWidth)
-                } else {
-                    editor
-                        .fixedSize(horizontal: true, vertical: false)
-                }
+        HStack(spacing: 6) {
+            if descriptor.isWritable || isResolutionControl {
+                editor
+                    .frame(width: editorWidth)
+            } else {
+                editor
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
         .frame(
-            minWidth: descriptor.isWritable || isResolutionControl ? 200 : 0,
-            minHeight: 40,
-            alignment: .leading
+            minWidth: descriptor.isWritable || isResolutionControl ? editorWidth + 12 : 0,
+            minHeight: 36,
+            alignment: .center
         )
-        .padding(.horizontal, 5)
+        .padding(.horizontal, 6)
         .background(
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: 6)
                 .fill(Color(nsColor: NSColor.controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.65), lineWidth: 0.5)
         )
         .fixedSize(horizontal: true, vertical: false)
         .help(featureHelpText)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(descriptor.displayName)
     }
 
     private var featureHelpText: String {

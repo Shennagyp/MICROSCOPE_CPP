@@ -242,6 +242,7 @@ public:
         cameraStateIndicator_->setMinimumWidth(104);
         statusBar()->addPermanentWidget(cameraStateIndicator_);
 
+        auto* fileMenu = menuBar()->addMenu("&File");
         auto* viewMenu = menuBar()->addMenu("&View");
 
         // Output is a genuine bottom tool window, not a second status strip.
@@ -262,7 +263,6 @@ public:
         outputDock_->setWidget(outputLog_);
         addDockWidget(Qt::BottomDockWidgetArea, outputDock_);
 
-        auto* fileMenu = menuBar()->addMenu("&File");
         cameraControlsDock_ = new QDockWidget(QStringLiteral("Camera Explorer"), this);
         cameraControlsDock_->setObjectName(QStringLiteral("cameraExplorerDock"));
         cameraControlsDock_->setAllowedAreas(

@@ -24,7 +24,7 @@ final class NativeCaptureGalleryStore: ObservableObject {
     @Published private(set) var isCapturing = false
     @Published private(set) var captureErrorMessage: String?
 
-    private let maximumCaptureCount = 80
+    private let maximumVisibleCaptureCount = 80
     private let maximumConcurrentCaptures = 1
     private var pendingCaptureCount = 0
 
@@ -103,17 +103,15 @@ final class NativeCaptureGalleryStore: ObservableObject {
     }
 
     private func trimGallery() {
-        guard captures.count > maximumCaptureCount else { return }
-        let expired = Array(captures.dropFirst(maximumCaptureCount))
-        captures = Array(captures.prefix(maximumCaptureCount))
-        for item in expired {
-            try? FileManager.default.removeItem(at: item.fileURL)
-        }
+        // Limit in-memory gallery rows/thumbnails only. Captures are user data:
+        // old PNG files are never removed automatically by an age/count policy.
+        guard captures.count > maximumVisibleCaptureCount else { return }
+        captures = Array(captures.prefix(maximumVisibleCaptureCount))
     }
 
     private func loadExistingCaptures() {
         let directory = directoryURL
-        let maximumCount = maximumCaptureCount
+        let maximumCount = maximumVisibleCaptureCount
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let loadedItems: [NativeCaptureItem]
@@ -138,12 +136,8 @@ final class NativeCaptureGalleryStore: ObservableObject {
                         return leftDate > rightDate
                     }
 
-                // The gallery retention limit is a disk policy as well as a
-                // presentation limit. Remove old files during startup recovery.
-                for expiredURL in pngURLs.dropFirst(maximumCount) {
-                    try? FileManager.default.removeItem(at: expiredURL)
-                }
-
+                // Keep all capture files on disk. Only the most recent subset
+                // is loaded into the in-memory gallery thumbnail list.
                 loadedItems = pngURLs.prefix(maximumCount).compactMap {
                     NativeCaptureFileCodec.loadCapture(at: $0)
                 }
@@ -299,7 +293,8 @@ private enum NativeCaptureFileCodec {
     private static func copyPixels(of image: CGImage) -> CGImage? {
         guard let sourceProvider = image.dataProvider,
               let copiedData = CGDataProviderCopyData(sourceProvider),
-              let independentProvider = CGDataProvider(data: copiedData) else {
+              let independentProvider = CGDataProvider(data: copiedData),
+              let colorSpace = image.colorSpace else {
             return nil
         }
 
@@ -309,7 +304,7 @@ private enum NativeCaptureFileCodec {
             bitsPerComponent: image.bitsPerComponent,
             bitsPerPixel: image.bitsPerPixel,
             bytesPerRow: image.bytesPerRow,
-            space: image.colorSpace,
+            space: colorSpace,
             bitmapInfo: image.bitmapInfo,
             provider: independentProvider,
             decode: image.decode,

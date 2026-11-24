@@ -37,17 +37,7 @@ struct NativeWorkspaceDock: View {
                 NativeSmartGalleryDock(gallery: model.captureGallery)
             }
         }
-        .padding(.trailing, 38)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .trailing) {
-            VStack(spacing: 1) {
-                dockTabButton(.cameraControls)
-                dockTabButton(.smartGallery)
-            }
-            .padding(.top, 42)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .zIndex(2)
-        }
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 5) {
                 dockChromeButton(
@@ -99,27 +89,51 @@ struct NativeWorkspaceDock: View {
         .help(description)
         .accessibilityLabel(description)
     }
+}
+
+struct NativeWorkspaceDockTabRail: View {
+    @ObservedObject var model: NativeCameraModel
+
+    static let width: CGFloat = 26
+    private let tabHeight: CGFloat = 104
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: 0) {
+                dockTabButton(.cameraControls)
+                dockTabButton(.smartGallery)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(width: Self.width)
+        .frame(maxHeight: .infinity)
+    }
+
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
         let isSelected = model.selectedWorkspaceDockTab == tab
         let accent = Color(nsColor: NSColor.controlAccentColor)
 
         return Button {
             model.selectedWorkspaceDockTab = tab
+            model.isWorkspaceDockVisible = true
         } label: {
-            VStack(spacing: 5) {
+            VStack(spacing: 4) {
                 Image(systemName: tab.symbolName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 14, height: 14)
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 11, height: 11)
 
                 Text(tab.title)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 9, weight: .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .frame(width: 110, height: 14)
+                    .minimumScaleFactor(0.8)
+                    .frame(width: 82, height: 12)
                     .rotationEffect(.degrees(90))
-                    .frame(width: 14, height: 110)
+                    .frame(width: 12, height: 82)
             }
-            .frame(width: 38, height: 136)
+            .frame(width: Self.width, height: tabHeight)
             .background(
                 Rectangle().fill(
                     isSelected
@@ -132,13 +146,13 @@ struct NativeWorkspaceDock: View {
                     isSelected
                         ? accent
                         : Color(nsColor: NSColor.separatorColor),
-                    lineWidth: isSelected ? 1.2 : 0.8
+                    lineWidth: isSelected ? 1 : 0.7
                 )
             )
             .overlay(alignment: .leading) {
                 Rectangle()
                     .fill(isSelected ? Color.white.opacity(0.82) : .clear)
-                    .frame(width: 2)
+                    .frame(width: 1.5)
             }
             .contentShape(Rectangle())
         }
@@ -146,6 +160,7 @@ struct NativeWorkspaceDock: View {
         .foregroundColor(isSelected ? .white : Color(nsColor: NSColor.labelColor))
         .help(tab.title)
         .accessibilityLabel(tab.title)
+        .accessibilityHint("Shows the \\(tab.title) dock")
     }
 }
 

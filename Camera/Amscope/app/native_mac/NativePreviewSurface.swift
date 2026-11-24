@@ -395,7 +395,12 @@ private final class NativeSlidePreviewPane: NSView {
             self?.updateToolButtonStates()
         }
         imageView.onFreezeStateChanged = { [weak self] in
-            self?.updateFreezeButton()
+            guard let self = self else { return }
+            self.updatePresentationState(
+                isActiveTarget: self.currentIsActiveTarget,
+                isMaximized: self.currentIsMaximized
+            )
+            self.updateToolButtonStates()
         }
 
         configureIconButton(
@@ -747,11 +752,6 @@ private final class NativeSlidePreviewPane: NSView {
 
     @objc private func toggleImageFreezeAction(_ sender: NSButton) {
         imageView.toggleImageFreeze()
-        updateFreezeButton()
-        updatePresentationState(
-            isActiveTarget: currentIsActiveTarget,
-            isMaximized: currentIsMaximized
-        )
     }
 
     @objc private func selectPanToolAction(_ sender: NSButton) {
@@ -983,6 +983,17 @@ private final class NativeSlideImageView: NSView {
     func toggleImageFreeze() {
         guard currentImage != nil else { return }
         isImageFrozen.toggle()
+        if !isImageFrozen {
+            // Resuming a moving image returns the pointer to pan mode. A
+            // measurement tool must be selected again, which freezes the
+            // next source frame before drawing a new measurement.
+            toolMode = .pan
+            measurementStart = nil
+            previewMeasurement = nil
+            updateOverlayRendering()
+            window?.invalidateCursorRects(for: self)
+            onOverlayStateChanged?()
+        }
         onFreezeStateChanged?()
     }
 

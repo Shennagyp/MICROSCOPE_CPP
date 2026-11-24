@@ -315,6 +315,9 @@ private final class NativeSlidePreviewPane: NSView {
     var onToggleMaximize: (() -> Void)?
     var onCaptureImage: ((CGImage) -> Void)?
 
+    // The image view owns freeze state; expose it read-only to the frame router.
+    var isImageFrozen: Bool { imageView.isImageFrozen }
+
     private var pulledFrameCount: UInt64 = 0
     private var droppedFrameCount: UInt64 = 0
     private var paneFrameCount: UInt64 = 0

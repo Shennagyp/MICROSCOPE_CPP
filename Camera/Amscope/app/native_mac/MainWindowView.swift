@@ -70,7 +70,10 @@ struct MainWindowView: View {
                 selectedDockTab = .cameraControls
                 isDockVisible = true
             } label: {
-                Label("Camera Controls", systemImage: "slider.horizontal.3")
+                HStack(spacing: 5) {
+                    Image(systemName: "slider.horizontal.3")
+                    Text("Camera Controls")
+                }
             }
             .buttonStyle(.borderless)
             .font(.system(size: 10, weight: .medium))
@@ -80,7 +83,10 @@ struct MainWindowView: View {
                 selectedDockTab = .smartGallery
                 isDockVisible = true
             } label: {
-                Label("Smart Gallery", systemImage: "rectangle.stack")
+                HStack(spacing: 5) {
+                    Image(systemName: "rectangle.stack")
+                    Text("Smart Gallery")
+                }
             }
             .buttonStyle(.borderless)
             .font(.system(size: 10, weight: .medium))

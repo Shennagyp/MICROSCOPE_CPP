@@ -180,6 +180,9 @@ typedef void (^AmscopeCameraLifecycleCompletion)(
                     value:(AmscopeCameraFeatureValue *)value
                completion:(AmscopeFeatureWriteCompletion)completion
     NS_SWIFT_NAME(writeFeatureNamed(_:value:completion:));
+- (void)changePreviewResolution:(NSString *)resolutionSymbol
+                     completion:(AmscopeFeatureWriteCompletion)completion
+    NS_SWIFT_NAME(changePreviewResolution(_:completion:));
 
 
 /// Transfers the newest available frame lease. Returns nil when no frame is

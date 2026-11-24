@@ -1,96 +1,45 @@
 import Foundation
 
-/// Sensor geometry known to the application. Unknown/custom cameras must have
-/// their pixel pitch and current output binning specified in microscope setup.
-enum NativeCameraSensorPreset: String, Codable, CaseIterable, Identifiable {
-    case amscopeMU503
-    case custom
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .amscopeMU503:
-            return "AmScope MU503 · Aptina MT9P006"
-        case .custom:
-            return "Custom camera sensor"
-        }
-    }
-
-    var nominalPixelPitchMicrometers: Double? {
-        switch self {
-        case .amscopeMU503: return 2.2
-        case .custom: return nil
-        }
-    }
-
-    /// Returns the physical sensor-pixel grouping represented by one output
-    /// pixel for a reported camera frame size. nil means the mode is not
-    /// described by this sensor profile and must not be assigned a scale.
-    func binningFactor(
-        imageWidth: Int,
-        imageHeight: Int,
-        customBinningFactor: Double
-    ) -> Double? {
-        guard imageWidth > 0, imageHeight > 0 else { return nil }
-
-        switch self {
-        case .amscopeMU503:
-            // AmScope publishes these MU503 output modes and 1x1, 2x2 and 4x4
-            // binning support. Only exact documented output modes are mapped.
-            switch (imageWidth, imageHeight) {
-            case (2560, 1922): return 1
-            case (1280, 960): return 2
-            case (640, 480): return 4
-            default: return nil
-            }
-
-        case .custom:
-            guard customBinningFactor.isFinite,
-                  customBinningFactor > 0 else {
-                return nil
-            }
-            return customBinningFactor
-        }
-    }
-}
-
-/// Converts source-image pixel distances to specimen-plane micrometers.
-///
-/// Formula:
-/// specimen µm / output pixel =
-///     sensor pixel pitch µm × output binning factor
-///     / (objective magnification × reduction-lens magnification)
-///
-/// This is an optical estimate from configured component specifications.
-/// A stage-micrometer calibration can later replace/refine it if the installed
-/// optical path has tolerances or additional unmodeled elements.
+/// Application-level optical calibration. It contains physical specifications,
+/// not a camera-model lookup or a frame-resolution heuristic.
 struct NativeMicroscopeMeasurementCalibration: Equatable {
+    /// Physical pitch of one photosite on the camera sensor, in micrometers.
     let sensorPixelPitchMicrometers: Double
-    let objectiveMagnification: Double
-    let reductionLensMagnification: Double
-    let sensorPreset: NativeCameraSensorPreset
-    let customBinningFactor: Double
 
-    func micrometersPerSourcePixel(
-        imageWidth: Int,
-        imageHeight: Int
-    ) -> Double? {
+    /// Linear number of physical sensor pixels represented by one output pixel.
+    /// This is 1 for native readout, 2 for 2× binning/downsampling, etc.
+    /// Cropping/ROI alone does not change this factor.
+    let outputPixelFactor: Double
+
+    /// Magnification of the objective currently in the optical path.
+    let objectiveMagnification: Double
+
+    /// Effective combined magnification of the reduction/relay optics between
+    /// objective and sensor (for example, a 0.5× reducer).
+    let reductionLensMagnification: Double
+
+    /// Specimen-plane micrometers represented by one pixel in the source frame.
+    ///
+    /// µm/source-pixel =
+    ///   (sensor pixel pitch × output pixel factor)
+    ///   / (objective magnification × reduction-lens magnification)
+    ///
+    /// This is calculated by the application from the configured component
+    /// specifications. It is independent of camera brand, preview zoom,
+    /// window size and display backing scale.
+    var micrometersPerSourcePixel: Double? {
         guard sensorPixelPitchMicrometers.isFinite,
               sensorPixelPitchMicrometers > 0,
+              outputPixelFactor.isFinite,
+              outputPixelFactor > 0,
               objectiveMagnification.isFinite,
               objectiveMagnification > 0,
               reductionLensMagnification.isFinite,
-              reductionLensMagnification > 0,
-              let binning = sensorPreset.binningFactor(
-                imageWidth: imageWidth,
-                imageHeight: imageHeight,
-                customBinningFactor: customBinningFactor
-              ) else {
+              reductionLensMagnification > 0 else {
             return nil
         }
 
-        let scale = sensorPixelPitchMicrometers * binning /
+        let scale = sensorPixelPitchMicrometers * outputPixelFactor /
             (objectiveMagnification * reductionLensMagnification)
         guard scale.isFinite, scale > 0 else { return nil }
         return scale

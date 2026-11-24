@@ -154,7 +154,6 @@ struct DockCameraFeatureControl: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(width: 82, alignment: .leading)
-                .accessibilityHidden(true)
 
             editor
                 .frame(width: editorWidth, alignment: .leading)

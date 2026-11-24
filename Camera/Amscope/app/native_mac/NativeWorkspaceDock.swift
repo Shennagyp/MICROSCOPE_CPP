@@ -168,51 +168,6 @@ private struct NativeCameraControlsDock: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("MICROSCOPE")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.secondary)
-
-                    Picker(
-                        "Objective",
-                        selection: Binding(
-                            get: { model.microscopeConfiguration.activeObjectiveID },
-                            set: { model.selectMicroscopeObjective($0) }
-                        )
-                    ) {
-                        ForEach(model.microscopeConfiguration.objectives) { objective in
-                            Text(String(format: "%.0f×", objective.magnification))
-                                .tag(objective.id)
-                        }
-                    }
-                    .pickerStyle(PopUpButtonPickerStyle())
-                    .disabled(model.isCameraOperationPending)
-                    .help("Current objective. Configure objectives in File → Microscope Configuration.")
-
-                    HStack {
-                        Text("Live frame destination")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        Spacer(minLength: 6)
-                        Picker(
-                            "Live frame destination",
-                            selection: Binding(
-                                get: { model.activeSlide },
-                                set: { model.selectActiveSlide($0) }
-                            )
-                        ) {
-                            Text("Slide 1").tag(NativeSlideID.slide1)
-                            Text("Slide 2").tag(NativeSlideID.slide2)
-                        }
-                        .labelsHidden()
-                        .pickerStyle(SegmentedPickerStyle())
-                        .frame(width: 132)
-                        .disabled(model.isCameraOperationPending)
-                    }
-                }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("CAMERA FEATURES")
                             .font(.system(size: 13, weight: .bold))
@@ -263,6 +218,72 @@ private struct NativeCameraControlsDock: View {
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MICROSCOPE")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.secondary)
+
+                    Picker(
+                        "Objective",
+                        selection: Binding(
+                            get: { model.microscopeConfiguration.activeObjectiveID },
+                            set: { model.selectMicroscopeObjective($0) }
+                        )
+                    ) {
+                        ForEach(model.microscopeConfiguration.objectives) { objective in
+                            Text(String(format: "%.0f×", objective.magnification))
+                                .tag(objective.id)
+                        }
+                    }
+                    .pickerStyle(PopUpButtonPickerStyle())
+                    .disabled(model.isCameraOperationPending)
+                    .help("Current objective. Configure objectives in File → Microscope Configuration.")
+
+                    Toggle(
+                        "Automatic resolution",
+                        isOn: Binding(
+                            get: { model.isAutomaticResolutionEnabled },
+                            set: { model.setAutomaticResolutionEnabled($0) }
+                        )
+                    )
+                    .font(.system(size: 12))
+                    .disabled(!model.canAccessFeatures ||
+                              model.isCameraOperationPending ||
+                              model.isFeatureWritePending ||
+                              model.isFeatureSnapshotLoading)
+                    .help(model.automaticResolutionHelp)
+
+                    if model.isAutomaticResolutionEnabled {
+                        Text(model.automaticResolutionSummary)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    HStack {
+                        Text("Live frame destination")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        Spacer(minLength: 6)
+                        Picker(
+                            "Live frame destination",
+                            selection: Binding(
+                                get: { model.activeSlide },
+                                set: { model.selectActiveSlide($0) }
+                            )
+                        ) {
+                            Text("Slide 1").tag(NativeSlideID.slide1)
+                            Text("Slide 2").tag(NativeSlideID.slide2)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(SegmentedPickerStyle())
+                        .frame(width: 132)
+                        .disabled(model.isCameraOperationPending)
                     }
                 }
             }
@@ -319,26 +340,6 @@ private struct CameraDockConnectionSection: View {
                     .disabled(!model.canChangePreviewResolution)
                 }
 
-                Toggle(
-                    "Automatic resolution",
-                    isOn: Binding(
-                        get: { model.isAutomaticResolutionEnabled },
-                        set: { model.setAutomaticResolutionEnabled($0) }
-                    )
-                )
-                .font(.system(size: 12))
-                .disabled(!model.canAccessFeatures ||
-                          model.isCameraOperationPending ||
-                          model.isFeatureWritePending ||
-                          model.isFeatureSnapshotLoading)
-                .help(model.automaticResolutionHelp)
-
-                Text(model.isAutomaticResolutionEnabled
-                     ? "Manual selection turns automatic mode off."
-                     : "Changing resolution briefly restarts live preview.")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 2)
         } else if model.canAccessFeatures {

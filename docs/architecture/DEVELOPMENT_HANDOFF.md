@@ -15,19 +15,21 @@
 **Current CI:** Not reported for the active v0.7 Phase 4 source commit.  
 **Latest Phase 4 physical smoke checkout:** `5339c441659b45a3bdb30fdce6971f6dc991f885` (MU503 FrameView preview, Open/Start/Stop/Close; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`)  
 **Current phase:** Phase 4 — extract reusable Qt camera UI  
-**Phase status:** Phases 0–3 are accepted by the project owner. Phase 4's first component, `camera::qtwidgets::FrameView`, passed the owner-reported Release build and 13/13 CTest at implementation source `892b91a`, followed by a successful MU503 Open/Start/changing-frame/Stop/Close smoke check on checkout `5339c44`. The next increment, `camera::qtwidgets::CameraControlPanel`, is implemented on `17d6b0a` and added to the AmScope preview; its local Release build and expanded 14-target CTest suite are pending. The panel remains a host-driven view: no session ownership, enumeration implementation, request scheduling, or backend lifecycle semantics moved into `Camera::QtWidgets`.
+**Phase status:** Phases 0–3 are accepted by the project owner. Phase 4's extracted `camera::qtwidgets::FrameView` passed the owner-reported Release build and 13/13 CTest at `892b91a`, followed by the MU503 preview smoke on checkout `5339c44`. The current Phase 4 UI increment adds the File-menu-only Camera Controls window and the bottom `ImageInfoBar`; the AmScope preview now hosts all camera operations/settings in that window and keeps the main window image-first. The new UI and ImageInfoBar test are committed through source revision `775f2b3`, bringing the expected suite to 15 CTest tests. This increment has not yet been built or tested locally. No camera backend, vendor SDK source, feature descriptor, saturation support, or new SDK call was added.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
 ## Current continuation state — 24 November 2026
 
 - Active branch: `amscope-native-driver-v0.7`.
-- CameraControlPanel source history: contract `a4ca387`, implementation `1559099`, preview/CMake integration `195f0f6`, focused test `5189d40`, preservation of the existing accessory/trigger enablement rules `3795427`, callback-presence gating `17d6b0a`, and explicit `QString` include `cd37af6`. Latest source commit: `cd37af622783f4dc8a5d3ae16782955887a286ce`; later commits update documentation only.
-- Latest locally validated source remains `892b91a57016e570a1e972343f78ed7c42be801c`: Release build including `amscope_preview`, 13/13 CTest passed. This validation predates the new CameraControlPanel.
-- FrameView physical check: owner confirmed the MU503 preview sequence worked on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record is `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This verifies only the FrameView integration at that source boundary.
-- New component: `camera::qtwidgets::CameraControlPanel` in `Camera/QtWidgets`. It consumes common `CameraDeviceInfo`, preserves opaque IDs, exposes Refresh/Open/Start/Stop/Close callbacks, and receives host-supplied coarse lifecycle/pending state. It does not enumerate, own a session, schedule requests or depend on AmScope types.
-- The AmScope preview converts discovered `amscope::CameraInfo` to its common base type and retains enumeration, async requests, lifecycle generations, error reporting and native ownership. Still capture, feature editors, trigger panel and accessory controls remain in the application.
-- Added `camera_qt_widgets_camera_control_panel_tests`; expected total CTest count is now 14. The new panel source/CMake integration is **not yet built or tested locally**; no CI result is recorded for commit `17d6b0a`.
+- Latest Phase 4 UI source commit: `775f2b341e7d8fd61c2071e808c13058721c9d76`. Later commits update the README, inventory and release-plan/handoff documentation.
+- Latest locally validated source remains `892b91a57016e570a1e972343f78ed7c42be801c`: Release build including `amscope_preview`, 13/13 CTest passed. This validation predates the File-menu controls-window and ImageInfoBar change; do not claim the current UI source is built.
+- Previously accepted FrameView physical check: owner confirmed the MU503 live preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This validates the earlier FrameView extraction only, not the new window/info-bar composition.
+- Main UI architecture now in source: main window contains only the FrameView and bottom ImageInfoBar; **File → Camera Controls…** opens a modeless controls window. Camera selection/discovery, Open/Start/Stop/Close, still capture, feature tabs, trigger and accessory controls are all in that window. Discovery is initiated when the window is opened.
+- `camera::qtwidgets::ImageInfoBar` is a backend-neutral display component. The host supplies frame metadata and existing feature values. It does not query the camera, know about feature descriptors, write settings or add backend capability.
+- The info bar shows frame dimensions, pixel format/depth, payload bytes, sequence, frame exposure metadata, event/pull/paint rates, dropped frames, and existing readable image-related feature values. Double-clicking an editable item opens a typed editor; the host requires a complete readback plus an available/readable/writable descriptor, validates with the existing common validator, submits through the existing queued feature-write path, and refreshes values after the write so the display changes from confirmed readback rather than optimistic input.
+- Only already-existing descriptors are exposed. Saturation was an example, not an implementation request: no saturation descriptor or SDK call was added, and no `AmcamCamera`, vendor SDK or other backend source was changed.
+- Added `camera_qt_widgets_image_info_bar_tests`; the current CMake configuration registers **15 CTest tests** in total. The current source has not yet been built/tested locally, and no CI result is recorded for source commit `775f2b3`.
 - **Next local gate:**
 
 ```sh
@@ -36,11 +38,12 @@ cmake --build build/amscope-v07 --config Release --parallel
 ctest --test-dir build/amscope-v07 --output-on-failure
 ```
 
-The build should regenerate CMake because `Camera/QtWidgets/CMakeLists.txt` changed. Require `amscope_preview` to link and all 14/14 CTest tests to pass.
+CMake should regenerate because `Camera/QtWidgets/CMakeLists.txt` changed. Require the entire `amscope_preview` executable to link and all **15/15** CTest tests to pass.
 
-- After the software gate, repeat the MU503 discovery/select/Open/Start/changing-frame/Stop/Close smoke through the newly extracted control panel. The earlier FrameView smoke is not evidence for this later UI change.
-- Next implementation slice after acceptance: extract the descriptor-driven feature editor while keeping feature request ordering, validation/readback policy, generations, and camera operations in the host/backend layer. Then continue with commands, telemetry and capability presentation.
-- Do not claim Phase 4 complete yet. The composed supported-feature read/write interaction and remaining reusable UI extraction are still open; do not run an FPS benchmark for this UI slice.
+- After the software gate, physical smoke-check the new UI: open **File → Camera Controls…**, discover/select the MU503, Open, Start, confirm changing preview frames and bottom frame metadata, Stop and Close. Then double-click one image-related feature that the current descriptors identify as available/readable/writable and verify the displayed value changes only after its queued write and readback. Do not expect saturation unless the camera already advertises it. The earlier FrameView smoke is not evidence for this new UI.
+- No FPS benchmark, new camera capability, or backend qualification is implied. Keep the acquisition/frame path unchanged.
+- After this UI increment passes, the next reusable-UI slice is the descriptor-driven feature editor. Keep request ordering, generations, feature validation, readback policy, camera ownership and backend execution in the host/application layer unless a separate generic UI contract is justified.
+- Do not mark Phase 4 complete until the remaining reusable UI components and its phase-wide exit criteria are met.
 
 > The sections below retain the earlier v0.6 handoff snapshot and historical evidence. Where their branch, phase, or next-action statements conflict with the current continuation state above, this current section and the revised release plan take precedence. The acquisition, session-ownership, frame-lease and performance invariants remain applicable unless the current source and governing plan explicitly supersede them.
 

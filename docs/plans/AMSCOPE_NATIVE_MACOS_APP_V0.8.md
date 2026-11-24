@@ -57,7 +57,7 @@
 
 - [x] Implement a custom AppKit `NSView` hosted by SwiftUI through `NSViewRepresentable`.
 - [x] Invalidate the view through a coalesced main-thread notification from the native bridge; no per-frame SwiftUI observable state is created.
-- [x] Consume the newest lease from the mailbox and release the prior displayed image when replaced or when acquisition stops.
+- [x] Consume the newest lease from the mailbox and release a pane's prior displayed image when a newer frame replaces it; retain the last image across slide switches and Stop/Close.
 - [x] Build each Core Graphics image through a direct-access `CGDataProvider` whose release callback owns the opaque frame lease.
 - [x] Keep no history of frames/images and perform no application-side pixel-buffer copy.
 - [ ] Validate RGB24, RAW8, RAW16, row stride, byte order, dimensions, invalid buffers, view teardown, and provider lifetime on the user's Mac.
@@ -68,17 +68,21 @@
 ## Phase 5 — Native UI and control workflows
 
 - [x] Build the main live-preview window, native application menu, and dedicated camera-controls window.
+- [x] Add side-by-side Slide 1 / Slide 2 AppKit preview panes with a draggable divider and independent maximize/restore controls.
+- [x] Route each incoming frame to the selected slide pane while retaining one last image per slide.
+- [x] Add detected-camera actions that open the selected device and start acquisition through the existing serialized controller.
+- [ ] Verify the new dual-pane layout, active-slide routing, image persistence, and bottom-pane resizing on macOS.
 - [x] Keep camera discovery and lifecycle controls accessible through the File menu.
-- [x] Add the bottom information bar with camera, resolution, pixel format, and acquisition state.
+- [x] Add the resizable bottom split: editable quick feature controls on the left; read-only camera, resolution, pixel-format, acquisition-state, and active-slide information on the right.
 - [x] Update SwiftUI metadata only when dimensions or pixel format change, not on every frame.
 - [x] Prevent overlapping lifecycle requests and selection changes while a camera session is active.
 - [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
-- [x] Make up to three supported writable numeric imaging values (selected from camera descriptors, such as exposure or gain) double-click editable in the bottom information bar; commit through the backend feature-validation path.
+- [x] Expose up to three supported writable numeric imaging values (selected from camera descriptors, such as exposure or gain) as direct text-entry controls in the left bottom pane; commit through the backend feature-validation path.
 - [ ] Port dedicated accessory workflows and telemetry from the existing Qt/native contract.
 - [x] Queue camera Close and wait for completion before application termination.
 - [ ] Verify window detach/close, disconnect/reconnect, and still-running camera behavior on hardware.
 
-**Current limitation:** Native discovery, lifecycle, generic feature reads/writes, and preview are connected. Dedicated accessory workflows, local compile validation, visual QA, and hardware performance validation remain outstanding.
+**Current limitation:** The two-slide UI currently changes only the destination pane for incoming frames. It does not move a physical stage or operate a slide changer; this must be added through the controller later. Dedicated accessory workflows, post-change compile/visual validation, frame-pool validation, and hardware performance validation remain outstanding.
 
 **Gate:** All controls use asynchronous controller requests; no camera call blocks the main actor; UI state cannot issue stale commands to a newly selected device.
 
@@ -90,6 +94,30 @@
 - [x] Keep the Qt application as a separate fallback while parity remains incomplete.
 
 **Gate:** The native UI covers the existing supported camera workflows selected for v0.8 without changing driver semantics.
+
+## Two-slide workspace and information bar (2026-11-24)
+
+The main window now has a detected-camera action row, two side-by-side slide panes,
+and a resizable bottom information split. Each pane has a Set Live Target control
+and its own maximize/restore control. A new frame is routed only to the currently
+selected pane; the other pane retains its last displayed image.
+
+Each detected camera button runs Open followed by Start using the existing
+serialized C++ controller. This is still one camera session, not one session per
+slide. The active-slide choice is a UI routing intent pending future controller
+support for physical slide/stage switching.
+
+The AppKit preview parent is the only consumer of the bridge's frame callback and
+mailbox. Do not add one bridge listener or mailbox consumer per pane. Each pane
+retains at most one provider-backed image lease. With the existing four-slot frame
+pool, the two retained slide images plus a mailbox frame leave one slot for the
+acquisition worker; sustained pool availability and camera drop counts must be
+verified before acceptance.
+
+**Verification pending:** build and launch on macOS; resize the pane divider;
+maximize and restore each pane; switch the live destination repeatedly; confirm
+the inactive slide image does not change; Stop and Close must not erase either
+image; and verify no frame-pool starvation, unexpected drops, or memory growth.
 
 ## Phase 7 — Streaming performance and hardware sign-off
 

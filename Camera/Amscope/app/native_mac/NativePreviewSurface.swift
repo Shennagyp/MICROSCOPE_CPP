@@ -579,8 +579,10 @@ private final class NativeSlideImageView: NSView {
         let nativePixelScale = 1 / backingScale
         let scale = min(
             bounds.width / imageSize.width,
-            bounds.height / imageSize.height,
-            nativePixelScale
+            min(
+                bounds.height / imageSize.height,
+                nativePixelScale
+            )
         )
         guard scale.isFinite, scale > 0 else { return }
 

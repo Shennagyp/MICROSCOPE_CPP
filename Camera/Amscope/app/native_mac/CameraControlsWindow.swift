@@ -4,71 +4,87 @@ struct CameraControlsWindow: View {
     @ObservedObject var model: NativeCameraModel
 
     var body: some View {
-        Form {
-            Section(header: Text("Camera")) {
-                HStack {
-                    Picker("Device", selection: $model.selectedDeviceID) {
-                        Text("Select a camera").tag("")
-                        ForEach(model.cameras, id: \.deviceID) { camera in
-                            Text(camera.displayName).tag(camera.deviceID)
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 14) {
+                GroupBox(label: Text("Camera")) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Picker("Device", selection: $model.selectedDeviceID) {
+                            Text("Select a camera").tag("")
+                            ForEach(model.cameras, id: \.deviceID) { camera in
+                                Text(camera.displayName).tag(camera.deviceID)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .disabled(model.cameraState != .closed ||
+                                  model.isCameraOperationPending ||
+                                  model.isEnumeratingCameras)
+
+                        HStack {
+                            Button("Refresh") {
+                                model.refreshCameras()
+                            }
+                            .disabled(model.isEnumeratingCameras ||
+                                      model.isCameraOperationPending ||
+                                      model.cameraState != .closed)
+
+                            Spacer()
+
+                            if model.isEnumeratingCameras {
+                                Text("Searching…")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        HStack {
+                            Button("Open") {
+                                model.openSelectedCamera()
+                            }
+                            .disabled(!model.canOpen)
+
+                            Button("Close") {
+                                model.closeCamera()
+                            }
+                            .disabled(!model.canClose)
+
+                            Spacer()
+
+                            Text(model.cameraStateText)
+                                .foregroundColor(.secondary)
                         }
                     }
-                    .disabled(model.cameraState != .closed ||
-                              model.isCameraOperationPending ||
-                              model.isEnumeratingCameras)
-
-                    Button("Refresh") {
-                        model.refreshCameras()
-                    }
-                    .disabled(model.isEnumeratingCameras ||
-                              model.isCameraOperationPending ||
-                              model.cameraState != .closed)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                HStack {
-                    Button("Open") {
-                        model.openSelectedCamera()
+                GroupBox(label: Text("Acquisition")) {
+                    HStack {
+                        Button("Start") {
+                            model.startAcquisition()
+                        }
+                        .disabled(!model.canStart)
+
+                        Button("Stop") {
+                            model.stopAcquisition()
+                        }
+                        .disabled(!model.canStop)
+
+                        Spacer()
+
+                        if model.isCameraOperationPending {
+                            Text("Working…")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
-                    .disabled(!model.canOpen)
-
-                    Button("Close") {
-                        model.closeCamera()
-                    }
-                    .disabled(!model.canClose)
-
-                    Spacer()
-
-                    Text(model.cameraStateText)
-                        .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+                NativeFeatureSections(model: model)
             }
-
-            Section(header: Text("Acquisition")) {
-                HStack {
-                    Button("Start") {
-                        model.startAcquisition()
-                    }
-                    .disabled(!model.canStart)
-
-                    Button("Stop") {
-                        model.stopAcquisition()
-                    }
-                    .disabled(!model.canStop)
-
-                    Spacer()
-
-                    if model.isCameraOperationPending {
-                        Text("Working…")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-
-            NativeFeatureSections(model: model)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
         }
-        .padding()
-        .frame(minWidth: 620, minHeight: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             if model.cameras.isEmpty {
                 model.refreshCameras()

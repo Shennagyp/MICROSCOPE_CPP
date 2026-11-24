@@ -220,10 +220,14 @@ independent free-form tab dragging/rearrangement and docking to arbitrary
 window edges are not part of this increment.
 
 Each slide owns a separate floating overlay toolbar. It contains capture,
-pointer/pan, distance measurement, text annotation, and clear-overlay actions.
-Tool selection is local to its slide pane; changing the tool on Slide 1 does not
-change Slide 2's tool state. Existing zoom, pan, sizing, live-target, and
-maximize actions remain per pane.
+freeze/resume, pointer/pan, distance measurement, text annotation, and
+clear-overlay actions. Tool selection and freeze state are local to the slide
+pane; changing the tool on Slide 1 does not change Slide 2's tool state.
+Selecting distance or annotation mode freezes that pane's currently displayed
+source image automatically. Resuming live display returns the tool to Pan mode.
+The camera acquisition continues; the single preview consumer continues
+draining and releasing new leases without replacing the frozen pane image.
+Existing zoom, pan, sizing, live-target, and maximize actions remain per pane.
 
 A distance measurement is made by dragging between two points. Its endpoints
 are converted from viewport coordinates into the original image's pixel grid,
@@ -257,8 +261,10 @@ path has no new consumer, queue, or per-frame SwiftUI observation.
 **Verification pending:** rebuild and inspect on macOS; resize the main dock;
 float and re-dock it; switch Camera Controls / Smart Gallery; capture from both
 slides; confirm output files and startup recovery; verify one-at-a-time capture
-behavior, an 80-thumbnail in-memory limit, and no automatic deletion of older PNGs; select tools independently on both slides;
-drag distance measurements and add notes; pan/zoom and verify overlays remain
+behavior, an 80-thumbnail in-memory limit, and no automatic deletion of older PNGs; select tools independently on both slides; verify Ruler/Annotation
+automatically freezes the pane and Resume returns it to Pan/live display; confirm
+frozen panes continue draining and releasing incoming frame leases; drag distance
+measurements and add notes; pan/zoom and verify overlays remain
 at their original image coordinates; confirm overlays clear on a source
 dimension change; and monitor frame-pool availability, drops, and memory.
 No local build or visual/hardware result is claimed.

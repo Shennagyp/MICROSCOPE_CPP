@@ -11,7 +11,10 @@ struct MainWindowView: View {
         GeometryReader { geometry in
             let maximumDockWidth = max(
                 280,
-                geometry.size.width - minimumPreviewWidth - dockDividerWidth
+                geometry.size.width -
+                    minimumPreviewWidth -
+                    dockDividerWidth -
+                    NativeWorkspaceDockTabRail.width
             )
             let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
 
@@ -53,47 +56,12 @@ struct MainWindowView: View {
                     .frame(maxHeight: .infinity)
                     .layoutPriority(0)
                 }
+
+                NativeWorkspaceDockTabRail(model: model)
+                    .frame(width: NativeWorkspaceDockTabRail.width)
+                    .frame(maxHeight: .infinity)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
-                .overlay(alignment: .topTrailing) {
-                    if !model.isWorkspaceDockVisible {
-                        Menu {
-                            Button {
-                                model.selectedWorkspaceDockTab = .cameraControls
-                                model.isWorkspaceDockFloating = false
-                                model.isWorkspaceDockVisible = true
-                            } label: {
-                                Label("Camera Controls", systemImage: "slider.horizontal.3")
-                            }
-
-                            Button {
-                                model.selectedWorkspaceDockTab = .smartGallery
-                                model.isWorkspaceDockFloating = false
-                                model.isWorkspaceDockVisible = true
-                            } label: {
-                                Label("Smart Gallery", systemImage: "rectangle.stack")
-                            }
-                        } label: {
-                            Image(systemName: "sidebar.right")
-                                .font(.system(size: 14, weight: .semibold))
-                                .frame(width: 34, height: 34)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.94))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.75), lineWidth: 0.8)
-                                )
-                                .shadow(color: .black.opacity(0.14), radius: 4, x: 0, y: 2)
-                        }
-                        .menuStyle(BorderlessButtonMenuStyle())
-                        .padding(12)
-                        .help("Show workspace dock")
-                        .accessibilityLabel("Show workspace dock")
-                        .zIndex(5)
-                    }
-                }
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)
@@ -116,7 +84,6 @@ struct MainWindowView: View {
         }
     }
 }
-
 
 struct NativeWorkspaceDockResizeDivider: NSViewRepresentable {
     let dockWidth: CGFloat

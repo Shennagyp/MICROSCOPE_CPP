@@ -43,63 +43,57 @@ private struct NativeMicroscopePaneControls: View {
         model.previewResolutionDescriptor
     }
 
-    var body: some View {
-        HStack(alignment: .center, spacing: 6) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("OBJECTIVE")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.secondary)
+    private var isLiveTarget: Bool {
+        model.activeSlide == slide
+    }
 
+    var body: some View {
+        HStack(alignment: .center, spacing: 4) {
+            Picker(
+                "Objective",
+                selection: Binding(
+                    get: { model.microscopeConfiguration.activeObjectiveID },
+                    set: { model.selectMicroscopeObjective($0) }
+                )
+            ) {
+                ForEach(model.microscopeConfiguration.objectives) { objective in
+                    Text(String(format: "%.0f×", objective.magnification))
+                        .tag(objective.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(PopUpButtonPickerStyle())
+            .font(.system(size: 9))
+            .frame(width: 56)
+            .disabled(model.isCameraOperationPending)
+            .help("Select the active microscope objective")
+
+            if let descriptor = resolutionDescriptor {
                 Picker(
-                    "Objective",
+                    "Resolution",
                     selection: Binding(
-                        get: { model.microscopeConfiguration.activeObjectiveID },
-                        set: { model.selectMicroscopeObjective($0) }
+                        get: { model.selectedPreviewResolutionSymbol ?? "" },
+                        set: { model.selectManualPreviewResolution(to: $0) }
                     )
                 ) {
-                    ForEach(model.microscopeConfiguration.objectives) { objective in
-                        Text(String(format: "%.0f×", objective.magnification))
-                            .tag(objective.id)
+                    if model.selectedPreviewResolutionSymbol == nil {
+                        Text("Select…").tag("")
+                    }
+                    ForEach(descriptor.enumerationValues, id: \.self) { symbol in
+                        Text(resolutionOptionTitle(symbol)).tag(symbol)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(PopUpButtonPickerStyle())
-                .frame(width: 62)
-                .disabled(model.isCameraOperationPending)
-                .help("Select the active microscope objective")
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("RESOLUTION")
-                    .font(.system(size: 8, weight: .bold))
+                .font(.system(size: 9))
+                .frame(width: 84)
+                .disabled(!model.canChangePreviewResolution)
+                .help("Choose a resolution. Manual selection disables automatic resolution.")
+            } else {
+                Text(model.canAccessFeatures ? "Unavailable" : "—")
+                    .font(.system(size: 9))
                     .foregroundColor(.secondary)
-
-                if let descriptor = resolutionDescriptor {
-                    Picker(
-                        "Resolution",
-                        selection: Binding(
-                            get: { model.selectedPreviewResolutionSymbol ?? "" },
-                            set: { model.selectManualPreviewResolution(to: $0) }
-                        )
-                    ) {
-                        if model.selectedPreviewResolutionSymbol == nil {
-                            Text("Select…").tag("")
-                        }
-                        ForEach(descriptor.enumerationValues, id: \.self) { symbol in
-                            Text(resolutionOptionTitle(symbol)).tag(symbol)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(PopUpButtonPickerStyle())
-                    .frame(width: 98)
-                    .disabled(!model.canChangePreviewResolution)
-                    .help("Choose a resolution. Manual selection disables automatic resolution.")
-                } else {
-                    Text(model.canAccessFeatures ? "Unavailable" : "—")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .frame(width: 98, height: 22, alignment: .leading)
-                }
+                    .frame(width: 84, height: 20, alignment: .leading)
             }
 
             Toggle(
@@ -109,7 +103,7 @@ private struct NativeMicroscopePaneControls: View {
                     set: { model.setAutomaticResolutionEnabled($0) }
                 )
             )
-            .font(.system(size: 9, weight: .semibold))
+            .font(.system(size: 8, weight: .semibold))
             .toggleStyle(SwitchToggleStyle())
             .disabled(resolutionDescriptor == nil ||
                       !model.canAccessFeatures ||
@@ -117,12 +111,45 @@ private struct NativeMicroscopePaneControls: View {
                       model.isFeatureWritePending ||
                       model.isFeatureSnapshotLoading)
             .help(model.automaticResolutionHelp)
+
+            Button {
+                model.selectActiveSlide(slide)
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(isLiveTarget ? "LIVE" : "SET LIVE")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .foregroundColor(isLiveTarget ? Color.red : Color.primary)
+                .padding(.horizontal, 5)
+                .frame(height: 21)
+                .background(
+                    Capsule().fill(
+                        isLiveTarget
+                            ? Color.red.opacity(0.12)
+                            : Color.primary.opacity(0.07)
+                    )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isLiveTarget)
+            .help(
+                isLiveTarget
+                    ? "\(slide.title) is receiving the live camera feed."
+                    : "Route the live camera feed to \(slide.title)."
+            )
+            .accessibilityLabel(
+                isLiveTarget
+                    ? "\(slide.title) is the live feed destination"
+                    : "Route the live camera feed to \(slide.title)"
+            )
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
         .fixedSize(horizontal: true, vertical: true)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(slide.title) microscope controls")
+        .accessibilityLabel("\(slide.title) microscope and live-feed controls")
     }
 
     private func resolutionOptionTitle(_ symbol: String) -> String {
@@ -142,7 +169,6 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     let model: NativeCameraModel
     let activeSlide: NativeSlideID
     let measurementCalibration: NativeMicroscopeMeasurementCalibration?
-    let onActiveSlideChanged: (NativeSlideID) -> Void
     let onCapture: (NativeSlideID, CGImage) -> Void
 
     func makeNSView(context: Context) -> NativeDualPreviewNSView {
@@ -152,7 +178,6 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
             activeSlide: activeSlide,
             measurementCalibration: measurementCalibration,
             model: model,
-            onActiveSlideChanged: onActiveSlideChanged,
             onCapture: onCapture
         )
         return view
@@ -164,7 +189,6 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
             activeSlide: activeSlide,
             measurementCalibration: measurementCalibration,
             model: model,
-            onActiveSlideChanged: onActiveSlideChanged,
             onCapture: onCapture
         )
     }
@@ -181,7 +205,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var maximizedSlide: NativeSlideID?
     private var previousDividerFraction: CGFloat = 0.5
     private var didSetInitialSplitPosition = false
-    private var onActiveSlideChanged: ((NativeSlideID) -> Void)?
     private var onCapture: ((NativeSlideID, CGImage) -> Void)?
     private let minimumPaneWidth: CGFloat = 240
     private var didConfigureSubviews = false
@@ -217,12 +240,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         splitView.autoresizingMask = [.width, .height]
         addSubview(splitView)
 
-        slideOnePane.onSelectLiveTarget = { [weak self] in
-            self?.selectActiveSlide(.slide1)
-        }
-        slideTwoPane.onSelectLiveTarget = { [weak self] in
-            self?.selectActiveSlide(.slide2)
-        }
         slideOnePane.onToggleMaximize = { [weak self] in
             self?.toggleMaximizedSlide(.slide1)
         }
@@ -254,7 +271,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         activeSlide: NativeSlideID,
         measurementCalibration: NativeMicroscopeMeasurementCalibration?,
         model: NativeCameraModel,
-        onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
         onCapture: @escaping (NativeSlideID, CGImage) -> Void
     ) {
         if self.bridge !== bridge {
@@ -271,18 +287,12 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         slideTwoPane.updateMeasurementCalibration(measurementCalibration)
         slideOnePane.updateMicroscopeControls(model)
         slideTwoPane.updateMicroscopeControls(model)
-        self.onActiveSlideChanged = onActiveSlideChanged
         self.onCapture = onCapture
         setActiveSlide(activeSlide)
 
         // Recover a frame if the view was recreated while a notification
         // was already pending. This remains the single mailbox consumer.
         consumeLatestFrame()
-    }
-
-    private func selectActiveSlide(_ slide: NativeSlideID) {
-        setActiveSlide(slide)
-        onActiveSlideChanged?(slide)
     }
 
     private func setActiveSlide(_ slide: NativeSlideID) {
@@ -421,7 +431,6 @@ private final class NativeSlidePreviewPane: NSView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
     private let frameStatisticsLabel = NSTextField(labelWithString: "FRAMES 0 · VIEWED 0 · DROPS 0")
-    private let selectButton = NSButton(title: "Set Live Target", target: nil, action: nil)
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "", target: nil, action: nil)
@@ -440,7 +449,6 @@ private final class NativeSlidePreviewPane: NSView {
     private let microscopeControlsPlate = NSView()
     private var microscopeControlsHost: NSHostingView<NativeMicroscopePaneControls>?
 
-    var onSelectLiveTarget: (() -> Void)?
     var onToggleMaximize: (() -> Void)?
     var onCaptureImage: ((CGImage) -> Void)?
 
@@ -481,11 +489,6 @@ private final class NativeSlidePreviewPane: NSView {
         frameStatisticsLabel.textColor = NSColor.secondaryLabelColor
         frameStatisticsLabel.lineBreakMode = .byTruncatingTail
         frameStatisticsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        selectButton.bezelStyle = .rounded
-        selectButton.controlSize = .small
-        selectButton.target = self
-        selectButton.action = #selector(selectLiveTargetAction(_:))
 
         imageSizingButton.bezelStyle = .texturedRounded
         imageSizingButton.controlSize = .small
@@ -610,7 +613,6 @@ private final class NativeSlidePreviewPane: NSView {
         actionStack.distribution = .fill
         actionStack.spacing = 5
         actionStack.translatesAutoresizingMaskIntoConstraints = false
-        actionStack.addArrangedSubview(selectButton)
         actionStack.addArrangedSubview(imageSizingButton)
         actionStack.addArrangedSubview(fullResolutionButton)
         actionStack.addArrangedSubview(freezeButton)
@@ -883,8 +885,6 @@ private final class NativeSlidePreviewPane: NSView {
             statusLabel.textColor = imageView.isImageFrozen
                 ? NSColor.systemOrange
                 : NSColor.systemRed
-            selectButton.title = imageView.isImageFrozen ? "FROZEN" : "LIVE"
-            selectButton.isEnabled = false
         } else {
             statusLabel.stringValue = imageView.hasImage
                 ? (imageView.isImageFrozen ? "FROZEN IMAGE" : "HELD IMAGE")
@@ -892,10 +892,7 @@ private final class NativeSlidePreviewPane: NSView {
             statusLabel.textColor = imageView.isImageFrozen
                 ? NSColor.systemOrange
                 : NSColor.secondaryLabelColor
-            selectButton.title = "Switch Live"
-            selectButton.isEnabled = true
         }
-        selectButton.isHidden = false
         layer?.borderWidth = 1
         layer?.borderColor = isActiveTarget
             ? NSColor.systemRed.cgColor
@@ -918,10 +915,6 @@ private final class NativeSlidePreviewPane: NSView {
         maximizeButton.toolTip = maximizeDescription
         maximizeButton.setAccessibilityLabel(maximizeDescription)
         updateFreezeButton()
-    }
-
-    @objc private func selectLiveTargetAction(_ sender: NSButton) {
-        onSelectLiveTarget?()
     }
 
     @objc private func toggleImageSizingModeAction(_ sender: NSButton) {

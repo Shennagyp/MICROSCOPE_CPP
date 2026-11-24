@@ -155,11 +155,15 @@ void CameraControlPanel::updateControls() {
         state_.lifecycle == CameraPanelLifecycleState::Open;
     const bool streaming =
         state_.lifecycle == CameraPanelLifecycleState::Streaming;
+    const bool transitioning =
+        state_.lifecycle == CameraPanelLifecycleState::Starting ||
+        state_.lifecycle == CameraPanelLifecycleState::Stopping;
 
     const bool idle =
         !state_.discoveryPending &&
         !state_.lifecycleRequestPending &&
-        !state_.otherOperationPending;
+        !state_.otherOperationPending &&
+        !transitioning;
 
     deviceSelector_->setEnabled(closed && idle);
     refreshButton_->setEnabled(

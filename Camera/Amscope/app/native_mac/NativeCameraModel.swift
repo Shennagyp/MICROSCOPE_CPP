@@ -43,7 +43,8 @@ final class NativeCameraModel: ObservableObject {
     var canOpen: Bool {
         cameraState == .closed &&
             !selectedDeviceID.isEmpty &&
-            !isCameraOperationPending
+            !isCameraOperationPending &&
+            !isEnumeratingCameras
     }
 
     var canClose: Bool {

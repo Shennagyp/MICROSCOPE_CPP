@@ -182,6 +182,31 @@ private struct NativeMicroscopeQuickControls: View {
                       model.isFeatureWritePending ||
                       model.isFeatureSnapshotLoading)
             .help(model.automaticResolutionHelp)
+
+            Divider()
+                .frame(height: 22)
+
+            HStack(spacing: 5) {
+                Text("Live to")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                Picker(
+                    "Live frame destination",
+                    selection: Binding(
+                        get: { model.activeSlide },
+                        set: { model.selectActiveSlide($0) }
+                    )
+                ) {
+                    Text("Slide 1").tag(NativeSlideID.slide1)
+                    Text("Slide 2").tag(NativeSlideID.slide2)
+                }
+                .labelsHidden()
+                .pickerStyle(SegmentedPickerStyle())
+                .frame(width: 112)
+                .disabled(model.isCameraOperationPending)
+                .help("Choose which slide receives the live camera frames")
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

@@ -226,19 +226,23 @@ changes, but source audits do not establish that the product compiles or runs.
 With the Qt adapter and standalone preview app disabled, CTest should register
 15 deterministic tests: five Camera/Common tests, six AmScope tests and four
 application policy/geometry tests. Build the native app and all test targets,
-then run the complete CTest suite:
+then run the complete CTest suite. The Xcode generator is required because this
+application enables Swift; do not use the default Unix Makefiles generator:
 
 ```bash
-cmake -S . -B build/optika-b293-verify \
+cmake -S . -B build/optika-b293-xcode -G Xcode \
   -DOPTIKA_BUILD_NATIVE_APP=ON \
   -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
   -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
-  -DBUILD_TESTING=ON \
-  -DCMAKE_BUILD_TYPE=Release
+  -DBUILD_TESTING=ON
 
-cmake --build build/optika-b293-verify --parallel
-ctest --test-dir build/optika-b293-verify --output-on-failure
+cmake --build build/optika-b293-xcode --config Release --parallel
+ctest --test-dir build/optika-b293-xcode -C Release --output-on-failure
 ```
+
+Use a new build directory when switching generators. CMake caches the selected
+generator in each build tree and cannot convert an existing Unix Makefiles
+directory into an Xcode directory.
 
 Only after build and CTest pass should the native app be launched for manual
 UI checks. Camera-connected acquisition, resolution changes, freeze behavior,

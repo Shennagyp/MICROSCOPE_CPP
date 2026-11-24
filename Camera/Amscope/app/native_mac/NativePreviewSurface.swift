@@ -286,6 +286,8 @@ private final class NativeSlidePreviewPane: NSView {
         wantsLayer = true
         layer?.cornerRadius = 4
         layer?.masksToBounds = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.isOpaque = false
 
         statusLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         statusLabel.textColor = NSColor.secondaryLabelColor
@@ -346,6 +348,7 @@ private final class NativeSlidePreviewPane: NSView {
         // symbols, and labels remain normal opaque controls.
         headerStack.wantsLayer = true
         headerStack.layer?.backgroundColor = NSColor.clear.cgColor
+        headerStack.layer?.isOpaque = false
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.distribution = .fill

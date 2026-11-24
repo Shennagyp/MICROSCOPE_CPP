@@ -98,10 +98,12 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
     if(NOT APPLE)
         message(FATAL_ERROR "The native macOS application can only be built on Apple platforms.")
     endif()
-    if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
         message(FATAL_ERROR
-            "AMSCOPE_BUILD_NATIVE_MAC_APP requires the Xcode generator. "
-            "Configure a separate build directory with -G Xcode.")
+            "AMSCOPE_BUILD_NATIVE_MAC_APP requires the Ninja generator. "
+            "The standalone Command Line Tools toolchain is sufficient; "
+            "full Xcode and xcodebuild are not required. "
+            "Configure a separate build directory with -G Ninja.")
     endif()
     enable_language(Swift)
 endif()

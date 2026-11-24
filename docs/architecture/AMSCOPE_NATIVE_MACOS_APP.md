@@ -2,7 +2,7 @@
 
 **Branch:** `amscope-native-app-mac.v.0.8`  
 **Base:** `amscope-native-driver-0.7` (`17067f3c5b10a4bb0e748297bbd34ada295bcc43`)  
-**Status:** Architecture baseline; implementation not yet validated on macOS hardware.
+**Status:** Architecture baseline and initial SwiftUI/AppKit shell committed. Camera integration and macOS build/hardware validation are still pending.
 
 ## 1. Objective
 

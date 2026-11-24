@@ -40,6 +40,7 @@ struct MainWindowView: View {
                             model.setWorkspaceDockWidth($0, maximum: maximumDockWidth)
                         }
                     )
+                    .frame(width: dockDividerWidth, maxHeight: .infinity)
 
                     NativeWorkspaceDock(
                         model: model,

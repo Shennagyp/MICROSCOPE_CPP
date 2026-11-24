@@ -451,9 +451,6 @@ public:
         cameraControlsDock_->setWidget(controlsContent);
         addDockWidget(Qt::RightDockWidgetArea, cameraControlsDock_);
         viewMenu->addAction(cameraControlsDock_->toggleViewAction());
-        resizeDocks({cameraControlsDock_}, {410}, Qt::Horizontal);
-        resizeDocks({infoDock}, {54}, Qt::Vertical);
-
         preview_->setFramePresentedCallback([this]() {
             const double monotonicSeconds = std::chrono::duration<double>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();

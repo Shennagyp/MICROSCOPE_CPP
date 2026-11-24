@@ -27,9 +27,9 @@ public:
     using CameraListResult = std::variant<std::vector<CameraInfo>, CameraError>;
 
     // These callbacks execute on the controller's command worker. UI adapters
-    // must marshal results to their UI thread. FrameAvailableCallback is the
-    // exception: it is invoked on the acquisition worker only when the
-    // single-slot mailbox transitions to notification-pending.
+    // must marshal results to their UI thread. FrameAvailableCallback is
+    // invoked by a publisher when the latch is first set, or by a consumer
+    // during the race-safe re-arm path. It must only enqueue/invalidate UI work.
     using LifecycleCallback =
         std::function<void(RequestId, std::uint64_t, LifecycleResult)>;
     using CameraListCallback =

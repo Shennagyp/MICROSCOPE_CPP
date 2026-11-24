@@ -172,7 +172,7 @@ not only by assigning a clear fill to an inner control stack.
 - The main `NSWindow` is non-opaque with a clear background.
 - The `NSHostingView` and native window content view use clear, non-opaque
   backing layers.
-- Each slide pane and its upper control header use clear, non-opaque layers.
+- Each slide pane and its specimen annotation/action plates use clear, non-opaque parent surfaces; localized annotation plates provide contrast behind their contents.
 - The bottom dock's outer stack and control row use clear SwiftUI backgrounds.
 
 The former full-width upper slide header is removed. Slide identity, live/held

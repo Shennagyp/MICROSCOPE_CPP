@@ -160,6 +160,21 @@ final class NativeCameraModel: ObservableObject {
         activeSlide = slide
     }
 
+    /// Show the requested workspace tool from the permanent edge rail.
+    /// Selecting from the rail always restores the in-window dock, avoiding
+    /// stale floating state after a panel/window close transition.
+    func showWorkspaceDock(_ tab: NativeWorkspaceDockTab) {
+        selectedWorkspaceDockTab = tab
+        isWorkspaceDockFloating = false
+        isWorkspaceDockVisible = true
+    }
+
+    /// Hide the workspace tool dock without affecting camera or gallery state.
+    func closeWorkspaceDock() {
+        isWorkspaceDockVisible = false
+        isWorkspaceDockFloating = false
+    }
+
     func setWorkspaceDockWidth(_ width: CGFloat, maximum: CGFloat = 520) {
         guard width.isFinite, maximum.isFinite else { return }
         let upperBound = max(280, min(520, maximum))

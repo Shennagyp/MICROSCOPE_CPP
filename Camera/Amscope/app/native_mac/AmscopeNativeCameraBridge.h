@@ -38,7 +38,7 @@ typedef NS_ENUM(NSInteger, AmscopeNativeCameraState) {
 @property(nonatomic, readonly) uint32_t strideBytes;
 @property(nonatomic, readonly) NSUInteger byteCount;
 @property(nonatomic, readonly) NSInteger pixelFormat;
-- (nullable CGImageRef)newCGImage CF_RETURNS_RETAINED;
+- (nullable CGImageRef)createCGImage CF_RETURNS_RETAINED NS_SWIFT_NAME(createCGImage());
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
 @end
@@ -158,20 +158,28 @@ typedef void (^AmscopeCameraLifecycleCompletion)(
 @property(nonatomic, readonly) uint64_t framesPulled;
 @property(nonatomic, readonly) uint64_t imageEventsReceived;
 
-- (void)enumerateCamerasWithCompletion:(AmscopeCameraListCompletion)completion;
+- (void)enumerateCamerasWithCompletion:(AmscopeCameraListCompletion)completion
+    NS_SWIFT_NAME(enumerateCameras(completion:));
 - (void)openDeviceID:(NSString *)deviceID
-          completion:(AmscopeCameraLifecycleCompletion)completion;
-- (void)closeWithCompletion:(AmscopeCameraLifecycleCompletion)completion;
-- (void)startWithCompletion:(AmscopeCameraLifecycleCompletion)completion;
-- (void)stopWithCompletion:(AmscopeCameraLifecycleCompletion)completion;
+          completion:(AmscopeCameraLifecycleCompletion)completion
+    NS_SWIFT_NAME(openDeviceID(_:completion:));
+- (void)closeWithCompletion:(AmscopeCameraLifecycleCompletion)completion
+    NS_SWIFT_NAME(close(completion:));
+- (void)startWithCompletion:(AmscopeCameraLifecycleCompletion)completion
+    NS_SWIFT_NAME(start(completion:));
+- (void)stopWithCompletion:(AmscopeCameraLifecycleCompletion)completion
+    NS_SWIFT_NAME(stop(completion:));
 
 - (void)requestFeatureDescriptorsWithCompletion:
-    (AmscopeFeatureDescriptorsCompletion)completion;
+    (AmscopeFeatureDescriptorsCompletion)completion
+    NS_SWIFT_NAME(requestFeatureDescriptors(completion:));
 - (void)readFeatureNamed:(NSString *)name
-              completion:(AmscopeFeatureReadCompletion)completion;
+              completion:(AmscopeFeatureReadCompletion)completion
+    NS_SWIFT_NAME(readFeatureNamed(_:completion:));
 - (void)writeFeatureNamed:(NSString *)name
                     value:(AmscopeCameraFeatureValue *)value
-               completion:(AmscopeFeatureWriteCompletion)completion;
+               completion:(AmscopeFeatureWriteCompletion)completion
+    NS_SWIFT_NAME(writeFeatureNamed(_:value:completion:));
 
 
 /// Transfers the newest available frame lease. Returns nil when no frame is

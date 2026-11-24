@@ -872,6 +872,43 @@ const camera::Frame *frameFromStorage(void *storage) {
     }
 }
 
+- (void)changePreviewResolution:(NSString *)resolutionSymbol
+                     completion:(AmscopeFeatureWriteCompletion)completion {
+    if (!completion)
+        return;
+
+    const std::string nativeSymbol = utf8String(resolutionSymbol);
+    AmscopeFeatureWriteCompletion completionCopy = [completion copy];
+    __weak AmscopeNativeCameraBridge *weakSelf = self;
+    const auto requestID = [self controller]->requestChangePreviewResolution(
+        nativeSymbol,
+        [weakSelf, completionCopy](
+            std::uint64_t completedRequestID,
+            std::uint64_t sessionGeneration,
+            amscope::native_mac::NativeCameraController::FeatureWriteResult result) {
+            NSError *error = nil;
+            if (const auto *failure =
+                    std::get_if<camera::CameraFeatureAccessError>(&result)) {
+                error = errorFromFeatureAccessError(*failure);
+            }
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                AmscopeNativeCameraBridge *target = weakSelf;
+                if (target &&
+                    [target controller]->isSessionCurrent(sessionGeneration)) {
+                    completionCopy(error, completedRequestID, sessionGeneration);
+                }
+            });
+        });
+
+    if (requestID == 0) {
+        NSError *error = requestRejectedError(@"Change preview resolution");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completionCopy(error, 0, 0);
+        });
+    }
+}
+
 - (AmscopeFrameLease *)takeLatestFrame {
     if (![self controller])
         return nil;

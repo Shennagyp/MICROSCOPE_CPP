@@ -132,6 +132,39 @@ native target build on the user's Mac. No app launch, camera streaming,
 pixel-format, lease-lifetime, or hardware performance result is claimed from
 the compiler diagnostics alone.
 
+
+## Second standalone Swift build findings (2026-11-24)
+
+After the first corrections were pulled, the next native target build no longer
+reported the earlier `NSError` conversion or SwiftUI `StateMacro` errors.
+It exposed:
+
+- Swift 6.4 imports the variadic Objective-C `NSLog` API as unavailable. The
+  termination path no longer calls it.
+- Swift imports the Objective-C bridge completion blocks as Sendable closures.
+  The bridge implementation explicitly dispatches every camera lifecycle,
+  enumeration, feature, and acquisition-error callback to the main queue. The
+  model now uses `MainActor.assumeIsolated` at those documented callback
+  boundaries. This preserves synchronous delivery on the existing main queue;
+  it does not add a second dispatch or create per-frame Swift tasks.
+- The feature-write callback previously captured the Objective-C feature
+  descriptor object. It now captures only the feature name string, avoiding a
+  non-Sendable Objective-C object crossing the imported Sendable closure.
+
+Application termination now treats a failed camera close as a recoverable
+failure: the application remains open, refreshes the model's camera state,
+and reports the error rather than silently quitting while a camera session may
+still be active.
+
+These changes remain in the UI/control plane. They do not modify the vendor
+callback, event queue, acquisition worker, `Amcam_PullImageV4`, frame pool,
+frame leases, or latest-frame mailbox.
+
+**Build status remains pending.** The reported build stopped at Swift linking
+because of the `NSLog` compile error. The changes above have been committed,
+but the native target must be rebuilt on the user's Mac to verify them. No
+application launch or camera-streaming result is claimed.
+
 ## Implementation rules
 
 - Do not change `AmcamCamera.cpp`, the SDK callback, event queue, pull loop, or frame-pool layout for UI convenience.

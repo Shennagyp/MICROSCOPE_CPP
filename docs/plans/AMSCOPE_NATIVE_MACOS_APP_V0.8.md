@@ -437,9 +437,9 @@ layouts and independent tab dragging are deferred.
 
 The preview image is captured from the pane's current `CGImage`, not by calling
 the vendor SDK's dedicated still-capture operation. Captures are PNG files in
-the user's Pictures/AmScope Captures folder. Gallery retention is bounded to
-80 files, only one capture is processed at a time, and thumbnails are generated
-asynchronously. The capture path copies image pixels before encoding, avoiding
+the user's Pictures/AmScope Captures folder. Gallery rendering loads at most the 80 most recent thumbnails into memory;
+older PNG captures remain on disk and are not deleted automatically. Only one
+capture is processed at a time, and thumbnails are generated asynchronously. The capture path copies image pixels before encoding, avoiding
 long retention of a frame-pool lease.
 
 Per-slide tool overlays store points in source-image pixel coordinates. The

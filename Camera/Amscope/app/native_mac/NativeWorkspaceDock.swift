@@ -156,6 +156,10 @@ struct NativeWorkspaceDockTabRail: View {
 private struct NativeCameraControlsDock: View {
     @ObservedObject var model: NativeCameraModel
 
+    private var additionalFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
+        model.featureDescriptors.filter { $0.name != "AmcamResolutionIndex" }
+    }
+
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 14) {
@@ -183,17 +187,6 @@ private struct NativeCameraControlsDock: View {
                     .pickerStyle(PopUpButtonPickerStyle())
                     .disabled(model.isCameraOperationPending)
                     .help("Current objective. Configure objectives in File → Microscope Configuration.")
-
-                    Toggle(
-                        "Automatic resolution",
-                        isOn: Binding(
-                            get: { model.isAutomaticResolutionEnabled },
-                            set: { model.setAutomaticResolutionEnabled($0) }
-                        )
-                    )
-                    .font(.system(size: 12))
-                    .disabled(!model.canAccessFeatures || model.isCameraOperationPending)
-                    .help(model.automaticResolutionHelp)
 
                     HStack {
                         Text("Live frame destination")
@@ -245,19 +238,19 @@ private struct NativeCameraControlsDock: View {
                         Text("Open a camera to load its controls.")
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
-                    } else if model.featureDescriptors.isEmpty {
-                        Text(model.isFeatureSnapshotLoading
-                             ? "Loading camera features…"
-                             : "The camera reported no feature controls.")
+                    } else if additionalFeatureDescriptors.isEmpty {
+                        Text(model.previewResolutionDescriptor == nil
+                             ? "The camera reported no feature controls."
+                             : "No additional camera feature controls.")
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     } else {
                         ForEach(
-                            Array(model.featureDescriptors.enumerated()),
+                            Array(additionalFeatureDescriptors.enumerated()),
                             id: \.element.name
                         ) { index, descriptor in
                             if index == 0 ||
-                               model.featureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
+                               additionalFeatureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
                                 Text(featureGroupTitle(descriptor.group.rawValue).uppercased())
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundColor(.secondary)
@@ -294,6 +287,75 @@ private struct CameraDockConnectionSection: View {
         case .closed: return .secondary
         @unknown default: return .secondary
         }
+    }
+
+    @ViewBuilder
+    private var resolutionControls: some View {
+        if let descriptor = model.previewResolutionDescriptor {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Text("Resolution")
+                        .font(.system(size: 12, weight: .medium))
+
+                    Spacer(minLength: 6)
+
+                    Picker(
+                        "Resolution",
+                        selection: Binding(
+                            get: { model.selectedPreviewResolutionSymbol ?? "" },
+                            set: { model.selectManualPreviewResolution(to: $0) }
+                        )
+                    ) {
+                        if model.selectedPreviewResolutionSymbol == nil {
+                            Text("Select resolution").tag("")
+                        }
+                        ForEach(descriptor.enumerationValues, id: \.self) { symbol in
+                            Text(resolutionOptionTitle(symbol)).tag(symbol)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(PopUpButtonPickerStyle())
+                    .frame(maxWidth: 180)
+                    .disabled(!model.canChangePreviewResolution)
+                }
+
+                Toggle(
+                    "Automatic resolution",
+                    isOn: Binding(
+                        get: { model.isAutomaticResolutionEnabled },
+                        set: { model.setAutomaticResolutionEnabled($0) }
+                    )
+                )
+                .font(.system(size: 12))
+                .disabled(!model.canAccessFeatures ||
+                          model.isCameraOperationPending ||
+                          model.isFeatureWritePending ||
+                          model.isFeatureSnapshotLoading)
+                .help(model.automaticResolutionHelp)
+
+                Text(model.isAutomaticResolutionEnabled
+                     ? "Manual selection turns automatic mode off."
+                     : "Changing resolution briefly restarts live preview.")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 2)
+        } else if model.canAccessFeatures {
+            Text(model.isFeatureSnapshotLoading
+                 ? "Loading resolution modes…"
+                 : "Resolution selection is unavailable for this camera.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func resolutionOptionTitle(_ symbol: String) -> String {
+        guard let separator = symbol.firstIndex(of: ":") else {
+            return symbol
+        }
+        return String(symbol[symbol.index(after: separator)...])
+            .replacingOccurrences(of: "x", with: " × ")
     }
 
     var body: some View {
@@ -344,6 +406,10 @@ private struct CameraDockConnectionSection: View {
                         .disabled(!model.canClose)
                     }
                 }
+
+            if isConnected {
+                resolutionControls
+            }
 
             if !isConnected {
                 Picker("Device", selection: $model.selectedDeviceID) {

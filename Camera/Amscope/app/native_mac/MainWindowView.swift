@@ -4,62 +4,58 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
 
-    private let minimumPreviewWidth: CGFloat = 500
     private let dockDividerWidth: CGFloat = 6
+    private let maximumDockWidth: CGFloat = 520
 
     var body: some View {
         GeometryReader { geometry in
-            let maximumDockWidth = max(
-                280,
-                geometry.size.width -
-                    minimumPreviewWidth -
-                    dockDividerWidth
-            )
             let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
 
-            HStack(spacing: 0) {
-                NativeDualPreviewSurface(
-                    bridge: model.bridge,
-                    model: model,
-                    activeSlide: model.activeSlide,
-                    measurementCalibration: model.measurementCalibration,
-                    onCapture: { slide, image in
-                        model.captureGallery.capture(image, for: slide)
-                    }
-                )
-                .frame(
-                    minWidth: minimumPreviewWidth,
-                    maxWidth: .infinity,
-                    maxHeight: .infinity
-                )
-                .clipped()
-                .layoutPriority(1)
-
-                if model.isWorkspaceDockVisible {
-                    NativeWorkspaceDockResizeDivider(
-                        dockWidth: dockWidth,
-                        maximumWidth: maximumDockWidth,
-                        onResize: {
-                            model.setWorkspaceDockWidth($0, maximum: maximumDockWidth)
-                        }
-                    )
-                    .frame(width: dockDividerWidth)
-                    .frame(maxHeight: .infinity)
-
-                    NativeWorkspaceDock(
-                        model: model,
-                        onClose: { model.closeWorkspaceDock() }
-                    )
-                    .frame(width: dockWidth)
-                    .frame(maxHeight: .infinity)
-                    .layoutPriority(0)
+            NativeDualPreviewSurface(
+                bridge: model.bridge,
+                model: model,
+                activeSlide: model.activeSlide,
+                measurementCalibration: model.measurementCalibration,
+                onCapture: { slide, image in
+                    model.captureGallery.capture(image, for: slide)
                 }
-
-            }
+            )
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
             .overlay(alignment: .trailing) {
-                // The tool rail floats above the app content. The dock caption
-                // keeps its close control on the opposite side to avoid overlap.
+                if model.isWorkspaceDockVisible {
+                    HStack(spacing: 0) {
+                        NativeWorkspaceDockResizeDivider(
+                            dockWidth: dockWidth,
+                            maximumWidth: maximumDockWidth,
+                            onResize: {
+                                model.setWorkspaceDockWidth($0, maximum: maximumDockWidth)
+                            }
+                        )
+                        .frame(width: dockDividerWidth)
+                        .frame(maxHeight: .infinity)
+
+                        NativeWorkspaceDock(
+                            model: model,
+                            onClose: { model.closeWorkspaceDock() }
+                        )
+                        .frame(width: dockWidth)
+                        .frame(maxHeight: .infinity)
+                    }
+                    .frame(maxHeight: .infinity)
+                    // The panel floats above the preview and stops before the
+                    // permanent title rail. It never participates in preview layout.
+                    .padding(.trailing, NativeWorkspaceDockTabRail.width)
+                    .shadow(
+                        color: Color.black.opacity(0.20),
+                        radius: 14,
+                        x: -6,
+                        y: 0
+                    )
+                    .zIndex(50)
+                }
+            }
+            .overlay(alignment: .trailing) {
                 NativeWorkspaceDockTabRail(model: model)
                     .frame(width: NativeWorkspaceDockTabRail.width)
                     .frame(maxHeight: .infinity)

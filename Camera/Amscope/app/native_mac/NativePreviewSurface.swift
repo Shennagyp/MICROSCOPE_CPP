@@ -362,6 +362,7 @@ private final class NativeSlidePreviewPane: NSView {
             ? "Resizable: image follows viewer size. Click to lock the current scale and preserve source resolution."
             : "Full Resolution: preserve the manual image scale when the viewer changes size. Click to resume automatic resizing."
         imageSizingButton.setAccessibilityLabel(description)
+        imageSizingButton.isEnabled = imageView.hasImage
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {

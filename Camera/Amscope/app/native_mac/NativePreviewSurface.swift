@@ -512,9 +512,12 @@ private final class NativeSlideImageView: NSView {
         needsDisplay = true
     }
 
-    private func setActualPixels() {
+    private func setActualPixels(anchor: CGPoint? = nil) {
         guard currentImage != nil else { return }
-        zoom(to: 1, anchoredAt: CGPoint(x: bounds.midX, y: bounds.midY))
+        zoom(
+            to: 1,
+            anchoredAt: anchor ?? CGPoint(x: bounds.midX, y: bounds.midY)
+        )
     }
 
     private func toggleFillAndActualPixels() {
@@ -662,7 +665,7 @@ private final class NativeSlideImageView: NSView {
     }
 
     @objc private func selectActualPixels(_ sender: Any?) {
-        setActualPixels()
+        setActualPixels(anchor: contextMenuAnchor)
     }
 
     // MARK: - Rendering

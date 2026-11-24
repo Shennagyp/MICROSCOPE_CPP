@@ -113,20 +113,19 @@ final class NativeSlideImageView: NSView {
             // Overlays use the source pixel grid. Clear them if that grid changes.
             clearOverlays()
         }
-        currentImage = image
-        imageContainer.display(image)
 
-        if sizingMode == .resizable {
-            updateImageContainer(scale: automaticFitScale, origin: nil)
-        } else if dimensionsChanged {
-            // Camera mode changes replace the source document dimensions.
-            // Keep the selected display scale; Full Resolution remains 1:1
-            // because currentScale is derived from the new source pixel grid.
+        currentImage = image
+        imageContainer.setImage(image)
+
+        if dimensionsChanged {
+            // The source document changed. Recompute its geometry once while
+            // preserving the selected sizing mode and its scale policy.
             updateImageContainer(scale: currentScale, origin: nil)
         } else {
-            updateImageContainer(scale: currentScale, origin: imageOrigin)
+            // Normal live frames keep the same document geometry and overlays.
+            // Replace only the CGImage reference and invalidate the image surface.
+            imageContainer.needsDisplay = true
         }
-        needsDisplay = true
     }
 
     // MARK: - Image scale and container bounds
@@ -190,7 +189,6 @@ final class NativeSlideImageView: NSView {
         )
         imageContainer.needsDisplay = true
         imageOrigin = boundedOrigin
-        updateOverlayRendering()
         needsDisplay = true
     }
 

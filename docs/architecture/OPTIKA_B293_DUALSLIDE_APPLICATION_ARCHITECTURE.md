@@ -344,6 +344,10 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
 8. No extra frame copies, image histories or retained leases introduced by pane composition.
 9. No camera I/O blocking the UI thread.
 10. Session-generation checks continue to reject stale frames.
+11. Same-size live frames replace the retained `CGImage` and invalidate the image
+    surface without recomputing document geometry or re-publishing unchanged
+    overlay arrays. Geometry is recomputed only when dimensions, viewport, backing
+    scale or user-controlled transform changes.
 
 A UI simplification is invalid if it weakens any of these invariants.
 

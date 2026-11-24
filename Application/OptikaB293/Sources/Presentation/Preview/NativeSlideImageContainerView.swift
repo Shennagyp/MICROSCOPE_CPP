@@ -14,9 +14,10 @@ final class NativeSlideImageContainerView: NSView {
         superview
     }
 
-    func display(_ image: CGImage) {
+    // Image replacement is separate from invalidation so the owner can avoid
+    // a second display request when geometry changes on the same update.
+    func setImage(_ image: CGImage) {
         currentImage = image
-        needsDisplay = true
     }
 
     func updateOverlays(

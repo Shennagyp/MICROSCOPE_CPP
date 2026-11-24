@@ -32,6 +32,8 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
             activeSlide: activeSlide,
             measurementCalibration: measurementCalibration,
             model: model,
+            microscope: microscope,
+            resolutionCoordinator: resolutionCoordinator,
             workspace: workspace,
             onCapture: onCapture
         )

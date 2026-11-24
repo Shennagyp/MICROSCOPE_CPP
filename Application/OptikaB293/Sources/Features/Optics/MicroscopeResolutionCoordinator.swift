@@ -53,7 +53,7 @@ final class MicroscopeResolutionCoordinator: ObservableObject {
             microscope.configuration.chromatinBandLowerNanometers,
             microscope.configuration.chromatinBandUpperNanometers
         )
-        return "(choice.width) × (choice.height) · RF (lower)–(upper) · (band)" +
+        return "\\(choice.width) × \\(choice.height) · RF \\(lower)–\\(upper) · \\(band)" +
             (choice.meetsTarget ? "" : " · target not met")
     }
 

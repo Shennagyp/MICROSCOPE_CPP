@@ -2084,7 +2084,8 @@ private:
                 descriptor.kind == camera::CameraFeatureKind::IntegerVector ||
                 descriptor.kind == camera::CameraFeatureKind::FloatingPoint ||
                 descriptor.kind == camera::CameraFeatureKind::String ||
-                descriptor.kind == camera::CameraFeatureKind::Enumeration;
+                (descriptor.kind == camera::CameraFeatureKind::Enumeration &&
+                 !descriptor.enumerationValues.empty());
             const bool editable =
                 hasValueEditor && descriptor.isWritable &&
                 featureReadbackReady_ && !pendingFeatureWrite_ &&

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
+@MainActor
 struct AmscopeNativeApp {
     // NSApplication.delegate is not the owner. Retain it for the complete
     // application lifetime rather than relying on a local variable's lifetime.
@@ -16,6 +17,7 @@ struct AmscopeNativeApp {
     }
 }
 
+@MainActor
 final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
     private let cameraModel = NativeCameraModel.shared
     private var mainWindowController: NSWindowController?

@@ -1424,9 +1424,28 @@ private:
             editor = combo;
             break;
         }
-        case camera::CameraFeatureKind::IntegerVector:
-        case camera::CameraFeatureKind::String:
-            return;
+        case camera::CameraFeatureKind::IntegerVector: {
+            const auto& current =
+                std::get<std::vector<std::int64_t>>(*found->second.currentValue);
+            QStringList parts;
+            for (const auto value : current) {
+                parts.push_back(QString::number(static_cast<qlonglong>(value)));
+            }
+            auto* line = new QLineEdit(parts.join(", "), &dialog);
+            line->setPlaceholderText(
+                descriptor.elementCount
+                    ? QString("%1 comma-separated integers")
+                          .arg(static_cast<qulonglong>(*descriptor.elementCount))
+                    : QStringLiteral("Comma-separated integers"));
+            editor = line;
+            break;
+        }
+        case camera::CameraFeatureKind::String: {
+            const auto& current =
+                std::get<std::string>(*found->second.currentValue);
+            editor = new QLineEdit(QString::fromStdString(current), &dialog);
+            break;
+        }
         }
 
         if (!editor) return;
@@ -1491,9 +1510,40 @@ private:
                 utf8String(combo->currentData().toString())};
             break;
         }
-        case camera::CameraFeatureKind::IntegerVector:
-        case camera::CameraFeatureKind::String:
-            return;
+        case camera::CameraFeatureKind::IntegerVector: {
+            const auto* line = qobject_cast<QLineEdit*>(editor);
+            if (!line) return;
+            std::vector<std::int64_t> values;
+            const QStringList parts =
+                line->text().split(',', Qt::KeepEmptyParts);
+            bool valid = !parts.isEmpty();
+            for (const auto& part : parts) {
+                bool ok = false;
+                const qlonglong number = part.trimmed().toLongLong(&ok);
+                if (!ok) {
+                    valid = false;
+                    break;
+                }
+                values.push_back(static_cast<std::int64_t>(number));
+            }
+            if (descriptor.elementCount &&
+                values.size() != *descriptor.elementCount) {
+                valid = false;
+            }
+            if (!valid) {
+                statusBar()->showMessage(
+                    "Enter the required number of comma-separated integers.", 5000);
+                return;
+            }
+            value = std::move(values);
+            break;
+        }
+        case camera::CameraFeatureKind::String: {
+            const auto* line = qobject_cast<QLineEdit*>(editor);
+            if (!line) return;
+            value = utf8String(line->text());
+            break;
+        }
         }
 
         const auto validation = camera::validateFeatureWrite(descriptor, value);
@@ -2012,13 +2062,15 @@ private:
                 continue;
             }
 
-            const bool scalarEditable =
+            const bool hasValueEditor =
                 descriptor.kind == camera::CameraFeatureKind::Boolean ||
                 descriptor.kind == camera::CameraFeatureKind::Integer ||
+                descriptor.kind == camera::CameraFeatureKind::IntegerVector ||
                 descriptor.kind == camera::CameraFeatureKind::FloatingPoint ||
+                descriptor.kind == camera::CameraFeatureKind::String ||
                 descriptor.kind == camera::CameraFeatureKind::Enumeration;
             const bool editable =
-                scalarEditable && descriptor.isWritable &&
+                hasValueEditor && descriptor.isWritable &&
                 featureReadbackReady_ && !pendingFeatureWrite_ &&
                 camera_.state() == amscope::CameraState::Open;
 

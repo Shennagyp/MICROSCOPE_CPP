@@ -273,8 +273,9 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             }
         }
 
-        // Frozen panes still consume and release the newest lease. They simply
-        // do not replace their stable source image or update their UI.
+        // Frozen panes still consume and release the newest lease and keep
+        // acquisition counters current. They do not replace the stable source
+        // image or rewrite toolbar state for every incoming frame.
     }
 }
 

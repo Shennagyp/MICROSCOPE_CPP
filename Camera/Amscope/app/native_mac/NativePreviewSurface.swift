@@ -288,6 +288,8 @@ private final class NativeSlidePreviewPane: NSView {
     private func configureSubviews() {
         titleLabel.stringValue = slide.title.uppercased()
         titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        wantsLayer = true
+        layer?.cornerRadius = 4
 
         statusLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         statusLabel.textColor = NSColor.secondaryLabelColor
@@ -336,14 +338,21 @@ private final class NativeSlidePreviewPane: NSView {
 
     func updatePresentationState(isActiveTarget: Bool, isMaximized: Bool) {
         if isActiveTarget {
-            statusLabel.stringValue = "LIVE TARGET"
-            statusLabel.textColor = NSColor.controlAccentColor
-            selectButton.isHidden = true
+            statusLabel.stringValue = "LIVE"
+            statusLabel.textColor = NSColor.systemRed
+            selectButton.title = "LIVE"
+            selectButton.isEnabled = false
         } else {
             statusLabel.stringValue = imageView.hasImage ? "HELD IMAGE" : "STANDBY"
             statusLabel.textColor = NSColor.secondaryLabelColor
-            selectButton.isHidden = false
+            selectButton.title = "Switch Live"
+            selectButton.isEnabled = true
         }
+        selectButton.isHidden = false
+        layer?.borderWidth = isActiveTarget ? 3 : 1
+        layer?.borderColor = isActiveTarget
+            ? NSColor.systemRed.cgColor
+            : NSColor.separatorColor.cgColor
         maximizeButton.title = isMaximized ? "Restore" : "Maximize"
     }
 

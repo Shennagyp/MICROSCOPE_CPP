@@ -761,7 +761,7 @@ private final class NativeSlidePreviewPane: NSView {
     private func configureAnnotationPlate(_ plate: NSView) {
         plate.wantsLayer = true
         plate.layer?.backgroundColor = NSColor.windowBackgroundColor
-            .withAlphaComponent(0.50).cgColor
+            .withAlphaComponent(0.20).cgColor
         plate.layer?.cornerRadius = 7
         plate.layer?.borderWidth = 1
         plate.layer?.borderColor = NSColor.separatorColor

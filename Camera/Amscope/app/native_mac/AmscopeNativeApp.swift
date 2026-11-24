@@ -40,7 +40,7 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         _ sender: NSApplication
     ) -> NSApplication.TerminateReply {
         if terminationInProgress {
-            return .terminateNow
+            return .terminateLater
         }
 
         if cameraModel.bridge.state == .closed {

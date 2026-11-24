@@ -74,7 +74,8 @@
 - [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
 - [x] Make up to three supported writable numeric imaging values (selected from camera descriptors, such as exposure or gain) double-click editable in the bottom information bar; commit through the backend feature-validation path.
 - [ ] Port dedicated accessory workflows and telemetry from the existing Qt/native contract.
-- [ ] Preserve and verify explicit camera lifecycle behavior when the window is hidden or closed.
+- [x] Queue camera Close and wait for completion before application termination.
+- [ ] Verify window detach/close, disconnect/reconnect, and still-running camera behavior on hardware.
 
 **Current limitation:** Native discovery, lifecycle, generic feature reads/writes, and preview are connected. Dedicated accessory workflows, local compile validation, visual QA, and hardware performance validation remain outstanding.
 

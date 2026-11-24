@@ -13,8 +13,9 @@ This is a frontend migration, not a camera-backend rewrite. The existing Qt prev
 The v0.8 user-interface structure is:
 
 - The main window contains two persistent preview panes, Slide 1 and Slide 2, side by side. Either pane can be maximized independently and restored.
-- A detected-camera button opens the chosen camera and starts acquisition in one action. The existing **File → Camera Controls…** window remains available for advanced lifecycle and feature controls.
-- The bottom information region is a draggable horizontal split: editable quick controls on the left and read-only camera/image/session information on the right.
+- The camera preview begins at the top of the main window; there is no separate camera toolbar above it.
+- One thin bottom dock contains a draggable horizontal split: camera open/start and editable quick controls on the left, read-only camera/image/session information on the right. The dock can collapse to a narrow handle or detach into a floating utility panel and re-dock.
+- Each slide pane exposes a persistent `Switch Live` control. The live pane is identified by a red outer container border; the inactive pane retains its last image.
 - Up to three supported writable numeric features are exposed as direct value-entry controls in the editable region; the full descriptor editor remains in Camera Controls.
 - Both images are rendered by a single purpose-built AppKit preview owner hosted in SwiftUI, not by SwiftUI `Image` views or per-frame observable properties.
 - The dedicated camera-controls window uses a width-flexible vertical layout inside an explicit scroll viewport; camera, acquisition, and descriptor groups remain reachable when the window is resized or the camera exposes many features.
@@ -127,9 +128,11 @@ Frame consumption is separate from `draw(_:)`: the main-thread notification tran
 ## 5. Two-slide presentation model
 
 The main workspace has two persistent slide panes (Slide 1 and Slide 2) arranged
-side by side in a resizable AppKit split view. Either pane can temporarily occupy
-the full preview region and then return to the split layout. The user can resize
-the pane divider independently of the window size.
+side by side in a resizable AppKit split view. The user can switch the live target
+using the persistent `Switch Live` button in the pane header. The active pane has
+a red outer border and a `LIVE` status; the inactive pane is marked `HELD IMAGE`
+when it contains a frame. Either pane can temporarily occupy the full preview
+region and then return to the split layout.
 
 There is still exactly one camera session, one acquisition worker, one latest-frame
 mailbox, and one AppKit mailbox consumer. The two panes must **not** each register
@@ -154,7 +157,9 @@ window.
 
 **Current hardware boundary:** selecting Slide 1 or Slide 2 currently changes
 only the UI's live-frame destination. It does not physically move the microscope
-stage, actuate a slide changer, or change the camera session. A future controller
+stage, actuate a slide changer, or change the camera session. The red border
+therefore indicates the selected UI live target until the controller confirms
+physical slide switching. A future controller
 operation must perform the physical switch and acknowledge the resulting slide
 position. The controller's acknowledged position, not an optimistic view-local
 selection, must become authoritative when hardware switching is integrated.

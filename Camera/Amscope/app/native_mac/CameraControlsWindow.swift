@@ -1,19 +1,56 @@
 import SwiftUI
 
 struct CameraControlsWindow: View {
+    @ObservedObject var model: NativeCameraModel
+
     var body: some View {
         Form {
             Section(header: Text("Camera")) {
                 HStack {
-                    Image(systemName: "video.slash")
-                    Text("No camera connected")
+                    Picker("Device", selection: $model.selectedDeviceID) {
+                        Text("Select a camera").tag("")
+                        ForEach(model.cameras, id: \.deviceID) { camera in
+                            Text(camera.displayName).tag(camera.deviceID)
+                        }
+                    }
+
+                    Button("Refresh") {
+                        model.refreshCameras()
+                    }
                 }
-                .foregroundColor(.secondary)
+
+                HStack {
+                    Button("Open") {
+                        model.openSelectedCamera()
+                    }
+                    .disabled(!model.canOpen)
+
+                    Button("Close") {
+                        model.closeCamera()
+                    }
+                    .disabled(!model.canClose)
+                }
             }
 
             Section(header: Text("Acquisition")) {
-                Text("Acquisition controls will be connected to the native C++ controller.")
-                    .foregroundColor(.secondary)
+                HStack {
+                    Button("Start") {
+                        model.startAcquisition()
+                    }
+                    .disabled(!model.canStart)
+
+                    Button("Stop") {
+                        model.stopAcquisition()
+                    }
+                    .disabled(!model.canStop)
+                }
+
+                HStack {
+                    Text("State")
+                    Spacer()
+                    Text(model.cameraStateText)
+                        .foregroundColor(.secondary)
+                }
             }
 
             Section(header: Text("Imaging")) {
@@ -28,5 +65,10 @@ struct CameraControlsWindow: View {
         }
         .padding()
         .frame(minWidth: 480, minHeight: 420)
+        .onAppear {
+            if model.cameras.isEmpty {
+                model.refreshCameras()
+            }
+        }
     }
 }

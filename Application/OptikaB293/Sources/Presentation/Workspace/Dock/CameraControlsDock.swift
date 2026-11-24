@@ -15,7 +15,10 @@ struct NativeCameraControlsDock: View {
         VStack(spacing: 0) {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 14) {
-                    CameraDockConnectionSection(model: model)
+                    CameraDockConnectionSection(
+                        model: model,
+                        resolutionCoordinator: resolutionCoordinator
+                    )
 
                     Divider()
 
@@ -171,6 +174,7 @@ struct NativeCameraControlsDock: View {
 
 private struct CameraDockConnectionSection: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
 
     private var isConnected: Bool {
         model.openedCameraDeviceID != nil && model.cameraState != .closed

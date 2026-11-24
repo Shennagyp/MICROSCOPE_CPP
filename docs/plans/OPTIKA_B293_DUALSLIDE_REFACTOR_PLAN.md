@@ -247,6 +247,7 @@ cmake -S . -B build/optika-b293-ninja -G Ninja \
   -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
   -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
   -DBUILD_TESTING=ON \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
   -DCMAKE_BUILD_TYPE=Release
 
 cmake --build build/optika-b293-ninja --parallel

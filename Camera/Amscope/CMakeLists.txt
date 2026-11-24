@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 # Set the deployment target before enabling C++/Swift/Objective-C++ compilers.
 if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING
         "Minimum macOS version for Amscope targets")
 endif()
 

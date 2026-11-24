@@ -1,4 +1,3 @@
-import Dispatch
 import Foundation
 
 /// The latest frame lease and acquisition counters observed for one UI notification.
@@ -11,12 +10,12 @@ struct NativeCameraFrameSnapshot {
 /// Narrow frame-consumption surface exposed to presentation.
 /// Lifecycle and feature commands remain private to NativeCameraModel.
 protocol NativeCameraFrameFeed: AnyObject {
-    func setFrameAvailableHandler(_ handler: dispatch_block_t?)
+    func setFrameAvailableHandler(_ handler: (() -> Void)?)
     func takeLatestFrameSnapshot() -> NativeCameraFrameSnapshot
 }
 
 extension AmscopeNativeCameraBridge: NativeCameraFrameFeed {
-    func setFrameAvailableHandler(_ handler: dispatch_block_t?) {
+    func setFrameAvailableHandler(_ handler: (() -> Void)?) {
         onFrameAvailable = handler
     }
 

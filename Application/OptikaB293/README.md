@@ -1,6 +1,8 @@
 # OPTIKA B293 Dual-Slide Application
 
-Build the native macOS application from the repository root.
+Build the native macOS application from the repository root. The default
+minimum deployment target is macOS 11.0, matching the supported minimum of the
+current libc++ toolchain.
 
 The application enables CMake's Swift language support. Two generators are
 available for the native macOS target:
@@ -27,6 +29,7 @@ cmake -S . -B build/optika-b293-ninja -G Ninja \
   -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
   -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
   -DBUILD_TESTING=ON \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
   -DCMAKE_BUILD_TYPE=Release
 
 cmake --build build/optika-b293-ninja --parallel

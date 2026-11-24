@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.21)
 
 if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum macOS deployment target")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS deployment target")
 endif()
 
 project(OptikaB293Workstation VERSION 0.9.0 LANGUAGES CXX)
+
+include(CTest)
 
 option(OPTIKA_BUILD_NATIVE_APP "Build the OPTIKA B293 native macOS application" OFF)
 

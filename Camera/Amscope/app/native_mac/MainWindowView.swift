@@ -21,8 +21,8 @@ struct MainWindowView: View {
                 NativeDualPreviewSurface(
                     bridge: model.bridge,
                     activeSlide: model.activeSlide,
-                    onActiveSlideChanged: model.selectActiveSlide,
                     measurementCalibration: model.measurementCalibration,
+                    onActiveSlideChanged: model.selectActiveSlide,
                     onCapture: { slide, image in
                         model.captureGallery.capture(image, for: slide)
                     }

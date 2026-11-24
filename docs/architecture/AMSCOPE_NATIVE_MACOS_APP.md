@@ -70,7 +70,7 @@ The current acquisition implementation uses a four-frame pool. The native fronte
 
 Owns macOS window composition, menus, control-window presentation, settings, user interaction, and low-frequency application state.
 
-SwiftUI observes camera state, feature values, errors, and command completions. It does **not** observe every incoming frame.
+SwiftUI observes camera state, feature descriptors/values, errors, and command completions. Controls are generated from the backend's feature metadata and preserve the feature's declared type, range, unit, discrete options, and writability. The information bar promotes a small set of writable numeric features for double-click editing. It does **not** observe every incoming frame.
 
 ### Preview surface — AppKit
 
@@ -84,6 +84,7 @@ A narrow Objective-C++ facade adapts Swift-facing methods and callbacks to the C
 
 The bridge exposes:
 - typed lifecycle and camera-control commands;
+- typed feature descriptors and read/write values through a stable Objective-C API;
 - low-frequency state and command results;
 - opaque retained frame-lease handles and read-only frame metadata;
 - one coalesced frame-available notification.
@@ -94,7 +95,7 @@ Swift does not directly own or call `HAmcam`.
 
 The native frontend reuses `Amscope::Driver` and its existing `AmcamCamera` session owner.
 
-The native-facing asynchronous command controller must preserve the existing Qt adapter's behavioral contract: serialized lifecycle and feature operations, FIFO mutation ordering, request IDs, session generations, stale-completion rejection, and callback delivery outside the acquisition worker. This controller is a **replacement for the Qt-facing controller in the native executable**, not a second controller layered on top of `QtAmcamCamera`.
+The native-facing asynchronous command controller preserves the relevant Qt adapter semantics: serialized lifecycle and feature operations, FIFO mutation ordering, request IDs, session and feature-state generations, stale-snapshot rejection, and callbacks outside the acquisition worker. Lifecycle and feature operations run on one bounded command executor. This controller is a **replacement for the Qt-facing controller in the native executable**, not a second controller layered on top of `QtAmcamCamera`.
 
 The native application must not link or instantiate `QtAmcamCamera`. The Qt adapter and native controller are separate frontend adapters over the same driver, and they are never active as two owners of one camera session.
 
@@ -110,11 +111,11 @@ The mailbox contract is:
 - schedule a notification only when the pending latch transitions from false to true;
 - consume the latest lease and clear/re-arm the notification latch with the existing race-safe recheck.
 
-As part of implementation, move this mailbox to a backend-neutral `Camera/Common` header and keep the existing Qt include as a compatibility alias. Both frontends must use the same implementation and the same tests.
+The mailbox has already been moved to the backend-neutral `Camera/Common` header. The existing Qt include remains as a source-compatibility alias; `QtAmcamCamera` and the native controller use the same implementation. The same framework-independent mailbox tests exercise latest-frame replacement, coalescing, generation rejection, re-arm, and lease release.
 
 ### Core Graphics provider
 
-The AppKit view should create a direct-access `CGDataProvider` over the existing frame bytes. The provider's release callback owns and releases an opaque frame lease, ensuring that the backing pool buffer remains alive for as long as Core Graphics may read it.
+The AppKit view consumes the mailbox's newest lease on the coalesced main-thread notification, creates a direct-access `CGDataProvider` over the existing frame bytes, and retains only the current `CGImage`. The provider's release callback owns and releases an opaque frame lease, ensuring that the backing pool buffer remains alive for as long as Core Graphics may read it. `draw(_:)` renders the current image; it does not dequeue frames or perform camera work.
 
 This is an application-side no-copy handoff: the bridge does not allocate a second pixel buffer or rewrite the frame. It is **not** a claim that Core Graphics, the window compositor, or the display hardware performs no internal transfer. Any such platform work is outside the application-controlled acquisition path and must be measured.
 
@@ -126,7 +127,7 @@ A draw consumes the newest available frame. Replacing the displayed lease must r
 
 The acquisition callback publishes to the C++ mailbox and returns. It does not directly update a Swift property.
 
-When the mailbox transitions to pending, the native adapter schedules one main-thread invalidation. The AppKit view consumes the latest lease during its draw. Further camera frames overwrite the mailbox slot while the invalidation is pending; they do not add more main-thread work items.
+When the mailbox transitions to pending, the native adapter schedules one main-thread callback. The AppKit view consumes the latest lease in that callback, builds the direct-access `CGImage`, and requests a redraw. Further camera frames overwrite the mailbox slot while the notification is pending; they do not add more main-thread work items. The display image is not stored as per-frame SwiftUI state.
 
 The view must tolerate being detached, resized, hidden, or closed while acquisition continues. Closing a window may stop presentation, but it must not implicitly close the camera unless an explicit application lifecycle command requests that action.
 
@@ -138,7 +139,7 @@ Camera lifecycle and feature operations execute on one serialized non-UI command
 - The native target links `Amscope::Driver` and the minimal Apple frameworks it uses.
 - The native target does not link Qt Core, Qt Widgets, `Amscope::Qt`, or `Camera::QtWidgets`.
 - Existing Qt options and targets remain available and unchanged until native parity is established.
-- Keep Swift/Objective-C++ enabled only for the native target configuration. CMake has supported Swift with the Ninja generator since 3.15; the project's 3.21 minimum is sufficient. The native app deliberately requires Ninja rather than the Xcode generator, so the standalone Command Line Tools package is enough and full Xcode / `xcodebuild` is not required. The shell targets macOS 10.15 and uses an AppKit `NSApplicationDelegate` / `NSWindow` lifecycle with SwiftUI hosted by `NSHostingController`, avoiding the macOS 13 SwiftUI `Window` scene requirement. Add the explicit Objective-C++ bridge when camera-controller integration begins.
+- Keep Swift/Objective-C++ enabled only for the native target configuration. CMake has supported Swift with the Ninja generator since 3.15; the project's 3.21 minimum is sufficient. The native app deliberately requires Ninja rather than the Xcode generator, so the standalone Command Line Tools package is enough and full Xcode / `xcodebuild` is not required. The shell targets macOS 10.15 and uses an AppKit `NSApplicationDelegate` / `NSWindow` lifecycle with SwiftUI hosted by `NSHostingController`, avoiding the macOS 13 SwiftUI `Window` scene requirement. The Objective-C++ bridge and bridging header are in place.
 - Prefer the narrow Objective-C++ facade over exposing the complete C++ type graph to Swift. This keeps C++ templates, STL ownership, and vendor types out of Swift's source interface.
 
 ## 7. Performance acceptance gates

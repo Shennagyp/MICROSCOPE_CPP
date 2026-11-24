@@ -2,7 +2,7 @@
 
 **Branch:** `amscope-native-app-mac.v.0.8`  
 **Base branch:** `amscope-native-driver-0.7`  
-**Current state:** Branch created; architecture and performance acceptance criteria committed before implementation.
+**Current state:** Branch created from the validated driver baseline. Architecture and performance criteria are committed. The opt-in app target and a non-streaming SwiftUI/AppKit shell are in place; camera integration and local build validation remain pending.
 
 ## Phase 0 — Baseline and architecture
 
@@ -16,11 +16,14 @@
 
 ## Phase 1 — Native app target and launch shell
 
-- Add an opt-in `AMSCOPE_BUILD_NATIVE_MAC_APP` target; keep it OFF by default.
-- Integrate SwiftUI and Objective-C++ using the repository's CMake build. Use an Xcode-generated native app bundle for the first implementation.
-- Add a minimal SwiftUI application shell with a single main window and native menu.
-- Add the Objective-C++ bridge boundary, but do not open the camera yet.
-- Keep Qt disabled for the native-only configuration; do not remove the Qt targets from the repository.
+- [x] Add an opt-in `AMSCOPE_BUILD_NATIVE_MAC_APP` target; it is OFF by default and requires the Xcode generator.
+- [x] Add the initial SwiftUI app shell, native main window, File-menu entry, and dedicated controls window.
+- [x] Add an AppKit `NSViewRepresentable` preview placeholder; no camera frames are connected yet.
+- [ ] Add the Objective-C++ bridge boundary without opening the camera.
+- [ ] Build and launch the native app on the user's Mac.
+- [ ] Verify a native-only configuration with Qt disabled; do not remove the Qt targets from the repository.
+
+**Current Phase 1 note:** The preview and controls window are scaffolding only. No camera session is created, no stream is consumed, and no build, CTest, or hardware run has been performed for this branch.
 
 **Gate:** The native application bundle builds and launches independently of Qt, without changing existing driver code.
 

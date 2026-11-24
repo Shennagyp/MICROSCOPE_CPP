@@ -101,7 +101,7 @@ final class NativePreviewNSView: NSView {
             return
         }
 
-        let imageSize = CGSize(width: image.width, height: image.height)
+        let imageSize = CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
         let scale = min(
             bounds.width / imageSize.width,
             bounds.height / imageSize.height

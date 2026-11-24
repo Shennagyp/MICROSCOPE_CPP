@@ -281,10 +281,16 @@ private struct DockCameraFeatureControl: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 3) {
+            HStack(spacing: 4) {
                 Text(featureGroupTitle(descriptor.group.rawValue))
                     .font(.system(size: 8, weight: .medium))
                     .foregroundColor(.secondary)
+                if let unit = descriptor.unit, !unit.isEmpty {
+                    Text(unit)
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
                 if model.featureError(for: descriptor) != nil {
                     Circle()
                         .fill(Color.red)
@@ -365,7 +371,7 @@ private struct DockCameraFeatureControl: View {
                         }
                     }
                     .labelsHidden()
-                    .pickerStyle(MenuPickerStyle())
+                    .pickerStyle(PopUpButtonPickerStyle())
                     .disabled(editingDisabled)
                 } else {
                     textEditor

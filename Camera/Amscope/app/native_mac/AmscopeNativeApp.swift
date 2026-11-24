@@ -1,25 +1,100 @@
+import AppKit
 import SwiftUI
 
 @main
-struct AmscopeNativeApp: App {
-    @Environment(\.openWindow) private var openWindow
+final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
+    private var mainWindowController: NSWindowController?
+    private var cameraControlsWindowController: NSWindowController?
 
-    var body: some Scene {
-        WindowGroup("AmScope") {
-            MainWindowView()
-        }
-        .defaultSize(width: 1440, height: 900)
-        .commands {
-            CommandGroup(after: .newItem) {
-                Button("Camera Controls…") {
-                    openWindow(id: "camera-controls")
-                }
-            }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        installMainMenu()
+        showMainWindow()
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(
+        _ sender: NSApplication
+    ) -> Bool {
+        true
+    }
+
+    @objc private func openCameraControls(_ sender: Any?) {
+        if let existingController = cameraControlsWindowController {
+            existingController.showWindow(sender)
+            existingController.window?.makeKeyAndOrderFront(sender)
+            NSApp.activate(ignoringOtherApps: true)
+            return
         }
 
-        Window("Camera Controls", id: "camera-controls") {
-            CameraControlsWindow()
-        }
-        .defaultSize(width: 520, height: 560)
+        let hostingController = NSHostingController(
+            rootView: CameraControlsWindow()
+        )
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Camera Controls"
+        window.setContentSize(NSSize(width: 520, height: 560))
+        window.minSize = NSSize(width: 480, height: 420)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+
+        let windowController = NSWindowController(window: window)
+        cameraControlsWindowController = windowController
+        windowController.showWindow(sender)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showMainWindow() {
+        let hostingController = NSHostingController(
+            rootView: MainWindowView()
+        )
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "AmScope"
+        window.setContentSize(NSSize(width: 1440, height: 900))
+        window.minSize = NSSize(width: 960, height: 640)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.center()
+
+        let windowController = NSWindowController(window: window)
+        mainWindowController = windowController
+        windowController.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu(title: "AmScope")
+        appMenu.addItem(NSMenuItem(
+            title: "About AmScope",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: ""
+        ))
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(NSMenuItem(
+            title: "Quit AmScope",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        ))
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        let fileMenuItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+
+        let controlsItem = NSMenuItem(
+            title: "Camera Controls…",
+            action: #selector(openCameraControls(_:)),
+            keyEquivalent: ""
+        )
+        controlsItem.target = self
+        fileMenu.addItem(controlsItem)
+        fileMenu.addItem(NSMenuItem.separator())
+        fileMenu.addItem(NSMenuItem(
+            title: "Close Window",
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w"
+        ))
+
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
+        NSApp.mainMenu = mainMenu
     }
 }

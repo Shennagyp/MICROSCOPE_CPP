@@ -34,6 +34,30 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    private var terminationInProgress = false
+
+    func applicationShouldTerminate(
+        _ sender: NSApplication
+    ) -> NSApplication.TerminateReply {
+        if terminationInProgress {
+            return .terminateNow
+        }
+
+        if cameraModel.bridge.state == .closed {
+            return .terminateNow
+        }
+
+        terminationInProgress = true
+        cameraModel.bridge.close { [weak self] error, _, _ in
+            if let error = error {
+                NSLog("AmScope camera close during termination failed: %@", error)
+            }
+            self?.terminationInProgress = false
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     @objc private func openCameraControls(_ sender: Any?) {
         if let existingController = cameraControlsWindowController {
             existingController.showWindow(sender)

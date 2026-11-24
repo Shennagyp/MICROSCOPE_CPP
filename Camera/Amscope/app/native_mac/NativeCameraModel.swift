@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 
+@MainActor
 final class NativeCameraModel: ObservableObject {
     static let shared = NativeCameraModel()
 

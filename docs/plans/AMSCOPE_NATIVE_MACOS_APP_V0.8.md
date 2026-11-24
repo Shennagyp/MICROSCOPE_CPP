@@ -320,7 +320,9 @@ The policy is presentation-only:
 
 - It targets one source-image pixel per display backing pixel, accounting for
   the current window's backing scale factor.
-- It budgets for both side-by-side panes, or one pane while a slide is maximized.
+- It budgets for the live-target pane's actual share of the split, or the full
+  preview width when a pane is maximized; the held pane keeps its image and
+  continues to aspect-fit independently.
 - It uniformly downscales the target when the screen's usable content area
   cannot contain the requested image dimensions; it does not distort the frame.
 - It includes the actual bottom-dock height (expanded, collapsed, or detached),

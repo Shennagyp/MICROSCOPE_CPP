@@ -76,9 +76,11 @@ private struct NativeFeatureEditor: View {
     let descriptor: AmscopeCameraFeatureDescriptor
 
     private var editingDisabled: Bool {
+        !model.canAccessFeatures ||
         !descriptor.isAvailable ||
         !descriptor.isWritable ||
         model.isFeatureWritePending ||
+        model.isFeatureSnapshotLoading ||
         model.isCameraOperationPending
     }
 
@@ -178,7 +180,7 @@ private struct NativeFeatureEditor: View {
             )
             .textFieldStyle(RoundedBorderTextFieldStyle())
             .frame(width: 140)
-            .disabled(editingDisabled || !descriptor.isReadable)
+            .disabled(editingDisabled)
 
             Button("Set") {
                 model.commitDraft(for: descriptor)

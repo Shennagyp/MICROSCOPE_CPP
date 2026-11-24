@@ -252,7 +252,10 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.shennagyp.amscope.native"
         MACOSX_BUNDLE_BUNDLE_VERSION "0.8.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "0.8.0"
-        OSX_DEPLOYMENT_TARGET "10.15")
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        OBJCXX_STANDARD 17
+        OBJCXX_STANDARD_REQUIRED YES)
     target_compile_options(amscope_native_mac_app PRIVATE
         "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
         "$<$<COMPILE_LANGUAGE:Swift>:5>")

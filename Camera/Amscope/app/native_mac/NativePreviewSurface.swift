@@ -147,6 +147,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private func setActiveSlide(_ slide: NativeSlideID) {
         guard activeSlide != slide else { return }
         activeSlide = slide
+        resizeWindowForLatestFrame(force: true)
         updatePaneStates()
     }
 

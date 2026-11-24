@@ -2,6 +2,15 @@ import AppKit
 import SwiftUI
 
 @main
+struct AmscopeNativeApp {
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = AmscopeApplicationDelegate()
+        application.delegate = delegate
+        application.run()
+    }
+}
+
 final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: NSWindowController?
     private var cameraControlsWindowController: NSWindowController?

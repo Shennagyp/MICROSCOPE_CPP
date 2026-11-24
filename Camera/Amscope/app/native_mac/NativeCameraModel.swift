@@ -72,6 +72,7 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var isFeatureWritePending = false
     @Published private(set) var featureDescriptors: [AmscopeCameraFeatureDescriptor] = []
     @Published private(set) var featureValues: [String: AmscopeCameraFeatureValue] = [:]
+    @Published private(set) var selectedPreviewResolutionSymbol: String?
     @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
     let microscopeConfigurationDraftStore = MicroscopeConfigurationDraftStore(
@@ -387,6 +388,18 @@ final class NativeCameraModel: ObservableObject {
             !isFeatureSnapshotLoading
     }
 
+    /// The dedicated resolution mutation path does not use generic feature
+    /// writes. Some camera backends expose mode enumeration without marking it
+    /// generically readable or writable, so those flags must not block it.
+    var previewResolutionDescriptor: AmscopeCameraFeatureDescriptor? {
+        guard let descriptor = featureDescriptors.first(where: {
+            $0.name == "AmcamResolutionIndex"
+        }), descriptor.isAvailable, !descriptor.enumerationValues.isEmpty else {
+            return nil
+        }
+        return descriptor
+    }
+
     var canOpen: Bool {
         cameraState == .closed &&
             !selectedDeviceID.isEmpty &&
@@ -443,6 +456,7 @@ final class NativeCameraModel: ObservableObject {
               cameras.contains(where: { $0.deviceID == deviceID }) else { return }
 
         selectedDeviceID = deviceID
+        selectedPreviewResolutionSymbol = nil
         isCameraOperationPending = true
         bridge.openDeviceID(deviceID) { [weak self] error, _, _ in
             MainActor.assumeIsolated {
@@ -481,6 +495,7 @@ final class NativeCameraModel: ObservableObject {
                     self.openedCameraDeviceID = nil
                     self.featureDescriptors = []
                     self.featureValues = [:]
+                    self.selectedPreviewResolutionSymbol = nil
                     self.featureErrors = [:]
                     self.featureDrafts = [:]
                     self.isFeatureSnapshotLoading = false
@@ -585,6 +600,7 @@ final class NativeCameraModel: ObservableObject {
                 self.featureDrafts[name] = self.stringValue(for: value)
                 self.featureErrors[name] = nil
                 if name == "AmcamResolutionIndex" {
+                    self.selectedPreviewResolutionSymbol = value.enumerationSymbol
                     self.reconcileAutomaticResolution()
                 }
             }
@@ -663,11 +679,7 @@ final class NativeCameraModel: ObservableObject {
 
     func changePreviewResolution(to symbol: String) {
         guard canChangePreviewResolution,
-              let descriptor = featureDescriptors.first(where: {
-                  $0.name == "AmcamResolutionIndex"
-              }),
-              descriptor.isAvailable,
-              descriptor.isReadable,
+              let descriptor = previewResolutionDescriptor,
               descriptor.enumerationValues.contains(symbol) else {
             return
         }
@@ -682,10 +694,14 @@ final class NativeCameraModel: ObservableObject {
                 self.refreshState()
                 if let error = error {
                     self.present(error)
+                } else {
+                    // Preserve the selection even when a backend exposes the
+                    // modes without a generic feature readback.
+                    self.selectedPreviewResolutionSymbol = symbol
                 }
 
-                // Restart can fail after the new resolution was applied. Refresh
-                // in either outcome so the UI reports the camera's actual state.
+                // The native controller serially stops acquisition, applies the
+                // mode, and resumes acquisition when it was previously streaming.
                 self.refreshFeatures()
             }
         }

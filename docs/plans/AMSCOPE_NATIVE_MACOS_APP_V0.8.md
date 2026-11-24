@@ -101,56 +101,64 @@
 
 **Gate:** The native UI covers the existing supported camera workflows selected for v0.8 without changing driver semantics.
 
-## Independent slide-image sizing modes (2026-11-24)
+## Slide workspace, dock separation, and image document sizing (2026-11-24)
 
-The two existing side-by-side slide panes, headers, divider, and window remain
-unchanged. Each pane is a fixed viewport containing a separate image container.
-The container is the only element whose size changes.
+The slide workspace and camera dock are separate vertically arranged siblings.
+The dock owns its own reserved height at the bottom of the window; it is never
+painted over the specimen viewport. The SwiftUI workspace is clipped to its
+allocated area, and the native AppKit preview/split-view hierarchy has matching
+clipping boundaries. An oversized image document may be clipped by its own
+slide viewport, but it cannot draw into the dock.
 
-Each pane has two distinct header controls because locking a scale and viewing
-the source at full resolution are different operations:
+The two existing slide panes, headers, divider, and window remain unchanged.
+Each pane is a fixed viewport containing a separate image document. The
+viewport is the visible window onto the specimen; it is not the image itself.
 
-- **Lock / Auto Resize control:** the open-lock icon means the image currently
-  follows the viewer size. Clicking it locks the scale currently on screen;
-  it does not jump to 1:1. The closed-lock icon means the current/manual scale
-  is retained when that pane's viewport changes. Clicking it resumes automatic
-  resizing.
-- **1:1 control:** explicitly switches that pane to full-resolution viewing,
-  mapping one camera pixel to one physical display pixel. This is a direct
-  command, not a toggle. It centers the image initially; if the source image
-  is larger than the viewport, the fixed pane clips it and dragging pans the
-  view with movement clamped to the image edges.
+Each pane has two distinct controls:
 
-In **Resizable** mode, the image container automatically recalculates its
-scale when that pane's viewport is resized by the split divider or
-maximize/restore. It scales to cover the viewport without black margins,
-preserves aspect ratio, and never upscales beyond native 1:1 physical-pixel
-size. In **Manual Scale** mode, the container keeps its selected scale when
-the pane viewport changes. Scroll-wheel or trackpad zoom from Resizable mode
-locks the pane only after the scale actually changes. The original
-full-resolution CGImage remains the source.
+- **Lock / Auto Resize:** the open-lock icon means the image follows the
+  viewport size. Clicking it preserves the exact scale currently displayed;
+  it does not jump to 1:1. The closed-lock icon means the selected scale is
+  retained when that pane is resized. Clicking it resumes automatic resizing.
+- **1:1:** displays the complete source image in a full-size image document at
+  native physical-pixel scale: source width × source height, with one camera
+  pixel mapped to one physical display pixel. The document is not resized to
+  the viewport, cropped to a smaller backing image, or replaced by a preview.
+  If the viewport is smaller than the document, only the visible region is
+  shown; dragging pans the viewport over the same complete image document,
+  with movement clamped at image edges.
 
-The image container is capped independently in both dimensions to the
-source-image width and height at 1:1 physical-pixel scale. It can never become
-larger than the original camera image. The other slide has its own independent
-mode, scale, and pan position.
+The implementation distinguishes three states internally: Resizable,
+Locked Scale, and Full Resolution. This prevents a camera resolution change
+or display backing-scale change from turning an ordinary locked scale into
+1:1. Full Resolution derives its point dimensions from the current display's
+backing scale so that the one-source-pixel-to-one-physical-pixel invariant
+remains true.
 
-The context menu exposes Resizable, Lock Current Scale, and View Full
-Resolution (1:1). No new toolbar, pane, splitter, or application-window
-resizing is introduced.
+In **Resizable** mode, the image document automatically recalculates its
+scale when that pane's viewport changes because of the split divider or
+maximize/restore. It preserves aspect ratio, covers the viewport without black
+margins, and never upscales beyond native 1:1 physical-pixel size. In
+**Locked Scale** mode, the document retains its selected scale when the
+viewport changes. Scroll-wheel or trackpad zoom locks the pane only after the
+scale actually changes. The original full-resolution CGImage remains the
+source in all modes.
+
+Each slide owns its own mode, scale, and pan position. The context menu exposes
+Resizable, Lock Current Scale, and View Full Resolution (1:1). No additional
+toolbar, pane, splitter, or application-window resizing is introduced.
 
 Downsampling uses high-quality interpolation; native 1:1 mapping disables
 interpolation. The provider-backed full-resolution CGImage remains the source;
 no pixel-buffer copy or frame history is added. Camera resolution selection
 and optical Auto Res remain independent of image presentation.
 
-**Verification pending:** rebuild and verify both header controls independently
-in each pane, resize each pane with the divider in Resizable and Manual Scale
-modes, confirm the 1:1 command shows native pixels and permits edge-clamped
-panning, ensure each container remains within source dimensions at 1:1, and
-verify Retina backing-scale behavior. No local build or hardware test is
-claimed.
-
+**Verification pending:** rebuild and verify that the bottom dock reserves its
+own area without covering either slide; verify that the 1:1 document dimensions
+match the complete source frame at physical-pixel scale; pan to all four image
+edges without gaps or unreachable regions; verify independent per-pane scale
+states, divider resizing, camera mode changes, and Retina backing-scale changes.
+No local build or hardware test is claimed.
 ## Two-slide workspace and compact camera dock (2026-11-24)
 
 The main window now has two side-by-side slide panes and one thin bottom dock; the

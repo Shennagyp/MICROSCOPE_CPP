@@ -227,6 +227,7 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
 
     add_executable(amscope_native_mac_app MACOSX_BUNDLE
         app/native_mac/AmscopeNativeApp.swift
+        app/native_mac/NativeCameraModel.swift
         app/native_mac/MainWindowView.swift
         app/native_mac/NativePreviewSurface.swift
         app/native_mac/CameraControlsWindow.swift

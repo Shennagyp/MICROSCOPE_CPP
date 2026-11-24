@@ -296,15 +296,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 
         let backingScale = max(window.backingScaleFactor, 1)
         let paneCount: CGFloat = maximizedSlide == nil ? 2 : 1
-        let desiredContentSize = NSSize(
-            width: ceil(pixelSize.width / backingScale * paneCount + splitView.dividerThickness),
-            height: ceil(
-                pixelSize.height / backingScale +
-                previewHeaderHeight +
-                bottomDockHeight
-            )
-        )
-
+        let dividerAllowance = splitView.dividerThickness
         let safeWindowFrame = screen.visibleFrame.insetBy(
             dx: windowSizingMargin,
             dy: windowSizingMargin
@@ -312,6 +304,33 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         let maximumContentSize = window.contentRect(
             forFrameRect: safeWindowFrame
         ).size
+
+        let requestedImageWidth = pixelSize.width / backingScale
+        let requestedImageHeight = pixelSize.height / backingScale
+        let availableImageWidth = max(
+            1,
+            (maximumContentSize.width - dividerAllowance) / paneCount
+        )
+        let availableImageHeight = max(
+            1,
+            maximumContentSize.height - previewHeaderHeight - bottomDockHeight
+        )
+        let presentationScale = min(
+            1,
+            availableImageWidth / requestedImageWidth,
+            availableImageHeight / requestedImageHeight
+        )
+        let desiredContentSize = NSSize(
+            width: ceil(
+                requestedImageWidth * presentationScale * paneCount +
+                dividerAllowance
+            ),
+            height: ceil(
+                requestedImageHeight * presentationScale +
+                previewHeaderHeight +
+                bottomDockHeight
+            )
+        )
 
         let minimumContentWidth: CGFloat = 960
         let minimumContentHeight: CGFloat = 560
@@ -554,9 +573,12 @@ private final class NativeSlideImageView: NSView {
         }
 
         let imageSize = CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
+        let backingScale = max(window?.backingScaleFactor ?? 1, 1)
+        let nativePixelScale = 1 / backingScale
         let scale = min(
             bounds.width / imageSize.width,
-            bounds.height / imageSize.height
+            bounds.height / imageSize.height,
+            nativePixelScale
         )
         guard scale.isFinite, scale > 0 else { return }
 

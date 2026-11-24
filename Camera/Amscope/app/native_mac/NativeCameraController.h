@@ -94,7 +94,6 @@ private:
     mutable std::mutex requestMutex_;
     std::condition_variable requestCondition_;
     std::deque<PendingRequest> pendingRequests_;
-    std::thread commandWorker_;
     RequestId nextRequestId_ = 1;
     std::uint64_t scheduledSessionGeneration_ = 0;
     std::atomic<std::uint64_t> activeSessionGeneration_{0};
@@ -102,6 +101,10 @@ private:
 
     // Accessed only by the serialized command worker (and after join in dtor).
     std::shared_ptr<detail::AcquisitionFrameGate> acquisitionFrameGate_;
+
+    // Constructed last so every field used by runCommandWorker is initialized
+    // before the thread can begin executing.
+    std::thread commandWorker_;
 };
 
 } // namespace amscope::native_mac

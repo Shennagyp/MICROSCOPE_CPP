@@ -12,7 +12,7 @@ protocol NativeCameraFrameFeed: AnyObject {
 }
 
 extension AmscopeNativeCameraBridge: NativeCameraFrameFeed {
-    func setFrameAvailableHandler(_ handler: @escaping () -> Void) {
+    func setFrameAvailableHandler(_ handler: dispatch_block_t?) {
         onFrameAvailable = handler
     }
 }

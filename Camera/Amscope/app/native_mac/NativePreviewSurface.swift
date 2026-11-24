@@ -264,13 +264,17 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 
         switch activeSlide {
         case .slide1:
-            slideOnePane.display(image)
+            if !slideOnePane.isImageFrozen {
+                slideOnePane.display(image)
+            }
         case .slide2:
-            slideTwoPane.display(image)
+            if !slideTwoPane.isImageFrozen {
+                slideTwoPane.display(image)
+            }
         }
 
-        // Pane role/status changes are handled by selectActiveSlide and
-        // maximize/restore. Do not rewrite toolbar controls for every frame.
+        // Frozen panes still consume and release the newest lease. They simply
+        // do not replace their stable source image or update their UI.
     }
 }
 
@@ -293,6 +297,7 @@ private final class NativeSlidePreviewPane: NSView {
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "", target: nil, action: nil)
+    private let freezeButton = NSButton(title: "", target: nil, action: nil)
     private let captureButton = NSButton(title: "", target: nil, action: nil)
     private let panToolButton = NSButton(title: "", target: nil, action: nil)
     private let distanceToolButton = NSButton(title: "", target: nil, action: nil)
@@ -312,6 +317,8 @@ private final class NativeSlidePreviewPane: NSView {
     private var pulledFrameCount: UInt64 = 0
     private var droppedFrameCount: UInt64 = 0
     private var paneFrameCount: UInt64 = 0
+    private var currentIsActiveTarget = false
+    private var currentIsMaximized = false
 
     init(slide: NativeSlideID) {
         self.slide = slide
@@ -387,6 +394,16 @@ private final class NativeSlidePreviewPane: NSView {
         imageView.onOverlayStateChanged = { [weak self] in
             self?.updateToolButtonStates()
         }
+        imageView.onFreezeStateChanged = { [weak self] in
+            self?.updateFreezeButton()
+        }
+
+        configureIconButton(
+            freezeButton,
+            symbol: "pause.fill",
+            description: "Freeze this slide image",
+            action: #selector(toggleImageFreezeAction(_:))
+        )
 
         maximizeButton.bezelStyle = .texturedRounded
         maximizeButton.controlSize = .small
@@ -457,6 +474,7 @@ private final class NativeSlidePreviewPane: NSView {
         actionStack.addArrangedSubview(selectButton)
         actionStack.addArrangedSubview(imageSizingButton)
         actionStack.addArrangedSubview(fullResolutionButton)
+        actionStack.addArrangedSubview(freezeButton)
         actionStack.addArrangedSubview(captureButton)
         actionStack.addArrangedSubview(maximizeButton)
 
@@ -513,6 +531,7 @@ private final class NativeSlidePreviewPane: NSView {
         ])
         updateImageSizingButton()
         updateToolButtonStates()
+        updateFreezeButton()
     }
 
     private func configureIconButton(
@@ -566,6 +585,25 @@ private final class NativeSlidePreviewPane: NSView {
         annotationToolButton.isEnabled = hasImage
         captureButton.isEnabled = hasImage
         clearOverlayButton.isEnabled = imageView.hasOverlays
+    }
+
+    private func updateFreezeButton() {
+        let frozen = imageView.isImageFrozen
+        let description = frozen ? "Resume live image" : "Freeze this slide image"
+        let symbol = frozen ? "play.fill" : "pause.fill"
+        if #available(macOS 11.0, *) {
+            freezeButton.image = NSImage(
+                systemSymbolName: symbol,
+                accessibilityDescription: description
+            )
+            freezeButton.imagePosition = .imageOnly
+        } else {
+            freezeButton.image = nil
+            freezeButton.title = frozen ? ">" : "||"
+        }
+        freezeButton.toolTip = description
+        freezeButton.setAccessibilityLabel(description)
+        freezeButton.isEnabled = imageView.hasImage
     }
 
     private func configureAnnotationPlate(_ plate: NSView) {
@@ -624,6 +662,7 @@ private final class NativeSlidePreviewPane: NSView {
         if !hadImage {
             updateImageSizingButton()
             updateToolButtonStates()
+            updateFreezeButton()
         } else if hadOverlays && !imageView.hasOverlays {
             updateToolButtonStates()
         }
@@ -639,14 +678,22 @@ private final class NativeSlidePreviewPane: NSView {
     }
 
     func updatePresentationState(isActiveTarget: Bool, isMaximized: Bool) {
+        currentIsActiveTarget = isActiveTarget
+        currentIsMaximized = isMaximized
         if isActiveTarget {
-            statusLabel.stringValue = "LIVE"
-            statusLabel.textColor = NSColor.systemRed
-            selectButton.title = "LIVE"
+            statusLabel.stringValue = imageView.isImageFrozen ? "FROZEN" : "LIVE"
+            statusLabel.textColor = imageView.isImageFrozen
+                ? NSColor.systemOrange
+                : NSColor.systemRed
+            selectButton.title = imageView.isImageFrozen ? "FROZEN" : "LIVE"
             selectButton.isEnabled = false
         } else {
-            statusLabel.stringValue = imageView.hasImage ? "HELD IMAGE" : "STANDBY"
-            statusLabel.textColor = NSColor.secondaryLabelColor
+            statusLabel.stringValue = imageView.hasImage
+                ? (imageView.isImageFrozen ? "FROZEN IMAGE" : "HELD IMAGE")
+                : "STANDBY"
+            statusLabel.textColor = imageView.isImageFrozen
+                ? NSColor.systemOrange
+                : NSColor.secondaryLabelColor
             selectButton.title = "Switch Live"
             selectButton.isEnabled = true
         }
@@ -672,6 +719,7 @@ private final class NativeSlidePreviewPane: NSView {
         }
         maximizeButton.toolTip = maximizeDescription
         maximizeButton.setAccessibilityLabel(maximizeDescription)
+        updateFreezeButton()
     }
 
     @objc private func selectLiveTargetAction(_ sender: NSButton) {
@@ -695,6 +743,15 @@ private final class NativeSlidePreviewPane: NSView {
     @objc private func captureCurrentImageAction(_ sender: NSButton) {
         guard let image = imageView.currentImageForCapture() else { return }
         onCaptureImage?(image)
+    }
+
+    @objc private func toggleImageFreezeAction(_ sender: NSButton) {
+        imageView.toggleImageFreeze()
+        updateFreezeButton()
+        updatePresentationState(
+            isActiveTarget: currentIsActiveTarget,
+            isMaximized: currentIsMaximized
+        )
     }
 
     @objc private func selectPanToolAction(_ sender: NSButton) {
@@ -723,6 +780,7 @@ private final class NativeSlideImageView: NSView {
     private let imageContainer = NativeSlideImageContainerView()
     private var currentImage: CGImage?
     private(set) var toolMode: NativeSlideToolMode = .pan
+    private(set) var isImageFrozen = false
     private var measurements: [NativeDistanceMeasurement] = []
     private var previewMeasurement: NativeDistanceMeasurement?
     private var textAnnotations: [NativeSlideTextAnnotation] = []
@@ -731,6 +789,7 @@ private final class NativeSlideImageView: NSView {
     private(set) var sizingMode: NativeSlideImageSizingMode = .resizable
     var onSizingModeChanged: (() -> Void)?
     var onOverlayStateChanged: (() -> Void)?
+    var onFreezeStateChanged: (() -> Void)?
 
     /// Retained only in Manual Scale mode. The Full Resolution command sets
     /// this to the physical 1:1 scale, making the document exactly source
@@ -921,11 +980,21 @@ private final class NativeSlideImageView: NSView {
 
     // MARK: - Slide tools and image-space overlays
 
+    func toggleImageFreeze() {
+        guard currentImage != nil else { return }
+        isImageFrozen.toggle()
+        onFreezeStateChanged?()
+    }
+
     func setToolMode(_ mode: NativeSlideToolMode) {
         guard toolMode != mode else { return }
         toolMode = mode
         measurementStart = nil
         previewMeasurement = nil
+        if mode != .pan && currentImage != nil && !isImageFrozen {
+            isImageFrozen = true
+            onFreezeStateChanged?()
+        }
         updateOverlayRendering()
         window?.invalidateCursorRects(for: self)
     }

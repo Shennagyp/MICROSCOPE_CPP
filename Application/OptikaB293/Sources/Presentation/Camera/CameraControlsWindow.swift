@@ -79,7 +79,7 @@ struct CameraControlsWindow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                NativeFeatureSections(model: model)
+                NativeFeatureSections(model: model, features: model.features)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)

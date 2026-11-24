@@ -23,7 +23,7 @@ final class MicroscopeResolutionCoordinator: ObservableObject {
         isAutomaticResolutionEnabled = UserDefaults.standard.bool(
             forKey: Self.automaticResolutionDefaultsKey
         )
-        camera.onPreviewResolutionReadbackChanged = { [weak self] in
+        camera.features.onPreviewResolutionReadbackChanged = { [weak self] in
             self?.reconcileAutomaticResolution()
         }
         microscope.onConfigurationChanged = { [weak self] in
@@ -36,7 +36,7 @@ final class MicroscopeResolutionCoordinator: ObservableObject {
     }
 
     var automaticResolutionSummary: String {
-        guard let camera, let descriptor = camera.previewResolutionDescriptor else {
+        guard let camera, let descriptor = camera.features.previewResolutionDescriptor else {
             return "Camera modes unavailable"
         }
         guard let microscope,
@@ -74,8 +74,8 @@ final class MicroscopeResolutionCoordinator: ObservableObject {
               let camera,
               let microscope,
               camera.canChangePreviewResolution,
-              let descriptor = camera.previewResolutionDescriptor,
-              let current = camera.selectedPreviewResolutionSymbol,
+              let descriptor = camera.features.previewResolutionDescriptor,
+              let current = camera.features.selectedPreviewResolutionSymbol,
               let choice = NativeAutomaticResolutionPolicy.choose(
                 modeSymbols: descriptor.enumerationValues,
                 configuration: microscope.configuration

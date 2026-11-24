@@ -8,7 +8,7 @@ struct NativeMicroscopePaneControls: View {
     let slide: NativeSlideID
 
     private var resolutionDescriptor: AmscopeCameraFeatureDescriptor? {
-        model.previewResolutionDescriptor
+        model.features.previewResolutionDescriptor
     }
 
     private var isLiveTarget: Bool {
@@ -40,11 +40,11 @@ struct NativeMicroscopePaneControls: View {
                 Picker(
                     "Resolution",
                     selection: Binding(
-                        get: { model.selectedPreviewResolutionSymbol ?? "" },
+                        get: { model.features.selectedPreviewResolutionSymbol ?? "" },
                         set: { resolutionCoordinator.selectManualPreviewResolution(to: $0) }
                     )
                 ) {
-                    if model.selectedPreviewResolutionSymbol == nil {
+                    if model.features.selectedPreviewResolutionSymbol == nil {
                         Text("Select…").tag("")
                     }
                     ForEach(descriptor.enumerationValues, id: \.self) { symbol in
@@ -76,8 +76,8 @@ struct NativeMicroscopePaneControls: View {
             .disabled(resolutionDescriptor == nil ||
                       !model.canAccessFeatures ||
                       model.isCameraOperationPending ||
-                      model.isFeatureWritePending ||
-                      model.isFeatureSnapshotLoading)
+                      model.features.isFeatureWritePending ||
+                      model.features.isFeatureSnapshotLoading)
             .help(resolutionCoordinator.automaticResolutionHelp)
 
             Button {

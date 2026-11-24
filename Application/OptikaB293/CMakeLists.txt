@@ -15,6 +15,7 @@ set(OPTIKA_APP_SOURCES
     Sources/App/OptikaB293App.swift
     Sources/Composition/OptikaB293Composition.swift
     Sources/Features/Camera/NativeCameraModel.swift
+    Sources/Features/Camera/NativeCameraFeatureModel.swift
     Sources/Features/Slides/SlideImageGeometry.swift
     Sources/Features/Capture/NativeCaptureGallery.swift
     Sources/Features/Optics/MicroscopeOpticalConfiguration.swift

@@ -30,6 +30,7 @@ private enum NativeFeatureGroup: Int, CaseIterable, Identifiable {
 
 struct NativeFeatureSections: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var features: NativeCameraFeatureModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -41,21 +42,21 @@ struct NativeFeatureSections: View {
                     Text("Camera Features")
                         .font(.headline)
                     Spacer()
-                    if model.isFeatureSnapshotLoading {
+                    if features.isFeatureSnapshotLoading {
                         Text("Loading…")
                             .font(.caption)
                             .foregroundColor(OptikaPalette.secondaryText)
                     }
                     Button("Refresh") {
-                        model.refreshFeatures()
+                        features.refreshFeatures()
                     }
-                    .disabled(model.isFeatureSnapshotLoading ||
-                              model.isFeatureWritePending ||
+                    .disabled(features.isFeatureSnapshotLoading ||
+                              features.isFeatureWritePending ||
                               model.isCameraOperationPending)
                 }
 
                 ForEach(NativeFeatureGroup.allCases) { group in
-                    let descriptors = model.featureDescriptors.filter {
+                    let descriptors = features.featureDescriptors.filter {
                         $0.group.rawValue == group.rawValue
                     }
                     if !descriptors.isEmpty {
@@ -64,6 +65,7 @@ struct NativeFeatureSections: View {
                                 ForEach(descriptors, id: \.name) { descriptor in
                                     NativeFeatureEditor(
                                         model: model,
+                                        features: features,
                                         descriptor: descriptor
                                     )
                                 }
@@ -80,14 +82,15 @@ struct NativeFeatureSections: View {
 
 private struct NativeFeatureEditor: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var features: NativeCameraFeatureModel
     let descriptor: AmscopeCameraFeatureDescriptor
 
     private var editingDisabled: Bool {
         !model.canAccessFeatures ||
         !descriptor.isAvailable ||
         !descriptor.isWritable ||
-        model.isFeatureWritePending ||
-        model.isFeatureSnapshotLoading ||
+        features.isFeatureWritePending ||
+        features.isFeatureSnapshotLoading ||
         model.isCameraOperationPending
     }
 
@@ -107,7 +110,7 @@ private struct NativeFeatureEditor: View {
                         .foregroundColor(OptikaPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if let error = model.featureError(for: descriptor) {
+                if let error = features.featureError(for: descriptor) {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(OptikaPalette.live)
@@ -129,8 +132,8 @@ private struct NativeFeatureEditor: View {
             Toggle(
                 "",
                 isOn: Binding(
-                    get: { model.booleanValue(for: descriptor) },
-                    set: { model.writeBoolean($0, for: descriptor) }
+                    get: { features.booleanValue(for: descriptor) },
+                    set: { features.writeBoolean($0, for: descriptor) }
                 )
             )
             .labelsHidden()
@@ -141,8 +144,8 @@ private struct NativeFeatureEditor: View {
                 Picker(
                     "",
                     selection: Binding(
-                        get: { model.integerValue(for: descriptor) },
-                        set: { model.writeInteger($0, for: descriptor) }
+                        get: { features.integerValue(for: descriptor) },
+                        set: { features.writeInteger($0, for: descriptor) }
                     )
                 ) {
                     ForEach(
@@ -166,8 +169,8 @@ private struct NativeFeatureEditor: View {
             Picker(
                 "",
                 selection: Binding(
-                    get: { model.enumerationValue(for: descriptor) },
-                    set: { model.writeEnumeration($0, for: descriptor) }
+                    get: { features.enumerationValue(for: descriptor) },
+                    set: { features.writeEnumeration($0, for: descriptor) }
                 )
             ) {
                 ForEach(descriptor.enumerationValues, id: \.self) { symbol in
@@ -179,7 +182,7 @@ private struct NativeFeatureEditor: View {
             .frame(maxWidth: 220)
 
         @unknown default:
-            Text(model.displayValue(for: descriptor))
+            Text(features.displayValue(for: descriptor))
                 .foregroundColor(OptikaPalette.secondaryText)
         }
     }
@@ -189,8 +192,8 @@ private struct NativeFeatureEditor: View {
             TextField(
                 "Value",
                 text: Binding(
-                    get: { model.draftValue(for: descriptor) },
-                    set: { model.setDraftValue($0, for: descriptor) }
+                    get: { features.draftValue(for: descriptor) },
+                    set: { features.setDraftValue($0, for: descriptor) }
                 )
             )
             .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -198,7 +201,7 @@ private struct NativeFeatureEditor: View {
             .disabled(editingDisabled)
 
             Button("Set") {
-                model.commitDraft(for: descriptor)
+                features.commitDraft(for: descriptor)
             }
             .disabled(editingDisabled || !descriptor.isWritable)
         }

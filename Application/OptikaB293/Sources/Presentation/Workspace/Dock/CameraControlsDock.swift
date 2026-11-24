@@ -8,7 +8,7 @@ struct NativeCameraControlsDock: View {
     @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
 
     private var additionalFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
-        model.featureDescriptors.filter { $0.name != "AmcamResolutionIndex" }
+        model.features.featureDescriptors.filter { $0.name != "AmcamResolutionIndex" }
     }
 
     var body: some View {
@@ -28,7 +28,7 @@ struct NativeCameraControlsDock: View {
                             Spacer()
 
                             Button {
-                                model.refreshFeatures()
+                                model.features.refreshFeatures()
                             } label: {
                                 Image(systemName: "arrow.clockwise")
                                     .font(.system(size: 13, weight: .medium))
@@ -36,8 +36,8 @@ struct NativeCameraControlsDock: View {
                             .buttonStyle(BorderlessButtonStyle())
                             .help("Refresh camera feature values")
                             .disabled(!model.canAccessFeatures ||
-                                      model.isFeatureSnapshotLoading ||
-                                      model.isFeatureWritePending ||
+                                      model.features.isFeatureSnapshotLoading ||
+                                      model.features.isFeatureWritePending ||
                                       model.isCameraOperationPending)
                         }
 
@@ -46,7 +46,7 @@ struct NativeCameraControlsDock: View {
                                 .font(.system(size: 12))
                                 .foregroundColor(OptikaPalette.secondaryText)
                         } else if additionalFeatureDescriptors.isEmpty {
-                            Text(model.previewResolutionDescriptor == nil
+                            Text(model.features.previewResolutionDescriptor == nil
                                  ? "The camera reported no feature controls."
                                  : "No additional camera feature controls.")
                                 .font(.system(size: 12))
@@ -66,6 +66,7 @@ struct NativeCameraControlsDock: View {
 
                                 DockCameraFeatureControl(
                                     model: model,
+                                    features: model.features,
                                     descriptor: descriptor
                                 )
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,8 +123,8 @@ struct NativeCameraControlsDock: View {
                     .font(.system(size: 12))
                     .disabled(!model.canAccessFeatures ||
                               model.isCameraOperationPending ||
-                              model.isFeatureWritePending ||
-                              model.isFeatureSnapshotLoading)
+                              model.features.isFeatureWritePending ||
+                              model.features.isFeatureSnapshotLoading)
                     .help(resolutionCoordinator.automaticResolutionHelp)
 
                     Spacer(minLength: 4)
@@ -187,7 +188,7 @@ private struct CameraDockConnectionSection: View {
 
     @ViewBuilder
     private var resolutionControls: some View {
-        if let descriptor = model.previewResolutionDescriptor {
+        if let descriptor = model.features.previewResolutionDescriptor {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 8) {
                     Text("Resolution")
@@ -198,11 +199,11 @@ private struct CameraDockConnectionSection: View {
                     Picker(
                         "Resolution",
                         selection: Binding(
-                            get: { model.selectedPreviewResolutionSymbol ?? "" },
+                            get: { model.features.selectedPreviewResolutionSymbol ?? "" },
                             set: { resolutionCoordinator.selectManualPreviewResolution(to: $0) }
                         )
                     ) {
-                        if model.selectedPreviewResolutionSymbol == nil {
+                        if model.features.selectedPreviewResolutionSymbol == nil {
                             Text("Select resolution").tag("")
                         }
                         ForEach(descriptor.enumerationValues, id: \.self) { symbol in
@@ -218,7 +219,7 @@ private struct CameraDockConnectionSection: View {
             }
             .padding(.top, 2)
         } else if model.canAccessFeatures {
-            Text(model.isFeatureSnapshotLoading
+            Text(model.features.isFeatureSnapshotLoading
                  ? "Loading resolution modes…"
                  : "Resolution selection is unavailable for this camera.")
                 .font(.system(size: 11))

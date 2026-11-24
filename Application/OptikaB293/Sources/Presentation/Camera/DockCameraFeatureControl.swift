@@ -2,14 +2,15 @@ import SwiftUI
 
 struct DockCameraFeatureControl: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var features: NativeCameraFeatureModel
     let descriptor: AmscopeCameraFeatureDescriptor
 
     private var editingDisabled: Bool {
         !model.canAccessFeatures ||
         !descriptor.isAvailable ||
         !descriptor.isWritable ||
-        model.isFeatureWritePending ||
-        model.isFeatureSnapshotLoading ||
+        features.isFeatureWritePending ||
+        features.isFeatureSnapshotLoading ||
         model.isCameraOperationPending
     }
 
@@ -60,14 +61,14 @@ struct DockCameraFeatureControl: View {
             }
         }
         if let reason = descriptor.disabledReason, !reason.isEmpty { parts.append(reason) }
-        if let error = model.featureError(for: descriptor) { parts.append(error) }
+        if let error = features.featureError(for: descriptor) { parts.append(error) }
         return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
     private var editor: some View {
         if !descriptor.isWritable {
-            Text(model.displayValue(for: descriptor))
+            Text(features.displayValue(for: descriptor))
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(OptikaPalette.secondaryText)
                 .lineLimit(1)
@@ -78,8 +79,8 @@ struct DockCameraFeatureControl: View {
                 Toggle(
                     "",
                     isOn: Binding(
-                        get: { model.booleanValue(for: descriptor) },
-                        set: { model.writeBoolean($0, for: descriptor) }
+                        get: { features.booleanValue(for: descriptor) },
+                        set: { features.writeBoolean($0, for: descriptor) }
                     )
                 )
                 .labelsHidden()
@@ -91,8 +92,8 @@ struct DockCameraFeatureControl: View {
                     Picker(
                         "",
                         selection: Binding(
-                            get: { model.integerValue(for: descriptor) },
-                            set: { model.writeInteger($0, for: descriptor) }
+                            get: { features.integerValue(for: descriptor) },
+                            set: { features.writeInteger($0, for: descriptor) }
                         )
                     ) {
                         ForEach(descriptor.discreteIntegerValues.map(\.int64Value), id: \.self) { value in
@@ -115,8 +116,8 @@ struct DockCameraFeatureControl: View {
                     Picker(
                         "",
                         selection: Binding(
-                            get: { model.enumerationValue(for: descriptor) },
-                            set: { model.writeEnumeration($0, for: descriptor) }
+                            get: { features.enumerationValue(for: descriptor) },
+                            set: { features.writeEnumeration($0, for: descriptor) }
                         )
                     ) {
                         ForEach(descriptor.enumerationValues, id: \.self) { symbol in
@@ -132,7 +133,7 @@ struct DockCameraFeatureControl: View {
                 textEditor
 
             @unknown default:
-                Text(model.displayValue(for: descriptor))
+                Text(features.displayValue(for: descriptor))
                     .font(.system(size: 11))
                     .foregroundColor(OptikaPalette.secondaryText)
             }
@@ -144,8 +145,8 @@ struct DockCameraFeatureControl: View {
             TextField(
                 "Value",
                 text: Binding(
-                    get: { model.draftValue(for: descriptor) },
-                    set: { model.setDraftValue($0, for: descriptor) }
+                    get: { features.draftValue(for: descriptor) },
+                    set: { features.setDraftValue($0, for: descriptor) }
                 )
             )
             .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -154,7 +155,7 @@ struct DockCameraFeatureControl: View {
             .disabled(editingDisabled)
 
             Button("Set") {
-                model.commitDraft(for: descriptor)
+                features.commitDraft(for: descriptor)
             }
             .disabled(editingDisabled)
         }

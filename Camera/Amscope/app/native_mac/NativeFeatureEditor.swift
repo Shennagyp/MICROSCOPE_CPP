@@ -32,43 +32,49 @@ struct NativeFeatureSections: View {
     @ObservedObject var model: NativeCameraModel
 
     var body: some View {
-        if !model.canAccessFeatures {
-            Text("Open a camera to inspect its supported features.")
-                .foregroundColor(.secondary)
-        } else {
-            HStack {
-                Text("Camera Features")
-                    .font(.headline)
-                Spacer()
-                if model.isFeatureSnapshotLoading {
-                    Text("Loading…")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            if !model.canAccessFeatures {
+                Text("Open a camera to inspect its supported features.")
+                    .foregroundColor(.secondary)
+            } else {
+                HStack {
+                    Text("Camera Features")
+                        .font(.headline)
+                    Spacer()
+                    if model.isFeatureSnapshotLoading {
+                        Text("Loading…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Button("Refresh") {
+                        model.refreshFeatures()
+                    }
+                    .disabled(model.isFeatureSnapshotLoading ||
+                              model.isFeatureWritePending ||
+                              model.isCameraOperationPending)
                 }
-                Button("Refresh") {
-                    model.refreshFeatures()
-                }
-                .disabled(model.isFeatureSnapshotLoading ||
-                          model.isFeatureWritePending ||
-                          model.isCameraOperationPending)
-            }
 
-            ForEach(NativeFeatureGroup.allCases) { group in
-                let descriptors = model.featureDescriptors.filter {
-                    $0.group.rawValue == group.rawValue
-                }
-                if !descriptors.isEmpty {
-                    Section(header: Text(group.title)) {
-                        ForEach(descriptors, id: \.name) { descriptor in
-                            NativeFeatureEditor(
-                                model: model,
-                                descriptor: descriptor
-                            )
+                ForEach(NativeFeatureGroup.allCases) { group in
+                    let descriptors = model.featureDescriptors.filter {
+                        $0.group.rawValue == group.rawValue
+                    }
+                    if !descriptors.isEmpty {
+                        GroupBox(label: Text(group.title)) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(descriptors, id: \.name) { descriptor in
+                                    NativeFeatureEditor(
+                                        model: model,
+                                        descriptor: descriptor
+                                    )
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -89,6 +95,7 @@ private struct NativeFeatureEditor: View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(descriptor.displayName)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let unit = descriptor.unit, !unit.isEmpty {
                     Text(unit)
                         .font(.caption)
@@ -98,19 +105,21 @@ private struct NativeFeatureEditor: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let error = model.featureError(for: descriptor) {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            Spacer(minLength: 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             editor
         }
         .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

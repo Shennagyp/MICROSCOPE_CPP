@@ -274,14 +274,15 @@ NativeCameraController::RequestId NativeCameraController::enqueue(
         if (stopping_ || pendingRequests_.size() >= kMaximumPendingRequests)
             return 0;
 
+        if (nextRequestId_ == 0)
+            return 0;
         requestId = nextRequestId_++;
-        if (requestId == 0) {
-            requestId = nextRequestId_++;
-        }
 
         const std::uint64_t generation = lifecycleMutation
             ? nextSessionGenerationLocked()
             : scheduledSessionGeneration_;
+        if (generation == 0)
+            return 0;
 
         pendingRequests_.push_back(PendingRequest{
             requestId,
@@ -296,10 +297,9 @@ NativeCameraController::RequestId NativeCameraController::enqueue(
 }
 
 std::uint64_t NativeCameraController::nextSessionGenerationLocked() noexcept {
-    ++scheduledSessionGeneration_;
-    if (scheduledSessionGeneration_ == 0)
-        ++scheduledSessionGeneration_;
-    return scheduledSessionGeneration_;
+    if (scheduledSessionGeneration_ == std::numeric_limits<std::uint64_t>::max())
+        return 0;
+    return ++scheduledSessionGeneration_;
 }
 
 void NativeCameraController::runCommandWorker() {

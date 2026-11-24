@@ -289,7 +289,8 @@ final class NativeCameraModel: ObservableObject {
     }
 
     func enumerationValue(for descriptor: AmscopeCameraFeatureDescriptor) -> String {
-        featureValues[descriptor.name]?.enumerationSymbol ?? ""
+        featureValues[descriptor.name]?.enumerationSymbol ??
+            descriptor.enumerationValues.first ?? ""
     }
 
     func writeBoolean(_ value: Bool, for descriptor: AmscopeCameraFeatureDescriptor) {
@@ -348,10 +349,14 @@ final class NativeCameraModel: ObservableObject {
                 for: descriptor
             )
         case .integerVector:
-            let values = text.split(separator: ",").compactMap {
+            let components = text.split(separator: ",")
+            let values = components.compactMap {
                 Int64($0.trimmingCharacters(in: .whitespaces))
             }
-            guard values.count == Int(descriptor.elementCount) else {
+            guard !components.isEmpty &&
+                  values.count == components.count &&
+                  (!descriptor.hasElementCount ||
+                   values.count == Int(descriptor.elementCount)) else {
                 restoreDraft(for: descriptor)
                 return
             }

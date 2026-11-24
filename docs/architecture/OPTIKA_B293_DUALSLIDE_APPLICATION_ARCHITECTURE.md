@@ -242,7 +242,10 @@ This invalidates prior-session feature reads even when Start, Stop or Close fail
 After every lifecycle completion, `NativeCameraModel` refreshes feature state
 when the resulting camera state still permits access; otherwise it clears the
 feature snapshot. A new session also starts with an empty feature snapshot, so
-descriptors and values cannot leak across camera sessions.
+descriptors and values cannot leak across camera sessions. Descriptor and read
+callbacks also recheck the read-only access snapshot when delivered. This
+prevents a late callback from repopulating feature data after an asynchronous
+acquisition fault has revoked access without changing the session generation.
 
 ### 6.2 Slide documents
 

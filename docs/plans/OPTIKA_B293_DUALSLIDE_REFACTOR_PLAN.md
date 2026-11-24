@@ -122,7 +122,7 @@ Exit criteria:
 
 **Purpose:** remove the monolithic shared application model without introducing a global framework.
 
-**Implementation status:** workspace, microscope configuration and automatic-resolution policy have distinct owners. Camera session lifecycle and generic feature snapshot/mutation state are split between `NativeCameraModel` and `NativeCameraFeatureModel`. The command/readback audit closed the routing and recovery defects found so far: generic editors exclude and reject acquisition-affecting preview resolution; generic writes refresh after either outcome because enqueueing invalidates earlier reads; and lifecycle completions refresh or clear the snapshot according to the resulting camera state because session-generation changes invalidate older reads.
+**Implementation status:** workspace, microscope configuration and automatic-resolution policy have distinct owners. Camera session lifecycle and generic feature snapshot/mutation state are split between `NativeCameraModel` and `NativeCameraFeatureModel`. The command/readback audit closed the routing and recovery defects found so far: generic editors exclude and reject acquisition-affecting preview resolution; generic writes refresh after either outcome because enqueueing invalidates earlier reads; and lifecycle completions refresh or clear the snapshot according to the resulting camera state because session-generation changes invalidate older reads. Acquisition-fault handling clears the snapshot, and late descriptor/read callbacks are gated by current session access.
 
 Target state owners:
 - Camera session state: application camera adapter/session projection.

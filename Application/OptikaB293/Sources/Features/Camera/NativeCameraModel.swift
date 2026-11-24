@@ -32,7 +32,7 @@ final class NativeCameraModel: ObservableObject {
                 guard let self = self else { return }
                 self.present(error)
                 self.refreshState()
-                self.features.finishCameraOperation()
+                self.reconcileFeatureSnapshotForCurrentCameraState()
             }
         }
     }
@@ -146,13 +146,13 @@ final class NativeCameraModel: ObservableObject {
                 if let error = error {
                     self.openedCameraDeviceID = nil
                     self.present(error)
-                    self.reconcileFeatureSnapshotAfterLifecycleCompletion()
+                    self.reconcileFeatureSnapshotForCurrentCameraState()
                 } else {
                     self.openedCameraDeviceID = deviceID
                     if startImmediately {
                         self.startAcquisition()
                     } else {
-                        self.reconcileFeatureSnapshotAfterLifecycleCompletion()
+                        self.reconcileFeatureSnapshotForCurrentCameraState()
                     }
                 }
             }
@@ -170,7 +170,7 @@ final class NativeCameraModel: ObservableObject {
                 if let error = error {
                     self.present(error)
                 }
-                self.reconcileFeatureSnapshotAfterLifecycleCompletion()
+                self.reconcileFeatureSnapshotForCurrentCameraState()
             }
         }
     }
@@ -187,7 +187,7 @@ final class NativeCameraModel: ObservableObject {
                 if let error = error {
                     self.present(error)
                 }
-                self.reconcileFeatureSnapshotAfterLifecycleCompletion()
+                self.reconcileFeatureSnapshotForCurrentCameraState()
             }
         }
     }
@@ -204,7 +204,7 @@ final class NativeCameraModel: ObservableObject {
                 if let error = error {
                     self.present(error)
                 }
-                self.reconcileFeatureSnapshotAfterLifecycleCompletion()
+                self.reconcileFeatureSnapshotForCurrentCameraState()
             }
         }
     }
@@ -239,7 +239,7 @@ final class NativeCameraModel: ObservableObject {
         }
     }
 
-    private func reconcileFeatureSnapshotAfterLifecycleCompletion() {
+    private func reconcileFeatureSnapshotForCurrentCameraState() {
         guard canAccessFeatures else {
             if cameraState == .closed {
                 openedCameraDeviceID = nil

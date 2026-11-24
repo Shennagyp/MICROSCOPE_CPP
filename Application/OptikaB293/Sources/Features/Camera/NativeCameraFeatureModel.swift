@@ -82,6 +82,11 @@ final class NativeCameraFeatureModel: ObservableObject {
                 guard let self = self else { return }
                 self.isFeatureSnapshotLoading = false
 
+                let access = self.accessSnapshot()
+                guard access.canAccessFeatures && !access.isCameraOperationPending else {
+                    return
+                }
+
                 if let error = error {
                     self.presentError(error)
                     return
@@ -120,6 +125,10 @@ final class NativeCameraFeatureModel: ObservableObject {
         bridge.readFeatureNamed(name) { [weak self] value, error, _, _, _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
+                let access = self.accessSnapshot()
+                guard access.canAccessFeatures && !access.isCameraOperationPending else {
+                    return
+                }
                 guard let value = value, error == nil else {
                     if let error = error {
                         self.featureErrors[name] = error.localizedDescription

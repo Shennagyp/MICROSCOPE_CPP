@@ -316,6 +316,9 @@ available dock controls.
 
 - [x] Add a persisted OPTIKA B-293 optical profile with N-PLAN objectives,
   magnifications, N.A., immersion, 160 mm tube system, and Abbe condenser N.A.
+- [x] Replace the single 550 nm Rayleigh wavelength with a configurable H&E
+  chromatin band (initially 540–600 nm); report RF across the band and use its
+  shortest wavelength for conservative mode qualification.
 - [x] Add a separate Microscope Configuration window for optical-profile,
   sensor-pitch, camera-relay, wavelength, and sampling-target configuration.
 - [x] Add the manually selected active-objective state to the compact dock.

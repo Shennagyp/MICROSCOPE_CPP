@@ -144,9 +144,11 @@ sampling respectively. At 40× the predicted lower-edge factor in a 2×2 mode
 is only about 2.30, almost exactly the 2.3 threshold. It should be considered
 marginal until the optical path and effective sensor sampling are measured.
 
-With a 0.35× total relay instead, the full-mode factors are approximately 2.13,
-2.13, 3.28, and 4.27. Under a 2.3 target, the full-resolution mode is selected
-for all four objectives.
+With a 0.35× total relay instead, the full-mode RF ranges across 540–600 nm
+are approximately 2.10–2.33 (4× and 10×), 3.22–3.58 (40×), and 4.19–4.66
+(100×). At the conservative 540 nm band edge, 4× and 10× do not reach the
+2.3 target even at maximum camera resolution; Auto Res must report this
+shortfall rather than claim the optical limit is fully sampled.
 
 ## State and interaction boundaries
 

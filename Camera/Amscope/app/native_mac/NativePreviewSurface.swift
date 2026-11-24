@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-private enum NativeSlideToolMode {
+private enum NativeSlideToolMode: Equatable {
     case pan
     case distance
     case annotation
@@ -383,6 +383,9 @@ private final class NativeSlidePreviewPane: NSView {
         imageView.onSizingModeChanged = { [weak self] in
             self?.updateImageSizingButton()
         }
+        imageView.onOverlayStateChanged = { [weak self] in
+            self?.updateToolButtonStates()
+        }
 
         maximizeButton.bezelStyle = .texturedRounded
         maximizeButton.controlSize = .small
@@ -541,7 +544,13 @@ private final class NativeSlidePreviewPane: NSView {
             )
         } else {
             button.image = nil
-            button.title = symbol == "ruler" ? "R" : (symbol == "camera" ? "C" : "T")
+            switch symbol {
+            case "ruler": button.title = "R"
+            case "camera": button.title = "C"
+            case "trash": button.title = "×"
+            case "cursorarrow": button.title = "↖"
+            default: button.title = "T"
+            }
         }
     }
 
@@ -647,6 +656,7 @@ private final class NativeSlidePreviewPane: NSView {
         maximizeButton.toolTip = maximizeDescription
         maximizeButton.setAccessibilityLabel(maximizeDescription)
         updateImageSizingButton()
+        updateToolButtonStates()
     }
 
     @objc private func selectLiveTargetAction(_ sender: NSButton) {
@@ -705,6 +715,7 @@ private final class NativeSlideImageView: NSView {
 
     private(set) var sizingMode: NativeSlideImageSizingMode = .resizable
     var onSizingModeChanged: (() -> Void)?
+    var onOverlayStateChanged: (() -> Void)?
 
     /// Retained only in Manual Scale mode. The Full Resolution command sets
     /// this to the physical 1:1 scale, making the document exactly source
@@ -917,6 +928,7 @@ private final class NativeSlideImageView: NSView {
             previewMeasurement: previewMeasurement,
             annotations: textAnnotations
         )
+        onOverlayStateChanged?()
     }
 
     private func sourcePixel(at viewportPoint: CGPoint) -> CGPoint? {
@@ -1132,11 +1144,11 @@ private final class NativeSlideImageView: NSView {
             if measurement.distanceInPixels >= 1 {
                 measurements.append(measurement)
             }
-            measurementStart = nil
-            previewMeasurement = nil
-            updateOverlayRendering()
         }
+        measurementStart = nil
+        previewMeasurement = nil
         dragLocation = nil
+        updateOverlayRendering()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

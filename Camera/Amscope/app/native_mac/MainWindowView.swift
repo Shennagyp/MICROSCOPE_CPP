@@ -156,6 +156,12 @@ private struct NativeWorkspaceDockResizeDivider: View {
                     NSCursor.pop()
                 }
             }
+            .onDisappear {
+                if isHovering {
+                    NSCursor.pop()
+                    isHovering = false
+                }
+            }
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in

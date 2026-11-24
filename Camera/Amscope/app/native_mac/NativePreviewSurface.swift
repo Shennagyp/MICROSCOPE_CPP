@@ -52,7 +52,7 @@ final class NativePreviewNSView: NSView {
     private func consumeLatestFrame() {
         guard let bridge = bridge,
               let lease = bridge.takeLatestFrame(),
-              let image = lease.newCGImage() else {
+              let image = lease.createCGImage() else {
             return
         }
 

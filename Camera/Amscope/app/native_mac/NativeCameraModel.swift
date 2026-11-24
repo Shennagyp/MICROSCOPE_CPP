@@ -54,6 +54,7 @@ final class NativeCameraModel: ObservableObject {
     static let shared = NativeCameraModel()
 
     let bridge = AmscopeNativeCameraBridge()
+    let captureGallery = NativeCaptureGalleryStore()
 
     @Published private(set) var cameras: [AmscopeCameraDevice] = []
     @Published var selectedDeviceID = ""

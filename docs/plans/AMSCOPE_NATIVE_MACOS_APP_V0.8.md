@@ -101,43 +101,45 @@
 
 **Gate:** The native UI covers the existing supported camera workflows selected for v0.8 without changing driver semantics.
 
-## Independent slide-image presentation (2026-11-24)
+## Independent slide-image sizing modes (2026-11-24)
 
-The existing two-pane design remains unchanged: Slide 1 and Slide 2 stay
-side-by-side, each in its existing half of the preview split. Each pane's
-image view remains pinned to the pane's fixed viewport. No scroll/document
-container is created and no image-view frame is expanded.
+The two existing side-by-side slide panes, headers, divider, and window remain
+unchanged. Each pane is a fixed viewport containing a separate image container.
+The container is the only element whose size changes.
 
-Each slide image has independent presentation state:
+Each pane has an independent icon toggle with two modes:
 
-- The initial automatic zoom value is computed with the larger of the
-  horizontal and vertical pane-to-image ratios. For a high-resolution frame
-  larger than its pane, this fills the pane with no letterboxing/black bars.
-  The excess dimension is cropped by the fixed viewport rather than distorted.
-- The initial fill scale is capped at one camera pixel per physical display
-  pixel, so low-resolution frames are not upscaled merely to fill the pane.
-- Scroll-wheel and trackpad-pinch zoom increase the scale progressively from
-  the automatic fill value to exact Actual Pixels (1:1). Zoom is anchored
-  around the pointer.
-- Dragging pans the image within its fixed viewport. The image origin is
-  clamped at every edge so panning cannot expose empty black margins.
-- Double-click toggles automatic fill and Actual Pixels. The image-view context
-  menu exposes both modes.
-- Each pane retains its own zoom and pan state as new live frames replace its
-  previous image. A changed frame size resets that pane to automatic fill.
-- Downsampling uses high-quality interpolation; native 1:1 presentation
-  disables interpolation. The provider-backed full-resolution `CGImage`
-  remains the rendering source; no pixel-buffer copy or frame history is added.
+- **Resizable:** the image container automatically recalculates its scale when
+  that pane's viewport is resized by the split divider or maximize/restore.
+  It scales down when the pane becomes smaller, preserves aspect ratio, and
+  uses the largest cover scale that avoids black margins. It never upscales
+  beyond native 1:1 physical-pixel size.
+- **Full Resolution / manual scale:** the image container keeps its selected
+  scale when the pane viewport changes. Selecting this mode from the icon
+  starts at exact 1:1. Scroll-wheel or trackpad zoom from Resizable mode
+  automatically locks the pane into this mode at the manually selected scale.
+  The original full-resolution CGImage remains the source.
 
-No pane frame, split-view geometry, application-window size, header, dock,
-slide routing, or maximize/restore design changes are part of this update.
-Camera resolution selection and optical Auto Res remain independent of
-presentation scale.
+The image container is capped independently in both dimensions to the
+source-image width and height at 1:1 physical-pixel scale. It can never become
+larger than the original camera image. The fixed pane clips any overflow;
+dragging pans the image and clamps it to its edges. The other slide has its
+own independent mode, scale, and pan position.
 
-**Verification pending:** rebuild and verify automatic no-bars fill, aspect-ratio
-preservation with edge cropping, pan clamping, continuous zoom, exact 1:1,
-independent Slide 1 / Slide 2 state, changed camera modes, and Retina backing
-scale. No local build or hardware test is claimed by this source change.
+The context menu exposes Resizable and Full Resolution / Manual Scale. The
+compact icon in each existing pane header toggles the same two modes. No new
+toolbar, pane, splitter, or application-window resizing is introduced.
+
+Downsampling uses high-quality interpolation; native 1:1 mapping disables
+interpolation. The provider-backed full-resolution CGImage remains the source;
+no pixel-buffer copy or frame history is added. Camera resolution selection
+and optical Auto Res remain independent of image presentation.
+
+**Verification pending:** rebuild and verify the per-pane icon state, resize
+each pane with the divider in both modes, confirm that Resizable follows the
+pane, Full Resolution/manual zoom retains scale, each container remains
+within source dimensions at 1:1, panning is edge-clamped, and Retina backing
+scale behaves correctly. No local build or hardware test is claimed.
 
 ## Two-slide workspace and compact camera dock (2026-11-24)
 

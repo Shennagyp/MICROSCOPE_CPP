@@ -224,7 +224,10 @@ private struct CameraConnectionControl: View {
                                 Button {
                                     model.stopAcquisition()
                                 } label: {
-                                    Label("Stop", systemImage: "stop.fill")
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "stop.fill")
+                                        Text("Stop")
+                                    }
                                 }
                                 .disabled(!model.canStop)
                             }
@@ -233,7 +236,10 @@ private struct CameraConnectionControl: View {
                                 Button {
                                     model.closeCamera()
                                 } label: {
-                                    Label("Close", systemImage: "xmark.circle")
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "xmark.circle")
+                                        Text("Close")
+                                    }
                                 }
                                 .disabled(!model.canClose)
                             }

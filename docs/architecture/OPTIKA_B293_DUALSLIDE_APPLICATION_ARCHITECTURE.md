@@ -237,6 +237,13 @@ and readback snapshot. A failed write is reported and its draft is restored, but
 the rest of the feature view is also resynchronized rather than left showing
 permanent "Reading…" placeholders.
 
+Lifecycle commands advance the native session generation when they are enqueued.
+This invalidates prior-session feature reads even when Start, Stop or Close fails.
+After every lifecycle completion, `NativeCameraModel` refreshes feature state
+when the resulting camera state still permits access; otherwise it clears the
+feature snapshot. A new session also starts with an empty feature snapshot, so
+descriptors and values cannot leak across camera sessions.
+
 ### 6.2 Slide documents
 
 Each slide pane owns presentation/document state such as:

@@ -146,12 +146,13 @@ final class NativeCameraModel: ObservableObject {
                 if let error = error {
                     self.openedCameraDeviceID = nil
                     self.present(error)
+                    self.reconcileFeatureSnapshotAfterLifecycleCompletion()
                 } else {
                     self.openedCameraDeviceID = deviceID
                     if startImmediately {
                         self.startAcquisition()
                     } else {
-                        self.features.refreshFeatures()
+                        self.reconcileFeatureSnapshotAfterLifecycleCompletion()
                     }
                 }
             }
@@ -168,10 +169,8 @@ final class NativeCameraModel: ObservableObject {
                 self.refreshState()
                 if let error = error {
                     self.present(error)
-                } else {
-                    self.openedCameraDeviceID = nil
-                    self.features.clearForClosedSession()
                 }
+                self.reconcileFeatureSnapshotAfterLifecycleCompletion()
             }
         }
     }
@@ -187,9 +186,8 @@ final class NativeCameraModel: ObservableObject {
                 self.refreshState()
                 if let error = error {
                     self.present(error)
-                } else {
-                    self.features.refreshFeatures()
                 }
+                self.reconcileFeatureSnapshotAfterLifecycleCompletion()
             }
         }
     }
@@ -205,9 +203,8 @@ final class NativeCameraModel: ObservableObject {
                 self.refreshState()
                 if let error = error {
                     self.present(error)
-                } else {
-                    self.features.refreshFeatures()
                 }
+                self.reconcileFeatureSnapshotAfterLifecycleCompletion()
             }
         }
     }
@@ -240,6 +237,20 @@ final class NativeCameraModel: ObservableObject {
                 self.features.refreshFeatures()
             }
         }
+    }
+
+    private func reconcileFeatureSnapshotAfterLifecycleCompletion() {
+        guard canAccessFeatures else {
+            if cameraState == .closed {
+                openedCameraDeviceID = nil
+            }
+            features.clearForUnavailableSession()
+            return
+        }
+
+        // Lifecycle requests advance the native session generation when queued.
+        // A failed transition can therefore invalidate earlier feature reads too.
+        features.refreshFeatures()
     }
 
     private func refreshState() {

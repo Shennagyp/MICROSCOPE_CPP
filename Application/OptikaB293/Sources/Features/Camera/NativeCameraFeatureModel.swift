@@ -52,7 +52,7 @@ final class NativeCameraFeatureModel: ObservableObject {
         featureDescriptors.filter { $0.name != Self.previewResolutionFeatureName }
     }
 
-    func beginNewCameraSession() { selectedPreviewResolutionSymbol = nil }
+    func beginNewCameraSession() { clearForUnavailableSession() }
     func finishCameraOperation() {
         isFeatureWritePending = false
         isFeatureSnapshotLoading = false
@@ -62,7 +62,7 @@ final class NativeCameraFeatureModel: ObservableObject {
     func recordPreviewResolutionSelection(_ symbol: String) {
         selectedPreviewResolutionSymbol = symbol
     }
-    func clearForClosedSession() {
+    func clearForUnavailableSession() {
         featureDescriptors = []
         featureValues = [:]
         selectedPreviewResolutionSymbol = nil

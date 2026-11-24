@@ -11,26 +11,27 @@
 **Fixed-8-bit RAW correction:** `a16ae3bd77c56b14384736aa457e859c73a8072f`  
 **Common RAW 8/16-bit selector:** `3ef46d3a5b85aa7ae2e22d160d92f61aecace5bb`  
 **Latest CI for active branch:** No CI result has been reported for the v0.7 Phase 4 source commit; earlier workflow runs in the historical notes below predate this extraction.  
-**Latest owner-reported local validation source commit:** `4d61eca9d0f3c70bc1468628a05640e5339c2693` (Release build linked `amscope_preview`; 15/15 CTest passed; includes the ImageInfoBar callback correction but predates the dockable-info/live-edit follow-up)  
+**Latest owner-reported local validation source commit:** `4d61eca9d0f3c70bc1468628a05640e5339c2693` (Release build linked `amscope_preview`; 15/15 CTest passed; predates the current dock/live-edit/compact-style changes)  
 **Current CI:** Not reported for the active v0.7 Phase 4 source commit.  
 **Latest Phase 4 physical smoke checkout:** `5339c441659b45a3bdb30fdce6971f6dc991f885` (MU503 FrameView preview, Open/Start/Stop/Close; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`)  
 **Current phase:** Phase 4 — extract reusable Qt camera UI  
-**Phase status:** Phases 0–3 are accepted by the project owner. Phase 4 FrameView has passed its owner-reported build/test and MU503 preview smoke. The File-menu controls window/ImageInfoBar revision built successfully and passed 15/15 CTest at `4d61eca`. The latest follow-up makes the one Imaging Information bar dockable and allows descriptor-approved live Exposure/Color edits; it is not yet built/tested and still needs MU503 UI smoke. No new backend, SDK operation, or camera feature was added.
+**Phase status:** Phases 0–3 are accepted by the project owner. Phase 4 FrameView has passed its owner-reported build/test and MU503 preview smoke. The earlier File-menu/ImageInfoBar UI revision built successfully and passed 15/15 CTest at `4d61eca`. The current implementation replaces the controls dialog with a persistent, right-side Camera Controls dock; keeps the live preview central; and provides one compact bottom Imaging Information dock. The current dock/styling source is not yet built/tested and needs MU503 UI smoke. No new backend, SDK operation, or camera feature was added.
 
 This is the continuation entrypoint for subsequent development sessions. It is a state snapshot, not a replacement for the architecture papers or completion plan.
 
 ## Current continuation state — 24 November 2026
 
 - Active branch: `amscope-native-driver-v0.7`.
-- Latest UI source commits: dockable single information surface/live edit policy in `b295df9efd8fc2532e4e9f4fa863332470344528`; existing descriptor-group corrections in `11c443d85bf19916e817121e6c65ddd142174e7e` (current branch head).
-- Latest owner-reported local validation: `4d61eca9d0f3c70bc1468628a05640e5339c2693` built the previous UI revision including `amscope_preview` and passed **15/15 CTest**. The dockable-info/live-edit changes after that revision are not yet built or tested.
-- Previously accepted FrameView physical check: owner confirmed the MU503 live preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This validates the earlier FrameView extraction only, not the new dock/edit behavior.
-- Main UI now has only the FrameView in its central workspace. The single Imaging Information bar sits in a movable, floatable, closable QDockWidget, initially docked at the bottom and restored through **View → Imaging Information**. Transient status messages are rendered as items in this same dock; the app no longer creates a QStatusBar.
-- **File → Camera Controls…** remains the sole entry point for camera discovery, selection, Open/Start/Stop/Close, still capture, feature tabs, triggers and accessories. It remains modeless and retains the existing camera session if hidden/closed.
+- Latest source-bearing UI revision: `9b3ae44d7d8331a0de5ed1d960909174c045cf8d`. It includes dock workspace conversion, compact typography and controls, a 42–48 px imaging information bar, saved/restored QMainWindow dock layout, and camera discovery refresh when the Camera Controls dock is shown. Later commits update docs only.
+- Latest owner-reported local validation: `4d61eca9d0f3c70bc1468628a05640e5339c2693` built the previous UI revision including `amscope_preview` and passed **15/15 CTest**. The dock workspace/compact-styling changes after that revision are not yet built or tested.
+- Previously accepted FrameView physical check: owner confirmed the MU503 live preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This validates the earlier FrameView extraction only, not the current dock/edit behavior.
+- Main UI now follows a dock workspace: FrameView is central; Camera Controls is a right-side dock; Imaging Information is a compact bottom dock. Both docks can move/float/close and expose View-menu toggle actions. File → Camera Controls raises its dock. QSettings saves/restores main-window geometry and dock layout across launches.
+- Camera Controls uses a compact two-row discovery/lifecycle panel followed by still-capture controls and the existing scrollable feature/accessory settings. Showing the dock triggers camera discovery when the session is Closed.
+- Imaging Information uses reduced 8–9 pt typography and 42–48 px widget height. It contains frame metadata, current feature readbacks and application-status items. The application does not create a separate QStatusBar.
 - The generic ImageInfoBar remains backend-neutral: it renders host-supplied frame metadata and feature values, emits edit intent, and has no camera/descriptor/write dependency of its own.
-- Existing AmScope descriptor records now correctly classify Automatic Exposure, Exposure Time and Analog Gain as Exposure, and color matrix/white-balance features as Color. While Streaming, only readable/writable Exposure and Color items can be edited; other potentially stopped-only image settings remain disabled. Exposure Time is writable only with Automatic Exposure set to Off. The existing backend rebuilds/validates the live descriptor and the host refreshes the display after write/readback.
-- No new feature, saturation support, SDK operation, or backend was added. The AmScope backend source change only classifies existing feature descriptors.
-- The owner-reported 15/15 test result predates the latest dock/live-edit source commits. There is no current-head build/CTest result and no physical test of docking or live feature edits.
+- Existing AmScope descriptors correctly classify Automatic Exposure, Exposure Time and Analog Gain as Exposure, and Color Matrix/White Balance as Color. During Streaming only readable/writable Exposure and Color items may be edited. Exposure Time requires Automatic Exposure Off. The existing backend validates each write, and display values update after queued write/readback.
+- No new camera feature, saturation support, SDK operation, backend, worker, or acquisition path was added. The UI styling/layout changes do not alter frame processing.
+- Current source build/CTest and physical docking/edit smoke are still pending.
 - **Next local gate:**
 
 ```sh
@@ -39,9 +40,9 @@ cmake --build build/amscope-v07 --config Release --parallel
 ctest --test-dir build/amscope-v07 --output-on-failure
 ```
 
-No CMake changes were made in the latest follow-up. Require the full `amscope_preview` target to link and all **15/15** CTest tests to pass at the current branch head.
+No CMake changes were made in the latest UI follow-up. Require the full `amscope_preview` target to link and all **15/15** CTest tests to pass at the current branch head.
 
-- After the software gate, physical smoke-check the new UI: confirm there is one Imaging Information dock and no second status bar; move/float/close it and restore it through the View menu. Open **File → Camera Controls…**, discover/select the MU503, Open and Start, then test Automatic Exposure, Analog Gain and White Balance edits while streaming when their descriptors permit. Set Automatic Exposure to Off before testing Exposure Time. Verify each displayed value changes only after queued write/readback. Stop and verify stopped-only settings remain disabled during streaming and become available after Stop where descriptors allow. Close the camera cleanly.
+- After the software gate, physical smoke-check the new dock workspace: move/float/close both docks and restore them through View; restart and verify the saved dock layout is restored. Confirm the central preview remains unobstructed and only one Imaging Information surface exists. Use File → Camera Controls to raise the right dock, discover/select the MU503, Open and Start. Verify compact text/control sizing is legible and the info dock is not clipped. Test Automatic Exposure, Analog Gain and White Balance edits while streaming when descriptors permit. Set Automatic Exposure to Off before testing Exposure Time. Verify readback updates, Stop, then check stopped-only settings and Close.
 - No FPS benchmark, new camera capability, or backend qualification is implied. Keep the acquisition/frame path unchanged.
 - After this UI increment passes, the next reusable-UI slice is the descriptor-driven feature editor. Keep request ordering, generations, feature validation, readback policy, camera ownership and backend execution in the host/application layer unless a separate generic UI contract is justified.
 - Do not mark Phase 4 complete until the remaining reusable UI components and its phase-wide exit criteria are met.

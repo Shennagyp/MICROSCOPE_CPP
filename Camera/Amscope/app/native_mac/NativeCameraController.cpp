@@ -241,6 +241,156 @@ NativeCameraController::RequestId NativeCameraController::requestStop(
         });
 }
 
+NativeCameraController::RequestId NativeCameraController::requestFeatureDescriptors(
+    FeatureDescriptorsCallback callback) {
+    if (!callback)
+        return 0;
+
+    return enqueueFeatureRequest(
+        RequestSemantics::FeatureSnapshot,
+        [this, callback = std::move(callback)](
+            RequestId requestId,
+            std::uint64_t sessionGeneration,
+            std::uint64_t featureStateGeneration) mutable {
+            FeatureDescriptorsResult result;
+            try {
+                result = camera_.featureDescriptors();
+            } catch (const std::exception& exception) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    {},
+                    exception.what(),
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            } catch (...) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    {},
+                    "Unknown exception while reading camera feature descriptors.",
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            }
+
+            if (isFeatureSnapshotCurrent(
+                    sessionGeneration, featureStateGeneration)) {
+                invokeSafely(
+                    callback,
+                    requestId,
+                    sessionGeneration,
+                    featureStateGeneration,
+                    std::move(result));
+            }
+        });
+}
+
+NativeCameraController::RequestId NativeCameraController::requestReadFeature(
+    std::string name,
+    FeatureReadCallback callback) {
+    if (!callback || name.empty())
+        return 0;
+
+    return enqueueFeatureRequest(
+        RequestSemantics::FeatureSnapshot,
+        [this, name = std::move(name), callback = std::move(callback)](
+            RequestId requestId,
+            std::uint64_t sessionGeneration,
+            std::uint64_t featureStateGeneration) mutable {
+            FeatureReadResult result;
+            try {
+                result = camera_.readFeature(name);
+            } catch (const std::exception& exception) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    name,
+                    exception.what(),
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            } catch (...) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    name,
+                    "Unknown exception while reading camera feature.",
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            }
+
+            if (isFeatureSnapshotCurrent(
+                    sessionGeneration, featureStateGeneration)) {
+                invokeSafely(
+                    callback,
+                    requestId,
+                    sessionGeneration,
+                    featureStateGeneration,
+                    std::move(result));
+            }
+        });
+}
+
+NativeCameraController::RequestId NativeCameraController::requestWriteFeature(
+    std::string name,
+    camera::CameraFeatureValue value,
+    FeatureWriteCallback callback) {
+    if (!callback || name.empty())
+        return 0;
+
+    return enqueueFeatureRequest(
+        RequestSemantics::FeatureMutation,
+        [this, name = std::move(name), value = std::move(value),
+         callback = std::move(callback)](
+            RequestId requestId,
+            std::uint64_t sessionGeneration,
+            std::uint64_t) mutable {
+            FeatureWriteResult result;
+            try {
+                result = camera_.writeFeature(name, value);
+            } catch (const std::exception& exception) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    name,
+                    exception.what(),
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            } catch (...) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    name,
+                    "Unknown exception while writing camera feature.",
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            }
+
+            if (isSessionCurrent(sessionGeneration)) {
+                invokeSafely(callback, requestId, sessionGeneration, std::move(result));
+            }
+        });
+}
+
+bool NativeCameraController::isSessionCurrent(
+    std::uint64_t sessionGeneration) const noexcept {
+    return activeSessionGeneration_.load(std::memory_order_acquire) ==
+        sessionGeneration;
+}
+
+bool NativeCameraController::isFeatureSnapshotCurrent(
+    std::uint64_t sessionGeneration,
+    std::uint64_t featureStateGeneration) const noexcept {
+    return isSessionCurrent(sessionGeneration) &&
+        featureStateGeneration_.load(std::memory_order_acquire) ==
+            featureStateGeneration;
+}
+
 CameraState NativeCameraController::state() const noexcept {
     return camera_.state();
 }
@@ -268,6 +418,25 @@ NativeCameraController::RequestId NativeCameraController::enqueue(
     if (!execute)
         return 0;
 
+    const RequestSemantics semantics = lifecycleMutation
+        ? RequestSemantics::LifecycleMutation
+        : RequestSemantics::SessionBound;
+    return enqueueFeatureRequest(
+        semantics,
+        [execute = std::move(execute)](
+            RequestId requestId,
+            std::uint64_t sessionGeneration,
+            std::uint64_t) mutable {
+            execute(requestId, sessionGeneration);
+        });
+}
+
+NativeCameraController::RequestId NativeCameraController::enqueueFeatureRequest(
+    RequestSemantics semantics,
+    std::function<void(RequestId, std::uint64_t, std::uint64_t)> execute) {
+    if (!execute)
+        return 0;
+
     RequestId requestId = 0;
     {
         std::lock_guard<std::mutex> lock(requestMutex_);
@@ -278,17 +447,41 @@ NativeCameraController::RequestId NativeCameraController::enqueue(
             return 0;
         requestId = nextRequestId_++;
 
-        const std::uint64_t generation = lifecycleMutation
+        const bool lifecycleMutation =
+            semantics == RequestSemantics::LifecycleMutation;
+        const bool featureMutation =
+            semantics == RequestSemantics::FeatureMutation;
+
+        const std::uint64_t sessionGeneration = lifecycleMutation
             ? nextSessionGenerationLocked()
             : scheduledSessionGeneration_;
-        if (lifecycleMutation && generation == 0)
+        if (lifecycleMutation && sessionGeneration == 0)
             return 0;
+
+        if (featureMutation &&
+            scheduledFeatureStateGeneration_ ==
+                std::numeric_limits<std::uint64_t>::max()) {
+            return 0;
+        }
+        if (featureMutation) {
+            ++scheduledFeatureStateGeneration_;
+            featureStateGeneration_.store(
+                scheduledFeatureStateGeneration_, std::memory_order_release);
+        }
+
+        const std::uint64_t featureStateGeneration =
+            scheduledFeatureStateGeneration_;
+        auto task = [execute = std::move(execute), featureStateGeneration](
+            RequestId id, std::uint64_t session) mutable {
+            execute(id, session, featureStateGeneration);
+        };
 
         pendingRequests_.push_back(PendingRequest{
             requestId,
-            generation,
-            lifecycleMutation,
-            std::move(execute)
+            sessionGeneration,
+            featureStateGeneration,
+            semantics,
+            std::move(task)
         });
     }
 
@@ -318,9 +511,17 @@ void NativeCameraController::runCommandWorker() {
             pendingRequests_.pop_front();
         }
 
-        if (request.lifecycleMutation) {
+        if (request.semantics == RequestSemantics::LifecycleMutation) {
             activeSessionGeneration_.store(
                 request.sessionGeneration, std::memory_order_release);
+        } else if (!isSessionCurrent(request.sessionGeneration)) {
+            continue;
+        }
+
+        if (request.semantics == RequestSemantics::FeatureSnapshot &&
+            featureStateGeneration_.load(std::memory_order_acquire) !=
+                request.featureStateGeneration) {
+            continue;
         }
 
         try {

@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 final class NativeCameraModel: ObservableObject {
     private let bridge: AmscopeNativeCameraBridge
-    let frameFeed: NativeCameraFrameFeed
+    var frameFeed: NativeCameraFrameFeed { bridge }
     lazy var features = NativeCameraFeatureModel(
         bridge: bridge,
         accessSnapshot: { [weak self] in
@@ -32,7 +32,6 @@ final class NativeCameraModel: ObservableObject {
 
     init(bridge: AmscopeNativeCameraBridge) {
         self.bridge = bridge
-        self.frameFeed = bridge
 
         bridge.onAcquisitionError = { [weak self] error in
             MainActor.assumeIsolated {

@@ -82,9 +82,11 @@ Exit criteria:
 
 **Purpose:** make the application structurally independent of the camera directory.
 
+**Implementation status:** source/build ownership migration committed; CMake configuration and compilation remain unverified.
+
 Deliverables:
 - Create `Application/OptikaB293` as the application-owned source/build boundary.
-- Move or copy only application-owned entry point, UI and integration adapter files into the new boundary, preserving the old target while migration is in progress.
+- Move application-owned entry point, UI and integration adapter files into the new boundary. The v0.8 source remains available in the pre-refactor Git baseline/history.
 - Move `NativeCameraController` and the Objective-C++ bridge to an application camera adapter location; they coordinate the application with Camera but are not the vendor driver.
 - Extract application-target configuration from `Camera/Amscope/CMakeLists.txt` into the application build definition.
 - Keep the AmScope driver and common camera types buildable without the app.
@@ -94,15 +96,17 @@ Exit criteria:
 - Camera library targets no longer own or compile the product application.
 - Application target links to camera libraries from outside `Camera/`.
 - The existing camera library's public contracts are unchanged.
-- The migration can still build both the old reference target and the new target until cutover.
+- The current app CMake source list is statically verified against repository paths; the new target still requires user-side configure/build and behavior acceptance.
 
 ## Phase 2 — Functional core extraction
 
 **Purpose:** move policy and deterministic calculations out of UI state holders.
 
+**Implementation status:** calibration, automatic-resolution policy, image geometry and overlay value models are extracted. Source tests are registered but have not been executed.
+
 Extract focused pure functions/value models for:
 - Optical calibration and conversion to specimen-plane distance.
-- Automatic resolution selection, including explicit readout-mode semantics and evidence/provenance.
+- Automatic resolution selection, including explicit readout-mode semantics and evidence/provenance; the pure policy is owned by optics and invoked through the application-level microscope resolution coordinator.
 - Source-image, viewport and display coordinate transforms.
 - Fit, lock and 1:1 image scaling policy.
 - Measurement geometry and overlay coordinate calculations.
@@ -118,16 +122,19 @@ Exit criteria:
 
 **Purpose:** remove the monolithic shared application model without introducing a global framework.
 
+**Implementation status:** workspace, microscope configuration and automatic-resolution policy now have distinct owners. Camera session and generic feature snapshot/mutation state remain in one camera application model and are a candidate for a later, evidence-driven split.
+
 Target state owners:
 - Camera session state: application camera adapter/session projection.
 - Camera feature state: feature snapshot and mutation coordinator.
-- Microscope/optical configuration: microscope configuration owner and persistence port.
+- Microscope/optical configuration: `MicroscopeConfigurationModel` and its draft/persistence ownership.
+- Automatic resolution: `MicroscopeResolutionCoordinator`, joining pure optics policy with camera readback and generic resolution mutations.
 - Workspace state: active live destination, dock visibility/layout and pane selection.
 - Slide document state: per-pane retained image, freeze, view transform and overlays.
 - Capture gallery state: capture store and persistence lifecycle.
 
 Deliverables:
-- Application composition root constructs concrete capability adapters and feature coordinators.
+- Application composition root constructs the camera adapter, microscope configuration owner, resolution coordinator, workspace and gallery.
 - Replace `NativeCameraModel.shared` as a hidden dependency with explicit composition/injection.
 - Separate state transitions from effects.
 - Make asynchronous completion/error paths update the correct state owner.

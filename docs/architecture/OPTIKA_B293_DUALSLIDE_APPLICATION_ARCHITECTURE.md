@@ -136,7 +136,7 @@ The target combines functional programming principles with object-oriented lifec
 Prefer pure functions for behavior that can be expressed as values:
 
 - Optical calibration and unit conversion.
-- Automatic resolution policy.
+- Automatic resolution policy (pure optics policy coordinated at the application boundary).
 - Image coordinate and viewport transformations.
 - Measurement geometry and specimen-plane distance calculation.
 - Segmentation post-processing and object filtering.
@@ -226,9 +226,39 @@ The active destination is application routing state, not a camera property.
 
 ### 6.4 Microscope configuration
 
-The microscope configuration describes the optical path and hardware configuration used by application calculations. It is not inferred from the camera brand. Camera sensor specifications, output/readout behavior, objective magnification, numerical aperture and relay/reducer magnification must be represented explicitly, with provenance and validation.
+`MicroscopeConfigurationModel` owns the active `MicroscopeOpticalConfiguration`,
+its persisted representation, the editable draft store and the derived generic
+measurement calibration. It is not inferred from the camera brand. Camera sensor
+specifications, output/readout behavior, objective magnification, numerical
+aperture and relay/reducer magnification must be represented explicitly, with
+provenance and validation.
 
-An unknown calibration must remain unknown. The application must not silently display a precise physical measurement derived from guessed hardware assumptions.
+An unknown calibration must remain unknown. The application must not silently
+display a precise physical measurement derived from guessed hardware assumptions.
+
+### 6.5 Automatic resolution coordination
+
+Automatic resolution is an optics-level application workflow, not a camera feature.
+Its ownership is split deliberately:
+
+- `NativeAutomaticResolutionPolicy` is a deterministic function over microscope
+  optical configuration and camera-reported readout-mode symbols.
+- `MicroscopeResolutionCoordinator` owns the automatic-selection preference,
+  presents the policy summary and reconciles changes when microscope configuration
+  changes or the camera reports a new resolution readback.
+- `NativeCameraModel` reports camera feature/readback state and performs the
+  generic preview-resolution mutation. It does not know about objectives,
+  numerical aperture, stain wavelength bands or Rayleigh sampling.
+
+The coordinator is constructed at the application composition root and receives
+both state owners explicitly. The camera publishes a resolution-readback
+notification; the microscope model publishes configuration changes. The
+coordinator responds by evaluating the pure policy and requesting a generic
+camera resolution mutation only when the selected mode differs from the readback.
+
+The current readout-mode-to-effective-pixel interpretation in the policy remains
+provisional until the selected camera's mode semantics are measured and
+documented. A passing pure-policy test does not establish hardware truth.
 
 ## 7. UI architecture
 
@@ -304,31 +334,49 @@ Physical measurement and automatic resolution decisions must be based on the sam
 
 ## 9. Build and integration boundary
 
-The existing native macOS executable is currently defined inside `Camera/Amscope/CMakeLists.txt`, and application-facing files are currently stored below `Camera/Amscope/app/native_mac`. This is a historical organization, not the desired final ownership.
+The application ownership relocation is implemented in the current
+`OPTIKA-B293-DUALSLIDE-APP` branch:
 
-The migration target is:
-
-- Camera CMake targets build camera libraries and optional camera-specific adapters/probes.
-- The OPTIKA B293 application build is owned by `Application/OptikaB293`.
-- The application links against camera contracts and the selected camera implementation; camera does not link against the app.
-- The Objective-C++/Swift bridge and native application controller are application integration adapters, not part of the reusable AmScope driver.
+- Root `CMakeLists.txt` composes the camera capability and the optional native app.
+- `Camera/Amscope/CMakeLists.txt` owns the reusable driver and camera-specific
+  adapters/probes; it no longer owns or compiles the OPTIKA application.
+- `Application/OptikaB293/CMakeLists.txt` owns the SwiftUI/AppKit application,
+  application camera adapter, feature models and presentation files.
+- `OPTIKA_BUILD_NATIVE_APP` controls the product app target and defaults OFF.
+- The Objective-C++/Swift bridge and native camera controller are application
+  integration adapters, not part of the reusable AmScope driver.
 - The vendor SDK remains isolated in the AmScope implementation.
-- Application-specific UI and microscope workflows are never compiled as part of the generic camera library.
 
-A root-level build entry point can be introduced when it is useful for coordinating capabilities. Do not break existing camera build workflows during the migration.
+The current branch statically maps every application CMake source entry to a
+file in the repository tree. This is a source-registration audit only; CMake
+configuration and compilation remain unverified.
 
 ## 10. Migration and compatibility rules
 
 The migration is incremental and behavior-preserving until a behavior is intentionally changed.
 
-- The old v0.8 app is a reference implementation and temporary migration source.
+- The v0.8 app remains the migration reference in the pre-refactor Git baseline/history; its old source paths are removed from the current application branch after relocation.
 - Move ownership before changing behavior.
 - Keep the existing camera backend and frame pipeline intact.
 - Extract and test pure calculations before wiring them to UI.
 - Replace shared global state with composition-root-owned dependencies.
 - Maintain the dual-slide behavior and its single-stream routing semantics.
 - Do not add speculative motor or processing implementations to this branch merely to populate the architecture.
-- Do not delete the old app path until the new app target has equivalent required behavior and documented acceptance evidence.
+- Do not declare the new target accepted or retire the v0.8 reference until the user has completed the required compile, behavior and hardware acceptance on the target Mac.
+
+## Current implementation status
+
+The source refactor is committed on `OPTIKA-B293-DUALSLIDE-APP`. Application
+source ownership, color/layout tokenization, microscope configuration ownership,
+optics-level automatic-resolution coordination and slide image geometry have
+been moved into their intended feature/presentation/composition boundaries.
+CMake source paths have been checked against the repository tree.
+
+This is not an acceptance declaration. The application has not been configured,
+compiled, launched or tested in this refactoring session, and no camera/hardware
+verification has been performed. The single-frame-consumer, acquisition,
+frame-pool and physical-calibration acceptance gates remain open until verified
+in the user's environment.
 
 ## 11. Definition of done
 

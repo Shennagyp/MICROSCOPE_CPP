@@ -46,7 +46,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var previousDividerFraction: CGFloat = 0.5
     private var didSetInitialSplitPosition = false
     private var onCapture: ((NativeSlideID, CGImage) -> Void)?
-    private let minimumPaneWidth: CGFloat = 240
+    private let minimumPaneWidth = OptikaLayout.slideMinimumWidth
     private var didConfigureSubviews = false
 
     override init(frame frameRect: NSRect) {

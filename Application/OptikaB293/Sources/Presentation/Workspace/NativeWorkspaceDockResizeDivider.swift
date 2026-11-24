@@ -102,8 +102,8 @@ final class NativeWorkspaceDockResizeDividerView: NSView {
         }
 
         let horizontalDelta = event.locationInWindow.x - dragStartWindowX
-        let upperBound = max(280, maximumWidth)
-        let nextWidth = min(max(dragStartWidth - horizontalDelta, 280), upperBound)
+        let upperBound = max(OptikaLayout.workspaceDockMinimumWidth, maximumWidth)
+        let nextWidth = min(max(dragStartWidth - horizontalDelta, OptikaLayout.workspaceDockMinimumWidth), upperBound)
         onResize?(nextWidth)
     }
 

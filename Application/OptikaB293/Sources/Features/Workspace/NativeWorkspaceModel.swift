@@ -9,14 +9,24 @@ final class NativeWorkspaceModel: ObservableObject {
     @Published private(set) var workspaceDockWidth: CGFloat = OptikaLayout.workspaceDockDefaultWidth
 
     private static let widthDefaultsKey = "OptikaB293.WorkspaceDockWidth.v1"
+    private static let legacyWidthDefaultsKey = "AmscopeNative.WorkspaceDockWidth.v1"
 
     init() {
-        let saved = UserDefaults.standard.double(forKey: Self.widthDefaultsKey)
-        guard saved.isFinite && saved > 0 else { return }
+        let defaults = UserDefaults.standard
+        let saved = (defaults.object(forKey: Self.widthDefaultsKey) as? Double)
+            ?? (defaults.object(forKey: Self.legacyWidthDefaultsKey) as? Double)
+        guard let saved, saved.isFinite, saved > 0 else { return }
+
         workspaceDockWidth = min(
             max(CGFloat(saved), OptikaLayout.workspaceDockMinimumWidth),
             OptikaLayout.workspaceDockMaximumWidth
         )
+
+        // Migrate the old application preference once, without resetting
+        // existing workspace sizing during the ownership refactor.
+        if defaults.object(forKey: Self.widthDefaultsKey) == nil {
+            defaults.set(Double(workspaceDockWidth), forKey: Self.widthDefaultsKey)
+        }
     }
 
     func selectActiveSlide(_ slide: NativeSlideID) { activeSlide = slide }

@@ -912,6 +912,7 @@ private final class NativeSlideImageView: NSView {
         measurementStart = nil
         previewMeasurement = nil
         updateOverlayRendering()
+        window?.invalidateCursorRects(for: self)
     }
 
     func clearOverlays() {
@@ -928,7 +929,6 @@ private final class NativeSlideImageView: NSView {
             previewMeasurement: previewMeasurement,
             annotations: textAnnotations
         )
-        onOverlayStateChanged?()
     }
 
     private func sourcePixel(at viewportPoint: CGPoint) -> CGPoint? {
@@ -966,6 +966,7 @@ private final class NativeSlideImageView: NSView {
             NativeSlideTextAnnotation(location: sourcePoint, text: String(text.prefix(160)))
         )
         updateOverlayRendering()
+        onOverlayStateChanged?()
     }
 
     // MARK: - Sizing mode
@@ -1075,6 +1076,19 @@ private final class NativeSlideImageView: NSView {
         )
     }
 
+    override func resetCursorRects() {
+        let cursor: NSCursor
+        switch toolMode {
+        case .pan:
+            cursor = .openHand
+        case .distance:
+            cursor = .crosshair
+        case .annotation:
+            cursor = .iBeam
+        }
+        addCursorRect(bounds, cursor: cursor)
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
 
@@ -1149,6 +1163,7 @@ private final class NativeSlideImageView: NSView {
         previewMeasurement = nil
         dragLocation = nil
         updateOverlayRendering()
+        onOverlayStateChanged?()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

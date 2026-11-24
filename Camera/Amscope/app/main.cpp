@@ -208,6 +208,8 @@ public:
         // Camera tools and imaging information are independently dockable.
         auto* central = new QWidget(this);
         auto* root = new QVBoxLayout(central);
+        root->setContentsMargins(0, 0, 0, 0);
+        root->setSpacing(0);
         preview_ = new camera::qtwidgets::FrameView(central);
         root->addWidget(preview_, 1);
         setCentralWidget(central);
@@ -288,7 +290,6 @@ public:
         refreshFeaturesButton_ = new QPushButton("Refresh features", controlsContent);
         featureTabs_ = new QTabWidget(controlsContent);
         featureTabs_->setMinimumWidth(0);
-        featureTabs_->setMaximumWidth(QWIDGETSIZE_MAX);
         featureTabs_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         featureTabs_->setDocumentMode(true);
         featureTabs_->setMovable(false);
@@ -423,11 +424,7 @@ public:
         triggerGroup_->hide();
 
         lensFocusGroup_->hide();
-
-        astroAutoFocuserGroup_->hide();        lensFocusGroup_->hide();
-
         astroAutoFocuserGroup_->hide();
-
         accessoryGroup_->hide();
 
         auto* settingsContent = new QWidget(controlsContent);

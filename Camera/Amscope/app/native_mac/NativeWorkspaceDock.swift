@@ -27,33 +27,22 @@ struct NativeWorkspaceDock: View {
     let onClose: () -> Void
 
     var body: some View {
-        Group {
-            switch model.selectedWorkspaceDockTab {
-            case .cameraControls:
-                NativeCameraControlsDock(model: model)
-            case .smartGallery:
-                NativeSmartGalleryDock(gallery: model.captureGallery)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: NSColor.controlBackgroundColor))
-        // Float the panel title over its top edge rather than reserving a
-        // dedicated horizontal caption row.
-        .overlay(alignment: .topTrailing) {
+        VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: model.selectedWorkspaceDockTab.symbolName)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.secondary)
 
                 Text(model.selectedWorkspaceDockTab.title.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.primary)
-                    .lineLimit(1)
+
+                Spacer(minLength: 8)
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
-                        .frame(width: 22, height: 22)
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -61,21 +50,23 @@ struct NativeWorkspaceDock: View {
                 .help("Close dock")
                 .accessibilityLabel("Close \(model.selectedWorkspaceDockTab.title) dock")
             }
-            .padding(.leading, 10)
-            .padding(.trailing, 4)
-            .frame(height: 30)
-            .background(
-                Capsule()
-                    .fill(Color(nsColor: NSColor.controlBackgroundColor))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(Color(nsColor: NSColor.separatorColor), lineWidth: 0.8)
-            )
-            .shadow(color: Color.black.opacity(0.18), radius: 5, x: 0, y: 2)
-            .offset(x: -10, y: -14)
-            .zIndex(2)
+            .padding(.horizontal, 10)
+            .frame(height: 36)
+            .background(Color(nsColor: NSColor.controlBackgroundColor))
+
+            Divider()
+
+            Group {
+                switch model.selectedWorkspaceDockTab {
+                case .cameraControls:
+                    NativeCameraControlsDock(model: model)
+                case .smartGallery:
+                    NativeSmartGalleryDock(gallery: model.captureGallery)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
         .overlay(
             Rectangle()
                 .fill(Color(nsColor: NSColor.separatorColor))
@@ -305,9 +296,22 @@ private struct CameraDockConnectionSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("CAMERA")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(.secondary)
+            HStack(spacing: 6) {
+                Text("CAMERA")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Circle()
+                    .fill(stateColor)
+                    .frame(width: 7, height: 7)
+
+                Text(model.cameraStateText.uppercased())
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.secondary)
+
+            }
 
             Text(isConnected ? model.activeCameraName : "No camera connected")
                 .font(.system(size: 13, weight: .semibold))
@@ -338,18 +342,6 @@ private struct CameraDockConnectionSection: View {
                         .disabled(!model.canClose)
                     }
                 }
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(stateColor)
-                    .frame(width: 7, height: 7)
-
-                Text(model.cameraStateText.uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
-
-                Spacer(minLength: 0)
-            }
 
             if !isConnected {
                 Picker("Device", selection: $model.selectedDeviceID) {
@@ -451,14 +443,16 @@ private struct NativeSmartGalleryDock: View {
                          ? "Latest 80 captures"
                          : "\(gallery.captures.count) captures")
                         .font(.system(size: 13, weight: .semibold))
-                    if gallery.isCapturing {
-                        Text("● Saving…")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
                 }
 
-                Spacer(minLength: 0)
+                Spacer()
+
+                if gallery.isCapturing {
+                    Text("● Saving…")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)

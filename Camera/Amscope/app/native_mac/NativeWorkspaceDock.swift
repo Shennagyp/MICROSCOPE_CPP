@@ -150,12 +150,12 @@ final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
         super.viewDidMoveToWindow()
 
         guard window != nil else {
-            model.isWorkspaceDockFloating = false
-            model.isWorkspaceDockVisible = false
+            // SwiftUI may temporarily detach/re-host representable views while
+            // reconciling the root hierarchy. Preserve the user's dock state;
+            // only hide and detach the panel until a host window is available.
             if let panel = floatingPanel {
-                panel.delegate = nil
-                panel.close()
-                floatingPanel = nil
+                panel.parent?.removeChildWindow(panel)
+                panel.orderOut(nil)
             }
             return
         }
@@ -189,8 +189,8 @@ final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
             panel.title = "AmScope Workspace"
             panel.isFloatingPanel = true
             panel.isReleasedWhenClosed = false
-            panel.level = .floating
-            panel.minSize = NSSize(width: 300, height: 420)
+            panel.minSize = NSSize(width: 280, height: 320)
+            panel.setFrameAutosaveName("AmscopeWorkspaceDock")
             panel.contentViewController = NSHostingController(
                 rootView: NativeWorkspaceDock(
                     model: model,
@@ -216,14 +216,30 @@ final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
         }
 
         guard !panel.isVisible else { return }
+
         let mainFrame = mainWindow.frame
-        let panelSize = panel.frame.size
-        panel.setFrameOrigin(
-            NSPoint(
-                x: mainFrame.maxX - panelSize.width - 24,
-                y: mainFrame.maxY - panelSize.height - 72
+        var panelFrame = panel.frame
+        let visibleFrame = mainWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+
+        if let visibleFrame = visibleFrame {
+            panelFrame.size.width = min(panelFrame.size.width, visibleFrame.width)
+            panelFrame.size.height = min(panelFrame.size.height, visibleFrame.height)
+            panelFrame.origin.x = min(
+                max(mainFrame.maxX - panelFrame.width - 18, visibleFrame.minX),
+                visibleFrame.maxX - panelFrame.width
             )
-        )
+            panelFrame.origin.y = min(
+                max(mainFrame.maxY - panelFrame.height - 54, visibleFrame.minY),
+                visibleFrame.maxY - panelFrame.height
+            )
+        } else {
+            panelFrame.origin = NSPoint(
+                x: mainFrame.maxX - panelFrame.width - 18,
+                y: mainFrame.maxY - panelFrame.height - 54
+            )
+        }
+
+        panel.setFrame(panelFrame, display: false)
         panel.makeKeyAndOrderFront(nil)
     }
 

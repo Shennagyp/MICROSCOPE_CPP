@@ -39,7 +39,7 @@
 - [x] Keep the native controller independent of `QtAmcamCamera`; it calls the same C++ driver directly.
 - [x] Port the generic feature descriptor/read/write API with type-preserving Objective-C++ conversion and snapshot-generation rejection.
 - [ ] Port the supported accessory command/telemetry API (trigger configuration, I/O lines, filter wheel, guide port, focuser, still capture, and device-specific controls).
-- [ ] Add controller tests for FIFO ordering, queue saturation, shutdown, generation changes, failed Start/Stop recovery, and stale completions.
+- [ ] Add controller tests for FIFO ordering, queue saturation, shutdown, generation changes, failed Start/Stop recovery, stale completions, and the preview-resolution stop/apply/restart transaction.
 
 **Gate:** Lifecycle and feature-request tests cover FIFO ordering, shutdown, cancellation, generation changes, failed Start/Stop recovery, and stale completion rejection.
 

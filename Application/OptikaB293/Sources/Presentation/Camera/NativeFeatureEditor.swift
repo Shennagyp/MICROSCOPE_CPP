@@ -56,7 +56,7 @@ struct NativeFeatureSections: View {
                 }
 
                 ForEach(NativeFeatureGroup.allCases) { group in
-                    let descriptors = features.featureDescriptors.filter {
+                    let descriptors = features.genericEditorDescriptors.filter {
                         $0.group.rawValue == group.rawValue
                     }
                     if !descriptors.isEmpty {

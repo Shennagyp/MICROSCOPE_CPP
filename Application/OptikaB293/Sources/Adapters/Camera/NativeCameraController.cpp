@@ -613,6 +613,8 @@ NativeCameraController::RequestId NativeCameraController::enqueueFeatureRequest(
             return 0;
         }
         if (featureMutation) {
+            // Invalidate older queued/in-flight feature reads when the mutation is
+            // admitted. The feature model must refresh after success or failure.
             ++scheduledFeatureStateGeneration_;
             featureStateGeneration_.store(
                 scheduledFeatureStateGeneration_, std::memory_order_release);

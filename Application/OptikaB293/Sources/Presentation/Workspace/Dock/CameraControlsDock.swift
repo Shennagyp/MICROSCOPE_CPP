@@ -8,7 +8,7 @@ struct NativeCameraControlsDock: View {
     @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
 
     private var additionalFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
-        model.features.featureDescriptors.filter { $0.name != "AmcamResolutionIndex" }
+        model.features.genericEditorDescriptors
     }
 
     var body: some View {

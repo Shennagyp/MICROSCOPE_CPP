@@ -17,7 +17,7 @@ reference on its original branch.
 | 0 — Baseline and ownership map | Source inventory recorded | Camera/application split, dual-slide routing, frame ownership and coordinate behavior were inspected before extraction. Continue updating the inventory as responsibilities change. |
 | 1 — Product/application build boundary | Source migration committed; build unverified | `Application/OptikaB293` owns the app target, UI, camera adapter and application tests. Root CMake composes the app with `Camera/Amscope`. Every path listed by the app CMake source list exists in the branch tree. |
 | 2 — Functional core extraction | In progress | Microscope calibration, automatic-resolution policy, slide-image geometry and slide overlay value models are separate deterministic modules. Automatic-resolution readout semantics remain provisional and are not hardware-verified. |
-| 3 — Application composition and state ownership | Source split committed; build unverified | The composition root constructs and injects the camera bridge, microscope configuration owner, resolution coordinator, workspace and gallery. Camera session lifecycle and generic feature snapshot/editor state have separate owners. The session model alone performs lifecycle and acquisition-affecting resolution mutations; the feature model receives a read-only session-access snapshot. Microscope configuration/persistence and automatic-resolution coordination are separate optics feature owners. |
+| 3 — Application composition and state ownership | Source split committed; command/readback audit advanced; build unverified | The composition root constructs and injects the camera bridge, microscope configuration owner, resolution coordinator, workspace and gallery. Camera session lifecycle and generic feature snapshot/editor state have separate owners. The session model alone performs lifecycle and acquisition-affecting resolution mutations; generic editors cannot submit preview resolution. Native feature-generation invalidation is accounted for by refreshing readbacks after both successful and failed writes. Microscope configuration/persistence and automatic-resolution coordination are separate optics feature owners. |
 | 4 — UI and preview refactoring | In progress | Workspace, dock, preview router, pane, image view, image container and feature controls have separate source responsibilities. Preserve the single frame consumer and verify every construction/update path statically. |
 | 5 — Capability expansion seams | Not started | Motion and ImageProcessing remain separate future capabilities. Do not create placeholder implementations or speculative universal interfaces. |
 | 6 — Migration acceptance and retirement | Not accepted | No build, test, application, camera or hardware verification has been run here. Do not claim acceptance or retire migration references based on source movement alone. |
@@ -122,13 +122,13 @@ Exit criteria:
 
 **Purpose:** remove the monolithic shared application model without introducing a global framework.
 
-**Implementation status:** workspace, microscope configuration and automatic-resolution policy now have distinct owners. Camera session and generic feature snapshot/mutation state remain in one camera application model and are a candidate for a later, evidence-driven split.
+**Implementation status:** workspace, microscope configuration and automatic-resolution policy have distinct owners. Camera session lifecycle and generic feature snapshot/mutation state are split between `NativeCameraModel` and `NativeCameraFeatureModel`. The command/readback audit also closed two routing/recovery defects: generic editors exclude and reject acquisition-affecting preview resolution, and generic feature writes trigger a fresh snapshot after either success or failure because enqueueing a mutation invalidates earlier readbacks.
 
 Target state owners:
 - Camera session state: application camera adapter/session projection.
 - Camera feature state: feature snapshot and mutation coordinator.
 - Microscope/optical configuration: `MicroscopeConfigurationModel` and its draft/persistence ownership.
-- Automatic resolution: `MicroscopeResolutionCoordinator`, joining pure optics policy with camera readback and generic resolution mutations.
+- Automatic resolution: `MicroscopeResolutionCoordinator`, joining pure optics policy with camera readback and the session owner's acquisition-aware preview-resolution command.
 - Workspace state: active live destination, dock visibility/layout and pane selection.
 - Slide document state: per-pane retained image, freeze, view transform and overlays.
 - Capture gallery state: capture store and persistence lifecycle.

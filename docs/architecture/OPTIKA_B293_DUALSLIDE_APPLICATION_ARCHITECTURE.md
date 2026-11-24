@@ -224,6 +224,18 @@ The special preview-resolution mutation remains in the session model because the
 native controller may stop, reconfigure and restart acquisition to apply it.
 Generic feature state is not duplicated in the session model.
 
+The generic feature editor excludes `AmcamResolutionIndex`. Applying that mode may
+stop and restart acquisition, so it is exposed through the session owner's
+acquisition-aware preview-resolution command only; the feature model also rejects
+that name at its generic write boundary.
+
+The native controller advances the feature-state generation when a feature
+mutation is enqueued. Earlier queued or in-flight feature reads are then
+discarded, even when the mutation ultimately fails. Therefore, every write
+completion that still belongs to the active session triggers a fresh descriptor
+and readback snapshot. A failed write is reported and its draft is restored, but
+the rest of the feature view is also resynchronized rather than left showing
+permanent "Reading…" placeholders.
 
 ### 6.2 Slide documents
 
@@ -267,8 +279,8 @@ Its ownership is split deliberately:
   changes or the camera reports a new resolution readback.
 - `NativeCameraFeatureModel` publishes generic camera feature readbacks; the
   session owner forwards the selected resolution readback event to the coordinator.
-- `NativeCameraModel` performs the generic preview-resolution mutation. It does
-  not know about objectives,
+- `NativeCameraModel` performs the acquisition-aware preview-resolution mutation.
+  It does not know about objectives,
   numerical aperture, stain wavelength bands or Rayleigh sampling.
 
 The coordinator is constructed at the application composition root and receives

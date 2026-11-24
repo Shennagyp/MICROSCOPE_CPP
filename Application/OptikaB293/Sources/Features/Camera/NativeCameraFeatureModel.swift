@@ -15,6 +15,7 @@ final class NativeCameraFeatureModel: ObservableObject {
     private let bridge: AmscopeNativeCameraBridge
     private let accessSnapshot: () -> NativeCameraFeatureAccessSnapshot
     private let presentError: (Error) -> Void
+    private static let previewResolutionFeatureName = "AmcamResolutionIndex"
 
     @Published private(set) var isFeatureSnapshotLoading = false
     @Published private(set) var isFeatureWritePending = false
@@ -38,11 +39,17 @@ final class NativeCameraFeatureModel: ObservableObject {
 
     var previewResolutionDescriptor: AmscopeCameraFeatureDescriptor? {
         guard let descriptor = featureDescriptors.first(where: {
-            $0.name == "AmcamResolutionIndex"
+            $0.name == Self.previewResolutionFeatureName
         }), descriptor.isAvailable, !descriptor.enumerationValues.isEmpty else {
             return nil
         }
         return descriptor
+    }
+
+    // This setting changes acquisition lifecycle and must use the session owner's
+    // dedicated command rather than the generic camera-feature write path.
+    var genericEditorDescriptors: [AmscopeCameraFeatureDescriptor] {
+        featureDescriptors.filter { $0.name != Self.previewResolutionFeatureName }
     }
 
     func beginNewCameraSession() { selectedPreviewResolutionSymbol = nil }
@@ -122,7 +129,7 @@ final class NativeCameraFeatureModel: ObservableObject {
                 self.featureValues[name] = value
                 self.featureDrafts[name] = self.stringValue(for: value)
                 self.featureErrors[name] = nil
-                if name == "AmcamResolutionIndex" {
+                if name == Self.previewResolutionFeatureName {
                     self.selectedPreviewResolutionSymbol = value.enumerationSymbol
                     self.onPreviewResolutionReadbackChanged?()
                 }
@@ -262,7 +269,8 @@ final class NativeCameraFeatureModel: ObservableObject {
         for descriptor: AmscopeCameraFeatureDescriptor
     ) {
         let access = accessSnapshot()
-        guard access.canAccessFeatures &&
+        guard descriptor.name != Self.previewResolutionFeatureName &&
+              access.canAccessFeatures &&
               !access.isCameraOperationPending &&
               descriptor.isAvailable &&
               descriptor.isWritable &&
@@ -281,11 +289,13 @@ final class NativeCameraFeatureModel: ObservableObject {
                 if let error = error {
                     self.presentError(error)
                     self.restoreDraft(forFeatureName: featureName)
-                } else {
-                    // A feature mutation may change availability/ranges of related
-                    // features, so refresh descriptors and values as one snapshot.
-                    self.refreshFeatures()
                 }
+
+                // Enqueueing the write advanced the native feature-state generation.
+                // Reads from the previous generation may have been discarded even
+                // when the write failed, so every current-session completion needs
+                // a fresh descriptor/readback snapshot.
+                self.refreshFeatures()
             }
         }
     }

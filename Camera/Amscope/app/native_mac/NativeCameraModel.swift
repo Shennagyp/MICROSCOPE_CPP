@@ -25,6 +25,8 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
     @Published private(set) var openedCameraDeviceID: String?
     @Published private(set) var activeSlide: NativeSlideID = .slide1
+    @Published private(set) var isBottomDockDetached = false
+    @Published private(set) var isBottomDockCollapsed = false
     @Published private(set) var resolutionText = "—"
     @Published private(set) var pixelFormatText = "—"
     @Published var errorMessage = ""
@@ -74,6 +76,14 @@ final class NativeCameraModel: ObservableObject {
 
     func selectActiveSlide(_ slide: NativeSlideID) {
         activeSlide = slide
+    }
+
+    func setBottomDockDetached(_ detached: Bool) {
+        isBottomDockDetached = detached
+    }
+
+    func setBottomDockCollapsed(_ collapsed: Bool) {
+        isBottomDockCollapsed = collapsed
     }
 
     var informationBarFeatures: [AmscopeCameraFeatureDescriptor] {

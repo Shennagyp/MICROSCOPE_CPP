@@ -697,6 +697,11 @@ private final class NativeSlideImageView: NSView {
     private let slideTitle: String
     private let imageContainer = NativeSlideImageContainerView()
     private var currentImage: CGImage?
+    private(set) var toolMode: NativeSlideToolMode = .pan
+    private var measurements: [NativeDistanceMeasurement] = []
+    private var previewMeasurement: NativeDistanceMeasurement?
+    private var textAnnotations: [NativeSlideTextAnnotation] = []
+    private var measurementStart: CGPoint?
 
     private(set) var sizingMode: NativeSlideImageSizingMode = .resizable
     var onSizingModeChanged: (() -> Void)?
@@ -709,6 +714,14 @@ private final class NativeSlideImageView: NSView {
     private var dragLocation: CGPoint?
 
     var hasImage: Bool { currentImage != nil }
+    var hasOverlays: Bool {
+        !measurements.isEmpty || !textAnnotations.isEmpty || previewMeasurement != nil
+    }
+
+    func currentImageForCapture() -> CGImage? {
+        currentImage
+    }
+
     override var isFlipped: Bool { true }
 
     init(slideTitle: String) {
@@ -757,6 +770,10 @@ private final class NativeSlideImageView: NSView {
     func display(_ image: CGImage) {
         let dimensionsChanged = currentImage?.width != image.width ||
             currentImage?.height != image.height
+        if dimensionsChanged && currentImage != nil {
+            // Overlays use the source pixel grid. Clear them if that grid changes.
+            clearOverlays()
+        }
         currentImage = image
         imageContainer.display(image)
 
@@ -872,7 +889,71 @@ private final class NativeSlideImageView: NSView {
         )
         imageContainer.needsDisplay = true
         imageOrigin = boundedOrigin
+        updateOverlayRendering()
         needsDisplay = true
+    }
+
+    // MARK: - Slide tools and image-space overlays
+
+    func setToolMode(_ mode: NativeSlideToolMode) {
+        guard toolMode != mode else { return }
+        toolMode = mode
+        measurementStart = nil
+        previewMeasurement = nil
+        updateOverlayRendering()
+    }
+
+    func clearOverlays() {
+        measurements.removeAll(keepingCapacity: false)
+        textAnnotations.removeAll(keepingCapacity: false)
+        measurementStart = nil
+        previewMeasurement = nil
+        updateOverlayRendering()
+    }
+
+    private func updateOverlayRendering() {
+        imageContainer.updateOverlays(
+            measurements: measurements,
+            previewMeasurement: previewMeasurement,
+            annotations: textAnnotations
+        )
+    }
+
+    private func sourcePixel(at viewportPoint: CGPoint) -> CGPoint? {
+        guard let image = currentImage, currentScale > 0 else { return nil }
+        let origin = imageContainer.frame.origin
+        let pixel = CGPoint(
+            x: (viewportPoint.x - origin.x) / currentScale,
+            y: (viewportPoint.y - origin.y) / currentScale
+        )
+        guard pixel.x >= 0,
+              pixel.y >= 0,
+              pixel.x <= CGFloat(image.width),
+              pixel.y <= CGFloat(image.height) else {
+            return nil
+        }
+        return pixel
+    }
+
+    private func addTextAnnotation(at sourcePoint: CGPoint) {
+        let alert = NSAlert()
+        alert.messageText = "Add Annotation"
+        alert.informativeText = "The note will remain attached to this location in the slide image."
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        textField.placeholderString = "Enter annotation text"
+        alert.accessoryView = textField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let text = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        textAnnotations.append(
+            NativeSlideTextAnnotation(location: sourcePoint, text: String(text.prefix(160)))
+        )
+        updateOverlayRendering()
     }
 
     // MARK: - Sizing mode
@@ -984,37 +1065,77 @@ private final class NativeSlideImageView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if event.clickCount >= 2 {
-            toggleSizingMode()
-            dragLocation = nil
-            return
-        }
 
-        let size = imageContainer.frame.size
-        guard size.width > bounds.width || size.height > bounds.height else {
-            dragLocation = nil
-            return
+        switch toolMode {
+        case .distance:
+            guard let sourcePoint = sourcePixel(at: point) else { return }
+            measurementStart = sourcePoint
+            previewMeasurement = NativeDistanceMeasurement(
+                start: sourcePoint,
+                end: sourcePoint
+            )
+            updateOverlayRendering()
+
+        case .annotation:
+            guard let sourcePoint = sourcePixel(at: point) else { return }
+            addTextAnnotation(at: sourcePoint)
+
+        case .pan:
+            if event.clickCount >= 2 {
+                toggleSizingMode()
+                dragLocation = nil
+                return
+            }
+
+            let size = imageContainer.frame.size
+            guard size.width > bounds.width || size.height > bounds.height else {
+                dragLocation = nil
+                return
+            }
+            dragLocation = point
         }
-        dragLocation = point
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let previousPoint = dragLocation else { return }
-
         let point = convert(event.locationInWindow, from: nil)
-        let delta = CGPoint(
-            x: point.x - previousPoint.x,
-            y: point.y - previousPoint.y
-        )
-        let proposedOrigin = CGPoint(
-            x: (imageOrigin ?? imageContainer.frame.origin).x + delta.x,
-            y: (imageOrigin ?? imageContainer.frame.origin).y + delta.y
-        )
-        updateImageContainer(scale: currentScale, origin: proposedOrigin)
-        dragLocation = point
+
+        switch toolMode {
+        case .distance:
+            guard let start = measurementStart,
+                  let end = sourcePixel(at: point) else { return }
+            previewMeasurement = NativeDistanceMeasurement(start: start, end: end)
+            updateOverlayRendering()
+
+        case .annotation:
+            break
+
+        case .pan:
+            guard let previousPoint = dragLocation else { return }
+            let delta = CGPoint(
+                x: point.x - previousPoint.x,
+                y: point.y - previousPoint.y
+            )
+            let proposedOrigin = CGPoint(
+                x: (imageOrigin ?? imageContainer.frame.origin).x + delta.x,
+                y: (imageOrigin ?? imageContainer.frame.origin).y + delta.y
+            )
+            updateImageContainer(scale: currentScale, origin: proposedOrigin)
+            dragLocation = point
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
+        if toolMode == .distance,
+           let start = measurementStart,
+           let end = sourcePixel(at: convert(event.locationInWindow, from: nil)) {
+            let measurement = NativeDistanceMeasurement(start: start, end: end)
+            if measurement.distanceInPixels >= 1 {
+                measurements.append(measurement)
+            }
+            measurementStart = nil
+            previewMeasurement = nil
+            updateOverlayRendering()
+        }
         dragLocation = nil
     }
 
@@ -1082,6 +1203,9 @@ private final class NativeSlideImageView: NSView {
 
 private final class NativeSlideImageContainerView: NSView {
     private var currentImage: CGImage?
+    private var measurements: [NativeDistanceMeasurement] = []
+    private var previewMeasurement: NativeDistanceMeasurement?
+    private var annotations: [NativeSlideTextAnnotation] = []
 
     override var isFlipped: Bool { true }
 
@@ -1093,6 +1217,17 @@ private final class NativeSlideImageContainerView: NSView {
 
     func display(_ image: CGImage) {
         currentImage = image
+        needsDisplay = true
+    }
+
+    func updateOverlays(
+        measurements: [NativeDistanceMeasurement],
+        previewMeasurement: NativeDistanceMeasurement?,
+        annotations: [NativeSlideTextAnnotation]
+    ) {
+        self.measurements = measurements
+        self.previewMeasurement = previewMeasurement
+        self.annotations = annotations
         needsDisplay = true
     }
 

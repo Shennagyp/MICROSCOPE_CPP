@@ -160,7 +160,6 @@ struct NativeWorkspaceDockTabRail: View {
                 : "Shows the \(tab.title) dock over the viewer."
         )
     }
-    }
 }
 
 private struct NativeCameraControlsDock: View {

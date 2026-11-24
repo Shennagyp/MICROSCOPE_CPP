@@ -97,10 +97,14 @@
 
 ## Two-slide workspace and information bar (2026-11-24)
 
-The main window now has a detected-camera action row, two side-by-side slide panes,
-and a resizable bottom information split. Each pane has a Set Live Target control
-and its own maximize/restore control. A new frame is routed only to the currently
-selected pane; the other pane retains its last displayed image.
+The main window now has two side-by-side slide panes and one thin bottom dock; the
+separate camera row above the preview has been removed. The dock contains camera
+Open + Start and editable feature controls on the left, with read-only information
+on the right. Its divider is resizable; it can collapse or detach into a floating
+utility panel and re-dock. Each slide pane has a persistent Switch Live control,
+its own maximize/restore control, and a red outer border only while selected as the
+UI live target. A new frame is routed only to the selected pane; the other retains
+its last displayed image.
 
 Each detected camera button runs Open followed by Start using the existing
 serialized C++ controller. This is still one camera session, not one session per
@@ -249,3 +253,20 @@ remain reachable by vertical scrolling at the minimum size and when maximized.
 - Do not create a second pixel buffer using `Data`, `NSBitmapImageRep`, or equivalent.
 - Do not introduce Metal/IOSurface until the AppKit direct-access route is correct and its actual bottleneck has been measured.
 - Do not mark a performance gate complete without user-run hardware evidence.
+
+
+## Compact single-dock and active-slide indication correction (2026-11-24)
+
+The previous iteration added a separate camera action row above the preview and a
+116-point-high bottom information region. That did not preserve the camera-first
+layout intent. The revised main window removes the upper row and consolidates all
+camera open/start, quick editable controls, and read-only information into one thin
+bottom dock. The left and right regions remain user-resizable with a split divider.
+The dock collapses, detaches into a floating utility panel, and re-docks below the
+preview. The dock is 50 points expanded and 28 points collapsed.
+
+Each slide pane now always shows a live-switch control: the active pane is marked
+LIVE and outlined in red; the inactive pane exposes Switch Live. The selection
+changes UI frame routing only; physical microscope slide/stage movement remains a
+future controller operation. Updated compile, window interaction, and hardware
+validation are pending.

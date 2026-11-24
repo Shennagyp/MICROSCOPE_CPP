@@ -30,7 +30,7 @@ public:
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(6, 1, 8, 1);
         layout->setSpacing(0);
-        setMinimumHeight(38);
+        setMinimumHeight(34);
 
         label_ = new QLabel(this);
         label_->setAttribute(Qt::WA_TransparentForMouseEvents);

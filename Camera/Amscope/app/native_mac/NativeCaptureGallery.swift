@@ -98,6 +98,19 @@ final class NativeCaptureGalleryStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([item.fileURL])
     }
 
+    func revealCaptureFolder() {
+        do {
+            try FileManager.default.createDirectory(
+                at: directoryURL,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            NSWorkspace.shared.open(directoryURL)
+        } catch {
+            captureErrorMessage = "Could not open the capture folder: \(error.localizedDescription)"
+        }
+    }
+
     func dismissCaptureError() {
         captureErrorMessage = nil
     }

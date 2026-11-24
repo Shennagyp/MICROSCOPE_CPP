@@ -4,9 +4,6 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
 
-    @State private var selectedDockTab: NativeWorkspaceDockTab = .cameraControls
-    @State private var isDockVisible = true
-
     var body: some View {
         VStack(spacing: 0) {
             workspaceToolbar
@@ -25,11 +22,12 @@ struct MainWindowView: View {
                 .clipped()
                 .layoutPriority(1)
 
-                if isDockVisible {
+                if model.isWorkspaceDockVisible && !model.isWorkspaceDockFloating {
                     NativeWorkspaceDock(
                         model: model,
-                        selectedTab: $selectedDockTab,
-                        onClose: { isDockVisible = false }
+                        isFloating: false,
+                        onClose: { model.isWorkspaceDockVisible = false },
+                        onToggleFloating: { model.isWorkspaceDockFloating = true }
                     )
                     .frame(minWidth: 270, idealWidth: 340, maxWidth: 460)
                     .frame(maxHeight: .infinity)
@@ -40,6 +38,11 @@ struct MainWindowView: View {
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)
+        .background(
+            NativeWorkspaceDockPanelAnchor(model: model)
+                .frame(width: 1, height: 1)
+                .opacity(0)
+        )
         .onAppear {
             if model.cameras.isEmpty {
                 model.refreshCameras()
@@ -67,8 +70,8 @@ struct MainWindowView: View {
             Spacer()
 
             Button {
-                selectedDockTab = .cameraControls
-                isDockVisible = true
+                model.selectedWorkspaceDockTab = .cameraControls
+                model.isWorkspaceDockVisible = true
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "slider.horizontal.3")
@@ -80,8 +83,8 @@ struct MainWindowView: View {
             .help("Show Camera Controls dock")
 
             Button {
-                selectedDockTab = .smartGallery
-                isDockVisible = true
+                model.selectedWorkspaceDockTab = .smartGallery
+                model.isWorkspaceDockVisible = true
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "rectangle.stack")
@@ -93,14 +96,14 @@ struct MainWindowView: View {
             .help("Show Smart Gallery dock")
 
             Button {
-                isDockVisible.toggle()
+                model.isWorkspaceDockVisible.toggle()
             } label: {
-                Image(systemName: isDockVisible ? "sidebar.right" : "sidebar.left")
+                Image(systemName: model.isWorkspaceDockVisible ? "sidebar.right" : "sidebar.left")
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.borderless)
-            .help(isDockVisible ? "Hide dock panel" : "Show dock panel")
-            .accessibilityLabel(isDockVisible ? "Hide dock panel" : "Show dock panel")
+            .help(model.isWorkspaceDockVisible ? "Hide dock panel" : "Show dock panel")
+            .accessibilityLabel(model.isWorkspaceDockVisible ? "Hide dock panel" : "Show dock panel")
         }
         .padding(.horizontal, 12)
         .frame(height: 36)

@@ -12,13 +12,11 @@
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QSizePolicy>
-#include <QStyle>
 #include <QDialogButtonBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
-#include <QFont>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QImage>

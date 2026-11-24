@@ -56,6 +56,14 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         guard !didConfigureSubviews else { return }
         didConfigureSubviews = true
 
+        // Establish a hard AppKit clipping boundary matching the SwiftUI
+        // workspace frame. Oversized image documents must remain inside the
+        // slide viewport and must never paint into the bottom control dock.
+        wantsLayer = true
+        layer?.masksToBounds = true
+
+        splitView.wantsLayer = true
+        splitView.layer?.masksToBounds = true
         splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitView.delegate = self
@@ -275,6 +283,7 @@ private final class NativeSlidePreviewPane: NSView {
         titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         wantsLayer = true
         layer?.cornerRadius = 4
+        layer?.masksToBounds = true
 
         statusLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         statusLabel.textColor = NSColor.secondaryLabelColor
@@ -457,8 +466,9 @@ private final class NativeSlideImageView: NSView {
     private(set) var sizingMode: NativeSlideImageSizingMode = .resizable
     var onSizingModeChanged: (() -> Void)?
 
-    /// Retained only in Full Resolution mode. This is capped at the physical
-    /// 1:1 scale, so the image container can never exceed source dimensions.
+    /// Retained only in Manual Scale mode. The Full Resolution command sets
+    /// this to the physical 1:1 scale, making the document exactly source
+    /// width × source height in physical display pixels.
     private var lockedScale: CGFloat?
     private var imageOrigin: CGPoint?
     private var dragLocation: CGPoint?
@@ -562,18 +572,31 @@ private final class NativeSlideImageView: NSView {
         }
     }
 
+    /// Exact document dimensions for 1:1 viewing. This represents the
+    /// complete source frame, not merely the visible viewport. On Retina
+    /// displays each source pixel occupies 1 / backingScaleFactor points.
+    private func fullResolutionContainerSize(for image: CGImage) -> CGSize {
+        let pointsPerSourcePixel = actualPixelScale
+        return CGSize(
+            width: CGFloat(image.width) * pointsPerSourcePixel,
+            height: CGFloat(image.height) * pointsPerSourcePixel
+        )
+    }
+
+    /// Document dimensions at the requested scale. At 1:1, return the
+    /// complete original image dimensions without fitting or cropping them
+    /// to the viewport. The viewport clips; it does not resize the document.
     private func imageContainerSize(at scale: CGFloat) -> CGSize {
         guard let image = currentImage else { return .zero }
-        let boundedScale = min(scale, actualPixelScale)
+        let boundedScale = min(max(scale, 0), actualPixelScale)
+
+        if boundedScale == actualPixelScale {
+            return fullResolutionContainerSize(for: image)
+        }
+
         return CGSize(
-            width: min(
-                CGFloat(image.width) * boundedScale,
-                CGFloat(image.width) * actualPixelScale
-            ),
-            height: min(
-                CGFloat(image.height) * boundedScale,
-                CGFloat(image.height) * actualPixelScale
-            )
+            width: CGFloat(image.width) * boundedScale,
+            height: CGFloat(image.height) * boundedScale
         )
     }
 

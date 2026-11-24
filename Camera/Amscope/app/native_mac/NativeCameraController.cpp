@@ -281,7 +281,7 @@ NativeCameraController::RequestId NativeCameraController::enqueue(
         const std::uint64_t generation = lifecycleMutation
             ? nextSessionGenerationLocked()
             : scheduledSessionGeneration_;
-        if (generation == 0)
+        if (lifecycleMutation && generation == 0)
             return 0;
 
         pendingRequests_.push_back(PendingRequest{

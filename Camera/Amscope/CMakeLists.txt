@@ -267,6 +267,20 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
         "$<$<COMPILE_LANGUAGE:Swift>:5>")
 endif()
 
+if(BUILD_TESTING AND AMSCOPE_BUILD_NATIVE_MAC_APP)
+    add_executable(amscope_native_dock_model_tests
+        app/native_mac/NativeDockSystemModel.swift
+        tests/NativeDockSystemModelTests.swift)
+    target_compile_options(amscope_native_dock_model_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
+        "$<$<COMPILE_LANGUAGE:Swift>:5>")
+    target_link_libraries(amscope_native_dock_model_tests PRIVATE
+        "${AMSCOPE_FOUNDATION_FRAMEWORK}")
+    add_test(
+        NAME amscope_native_dock_model_tests
+        COMMAND amscope_native_dock_model_tests)
+endif()
+
 if(BUILD_TESTING AND AMSCOPE_BUILD_QT_ADAPTER)
     add_executable(amscope_qt_request_tests
         tests/QtAmcamCameraRequestTests.cpp)

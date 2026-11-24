@@ -258,7 +258,7 @@ struct DockCameraFeatureControl: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(Color(nsColor: NSColor.controlBackgroundColor))
+                .fill(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.50))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)

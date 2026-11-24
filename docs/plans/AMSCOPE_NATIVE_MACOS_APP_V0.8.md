@@ -137,8 +137,9 @@ remains true.
 
 In **Resizable** mode, the image document automatically recalculates its
 scale when that pane's viewport changes because of the split divider or
-maximize/restore. It preserves aspect ratio, covers the viewport without black
-margins, and never upscales beyond native 1:1 physical-pixel size. In
+maximize/restore. It preserves aspect ratio and fits the complete source frame
+inside the viewport; it never crops specimen edges merely to eliminate
+margins, and it never upscales beyond native 1:1 physical-pixel size. In
 **Locked Scale** mode, the document retains its selected scale when the
 viewport changes. Scroll-wheel or trackpad zoom locks the pane only after the
 scale actually changes. The original full-resolution CGImage remains the

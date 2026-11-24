@@ -42,6 +42,24 @@ The `camera_qt_widgets_camera_control_panel_tests` offscreen test covers
 device-label/opaque-ID preservation, callback dispatch, empty discovery,
 pending-state gating, and Closed/Open/Streaming/Faulted action availability.
 
+## ImageInfoBar
+
+`camera::qtwidgets::ImageInfoBar` renders a horizontally scrollable list of
+host-supplied imaging facts and values. Each item carries a stable ID, label,
+value, optional unit and tooltip. Read-only items remain informational;
+editable items report a double-click (and keyboard activation) to a
+host-supplied callback.
+
+The widget never queries a camera, interprets a feature descriptor, writes a
+setting, or owns feature state. The host decides which values are available,
+which are editable, and how to validate and execute an edit. This permits frame
+metadata and camera-feature readbacks to share one compact information strip
+without coupling the reusable widget to a particular camera backend.
+
+The `camera_qt_widgets_image_info_bar_tests` offscreen test covers item
+creation/removal, double-click routing for editable items, and no edit callback
+for read-only items.
+
 ## Build
 
 The target is `Camera::QtWidgets`. It can be added as a CMake subdirectory
@@ -51,3 +69,7 @@ build includes it when `AMSCOPE_BUILD_PREVIEW_APP=ON`.
 The `camera_qt_widgets_frame_view_tests` test uses the Qt offscreen
 platform and covers lease lifetime, RGB24/RAW8/RAW16 presentation, invalid
 buffer rejection, and post-paint notification.
+
+The offscreen UI tests are also registered for `CameraControlPanel` and
+`ImageInfoBar`; they exercise presentation and callback contracts only, not
+physical camera operations or feature readback.

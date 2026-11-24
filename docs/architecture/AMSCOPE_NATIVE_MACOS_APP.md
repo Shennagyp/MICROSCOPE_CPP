@@ -2,7 +2,7 @@
 
 **Branch:** `amscope-native-app-mac.v.0.8`  
 **Base:** `amscope-native-driver-0.7` (`17067f3c5b10a4bb0e748297bbd34ada295bcc43`)  
-**Status:** The native target has linked successfully on the user's Mac. The dual-slide workspace, single-consumer AppKit preview, camera open/start action, and split information bar are committed; updated build, visual QA, frame-pool validation, and hardware performance sign-off are pending.
+**Status:** The native target previously linked successfully on the user's Mac. The dual-slide workspace, single-consumer AppKit preview, compact all-feature bottom dock, camera connection actions, slide selector, and thin active-slide outline are committed; this latest iteration still requires a local build, visual QA, frame-pool validation, and hardware performance sign-off.
 
 ## 1. Objective
 

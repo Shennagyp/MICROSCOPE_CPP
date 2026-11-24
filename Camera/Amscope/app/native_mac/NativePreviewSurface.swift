@@ -577,8 +577,9 @@ private final class NativeSlideImageView: NSView {
         let proposedOrigin = origin ?? centeredOrigin(for: size)
         let boundedOrigin = clampedOrigin(proposedOrigin, for: size)
 
-        imageContainer.setFrame(
-            CGRect(origin: boundedOrigin, size: size)
+        imageContainer.frame = CGRect(
+            origin: boundedOrigin,
+            size: size
         )
         imageContainer.needsDisplay = true
         imageOrigin = boundedOrigin

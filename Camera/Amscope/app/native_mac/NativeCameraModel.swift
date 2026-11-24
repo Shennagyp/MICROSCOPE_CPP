@@ -27,8 +27,6 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var activeSlide: NativeSlideID = .slide1
     @Published private(set) var isBottomDockDetached = false
     @Published private(set) var isBottomDockCollapsed = false
-    @Published private(set) var resolutionText = "—"
-    @Published private(set) var pixelFormatText = "—"
     @Published var errorMessage = ""
     @Published var isShowingError = false
     @Published private(set) var isCameraOperationPending = false
@@ -479,17 +477,6 @@ final class NativeCameraModel: ObservableObject {
             return value.enumerationSymbol
         @unknown default:
             return "—"
-        }
-    }
-
-    func updateFrameMetadata(resolution: String, pixelFormat: String) {
-        // Avoid invalidating SwiftUI for every incoming frame. Only changes in
-        // dimensions or format update these low-frequency properties.
-        if resolutionText != resolution {
-            resolutionText = resolution
-        }
-        if pixelFormatText != pixelFormat {
-            pixelFormatText = pixelFormat
         }
     }
 

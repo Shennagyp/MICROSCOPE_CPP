@@ -472,6 +472,12 @@ public:
             [this]() { stopCamera(); });
         cameraControls_->setCloseRequestedHandler(
             [this]() { closeCamera(); });
+        connect(cameraControlsDock_, &QDockWidget::visibilityChanged,
+                this, [this](bool visible) {
+            if (visible && camera_.state() == amscope::CameraState::Closed) {
+                refreshCameras();
+            }
+        });
         connect(captureStillButton_, &QPushButton::clicked, this, [this]() {
             captureStill();
         });

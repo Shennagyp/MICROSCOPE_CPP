@@ -36,7 +36,9 @@ The panel does not enumerate devices, interpret backend errors, own a camera
 session, schedule operations, or know about a vendor API. In particular, the
 host remains responsible for opaque-ID routing, request ordering, generations,
 and session lifetime. A faulted session remains closeable but cannot be started
-or stopped through this panel.
+or stopped through this panel. Its compact two-row layout puts device selection
+and refresh on the first row and Open/Start/Stop/Close on the second, allowing
+it to fit a narrow IDE-style dock.
 
 The `camera_qt_widgets_camera_control_panel_tests` offscreen test covers
 device-label/opaque-ID preservation, callback dispatch, empty discovery,
@@ -54,7 +56,9 @@ The widget never queries a camera, interprets a feature descriptor, writes a
 setting, or owns feature state. The host decides which values are available,
 which are editable, and how to validate and execute an edit. This permits frame
 metadata and camera-feature readbacks to share one compact information strip
-without coupling the reusable widget to a particular camera backend.
+without coupling the reusable widget to a particular camera backend. The AmScope
+host uses compact 8–9 pt typography, subtle separators, and a 42–48 px widget
+height so the strip remains useful without consuming preview area.
 
 In the AmScope preview host, the bar is placed in a movable, floatable, and
 closable `QDockWidget`, initially docked at the bottom. The View menu can
@@ -62,6 +66,11 @@ show it again after closing it. Transient application messages are represented
 as items in that same bar; the host does not create a separate `QStatusBar`.
 Docking and application-status presentation belong to the host, not to the
 backend-neutral widget contract.
+
+The application also hosts Camera Controls in a right-side `QDockWidget`.
+Both docks support moving/floating and have persistent layout state saved by
+the main window. The Camera Controls dock is exposed through both File and
+View commands; discovery refreshes when the dock is shown.
 
 The `camera_qt_widgets_image_info_bar_tests` offscreen test covers item
 creation/removal, double-click routing for editable items, and no edit callback

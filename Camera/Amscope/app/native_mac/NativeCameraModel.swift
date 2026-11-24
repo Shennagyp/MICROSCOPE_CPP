@@ -86,43 +86,6 @@ final class NativeCameraModel: ObservableObject {
         isBottomDockCollapsed = collapsed
     }
 
-    var informationBarFeatures: [AmscopeCameraFeatureDescriptor] {
-        let preferredTerms = [
-            "exposure time",
-            "gain",
-            "saturation",
-            "brightness",
-            "contrast",
-            "exposure"
-        ]
-        let candidates = featureDescriptors.filter { descriptor in
-            guard descriptor.isReadable && descriptor.isWritable else { return false }
-            guard descriptor.discreteIntegerValues.isEmpty else { return false }
-            guard descriptor.kind == .integer ||
-                  descriptor.kind == .floatingPoint else { return false }
-            let identity = (descriptor.name + " " + descriptor.displayName)
-                .lowercased()
-            return preferredTerms.contains { identity.contains($0) }
-        }
-        return candidates.sorted { left, right in
-            func priority(_ descriptor: AmscopeCameraFeatureDescriptor) -> Int {
-                let identity = (descriptor.name + " " + descriptor.displayName)
-                    .lowercased()
-                return preferredTerms.firstIndex {
-                    identity.contains($0)
-                } ?? preferredTerms.count
-            }
-            let leftPriority = priority(left)
-            let rightPriority = priority(right)
-            if leftPriority != rightPriority {
-                return leftPriority < rightPriority
-            }
-            return left.displayName.localizedCaseInsensitiveCompare(
-                right.displayName
-            ) == .orderedAscending
-        }.prefix(3).map { $0 }
-    }
-
     var cameraStateText: String {
         switch cameraState {
         case .closed: return "Disconnected"

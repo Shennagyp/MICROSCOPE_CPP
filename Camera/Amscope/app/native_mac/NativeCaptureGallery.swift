@@ -169,7 +169,9 @@ final class NativeCaptureGalleryStore: ObservableObject {
     }
 }
 
-private final class NativeCaptureImageSource {
+// The image reference is transferred exactly once under NSLock. CGImage is immutable;
+// the lock protects the holder's mutable optional reference across the capture worker.
+private final class NativeCaptureImageSource: @unchecked Sendable {
     private let lock = NSLock()
     private var image: CGImage?
 
@@ -305,7 +307,7 @@ private enum NativeCaptureFileCodec {
 
     private static func copyPixels(of image: CGImage) -> CGImage? {
         guard let sourceProvider = image.dataProvider,
-              let copiedData = CGDataProviderCopyData(sourceProvider),
+              let copiedData = sourceProvider.data,
               let independentProvider = CGDataProvider(data: copiedData),
               let colorSpace = image.colorSpace else {
             return nil

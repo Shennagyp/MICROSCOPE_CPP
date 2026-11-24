@@ -2,7 +2,7 @@
 
 **Branch:** `OPTIKA-B293-DUALSLIDE-APP`  
 **Starting commit:** `f25e5d8e6fdefea7f742fb71fa5f4ead69291626`  
-**Plan status:** Implementation in progress; source/build migration and initial UI decomposition committed; compile/runtime acceptance pending  
+**Plan status:** Implementation in progress; source/build migration and UI decomposition committed; initial local configure/build/CTest checkpoint passed; interactive UI and hardware acceptance pending  
 **Related architecture:** [OPTIKA B293 Dual-Slide Application Architecture](../architecture/OPTIKA_B293_DUALSLIDE_APPLICATION_ARCHITECTURE.md)
 
 
@@ -15,12 +15,12 @@ reference on its original branch.
 | Phase | Current status | Evidence / remaining boundary |
 |---|---|---|
 | 0 — Baseline and ownership map | Source inventory recorded | Camera/application split, dual-slide routing, frame ownership and coordinate behavior were inspected before extraction. Continue updating the inventory as responsibilities change. |
-| 1 — Product/application build boundary | Source migration committed; build unverified | `Application/OptikaB293` owns the app target, UI, camera adapter and application tests. Root CMake composes the app with `Camera/Amscope`. Every path listed by the app CMake source list exists in the branch tree. |
-| 2 — Functional core extraction | In progress | Microscope calibration, automatic-resolution policy, slide-image geometry and slide overlay value models are separate deterministic modules. Automatic-resolution readout semantics remain provisional and are not hardware-verified. |
-| 3 — Application composition and state ownership | Source split committed; command/readback audit advanced; build unverified | The composition root constructs and injects the camera bridge, microscope configuration owner, resolution coordinator, workspace and gallery. Camera session lifecycle and generic feature snapshot/editor state have separate owners. The session model alone performs lifecycle and acquisition-affecting resolution mutations; generic editors cannot submit preview resolution. Feature-generation invalidation is reconciled after successful/failed writes and every lifecycle completion. Application termination also closes through the session owner, with a gate spanning previously queued operations. Microscope configuration/persistence and automatic-resolution coordination are separate optics feature owners. |
-| 4 — UI and preview refactoring | In progress | Workspace, dock, preview router, pane, image view, image container and feature controls have separate source responsibilities. The preview consumes frames through a narrow `NativeCameraFrameFeed`; the concrete lifecycle bridge is no longer exposed to presentation. Each notification uses one feed call to obtain a `NativeCameraFrameSnapshot` containing counters and the newest lease. RGB/gray color spaces are cached, the mailbox moves its frame pointer into the slot without an extra shared-pointer copy, and frame-specific Core Graphics providers retain the source lease without copying pixel bytes. The Objective-C++ lease stores FramePtr inline, removing the separate per-frame heap holder. The source audit also records the four-slot live pool, discard-on-exhaustion policy and separate still-capture allocation. The single-slot latest-frame mailbox and coalesced notification semantics remain unchanged. Preserve the single frame consumer and verify every construction/update path statically. |
+| 1 — Product/application build boundary | Source migration committed; local macOS configure/build passed on 2026-11-25 | `Application/OptikaB293` owns the app target, UI, camera adapter and application tests. Root CMake composes the app with `Camera/Amscope`. Every path listed by the app CMake source list exists in the branch tree. |
+| 2 — Functional core extraction | Extracted modules compiled; deterministic test coverage passed | Microscope calibration, automatic-resolution policy, slide-image geometry and slide overlay value models compiled in the application build. The 15-test CTest suite passed on 2026-11-25. Automatic-resolution readout semantics remain provisional and are not hardware-verified. |
+| 3 — Application composition and state ownership | Source split compiled; interactive lifecycle acceptance pending | The composition root constructs and injects the camera bridge, microscope configuration owner, resolution coordinator, workspace and gallery. Camera session lifecycle and generic feature snapshot/editor state have separate owners. The session model alone performs lifecycle and acquisition-affecting resolution mutations; generic editors cannot submit preview resolution. Feature-generation invalidation is reconciled after successful/failed writes and every lifecycle completion. Application termination also closes through the session owner, with a gate spanning previously queued operations. Microscope configuration/persistence and automatic-resolution coordination are separate optics feature owners. |
+| 4 — UI and preview refactoring | Initial UI implementation compiled; visual and camera-connected acceptance pending | Workspace, dock, preview router, pane, image view, image container and feature controls have separate source responsibilities. The preview consumes frames through a narrow `NativeCameraFrameFeed`; the concrete lifecycle bridge is no longer exposed to presentation. Each notification uses one feed call to obtain a `NativeCameraFrameSnapshot` containing counters and the newest lease. RGB/gray color spaces are cached, the mailbox moves its frame pointer into the slot without an extra shared-pointer copy, and frame-specific Core Graphics providers retain the source lease without copying pixel bytes. The Objective-C++ lease stores FramePtr inline, removing the separate per-frame heap holder. The source audit also records the four-slot live pool, discard-on-exhaustion policy and separate still-capture allocation. The single-slot latest-frame mailbox and coalesced notification semantics remain unchanged. Preserve the single frame consumer and verify every construction/update path statically. |
 | 5 — Capability expansion seams | Not started | Motion and ImageProcessing remain separate future capabilities. Do not create placeholder implementations or speculative universal interfaces. |
-| 6 — Migration acceptance and retirement | Not accepted | No build, test, application, camera or hardware verification has been run here. Do not claim acceptance or retire migration references based on source movement alone. |
+| 6 — Migration acceptance and retirement | Build and deterministic tests passed; application/hardware acceptance pending | No build, test, application, camera or hardware verification has been run here. Do not claim acceptance or retire migration references based on source movement alone. |
 
 ### Current implementation constraints
 
@@ -219,9 +219,12 @@ Only after acceptance:
 
 ## Verification checkpoints
 
-**Run the first full configure/build/test checkpoint now, before beginning Phase 5.**
-Phases 1–4 contain substantial C++, Objective-C++, Swift, CMake and ownership
-changes, but source audits do not establish that the product compiles or runs.
+**Initial configure/build/CTest checkpoint — passed by the user on 2026-11-25.**
+The native app configured and linked with Ninja and the Command Line Tools toolchain.
+CTest discovered all 15 expected deterministic tests and all 15 passed. This
+establishes compilation/linking and deterministic test status only; it does not
+establish visual UI behavior, camera acquisition, hardware behavior or full
+migration acceptance.
 
 With the Qt adapter and standalone preview app disabled, CTest should register
 15 deterministic tests: five Camera/Common tests, six AmScope tests and four
@@ -258,10 +261,11 @@ Use a new build directory when switching generators. CMake caches the selected
 generator in each build tree and cannot convert an existing build directory
 from Unix Makefiles or Xcode to Ninja.
 
-Only after build and CTest pass should the native app be launched for manual
-UI checks. Camera-connected acquisition, resolution changes, freeze behavior,
-capture-file inspection and shutdown are a subsequent hardware acceptance
-checkpoint; they are not replaced by the deterministic unit tests.
+The build and deterministic tests now pass. The next checkpoint is to launch
+the native app and inspect the workspace, dock, camera controls and microscope
+configuration windows. Camera-connected acquisition, resolution changes,
+freeze behavior, capture-file inspection and shutdown remain a separate
+hardware acceptance checkpoint; they are not replaced by deterministic tests.
 
 Repeat configure/build/CTest after changes to Camera, the frame feed, image
 ownership, capture, CMake composition or other compiled application contracts.

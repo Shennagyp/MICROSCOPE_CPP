@@ -58,7 +58,7 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 self.terminationInProgress = false
-                if let error = error {
+                if error != nil {
                     // Do not silently quit while the camera session may remain
                     // active. Keep the app alive so the user can recover.
                     NSApp.reply(toApplicationShouldTerminate: false)

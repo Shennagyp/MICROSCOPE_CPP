@@ -366,25 +366,35 @@ private struct DockCameraFeatureControl: View {
     }
 
     private var editorWidth: CGFloat {
-        isResolutionControl ? 128 : 110
+        if isResolutionControl { return 126 }
+
+        switch descriptor.kind {
+        case .boolean:
+            return 42
+        case .integer, .enumeration:
+            return 104
+        case .floatingPoint, .string, .integerVector:
+            return descriptor.isWritable ? 100 : 86
+        @unknown default:
+            return 86
+        }
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            if descriptor.isWritable || isResolutionControl {
-                editor
-                    .frame(width: editorWidth)
-            } else {
-                editor
-                    .fixedSize(horizontal: true, vertical: false)
-            }
+        HStack(alignment: .center, spacing: 8) {
+            Text(descriptor.displayName)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: 82, alignment: .leading)
+                .accessibilityHidden(true)
+
+            editor
+                .frame(width: editorWidth, alignment: .leading)
         }
-        .frame(
-            minWidth: descriptor.isWritable || isResolutionControl ? editorWidth + 12 : 0,
-            minHeight: 36,
-            alignment: .center
-        )
-        .padding(.horizontal, 6)
+        .frame(minHeight: 36, alignment: .center)
+        .padding(.horizontal, 8)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(Color(nsColor: NSColor.controlBackgroundColor))
@@ -401,17 +411,17 @@ private struct DockCameraFeatureControl: View {
 
     private var featureHelpText: String {
         var parts = [descriptor.displayName, featureGroupTitle(descriptor.group.rawValue)]
-        if let unit = descriptor.unit, !unit.isEmpty { parts.append("Unit: \(unit)") }
+        if let unit = descriptor.unit, !unit.isEmpty { parts.append("Unit: \\(unit)") }
         if descriptor.hasNumericRange {
             if descriptor.integerRange {
-                parts.append("Range: \(descriptor.minimumInteger)–\(descriptor.maximumInteger)")
+                parts.append("Range: \\(descriptor.minimumInteger)–\\(descriptor.maximumInteger)")
                 if descriptor.hasIntegerIncrement {
-                    parts.append("Step: \(descriptor.integerIncrement)")
+                    parts.append("Step: \\(descriptor.integerIncrement)")
                 }
             } else {
-                parts.append("Range: \(descriptor.minimumFloatingPoint)–\(descriptor.maximumFloatingPoint)")
+                parts.append("Range: \\(descriptor.minimumFloatingPoint)–\\(descriptor.maximumFloatingPoint)")
                 if descriptor.hasFloatingPointIncrement {
-                    parts.append("Step: \(descriptor.floatingPointIncrement)")
+                    parts.append("Step: \\(descriptor.floatingPointIncrement)")
                 }
             }
         }
@@ -442,6 +452,7 @@ private struct DockCameraFeatureControl: View {
                     )
                 )
                 .labelsHidden()
+                .toggleStyle(SwitchToggleStyle())
                 .disabled(editingDisabled)
 
             case .integer:
@@ -453,7 +464,7 @@ private struct DockCameraFeatureControl: View {
                             set: { model.writeInteger($0, for: descriptor) }
                         )
                     ) {
-                        ForEach(descriptor.discreteIntegerValues.map(\.int64Value), id: \.self) { value in
+                        ForEach(descriptor.discreteIntegerValues.map(\\.int64Value), id: \\.self) { value in
                             Text(String(value)).tag(value)
                         }
                     }
@@ -483,7 +494,7 @@ private struct DockCameraFeatureControl: View {
                             }
                         )
                     ) {
-                        ForEach(descriptor.enumerationValues, id: \.self) { symbol in
+                        ForEach(descriptor.enumerationValues, id: \\.self) { symbol in
                             Text(displayOption(symbol)).tag(symbol)
                         }
                     }

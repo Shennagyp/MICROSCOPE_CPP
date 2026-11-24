@@ -2,7 +2,7 @@
 
 **Branch:** `amscope-native-app-mac.v.0.8`  
 **Base:** `amscope-native-driver-0.7` (`17067f3c5b10a4bb0e748297bbd34ada295bcc43`)  
-**Status:** Architecture baseline and initial SwiftUI/AppKit shell committed. Camera integration and macOS build/hardware validation are still pending.
+**Status:** SwiftUI/AppKit shell, Objective-C++ bridge, native C++ lifecycle controller, common frame mailbox, and Core Graphics lease-backed preview are committed. macOS build, visual, and hardware validation are pending.
 
 ## 1. Objective
 
@@ -56,10 +56,10 @@ Core Graphics draw using the retained frame lease
 2. The vendor callback only enqueues event codes. It performs no SDK calls, image pulls, UI calls, lifecycle operations, or resource release.
 3. There remains exactly one acquisition worker and one `Amcam_PullImageV4` path.
 4. The frame pool, immutable `FramePtr` lease semantics, frame metadata, pixel formats, stride, drop accounting, and watchdog behavior remain unchanged.
-5. The acquisition callback must not call Swift, enter `MainActor`, construct an `NSImage`, create a `Data` copy, convert pixels, or wait for rendering.
+5. The acquisition callback must not call Swift directly, enter `MainActor`, construct an `NSImage`, create a `Data` copy, convert pixels, or wait for rendering. The Objective-C++ bridge only schedules a coalesced main-queue invalidation.
 6. Presentation is **latest-frame-wins**, not an unbounded FIFO. If rendering falls behind, old preview frames are replaced; acquisition continues.
 7. Session-generation validation occurs before and after mailbox publication. A stale session cannot republish into the current view.
-8. There is no new per-frame SwiftUI state update, per-frame main-queue block, timer, display polling loop, or additional frame queue.
+8. There is no per-frame SwiftUI state update, no unbounded per-frame main-queue backlog, no timer, display polling loop, or additional frame queue. The mailbox permits at most one outstanding notification; a consumer may re-arm it if a newer frame arrived during consumption.
 9. No UI control performs blocking camera I/O on the main thread.
 
 The current acquisition implementation uses a four-frame pool. The native frontend must therefore keep downstream frame retention bounded: no history of frame leases, no array of pending frames, and no long-lived retention of obsolete preview images.

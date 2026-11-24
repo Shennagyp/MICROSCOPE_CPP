@@ -5,6 +5,7 @@ struct NativeWorkspaceDock: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var workspace: NativeWorkspaceModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
+    @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
     @ObservedObject var gallery: NativeCaptureGalleryStore
     let onClose: () -> Void
 
@@ -43,7 +44,7 @@ struct NativeWorkspaceDock: View {
             Group {
                 switch workspace.selectedWorkspaceDockTab {
                 case .cameraControls:
-                    NativeCameraControlsDock(model: model, workspace: workspace, microscope: microscope)
+                    NativeCameraControlsDock(model: model, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator)
                 case .smartGallery:
                     NativeSmartGalleryDock(gallery: gallery)
                 }

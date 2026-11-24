@@ -5,6 +5,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
     let model: NativeCameraModel
     let microscope: MicroscopeConfigurationModel
+    let resolutionCoordinator: MicroscopeResolutionCoordinator
     let workspace: NativeWorkspaceModel
     let activeSlide: NativeSlideID
     let measurementCalibration: NativeMicroscopeMeasurementCalibration?
@@ -18,6 +19,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
             measurementCalibration: measurementCalibration,
             model: model,
             microscope: microscope,
+            resolutionCoordinator: resolutionCoordinator,
             workspace: workspace,
             onCapture: onCapture
         )
@@ -114,6 +116,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         measurementCalibration: NativeMicroscopeMeasurementCalibration?,
         model: NativeCameraModel,
         microscope: MicroscopeConfigurationModel,
+        resolutionCoordinator: MicroscopeResolutionCoordinator,
         workspace: NativeWorkspaceModel,
         onCapture: @escaping (NativeSlideID, CGImage) -> Void
     ) {
@@ -129,8 +132,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         self.measurementCalibration = measurementCalibration
         slideOnePane.updateMeasurementCalibration(measurementCalibration)
         slideTwoPane.updateMeasurementCalibration(measurementCalibration)
-        slideOnePane.updateMicroscopeControls(model, workspace: workspace, microscope: microscope)
-        slideTwoPane.updateMicroscopeControls(model, workspace: workspace, microscope: microscope)
+        slideOnePane.updateMicroscopeControls(model, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator)
+        slideTwoPane.updateMicroscopeControls(model, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator)
         self.onCapture = onCapture
         setActiveSlide(activeSlide)
 

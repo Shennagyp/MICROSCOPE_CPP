@@ -5,6 +5,7 @@ struct NativeCameraControlsDock: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var workspace: NativeWorkspaceModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
+    @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
 
     private var additionalFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
         model.featureDescriptors.filter { $0.name != "AmcamResolutionIndex" }
@@ -114,8 +115,8 @@ struct NativeCameraControlsDock: View {
                     Toggle(
                         "Automatic resolution",
                         isOn: Binding(
-                            get: { model.isAutomaticResolutionEnabled },
-                            set: { model.setAutomaticResolutionEnabled($0) }
+                            get: { resolutionCoordinator.isAutomaticResolutionEnabled },
+                            set: { resolutionCoordinator.setAutomaticResolutionEnabled($0) }
                         )
                     )
                     .font(.system(size: 12))
@@ -123,12 +124,12 @@ struct NativeCameraControlsDock: View {
                               model.isCameraOperationPending ||
                               model.isFeatureWritePending ||
                               model.isFeatureSnapshotLoading)
-                    .help(model.automaticResolutionHelp)
+                    .help(resolutionCoordinator.automaticResolutionHelp)
 
                     Spacer(minLength: 4)
 
-                    if model.isAutomaticResolutionEnabled {
-                        Text(model.automaticResolutionSummary)
+                    if resolutionCoordinator.isAutomaticResolutionEnabled {
+                        Text(resolutionCoordinator.automaticResolutionSummary)
                             .font(.system(size: 10))
                             .foregroundColor(OptikaPalette.secondaryText)
                             .lineLimit(2)
@@ -198,7 +199,7 @@ private struct CameraDockConnectionSection: View {
                         "Resolution",
                         selection: Binding(
                             get: { model.selectedPreviewResolutionSymbol ?? "" },
-                            set: { model.selectManualPreviewResolution(to: $0) }
+                            set: { resolutionCoordinator.selectManualPreviewResolution(to: $0) }
                         )
                     ) {
                         if model.selectedPreviewResolutionSymbol == nil {

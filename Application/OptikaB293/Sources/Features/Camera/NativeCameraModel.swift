@@ -4,7 +4,6 @@ import Foundation
 @MainActor
 final class NativeCameraModel: ObservableObject {
     let bridge: AmscopeNativeCameraBridge
-    private let microscope: MicroscopeConfigurationModel
     @Published private(set) var cameras: [AmscopeCameraDevice] = []
     @Published var selectedDeviceID = ""
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
@@ -20,24 +19,10 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var selectedPreviewResolutionSymbol: String?
     @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
-    @Published private(set) var isAutomaticResolutionEnabled = false {
-        didSet {
-            UserDefaults.standard.set(
-                isAutomaticResolutionEnabled,
-                forKey: Self.automaticResolutionDefaultsKey
-            )
-        }
-    }
+    var onPreviewResolutionReadbackChanged: (() -> Void)?
 
-    private static let automaticResolutionDefaultsKey =
-        "AmscopeNative.AutomaticResolutionEnabled.v1"
-
-    init(bridge: AmscopeNativeCameraBridge, microscope: MicroscopeConfigurationModel) {
+    init(bridge: AmscopeNativeCameraBridge) {
         self.bridge = bridge
-        self.microscope = microscope
-        isAutomaticResolutionEnabled = UserDefaults.standard.bool(
-            forKey: Self.automaticResolutionDefaultsKey
-        )
 
         bridge.onAcquisitionError = { [weak self] error in
             MainActor.assumeIsolated {
@@ -67,74 +52,6 @@ final class NativeCameraModel: ObservableObject {
         cameraState == .closed &&
             !isCameraOperationPending &&
             !isEnumeratingCameras
-    }
-
-    func setAutomaticResolutionEnabled(_ enabled: Bool) {
-        guard enabled != isAutomaticResolutionEnabled else { return }
-        isAutomaticResolutionEnabled = enabled
-        if enabled {
-            reconcileAutomaticResolution()
-        }
-    }
-
-    func selectManualPreviewResolution(to symbol: String) {
-        guard !symbol.isEmpty else { return }
-        setAutomaticResolutionEnabled(false)
-        changePreviewResolution(to: symbol)
-    }
-
-    var automaticResolutionHelp: String {
-        "Chooses the lowest camera-reported mode that meets the Rayleigh sampling target for the active objective and configured H&E chromatin wavelength band. If no mode meets the target, the maximum reported mode is selected."
-    }
-
-    var automaticResolutionSummary: String {
-        guard let descriptor = featureDescriptors.first(where: {
-            $0.name == "AmcamResolutionIndex"
-        }) else {
-            return "Camera modes unavailable"
-        }
-        guard let choice = automaticResolutionChoice(for: descriptor) else {
-            return "Check microscope calibration"
-        }
-        let lower = String(format: "%.2f", choice.minimumBandSamplingFactor)
-        let upper = String(format: "%.2f", choice.maximumBandSamplingFactor)
-        let band = String(
-            format: "%.0f–%.0f nm",
-            microscope.configuration.chromatinBandLowerNanometers,
-            microscope.configuration.chromatinBandUpperNanometers
-        )
-        return "\(choice.width) × \(choice.height) · RF \(lower)–\(upper) · \(band)" +
-            (choice.meetsTarget ? "" : " · target not met")
-    }
-
-    func microscopeConfigurationDidChange() {
-        reconcileAutomaticResolution()
-    }
-
-    private func reconcileAutomaticResolution() {
-        guard isAutomaticResolutionEnabled,
-              canChangePreviewResolution,
-              let descriptor = featureDescriptors.first(where: {
-                  $0.name == "AmcamResolutionIndex"
-              }),
-              descriptor.isAvailable,
-              let current = featureValues[descriptor.name]?.enumerationSymbol,
-              let choice = automaticResolutionChoice(for: descriptor),
-              current != choice.symbol else {
-            return
-        }
-
-        changePreviewResolution(to: choice.symbol)
-    }
-
-
-    private func automaticResolutionChoice(
-        for descriptor: AmscopeCameraFeatureDescriptor
-    ) -> NativeAutomaticResolutionChoice? {
-        NativeAutomaticResolutionPolicy.choose(
-            modeSymbols: descriptor.enumerationValues,
-            configuration: microscope.configuration
-        )
     }
 
     var cameraStateText: String {
@@ -373,7 +290,7 @@ final class NativeCameraModel: ObservableObject {
                 self.featureErrors[name] = nil
                 if name == "AmcamResolutionIndex" {
                     self.selectedPreviewResolutionSymbol = value.enumerationSymbol
-                    self.reconcileAutomaticResolution()
+                    self.onPreviewResolutionReadbackChanged?()
                 }
             }
         }

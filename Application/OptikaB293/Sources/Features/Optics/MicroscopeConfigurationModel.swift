@@ -9,7 +9,6 @@ final class MicroscopeConfigurationModel: ObservableObject {
         didSet {
             guard configuration != oldValue else { return }
             persistConfiguration()
-            onConfigurationChanged?()
         }
     }
 
@@ -17,8 +16,6 @@ final class MicroscopeConfigurationModel: ObservableObject {
         configuration: .optikaB293
     )
 
-    /// One application-level consumer: camera automatic-resolution policy.
-    var onConfigurationChanged: (() -> Void)?
 
     private static let defaultsKey = "AmscopeNative.MicroscopeConfiguration.v1"
 

@@ -3,11 +3,17 @@ import SwiftUI
 struct MicroscopeConfigurationWindow: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
+    @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
     @ObservedObject var draftStore: MicroscopeConfigurationDraftStore
 
-    init(model: NativeCameraModel, microscope: MicroscopeConfigurationModel) {
+    init(
+        model: NativeCameraModel,
+        microscope: MicroscopeConfigurationModel,
+        resolutionCoordinator: MicroscopeResolutionCoordinator
+    ) {
         self.model = model
         self.microscope = microscope
+        self.resolutionCoordinator = resolutionCoordinator
         self.draftStore = microscope.draftStore
     }
 
@@ -261,11 +267,11 @@ struct MicroscopeConfigurationWindow: View {
                         Toggle(
                             "Enable automatic camera resolution",
                             isOn: Binding(
-                                get: { model.isAutomaticResolutionEnabled },
-                                set: { model.setAutomaticResolutionEnabled($0) }
+                                get: { resolutionCoordinator.isAutomaticResolutionEnabled },
+                                set: { resolutionCoordinator.setAutomaticResolutionEnabled($0) }
                             )
                         )
-                        Text("Current automatic choice: \(model.automaticResolutionSummary)")
+                        Text("Current automatic choice: \(resolutionCoordinator.automaticResolutionSummary)")
                             .font(.caption)
                             .foregroundColor(OptikaPalette.secondaryText)
                     }

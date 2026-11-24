@@ -4,6 +4,7 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
+    @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
     @ObservedObject var workspace: NativeWorkspaceModel
     @ObservedObject var gallery: NativeCaptureGalleryStore
 
@@ -18,6 +19,7 @@ struct MainWindowView: View {
                 bridge: model.bridge,
                 model: model,
                 microscope: microscope,
+                resolutionCoordinator: resolutionCoordinator,
                 workspace: workspace,
                 activeSlide: workspace.activeSlide,
                 measurementCalibration: microscope.measurementCalibration,
@@ -44,6 +46,7 @@ struct MainWindowView: View {
                             model: model,
                             workspace: workspace,
                             microscope: microscope,
+                            resolutionCoordinator: resolutionCoordinator,
                             gallery: gallery,
                             onClose: { workspace.closeWorkspaceDock() }
                         )

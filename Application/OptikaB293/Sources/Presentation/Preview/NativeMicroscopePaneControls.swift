@@ -4,6 +4,7 @@ struct NativeMicroscopePaneControls: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var workspace: NativeWorkspaceModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
+    @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
     let slide: NativeSlideID
 
     private var resolutionDescriptor: AmscopeCameraFeatureDescriptor? {
@@ -40,7 +41,7 @@ struct NativeMicroscopePaneControls: View {
                     "Resolution",
                     selection: Binding(
                         get: { model.selectedPreviewResolutionSymbol ?? "" },
-                        set: { model.selectManualPreviewResolution(to: $0) }
+                        set: { resolutionCoordinator.selectManualPreviewResolution(to: $0) }
                     )
                 ) {
                     if model.selectedPreviewResolutionSymbol == nil {
@@ -66,8 +67,8 @@ struct NativeMicroscopePaneControls: View {
             Toggle(
                 "AUTO",
                 isOn: Binding(
-                    get: { model.isAutomaticResolutionEnabled },
-                    set: { model.setAutomaticResolutionEnabled($0) }
+                    get: { resolutionCoordinator.isAutomaticResolutionEnabled },
+                    set: { resolutionCoordinator.setAutomaticResolutionEnabled($0) }
                 )
             )
             .font(.system(size: 8, weight: .semibold))
@@ -77,7 +78,7 @@ struct NativeMicroscopePaneControls: View {
                       model.isCameraOperationPending ||
                       model.isFeatureWritePending ||
                       model.isFeatureSnapshotLoading)
-            .help(model.automaticResolutionHelp)
+            .help(resolutionCoordinator.automaticResolutionHelp)
 
             Button {
                 workspace.selectActiveSlide(slide)

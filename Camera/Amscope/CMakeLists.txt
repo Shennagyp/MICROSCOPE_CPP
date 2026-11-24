@@ -114,6 +114,7 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
             "Configure a separate build directory with -G Ninja.")
     endif()
     enable_language(Swift)
+    enable_language(OBJCXX)
 endif()
 
 # Standalone diagnostics. These tools intentionally use different acquisition
@@ -221,6 +222,7 @@ endif()
 if(AMSCOPE_BUILD_NATIVE_MAC_APP)
     find_library(AMSCOPE_SWIFTUI_FRAMEWORK SwiftUI REQUIRED)
     find_library(AMSCOPE_APPKIT_FRAMEWORK AppKit REQUIRED)
+    find_library(AMSCOPE_FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(AMSCOPE_COREGRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
 
     add_executable(amscope_native_mac_app MACOSX_BUNDLE
@@ -229,13 +231,21 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
         app/native_mac/NativePreviewSurface.swift
         app/native_mac/CameraControlsWindow.swift
         app/native_mac/NativeCameraController.cpp
-        app/native_mac/NativeCameraController.h)
+        app/native_mac/NativeCameraController.h
+        app/native_mac/AmscopeNativeCameraBridge.mm
+        app/native_mac/AmscopeNativeCameraBridge.h
+        app/native_mac/NativeMac-Bridging-Header.h)
     target_include_directories(amscope_native_mac_app PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/app/native_mac")
+    target_compile_options(amscope_native_mac_app PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-import-objc-header>"
+        "$<$<COMPILE_LANGUAGE:Swift>:${CMAKE_CURRENT_LIST_DIR}/app/native_mac/NativeMac-Bridging-Header.h>"
+        "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
     target_link_libraries(amscope_native_mac_app PRIVATE
         Amscope::Driver
         "${AMSCOPE_SWIFTUI_FRAMEWORK}"
         "${AMSCOPE_APPKIT_FRAMEWORK}"
+        "${AMSCOPE_FOUNDATION_FRAMEWORK}"
         "${AMSCOPE_COREGRAPHICS_FRAMEWORK}")
     set_target_properties(amscope_native_mac_app PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.shennagyp.amscope.native"

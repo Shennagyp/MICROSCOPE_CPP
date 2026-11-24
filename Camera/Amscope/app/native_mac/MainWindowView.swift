@@ -45,7 +45,8 @@ struct MainWindowView: View {
                             onClose: { model.isWorkspaceDockVisible = false },
                             onToggleFloating: { model.isWorkspaceDockFloating = true }
                         )
-                        .frame(width: dockWidth, maxHeight: .infinity)
+                        .frame(width: dockWidth)
+                        .frame(maxHeight: .infinity)
                         .layoutPriority(0)
                     }
                 }
@@ -195,34 +196,19 @@ struct DockCameraFeatureControl: View {
         model.isCameraOperationPending
     }
 
-    private var editorWidth: CGFloat {
-        if isResolutionControl { return 126 }
-
-        switch descriptor.kind {
-        case .boolean:
-            return 42
-        case .integer, .enumeration:
-            return 104
-        case .floatingPoint, .string, .integerVector:
-            return descriptor.isWritable ? 100 : 86
-        @unknown default:
-            return 86
-        }
-    }
-
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             Text(descriptor.displayName)
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(width: 82, alignment: .leading)
+                .frame(width: 96, alignment: .leading)
 
             editor
-                .frame(width: editorWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: 36, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .center)
         .padding(.horizontal, 8)
         .background(
             RoundedRectangle(cornerRadius: 6)
@@ -232,7 +218,6 @@ struct DockCameraFeatureControl: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.65), lineWidth: 0.5)
         )
-        .fixedSize(horizontal: true, vertical: false)
         .help(featureHelpText)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(descriptor.displayName)

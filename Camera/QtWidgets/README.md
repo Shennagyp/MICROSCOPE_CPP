@@ -37,8 +37,11 @@ session, schedule operations, or know about a vendor API. In particular, the
 host remains responsible for opaque-ID routing, request ordering, generations,
 and session lifetime. A faulted session remains closeable but cannot be started
 or stopped through this panel. Its compact two-row layout puts device selection
-and refresh on the first row and Open/Start/Stop/Close on the second, allowing
-it to fit a narrow IDE-style dock.
+and refresh on the first row and Open/Start/Stop/Close on the second. The
+AmScope host places this panel in the Camera Explorer tool window; feature
+settings and descriptor groups live in a separate Camera Properties tool
+window. Both panes are dockable, tabifiable, floatable, and included in the
+persisted workspace layout.
 
 The `camera_qt_widgets_camera_control_panel_tests` offscreen test covers
 device-label/opaque-ID preservation, callback dispatch, empty discovery,
@@ -60,17 +63,20 @@ without coupling the reusable widget to a particular camera backend. The AmScope
 host uses compact 8–9 pt typography, subtle separators, and a 42–48 px widget
 height so the strip remains useful without consuming preview area.
 
-In the AmScope preview host, the bar is placed in a movable, floatable, and
-closable `QDockWidget`, initially docked at the bottom. The View menu can
-show it again after closing it. Transient application messages are represented
-as items in that same bar; the host does not create a separate `QStatusBar`.
-Docking and application-status presentation belong to the host, not to the
+In the AmScope host, the bar is a permanent widget in the bottom
+`QStatusBar`. This keeps frame and camera values visible while a separate
+Output tool window holds timestamped application and camera messages. The
+status area also shows the current camera lifecycle state. Docking and
+application-status presentation belong to the host, not to the
 backend-neutral widget contract.
 
-The application also hosts Camera Controls in a right-side `QDockWidget`.
-Both docks support moving/floating and have persistent layout state saved by
-the main window. The Camera Controls dock is exposed through both File and
-View commands; discovery refreshes when the dock is shown.
+The AmScope preview uses a document-centric workspace: Live Preview is the
+central document tab; Camera Explorer and Camera Properties are separate
+right-side tool windows; Output is a bottom tool window. The View menu exposes
+the tool-window toggles and a Reset Window Layout command. File → Camera
+Workspace raises the two camera panes. The main window persists geometry and
+dock arrangements, and invalidates the older workspace-state version when
+the layout model changes.
 
 The `camera_qt_widgets_image_info_bar_tests` offscreen test covers item
 creation/removal, double-click routing for editable items, and no edit callback

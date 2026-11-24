@@ -33,7 +33,14 @@ private struct NativeAutomaticResolutionChoice {
     let pixelCount: Int
     let minimumBandSamplingFactor: Double
     let maximumBandSamplingFactor: Double
-    let meetsTarget: Bool
+    let meetsOpticalTarget: Bool
+    let meetsDisplayTarget: Bool
+    let requiredDisplayWidthPixels: Int?
+    let requiredDisplayHeightPixels: Int?
+
+    var meetsTarget: Bool {
+        meetsOpticalTarget && meetsDisplayTarget
+    }
 }
 
 enum NativeSlideID: String, CaseIterable, Identifiable, Hashable {
@@ -90,6 +97,9 @@ final class NativeCameraModel: ObservableObject {
             )
         }
     }
+
+    private var activePreviewDisplayWidthPixels = 0
+    private var activePreviewDisplayHeightPixels = 0
 
     private static let microscopeConfigurationDefaultsKey =
         "AmscopeNative.MicroscopeConfiguration.v1"
@@ -177,8 +187,20 @@ final class NativeCameraModel: ObservableObject {
         changePreviewResolution(to: symbol)
     }
 
+    func updatePreviewDisplayTarget(width: Int, height: Int) {
+        guard width > 0, height > 0 else { return }
+        guard width != activePreviewDisplayWidthPixels ||
+              height != activePreviewDisplayHeightPixels else {
+            return
+        }
+
+        activePreviewDisplayWidthPixels = width
+        activePreviewDisplayHeightPixels = height
+        reconcileAutomaticResolution()
+    }
+
     var automaticResolutionHelp: String {
-        "H&E chromatin mode. Chooses the lowest supported camera mode that meets the Rayleigh sampling target across the configured hematoxylin-sensitive wavelength band. Until the microscope's spectral response is measured, the shortest band wavelength is used conservatively."
+        "Chooses the lowest supported camera mode satisfying the optical Rayleigh sampling target and, when enabled, the active preview pane's Retina backing-pixel dimensions. Display matching is independent of the optical calculation."
     }
 
     var automaticResolutionSummary: String {
@@ -190,15 +212,23 @@ final class NativeCameraModel: ObservableObject {
         guard let choice = automaticResolutionChoice(for: descriptor) else {
             return "Check microscope calibration"
         }
+
         let lower = String(format: "%.2f", choice.minimumBandSamplingFactor)
         let upper = String(format: "%.2f", choice.maximumBandSamplingFactor)
-        let band = String(
-            format: "%.0f–%.0f nm",
-            microscopeConfiguration.chromatinBandLowerNanometers,
-            microscopeConfiguration.chromatinBandUpperNanometers
-        )
-        return "\(choice.width) × \(choice.height) · RF \(lower)–\(upper) · \(band)" +
-            (choice.meetsTarget ? "" : " · target not met")
+        let opticalStatus = choice.meetsOpticalTarget ? "optical OK" : "optical shortfall"
+        let displayStatus: String
+        if !microscopeConfiguration.matchPreviewDisplayResolution {
+            displayStatus = "display match off"
+        } else if let width = choice.requiredDisplayWidthPixels,
+                  let height = choice.requiredDisplayHeightPixels {
+            displayStatus = choice.meetsDisplayTarget
+                ? "display OK"
+                : "display needs \(width) × \(height) px"
+        } else {
+            displayStatus = "display target pending"
+        }
+
+        return "\(choice.width) × \(choice.height) · RF \(lower)–\(upper) · \(opticalStatus) · \(displayStatus)"
     }
 
     private func persistMicroscopeConfiguration() {
@@ -263,17 +293,43 @@ final class NativeCameraModel: ObservableObject {
             return nil
         }
 
+        // The active pane's backing-pixel viewport defines the display target.
+        // Fit the camera's aspect ratio inside that viewport; do not crop it.
+        var requiredDisplayWidth: Int?
+        var requiredDisplayHeight: Int?
+        if configuration.matchPreviewDisplayResolution,
+           activePreviewDisplayWidthPixels > 0,
+           activePreviewDisplayHeightPixels > 0 {
+            let imageAspect = Double(maximumMode.width) /
+                Double(maximumMode.height)
+            let viewportAspect =
+                Double(activePreviewDisplayWidthPixels) /
+                Double(activePreviewDisplayHeightPixels)
+            let fittedWidth: Double
+            let fittedHeight: Double
+            if viewportAspect > imageAspect {
+                fittedHeight = Double(activePreviewDisplayHeightPixels)
+                fittedWidth = fittedHeight * imageAspect
+            } else {
+                fittedWidth = Double(activePreviewDisplayWidthPixels)
+                fittedHeight = fittedWidth / imageAspect
+            }
+            requiredDisplayWidth = Int(ceil(fittedWidth))
+            requiredDisplayHeight = Int(ceil(fittedHeight))
+        }
+
         // The shortest wavelength has the smallest Rayleigh distance and
-        // therefore defines the conservative camera-sampling requirement.
+        // therefore defines the conservative optical sampling requirement.
         let lowerBandRayleighMicrometers =
             0.61 * (configuration.chromatinBandLowerNanometers / 1000.0) /
             objective.numericalAperture
         let upperBandRayleighMicrometers =
             0.61 * (configuration.chromatinBandUpperNanometers / 1000.0) /
             objective.numericalAperture
+
         let candidates = modes.map { mode -> NativeAutomaticResolutionChoice in
-            // The MU503's advertised modes are initially modeled as full-field
-            // modes whose effective sample pitch scales with output dimensions.
+            // The MU503 modes remain provisionally modeled as full-field modes.
+            // Exact sensor binning/full-field mapping is a separate hardware gate.
             let scaleX = Double(maximumMode.width) / Double(mode.width)
             let scaleY = Double(maximumMode.height) / Double(mode.height)
             let samplingScale = max(scaleX, scaleY)
@@ -284,6 +340,19 @@ final class NativeCameraModel: ObservableObject {
                 objectPixelPitchMicrometers
             let maximumBandFactor = upperBandRayleighMicrometers /
                 objectPixelPitchMicrometers
+
+            let meetsOpticalTarget =
+                minimumBandFactor >= configuration.targetRayleighSamplingFactor
+            let meetsDisplayTarget: Bool
+            if let requiredWidth = requiredDisplayWidth,
+               let requiredHeight = requiredDisplayHeight {
+                meetsDisplayTarget =
+                    mode.width >= requiredWidth &&
+                    mode.height >= requiredHeight
+            } else {
+                meetsDisplayTarget = true
+            }
+
             return NativeAutomaticResolutionChoice(
                 symbol: mode.symbol,
                 width: mode.width,
@@ -291,7 +360,10 @@ final class NativeCameraModel: ObservableObject {
                 pixelCount: mode.pixelCount,
                 minimumBandSamplingFactor: minimumBandFactor,
                 maximumBandSamplingFactor: maximumBandFactor,
-                meetsTarget: minimumBandFactor >= configuration.targetRayleighSamplingFactor
+                meetsOpticalTarget: meetsOpticalTarget,
+                meetsDisplayTarget: meetsDisplayTarget,
+                requiredDisplayWidthPixels: requiredDisplayWidth,
+                requiredDisplayHeightPixels: requiredDisplayHeight
             )
         }
 
@@ -301,8 +373,8 @@ final class NativeCameraModel: ObservableObject {
             return smallestValid
         }
 
-        // No mode reaches the requested factor: use maximum resolution and
-        // report the shortfall instead of claiming that the target is met.
+        // If no reported mode satisfies both limits, use maximum mode and
+        // report optical and display shortfalls independently.
         return candidates.max(by: { $0.pixelCount < $1.pixelCount })
     }
 

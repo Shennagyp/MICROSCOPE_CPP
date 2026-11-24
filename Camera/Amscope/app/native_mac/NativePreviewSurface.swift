@@ -8,13 +8,15 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
     let activeSlide: NativeSlideID
     let onActiveSlideChanged: (NativeSlideID) -> Void
+    let onDisplayPixelTargetChanged: (Int, Int) -> Void
 
     func makeNSView(context: Context) -> NativeDualPreviewNSView {
         let view = NativeDualPreviewNSView(frame: .zero)
         view.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged
+            onActiveSlideChanged: onActiveSlideChanged,
+            onDisplayPixelTargetChanged: onDisplayPixelTargetChanged
         )
         return view
     }
@@ -23,7 +25,8 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
         nsView.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged
+            onActiveSlideChanged: onActiveSlideChanged,
+            onDisplayPixelTargetChanged: onDisplayPixelTargetChanged
         )
     }
 }
@@ -39,6 +42,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var previousDividerFraction: CGFloat = 0.5
     private var didSetInitialSplitPosition = false
     private var onActiveSlideChanged: ((NativeSlideID) -> Void)?
+    private var onDisplayPixelTargetChanged: ((Int, Int) -> Void)?
+    private var displayTargetWorkItem: DispatchWorkItem?
     private let minimumPaneWidth: CGFloat = 240
     private var didConfigureSubviews = false
 
@@ -89,12 +94,28 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         } else if maximizedSlide != nil {
             applyMaximizedPosition()
         }
+        scheduleDisplayPixelTargetUpdate()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        scheduleDisplayPixelTargetUpdate()
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        scheduleDisplayPixelTargetUpdate(delay: 0)
+    }
+
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        scheduleDisplayPixelTargetUpdate()
     }
 
     func attach(
         to bridge: AmscopeNativeCameraBridge,
         activeSlide: NativeSlideID,
-        onActiveSlideChanged: @escaping (NativeSlideID) -> Void
+        onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
+        onDisplayPixelTargetChanged: @escaping (Int, Int) -> Void
     ) {
         if self.bridge !== bridge {
             self.bridge = bridge
@@ -106,7 +127,9 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         }
 
         self.onActiveSlideChanged = onActiveSlideChanged
+        self.onDisplayPixelTargetChanged = onDisplayPixelTargetChanged
         setActiveSlide(activeSlide)
+        scheduleDisplayPixelTargetUpdate()
 
         // Recover a frame if the view was recreated while a notification
         // was already pending. This remains the single mailbox consumer.
@@ -119,8 +142,10 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     }
 
     private func setActiveSlide(_ slide: NativeSlideID) {
+        guard activeSlide != slide else { return }
         activeSlide = slide
         updatePaneStates()
+        scheduleDisplayPixelTargetUpdate()
     }
 
     private func updatePaneStates() {
@@ -157,6 +182,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             applyMaximizedPosition()
         }
         updatePaneStates()
+        scheduleDisplayPixelTargetUpdate()
     }
 
     private func applyMaximizedPosition() {
@@ -206,9 +232,36 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         }
     }
 
+    private func scheduleDisplayPixelTargetUpdate(delay: TimeInterval = 0.25) {
+        displayTargetWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.publishDisplayPixelTarget()
+        }
+        displayTargetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + delay,
+            execute: workItem
+        )
+    }
+
+    private func publishDisplayPixelTarget() {
+        let pane = activeSlide == .slide1 ? slideOnePane : slideTwoPane
+        let pixelSize = pane.displayPixelSize
+        guard pixelSize.width > 0, pixelSize.height > 0 else { return }
+        onDisplayPixelTargetChanged?(pixelSize.width, pixelSize.height)
+    }
+
     private func consumeLatestFrame() {
-        guard let bridge = bridge,
-              let lease = bridge.takeLatestFrame(),
+        guard let bridge = bridge else { return }
+        slideOnePane.updateAcquisitionCounters(
+            pulled: bridge.framesPulled,
+            dropped: bridge.droppedFrames
+        )
+        slideTwoPane.updateAcquisitionCounters(
+            pulled: bridge.framesPulled,
+            dropped: bridge.droppedFrames
+        )
+        guard let lease = bridge.takeLatestFrame(),
               let image = lease.createCGImage() else {
             return
         }
@@ -229,12 +282,25 @@ private final class NativeSlidePreviewPane: NSView {
     private let imageView: NativeSlideImageView
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
+    private let frameStatisticsLabel = NSTextField(labelWithString: "FRAMES 0 · VIEWED 0 · DROPS 0")
     private let selectButton = NSButton(title: "Set Live Target", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "Maximize", target: nil, action: nil)
     private let headerStack = NSStackView()
 
     var onSelectLiveTarget: (() -> Void)?
     var onToggleMaximize: (() -> Void)?
+
+    private var pulledFrameCount: UInt64 = 0
+    private var droppedFrameCount: UInt64 = 0
+    private var paneFrameCount: UInt64 = 0
+
+    var displayPixelSize: (width: Int, height: Int) {
+        let backingBounds = imageView.convertToBacking(imageView.bounds)
+        return (
+            width: Int(ceil(backingBounds.width)),
+            height: Int(ceil(backingBounds.height))
+        )
+    }
 
     init(slide: NativeSlideID) {
         self.slide = slide
@@ -255,6 +321,10 @@ private final class NativeSlidePreviewPane: NSView {
 
         statusLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         statusLabel.textColor = NSColor.secondaryLabelColor
+        frameStatisticsLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular)
+        frameStatisticsLabel.textColor = NSColor.secondaryLabelColor
+        frameStatisticsLabel.lineBreakMode = .byTruncatingTail
+        frameStatisticsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         selectButton.bezelStyle = .rounded
         selectButton.controlSize = .small
@@ -273,6 +343,7 @@ private final class NativeSlidePreviewPane: NSView {
         headerStack.translatesAutoresizingMaskIntoConstraints = false
         headerStack.addArrangedSubview(titleLabel)
         headerStack.addArrangedSubview(statusLabel)
+        headerStack.addArrangedSubview(frameStatisticsLabel)
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerStack.addArrangedSubview(spacer)
@@ -294,8 +365,23 @@ private final class NativeSlidePreviewPane: NSView {
         ])
     }
 
+    func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
+        pulledFrameCount = pulled
+        droppedFrameCount = dropped
+        updateFrameStatisticsLabel()
+    }
+
     func display(_ image: CGImage) {
+        paneFrameCount &+= 1
         imageView.display(image)
+        updateFrameStatisticsLabel()
+    }
+
+    private func updateFrameStatisticsLabel() {
+        frameStatisticsLabel.stringValue =
+            "PULLED \(pulledFrameCount) · PANE \(paneFrameCount) · DROPS \(droppedFrameCount)"
+        frameStatisticsLabel.toolTip =
+            "PULLED: cumulative driver frames pulled. PANE: images assigned to this slide preview. DROPS: cumulative driver-reported dropped frames."
     }
 
     func updatePresentationState(isActiveTarget: Bool, isMaximized: Bool) {

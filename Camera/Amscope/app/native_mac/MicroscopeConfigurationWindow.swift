@@ -265,6 +265,20 @@ struct MicroscopeConfigurationWindow: View {
                                 set: { model.setAutomaticResolutionEnabled($0) }
                             )
                         )
+                        Toggle(
+                            "Match active preview to display pixels",
+                            isOn: Binding(
+                                get: { draftStore.configuration.matchPreviewDisplayResolution },
+                                set: { value in
+                                    draftStore.update { updated in
+                                        updated.matchPreviewDisplayResolution = value
+                                    }
+                                }
+                            )
+                        )
+                        Text("Uses the active preview pane's physical backing-pixel size, including Retina scaling. Auto Res selects the smallest camera mode satisfying both the optical sampling target and the displayed image size. The mode is applied after pane resizing settles.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         Text("Current automatic choice: \(model.automaticResolutionSummary)")
                             .font(.caption)
                             .foregroundColor(.secondary)

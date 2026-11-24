@@ -2,6 +2,7 @@
 
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QScrollArea>
@@ -31,7 +32,6 @@ public:
         label_->setAttribute(Qt::WA_TransparentForMouseEvents);
         value_ = new QLabel(this);
         value_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        value_->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
         layout->addWidget(label_);
         layout->addWidget(value_);
@@ -63,6 +63,19 @@ public:
     }
 
 protected:
+    void keyPressEvent(QKeyEvent* event) override {
+        if (editable_ &&
+            (event->key() == Qt::Key_Return ||
+             event->key() == Qt::Key_Enter ||
+             event->key() == Qt::Key_Space) &&
+            editHandler_) {
+            editHandler_(id_);
+            event->accept();
+            return;
+        }
+        QFrame::keyPressEvent(event);
+    }
+
     void mouseDoubleClickEvent(QMouseEvent* event) override {
         if (event->button() == Qt::LeftButton && editable_ && editHandler_) {
             editHandler_(id_);

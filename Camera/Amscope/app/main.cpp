@@ -1556,6 +1556,7 @@ private:
     }
 
     void refreshFeatureValues(std::uint64_t generation) {
+        featureReadbackReady_ = false;
         pendingFeatureReads_ = 0;
         for (const auto& entry : featureControls_) {
             if (entry.second.descriptor.isReadable) {

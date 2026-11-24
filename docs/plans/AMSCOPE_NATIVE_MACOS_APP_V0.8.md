@@ -98,11 +98,12 @@
 ## Two-slide workspace and information bar (2026-11-24)
 
 The main window now has two side-by-side slide panes and one thin bottom dock; the
-separate camera row above the preview has been removed. The dock contains camera
-Open + Start and editable feature controls on the left, with read-only information
-on the right. Its divider is resizable; it can collapse or detach into a floating
-utility panel and re-dock. Each slide pane has a persistent Switch Live control,
-its own maximize/restore control, and a red outer border only while selected as the
+separate camera row above the preview has been removed. The dock contains camera connection/lifecycle actions, a Slide 1/Slide 2 target
+selector, and the complete currently exposed generic feature descriptor list in one
+horizontally scrollable strip. The dock can collapse or detach into a floating
+utility panel and re-dock; duplicated camera/resolution/format/state property
+readouts have been removed. Each slide pane has a persistent Switch Live control,
+its own maximize/restore control, and a thin 1-point red outer border only while selected as the
 UI live target. A new frame is routed only to the selected pane; the other retains
 its last displayed image.
 
@@ -270,3 +271,26 @@ LIVE and outlined in red; the inactive pane exposes Switch Live. The selection
 changes UI frame routing only; physical microscope slide/stage movement remains a
 future controller operation. Updated compile, window interaction, and hardware
 validation are pending.
+
+
+## All exposed camera features in compact bottom dock (2026-11-24)
+
+The dock now presents the entire available `featureDescriptors` collection rather
+than a curated maximum of three writable numeric features. Each descriptor remains
+in the model-provided group ordering. Writable descriptors use type-appropriate
+controls: boolean Toggle, discrete integer Picker, enumeration Picker, or text
+entry for continuous integer, floating-point, string, and integer-vector values.
+Read-only descriptors display their current value. The strip scrolls horizontally
+to preserve the camera-first, single-row layout. Camera connection status/name is
+shown at the left beside connect/start/stop/close/refresh actions. The duplicate
+Camera, Resolution, Format, State, and Live property labels have been removed.
+A segmented Slide 1/Slide 2 selector is also in the dock; the panes retain their
+Switch Live buttons. The active outline is 1 point thick.
+
+**Scope limit:** this maps every generic feature descriptor currently exposed by
+the native bridge. Separate camera commands already defined in the Qt/native driver
+facade (auto white balance, trigger/I/O configuration, frame-rate telemetry, still
+capture, embedded light source, filter wheel, ST4, focuser, lens focus/aperture)
+are not yet connected to the native bridge/controller and are not claimed as
+available dock controls. Updated macOS build and hardware UI validation remain
+pending.

@@ -2,7 +2,7 @@
 
 **Branch:** `amscope-native-app-mac.v.0.8`  
 **Base:** `amscope-native-driver-0.7` (`17067f3c5b10a4bb0e748297bbd34ada295bcc43`)  
-**Status:** The native target previously linked successfully on the user's Mac. The dual-slide workspace, single-consumer AppKit preview, compact all-feature bottom dock, camera connection actions, slide selector, and thin active-slide outline are committed; this latest iteration still requires a local build, visual QA, frame-pool validation, and hardware performance sign-off.
+**Status:** The native target previously linked successfully on the user's Mac. The dual-slide workspace, single-consumer AppKit preview, compact all-feature bottom dock, camera connection actions, slide selector, thin active-slide outline, manual exposure availability correction, and preview-resolution selection path are committed; this latest iteration still requires a local build, visual QA, frame-pool validation, and hardware performance sign-off.
 
 ## 1. Objective
 
@@ -155,6 +155,28 @@ and scroll inside the dock; writable descriptors use type-appropriate editors,
 while read-only descriptors show their current values. The dock does not repeat
 camera name, resolution, pixel format, or acquisition state as separate properties.
 The connection indicator, selected device, and state remain on the left of the dock.
+Read-only numeric values size to their content rather than occupying the fixed
+width reserved for editable fields, avoiding a large empty area around a lone
+number. Editable numeric controls keep a compact input and explicit Set action.
+
+**Exposure and preview resolution behavior:**
+
+- `ExposureAuto` selects the vendor mode (`Off`, `Once`, or
+  `Continuous`). `ExposureTime` becomes writable only when the selected
+  mode is `Off` and the camera returns a valid exposure range. Descriptor
+  availability/range validation is separate from the current exposure readback:
+  a stale or out-of-range current value must not hide the manual input itself.
+  The value write still validates the requested microseconds against the current
+  SDK range and requires manual mode.
+- `AmcamResolutionIndex` exposes the preview resolutions reported for the open
+  camera. The dock renders these as width × height choices. Resolution changes
+  use the existing serialized native controller; they do not call the vendor SDK
+  from Swift. If acquisition is active, the controller clears the pending old-size
+  frame, stops the current acquisition, applies the selected mode through the
+  existing `AmcamCamera` feature API, and restarts acquisition under a new
+  session generation. The user may see a brief preview interruption. If Stop or
+  restart fails, the operation reports the failure rather than claiming the
+  stream is running.
 
 **Current hardware boundary:** selecting Slide 1 or Slide 2 currently changes
 only the UI's live-frame destination. It does not physically move the microscope

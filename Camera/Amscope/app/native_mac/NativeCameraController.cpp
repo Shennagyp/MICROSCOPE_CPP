@@ -434,6 +434,9 @@ NativeCameraController::requestChangePreviewResolution(
             const bool resumeAcquisition =
                 initialState == CameraState::Streaming;
             if (resumeAcquisition) {
+                // Discard any frame published under the old acquisition
+                // generation before that generation is invalidated by stop.
+                frameMailbox_.clear();
                 CameraError stopError;
                 if (!camera_.stop(&stopError)) {
                     if (camera_.state() == CameraState::Streaming &&
@@ -460,7 +463,6 @@ NativeCameraController::requestChangePreviewResolution(
                 }
 
                 acquisitionFrameGate_.reset();
-                frameMailbox_.clear();
             }
 
             try {

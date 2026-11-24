@@ -20,6 +20,7 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var isFeatureWritePending = false
     @Published private(set) var featureDescriptors: [AmscopeCameraFeatureDescriptor] = []
     @Published private(set) var featureValues: [String: AmscopeCameraFeatureValue] = [:]
+    @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
 
     private init() {
@@ -40,14 +41,15 @@ final class NativeCameraModel: ObservableObject {
     var informationBarFeatures: [AmscopeCameraFeatureDescriptor] {
         let preferredTerms = [
             "exposure time",
-            "exposure",
             "gain",
             "saturation",
             "brightness",
-            "contrast"
+            "contrast",
+            "exposure"
         ]
         let candidates = featureDescriptors.filter { descriptor in
-            guard descriptor.isReadable else { return false }
+            guard descriptor.isReadable && descriptor.isWritable else { return false }
+            guard descriptor.discreteIntegerValues.isEmpty else { return false }
             guard descriptor.kind == .integer ||
                   descriptor.kind == .floatingPoint else { return false }
             let identity = (descriptor.name + " " + descriptor.displayName)
@@ -62,7 +64,14 @@ final class NativeCameraModel: ObservableObject {
                     identity.contains($0)
                 } ?? preferredTerms.count
             }
-            return priority(left) < priority(right)
+            let leftPriority = priority(left)
+            let rightPriority = priority(right)
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return left.displayName.localizedCaseInsensitiveCompare(
+                right.displayName
+            ) == .orderedAscending
         }.prefix(3).map { $0 }
     }
 
@@ -151,6 +160,7 @@ final class NativeCameraModel: ObservableObject {
             } else {
                 self.featureDescriptors = []
                 self.featureValues = [:]
+                self.featureErrors = [:]
                 self.featureDrafts = [:]
                 self.isFeatureSnapshotLoading = false
             }
@@ -216,11 +226,11 @@ final class NativeCameraModel: ObservableObject {
                     ) == .orderedAscending
                 }
 
-            // Keep only values whose descriptors still belong to this session.
-            let availableNames = Set(self.featureDescriptors.map(\.name))
-            self.featureValues = self.featureValues.filter {
-                availableNames.contains($0.key)
-            }
+            // Start a fresh feature snapshot. Old values are not shown as if
+            // they still describe the current camera state.
+            self.featureValues = [:]
+            self.featureErrors = [:]
+            self.featureDrafts = [:]
 
             // Reads are serialized by the native command worker. Each is a
             // feature snapshot and is discarded if a later write supersedes it.
@@ -234,18 +244,29 @@ final class NativeCameraModel: ObservableObject {
         bridge.readFeatureNamed(name) { [weak self] value, error, _, _, _ in
             guard let self = self else { return }
             guard let value = value, error == nil else {
+                if let error = error {
+                    self.featureErrors[name] = error.localizedDescription
+                }
                 return
             }
             self.featureValues[name] = value
             self.featureDrafts[name] = self.stringValue(for: value)
+            self.featureErrors[name] = nil
         }
     }
 
     func displayValue(for descriptor: AmscopeCameraFeatureDescriptor) -> String {
         guard let value = featureValues[descriptor.name] else {
+            if featureErrors[descriptor.name] != nil {
+                return "Unavailable"
+            }
             return descriptor.isReadable ? "Reading…" : "—"
         }
         return stringValue(for: value)
+    }
+
+    func featureError(for descriptor: AmscopeCameraFeatureDescriptor) -> String? {
+        featureErrors[descriptor.name]
     }
 
     func draftValue(for descriptor: AmscopeCameraFeatureDescriptor) -> String {

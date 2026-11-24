@@ -139,6 +139,7 @@ struct NativeWorkspaceDockPanelAnchor: NSViewRepresentable {
 final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
     private let model: NativeCameraModel
     private var floatingPanel: NSPanel?
+    private var floatingPanelFrameWasRestored = false
 
     init(model: NativeCameraModel) {
         self.model = model
@@ -194,6 +195,7 @@ final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
             panel.isReleasedWhenClosed = false
             panel.minSize = NSSize(width: 280, height: 320)
             panel.setFrameAutosaveName("AmscopeWorkspaceDock")
+            floatingPanelFrameWasRestored = panel.setFrameUsingName("AmscopeWorkspaceDock")
             panel.contentViewController = NSHostingController(
                 rootView: NativeWorkspaceDock(
                     model: model,
@@ -227,15 +229,29 @@ final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
         if let visibleFrame = visibleFrame {
             panelFrame.size.width = min(panelFrame.size.width, visibleFrame.width)
             panelFrame.size.height = min(panelFrame.size.height, visibleFrame.height)
-            panelFrame.origin.x = min(
-                max(mainFrame.maxX - panelFrame.width - 18, visibleFrame.minX),
-                visibleFrame.maxX - panelFrame.width
-            )
-            panelFrame.origin.y = min(
-                max(mainFrame.maxY - panelFrame.height - 54, visibleFrame.minY),
-                visibleFrame.maxY - panelFrame.height
-            )
-        } else {
+
+            if floatingPanelFrameWasRestored {
+                // Keep the user's saved panel position and size, clamping only
+                // when the current display cannot contain the saved frame.
+                panelFrame.origin.x = min(
+                    max(panelFrame.origin.x, visibleFrame.minX),
+                    visibleFrame.maxX - panelFrame.width
+                )
+                panelFrame.origin.y = min(
+                    max(panelFrame.origin.y, visibleFrame.minY),
+                    visibleFrame.maxY - panelFrame.height
+                )
+            } else {
+                panelFrame.origin.x = min(
+                    max(mainFrame.maxX - panelFrame.width - 18, visibleFrame.minX),
+                    visibleFrame.maxX - panelFrame.width
+                )
+                panelFrame.origin.y = min(
+                    max(mainFrame.maxY - panelFrame.height - 54, visibleFrame.minY),
+                    visibleFrame.maxY - panelFrame.height
+                )
+            }
+        } else if !floatingPanelFrameWasRestored {
             panelFrame.origin = NSPoint(
                 x: mainFrame.maxX - panelFrame.width - 18,
                 y: mainFrame.maxY - panelFrame.height - 54

@@ -95,7 +95,7 @@
 
 **Gate:** The native UI covers the existing supported camera workflows selected for v0.8 without changing driver semantics.
 
-## Two-slide workspace and information bar (2026-11-24)
+## Two-slide workspace and compact camera dock (2026-11-24)
 
 The main window now has two side-by-side slide panes and one thin bottom dock; the
 separate camera row above the preview has been removed. The dock contains camera connection/lifecycle actions, a Slide 1/Slide 2 target

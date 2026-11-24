@@ -39,6 +39,20 @@ NSError *errorFromCameraError(const amscope::CameraError& error) {
                            userInfo:userInfo];
 }
 
+
+NSError *errorFromFeatureAccessError(
+    const camera::CameraFeatureAccessError& error) {
+    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+    userInfo[NSLocalizedDescriptionKey] =
+        error.message.empty() ? @"Camera feature request failed."
+                              : stringFromUtf8(error.message);
+    if (!error.feature.empty())
+        userInfo[@"feature"] = stringFromUtf8(error.feature);
+    return [NSError errorWithDomain:@"com.shennagyp.amscope.feature"
+                               code:static_cast<NSInteger>(error.code)
+                           userInfo:userInfo];
+}
+
 NSError *requestRejectedError(NSString *operation) {
     return [NSError errorWithDomain:@"com.shennagyp.amscope.camera"
                                code:0
@@ -225,6 +239,200 @@ const camera::Frame *frameFromStorage(void *storage) {
     CGDataProviderRelease(provider);
     CGColorSpaceRelease(colorSpace);
     return image;
+}
+
+@end
+
+
+@interface AmscopeCameraFeatureDescriptor ()
+@property(nonatomic, copy, readwrite) NSString *name;
+@property(nonatomic, copy, readwrite) NSString *displayName;
+@property(nonatomic, readwrite) AmscopeCameraFeatureKind kind;
+@property(nonatomic, readwrite) AmscopeCameraFeatureGroup group;
+@property(nonatomic, copy, readwrite, nullable) NSString *unit;
+@property(nonatomic, readwrite) BOOL isAvailable;
+@property(nonatomic, readwrite) BOOL isReadable;
+@property(nonatomic, readwrite) BOOL isWritable;
+@property(nonatomic, copy, readwrite) NSArray<NSString *> *enumerationValues;
+@property(nonatomic, copy, readwrite) NSArray<NSNumber *> *discreteIntegerValues;
+@property(nonatomic, readwrite) BOOL hasElementCount;
+@property(nonatomic, readwrite) NSUInteger elementCount;
+@property(nonatomic, copy, readwrite, nullable) NSString *disabledReason;
+@property(nonatomic, readwrite) BOOL hasNumericRange;
+@property(nonatomic, readwrite) BOOL integerRange;
+@property(nonatomic, readwrite) int64_t minimumInteger;
+@property(nonatomic, readwrite) int64_t maximumInteger;
+@property(nonatomic, readwrite) int64_t integerIncrement;
+@property(nonatomic, readwrite) BOOL hasIntegerIncrement;
+@property(nonatomic, readwrite) double minimumFloatingPoint;
+@property(nonatomic, readwrite) double maximumFloatingPoint;
+@property(nonatomic, readwrite) double floatingPointIncrement;
+@property(nonatomic, readwrite) BOOL hasFloatingPointIncrement;
+- (instancetype)initWithDescriptor:(const camera::CameraFeatureDescriptor&)descriptor;
+@end
+
+@implementation AmscopeCameraFeatureDescriptor
+
+- (instancetype)initWithDescriptor:(const camera::CameraFeatureDescriptor&)descriptor {
+    self = [super init];
+    if (!self)
+        return nil;
+
+    _name = [stringFromUtf8(descriptor.name) copy];
+    _displayName = [stringFromUtf8(descriptor.displayName) copy];
+    _kind = static_cast<AmscopeCameraFeatureKind>(descriptor.kind);
+    _group = static_cast<AmscopeCameraFeatureGroup>(descriptor.group);
+    _unit = descriptor.unit ? [stringFromUtf8(*descriptor.unit) copy] : nil;
+    _isAvailable = descriptor.isAvailable;
+    _isReadable = descriptor.isReadable;
+    _isWritable = descriptor.isWritable;
+    _disabledReason = descriptor.disabledReason
+        ? [stringFromUtf8(*descriptor.disabledReason) copy]
+        : nil;
+
+    NSMutableArray<NSString *> *enumerations = [NSMutableArray array];
+    for (const auto& item : descriptor.enumerationValues)
+        [enumerations addObject:stringFromUtf8(item)];
+    _enumerationValues = [enumerations copy];
+
+    NSMutableArray<NSNumber *> *discreteValues = [NSMutableArray array];
+    for (const auto item : descriptor.discreteIntegerValues)
+        [discreteValues addObject:@(item)];
+    _discreteIntegerValues = [discreteValues copy];
+
+    _hasElementCount = descriptor.elementCount.has_value();
+    _elementCount = descriptor.elementCount.value_or(0);
+
+    if (descriptor.numericRange) {
+        _hasNumericRange = YES;
+        if (const auto *range =
+                std::get_if<camera::CameraIntegerRange>(&*descriptor.numericRange)) {
+            _integerRange = YES;
+            _minimumInteger = range->minimum;
+            _maximumInteger = range->maximum;
+            _hasIntegerIncrement = range->increment.has_value();
+            _integerIncrement = range->increment.value_or(0);
+        } else if (const auto *range =
+                       std::get_if<camera::CameraFloatingPointRange>(
+                           &*descriptor.numericRange)) {
+            _integerRange = NO;
+            _minimumFloatingPoint = range->minimum;
+            _maximumFloatingPoint = range->maximum;
+            _hasFloatingPointIncrement = range->increment.has_value();
+            _floatingPointIncrement = range->increment.value_or(0.0);
+        } else {
+            _hasNumericRange = NO;
+        }
+    }
+    return self;
+}
+
+@end
+
+@interface AmscopeCameraFeatureValue ()
+@property(nonatomic, readwrite) AmscopeCameraFeatureKind kind;
+@property(nonatomic, readwrite) BOOL booleanValue;
+@property(nonatomic, readwrite) int64_t integerValue;
+@property(nonatomic, readwrite) double floatingPointValue;
+@property(nonatomic, copy, readwrite) NSArray<NSNumber *> *integerVectorValue;
+@property(nonatomic, copy, readwrite) NSString *stringValue;
+@property(nonatomic, copy, readwrite) NSString *enumerationSymbol;
+- (instancetype)initWithKind:(AmscopeCameraFeatureKind)kind;
+- (instancetype)initWithCameraValue:(const camera::CameraFeatureValue&)value;
+@end
+
+@implementation AmscopeCameraFeatureValue
+
+- (instancetype)initWithKind:(AmscopeCameraFeatureKind)kind {
+    self = [super init];
+    if (!self)
+        return nil;
+    _kind = kind;
+    _integerVectorValue = @[];
+    _stringValue = @"";
+    _enumerationSymbol = @"";
+    return self;
+}
+
+- (instancetype)initWithCameraValue:(const camera::CameraFeatureValue&)value {
+    self = [super init];
+    if (!self)
+        return nil;
+
+    std::visit([self](const auto& item) {
+        using T = std::decay_t<decltype(item)>;
+        if constexpr (std::is_same_v<T, bool>) {
+            _kind = AmscopeCameraFeatureKindBoolean;
+            _booleanValue = item;
+        } else if constexpr (std::is_same_v<T, std::int64_t>) {
+            _kind = AmscopeCameraFeatureKindInteger;
+            _integerValue = item;
+        } else if constexpr (std::is_same_v<T, std::vector<std::int64_t>>) {
+            _kind = AmscopeCameraFeatureKindIntegerVector;
+            NSMutableArray<NSNumber *> *values = [NSMutableArray array];
+            for (const auto entry : item)
+                [values addObject:@(entry)];
+            _integerVectorValue = [values copy];
+        } else if constexpr (std::is_same_v<T, double>) {
+            _kind = AmscopeCameraFeatureKindFloatingPoint;
+            _floatingPointValue = item;
+        } else if constexpr (std::is_same_v<T, std::string>) {
+            _kind = AmscopeCameraFeatureKindString;
+            _stringValue = [stringFromUtf8(item) copy];
+        } else if constexpr (std::is_same_v<T, camera::FeatureEnumeration>) {
+            _kind = AmscopeCameraFeatureKindEnumeration;
+            _enumerationSymbol = [stringFromUtf8(item.symbol) copy];
+        }
+    }, value);
+    if (!_integerVectorValue)
+        _integerVectorValue = @[];
+    if (!_stringValue)
+        _stringValue = @"";
+    if (!_enumerationSymbol)
+        _enumerationSymbol = @"";
+    return self;
+}
+
++ (instancetype)booleanFeatureValue:(BOOL)value {
+    AmscopeCameraFeatureValue *result =
+        [[self alloc] initWithKind:AmscopeCameraFeatureKindBoolean];
+    result.booleanValue = value;
+    return result;
+}
+
++ (instancetype)integerFeatureValue:(int64_t)value {
+    AmscopeCameraFeatureValue *result =
+        [[self alloc] initWithKind:AmscopeCameraFeatureKindInteger];
+    result.integerValue = value;
+    return result;
+}
+
++ (instancetype)integerVectorFeatureValue:(NSArray<NSNumber *> *)values {
+    AmscopeCameraFeatureValue *result =
+        [[self alloc] initWithKind:AmscopeCameraFeatureKindIntegerVector];
+    result.integerVectorValue = values;
+    return result;
+}
+
++ (instancetype)floatingPointFeatureValue:(double)value {
+    AmscopeCameraFeatureValue *result =
+        [[self alloc] initWithKind:AmscopeCameraFeatureKindFloatingPoint];
+    result.floatingPointValue = value;
+    return result;
+}
+
++ (instancetype)stringFeatureValue:(NSString *)value {
+    AmscopeCameraFeatureValue *result =
+        [[self alloc] initWithKind:AmscopeCameraFeatureKindString];
+    result.stringValue = value;
+    return result;
+}
+
++ (instancetype)enumerationFeatureValue:(NSString *)symbol {
+    AmscopeCameraFeatureValue *result =
+        [[self alloc] initWithKind:AmscopeCameraFeatureKindEnumeration];
+    result.enumerationSymbol = symbol;
+    return result;
 }
 
 @end

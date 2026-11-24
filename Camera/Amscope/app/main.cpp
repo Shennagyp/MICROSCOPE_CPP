@@ -31,7 +31,10 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QSaveFile>
+#include <QStatusBar>
+#include <QTime>
 #include <QSettings>
 #include <QStyleFactory>
 #include <QJsonDocument>
@@ -204,57 +207,82 @@ public:
                        QMainWindow::GroupedDragging);
         setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
-        // The central workspace is dedicated to live image presentation.
-        // Camera tools and imaging information are independently dockable.
-        auto* central = new QWidget(this);
-        auto* root = new QVBoxLayout(central);
-        root->setContentsMargins(0, 0, 0, 0);
-        root->setSpacing(0);
-        preview_ = new camera::qtwidgets::FrameView(central);
-        root->addWidget(preview_, 1);
-        setCentralWidget(central);
+        // Document workspace: the live camera feed is a document, not the
+        // entire application shell. This leaves the standard dock areas free
+        // for navigation, properties, and diagnostics.
+        documentTabs_ = new QTabWidget(this);
+        documentTabs_->setObjectName(QStringLiteral("documentWorkspace"));
+        documentTabs_->setDocumentMode(true);
+        documentTabs_->setMovable(true);
+        documentTabs_->setTabsClosable(false);
+        documentTabs_->setElideMode(Qt::ElideRight);
+        documentTabs_->setUsesScrollButtons(true);
 
-        auto* infoDock = new QDockWidget("Imaging Information", this);
-        infoDock->setObjectName(QStringLiteral("imagingInformationDock"));
-        infoDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-        infoDock->setFeatures(
-            QDockWidget::DockWidgetClosable |
-            QDockWidget::DockWidgetMovable |
-            QDockWidget::DockWidgetFloatable);
-        imageInfoBar_ = new camera::qtwidgets::ImageInfoBar(infoDock);
+        preview_ = new camera::qtwidgets::FrameView(documentTabs_);
+        preview_->setObjectName(QStringLiteral("livePreviewDocument"));
+        documentTabs_->addTab(preview_, QStringLiteral("Live Preview"));
+        setCentralWidget(documentTabs_);
+
+        // Imaging values remain directly accessible and editable from the
+        // bottom information strip. Connection state is a separate status item.
+        imageInfoBar_ = new camera::qtwidgets::ImageInfoBar(this);
         imageInfoBar_->setEditRequestedHandler([this](const std::string& id) {
             constexpr const char* prefix = "feature:";
             if (id.rfind(prefix, 0) == 0) {
                 editFeatureFromInfoBar(id.substr(std::char_traits<char>::length(prefix)));
             }
         });
-        infoDock->setWidget(imageInfoBar_);
-        addDockWidget(Qt::BottomDockWidgetArea, infoDock);
+        statusBar()->setSizeGripEnabled(false);
+        statusBar()->addPermanentWidget(imageInfoBar_, 1);
+
+        cameraStateIndicator_ = new QLabel(QStringLiteral("CLOSED"), statusBar());
+        cameraStateIndicator_->setObjectName(QStringLiteral("cameraStateIndicator"));
+        cameraStateIndicator_->setAlignment(Qt::AlignCenter);
+        cameraStateIndicator_->setMinimumWidth(104);
+        statusBar()->addPermanentWidget(cameraStateIndicator_);
 
         auto* viewMenu = menuBar()->addMenu("&View");
-        viewMenu->addAction(infoDock->toggleViewAction());
 
-        cameraControlsDock_ = new QDockWidget("Camera Controls", this);
-        cameraControlsDock_->setObjectName(QStringLiteral("cameraControlsDock"));
+        // Output is a genuine bottom tool window, not a second status strip.
+        outputDock_ = new QDockWidget(QStringLiteral("Output"), this);
+        outputDock_->setObjectName(QStringLiteral("outputDock"));
+        outputDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+        outputDock_->setFeatures(
+            QDockWidget::DockWidgetClosable |
+            QDockWidget::DockWidgetMovable |
+            QDockWidget::DockWidgetFloatable);
+        outputLog_ = new QPlainTextEdit(outputDock_);
+        outputLog_->setObjectName(QStringLiteral("cameraOutputLog"));
+        outputLog_->setReadOnly(true);
+        outputLog_->setLineWrapMode(QPlainTextEdit::NoWrap);
+        outputLog_->setMaximumBlockCount(2000);
+        outputLog_->setPlaceholderText(
+            QStringLiteral("Camera and application events will appear here."));
+        outputDock_->setWidget(outputLog_);
+        addDockWidget(Qt::BottomDockWidgetArea, outputDock_);
+
+        auto* fileMenu = menuBar()->addMenu("&File");
+        cameraControlsDock_ = new QDockWidget(QStringLiteral("Camera Explorer"), this);
+        cameraControlsDock_->setObjectName(QStringLiteral("cameraExplorerDock"));
         cameraControlsDock_->setAllowedAreas(
             Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
         cameraControlsDock_->setFeatures(
             QDockWidget::DockWidgetClosable |
             QDockWidget::DockWidgetMovable |
             QDockWidget::DockWidgetFloatable);
-        auto* controlsContent = new QWidget(cameraControlsDock_);
-        auto* controlsRoot = new QVBoxLayout(controlsContent);
-        controlsRoot->setContentsMargins(8, 8, 8, 8);
-        controlsRoot->setSpacing(6);
-        auto* toolbar = new QVBoxLayout();
+
+        auto* explorerContent = new QWidget(cameraControlsDock_);
+        auto* explorerRoot = new QVBoxLayout(explorerContent);
+        explorerRoot->setContentsMargins(8, 8, 8, 8);
+        explorerRoot->setSpacing(8);
 
         cameraControls_ =
-            new camera::qtwidgets::CameraControlPanel(controlsContent);
-        stillCaptureModeSelector_ = new QComboBox(controlsContent);
-        stillResolutionSelector_ = new QComboBox(controlsContent);
+            new camera::qtwidgets::CameraControlPanel(explorerContent);
+        stillCaptureModeSelector_ = new QComboBox(explorerContent);
+        stillResolutionSelector_ = new QComboBox(explorerContent);
         stillResolutionSelector_->setToolTip(
             "Still-image resolution reported by the camera SDK.");
-        stillPrecisionLabel_ = new QLabel("Last still: —", controlsContent);
+        stillPrecisionLabel_ = new QLabel("Last still: —", explorerContent);
         stillPrecisionLabel_->setToolTip(
             "Significant and storage bit depths reported by the most recently captured still frame. This is measured output metadata, not a requested setting.");
         stillCaptureModeSelector_->addItem(
@@ -262,19 +290,25 @@ public:
         stillCaptureModeSelector_->addItem(
             "RAW still", static_cast<int>(amscope::StillCaptureMode::Raw));
         captureStillButton_ =
-            new QPushButton("Capture still", controlsContent);
+            new QPushButton("Capture still", explorerContent);
 
         auto* stillCaptureToolbar = new QHBoxLayout();
         stillCaptureToolbar->setContentsMargins(0, 0, 0, 0);
-        stillCaptureToolbar->setSpacing(5);
+        stillCaptureToolbar->setSpacing(6);
+        stillResolutionSelector_->setMinimumWidth(90);
+        stillCaptureModeSelector_->setMinimumWidth(112);
         stillCaptureToolbar->addWidget(stillResolutionSelector_, 1);
         stillCaptureToolbar->addWidget(stillCaptureModeSelector_);
         stillCaptureToolbar->addWidget(captureStillButton_);
-        toolbar->addWidget(cameraControls_);
-        toolbar->addLayout(stillCaptureToolbar);
+        explorerRoot->addWidget(cameraControls_);
+        explorerRoot->addLayout(stillCaptureToolbar);
+        explorerRoot->addWidget(stillPrecisionLabel_);
+        explorerRoot->addStretch(1);
 
-        auto* fileMenu = menuBar()->addMenu("&File");
-        auto* controlsAction = fileMenu->addAction("Camera Controls...");
+        cameraControlsDock_->setWidget(explorerContent);
+        addDockWidget(Qt::RightDockWidgetArea, cameraControlsDock_);
+
+        auto* controlsAction = fileMenu->addAction("Camera Workspace...");
         connect(controlsAction, &QAction::triggered, this, [this]() {
             showCameraControlsDock();
         });
@@ -284,6 +318,19 @@ public:
             close();
         });
 
+        cameraPropertiesDock_ =
+            new QDockWidget(QStringLiteral("Camera Properties"), this);
+        cameraPropertiesDock_->setObjectName(QStringLiteral("cameraPropertiesDock"));
+        cameraPropertiesDock_->setAllowedAreas(
+            Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        cameraPropertiesDock_->setFeatures(
+            QDockWidget::DockWidgetClosable |
+            QDockWidget::DockWidgetMovable |
+            QDockWidget::DockWidgetFloatable);
+        auto* controlsContent = new QWidget(cameraPropertiesDock_);
+        auto* controlsRoot = new QVBoxLayout(controlsContent);
+        controlsRoot->setContentsMargins(8, 8, 8, 8);
+        controlsRoot->setSpacing(6);
         featureStatus_ = new QLabel("Open a camera to inspect its available features.", controlsContent);
         featureStatus_->setWordWrap(true);
 
@@ -442,12 +489,25 @@ public:
         settingsScroll->setWidgetResizable(true);
         settingsScroll->setWidget(settingsContent);
 
-        controlsRoot->addLayout(toolbar);
-        controlsRoot->addWidget(stillPrecisionLabel_, 0, Qt::AlignRight);
         controlsRoot->addWidget(settingsScroll, 1);
-        cameraControlsDock_->setWidget(controlsContent);
-        addDockWidget(Qt::RightDockWidgetArea, cameraControlsDock_);
+        cameraPropertiesDock_->setWidget(controlsContent);
+        addDockWidget(Qt::RightDockWidgetArea, cameraPropertiesDock_);
+        splitDockWidget(cameraControlsDock_, cameraPropertiesDock_, Qt::Vertical);
+
         viewMenu->addAction(cameraControlsDock_->toggleViewAction());
+        viewMenu->addAction(cameraPropertiesDock_->toggleViewAction());
+        viewMenu->addAction(outputDock_->toggleViewAction());
+        viewMenu->addSeparator();
+        auto* resetLayoutAction = viewMenu->addAction(QStringLiteral("Reset Window Layout"));
+        connect(resetLayoutAction, &QAction::triggered, this, [this]() {
+            resetWorkspaceLayout();
+        });
+
+        auto* workspaceToolbar = addToolBar(QStringLiteral("Workspace"));
+        workspaceToolbar->setObjectName(QStringLiteral("workspaceToolbar"));
+        workspaceToolbar->setMovable(false);
+        workspaceToolbar->addAction(controlsAction);
+        workspaceToolbar->addAction(resetLayoutAction);
         preview_->setFramePresentedCallback([this]() {
             const double monotonicSeconds = std::chrono::duration<double>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -579,11 +639,10 @@ public:
         }
         const QByteArray savedDockLayout =
             settings.value(QStringLiteral("window/dock-layout")).toByteArray();
-        if (!savedDockLayout.isEmpty()) {
-            restoreState(savedDockLayout, 1);
-        } else {
-            resizeDocks({cameraControlsDock_}, {410}, Qt::Horizontal);
-            resizeDocks({infoDock}, {54}, Qt::Vertical);
+        const bool layoutRestored =
+            !savedDockLayout.isEmpty() && restoreState(savedDockLayout, 2);
+        if (!layoutRestored) {
+            resetWorkspaceLayout();
         }
 
         updateControls(camera_.state());
@@ -615,10 +674,35 @@ protected:
 private:
     void showCameraControlsDock() {
         cameraControlsDock_->show();
+        cameraPropertiesDock_->show();
         cameraControlsDock_->raise();
-        cameraControlsDock_->setFocus(Qt::OtherFocusReason);
+        cameraControls_->setFocus(Qt::OtherFocusReason);
         if (camera_.state() == amscope::CameraState::Closed) {
             refreshCameras();
+        }
+    }
+
+    void resetWorkspaceLayout() {
+        removeDockWidget(cameraControlsDock_);
+        removeDockWidget(cameraPropertiesDock_);
+        removeDockWidget(outputDock_);
+
+        addDockWidget(Qt::RightDockWidgetArea, cameraControlsDock_);
+        splitDockWidget(cameraControlsDock_, cameraPropertiesDock_, Qt::Vertical);
+        addDockWidget(Qt::BottomDockWidgetArea, outputDock_);
+
+        cameraControlsDock_->show();
+        cameraPropertiesDock_->show();
+        outputDock_->show();
+
+        resizeDocks(
+            {cameraControlsDock_, cameraPropertiesDock_},
+            {230, 520},
+            Qt::Vertical);
+        resizeDocks({cameraControlsDock_}, {360}, Qt::Horizontal);
+        resizeDocks({outputDock_}, {185}, Qt::Vertical);
+        if (documentTabs_) {
+            documentTabs_->setCurrentWidget(preview_);
         }
     }
     struct FeatureControl {
@@ -2101,6 +2185,13 @@ private:
         const std::uint64_t generation = ++statusMessageGeneration_;
         updateFrameInfoLabel();
 
+        if (outputLog_) {
+            const QString timestamp =
+                QTime::currentTime().toString(QStringLiteral("HH:mm:ss"));
+            outputLog_->appendPlainText(
+                QStringLiteral("[%1] %2").arg(timestamp, message));
+        }
+
         if (timeoutMilliseconds > 0) {
             QTimer::singleShot(timeoutMilliseconds, this, [this, generation]() {
                 if (generation != statusMessageGeneration_) return;
@@ -3175,6 +3266,29 @@ private:
                 camera::qtwidgets::CameraPanelLifecycleState::Faulted;
             break;
         }
+        if (cameraStateIndicator_) {
+            switch (state) {
+            case amscope::CameraState::Closed:
+                cameraStateIndicator_->setText(QStringLiteral("CLOSED"));
+                break;
+            case amscope::CameraState::Open:
+                cameraStateIndicator_->setText(QStringLiteral("OPEN"));
+                break;
+            case amscope::CameraState::Starting:
+                cameraStateIndicator_->setText(QStringLiteral("STARTING"));
+                break;
+            case amscope::CameraState::Streaming:
+                cameraStateIndicator_->setText(QStringLiteral("STREAMING"));
+                break;
+            case amscope::CameraState::Stopping:
+                cameraStateIndicator_->setText(QStringLiteral("STOPPING"));
+                break;
+            case amscope::CameraState::Faulted:
+                cameraStateIndicator_->setText(QStringLiteral("FAULTED"));
+                break;
+            }
+        }
+
         panelState.discoveryPending = cameraEnumerationPending_;
         panelState.lifecycleRequestPending = lifecycleRequestPending_;
         panelState.otherOperationPending =
@@ -3341,7 +3455,12 @@ private:
     std::unordered_map<std::string, FeatureControl> featureControls_;
     std::vector<std::string> featureOrder_;
 
+    QTabWidget* documentTabs_ = nullptr;
     QDockWidget* cameraControlsDock_ = nullptr;
+    QDockWidget* cameraPropertiesDock_ = nullptr;
+    QDockWidget* outputDock_ = nullptr;
+    QPlainTextEdit* outputLog_ = nullptr;
+    QLabel* cameraStateIndicator_ = nullptr;
     camera::qtwidgets::CameraControlPanel* cameraControls_ = nullptr;
     QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
@@ -3400,12 +3519,57 @@ void applyProfessionalStyle(QApplication& application) {
     }
 
     QFont font = application.font();
-    font.setPointSizeF(9.0);
+    font.setPointSizeF(10.0);
     application.setFont(font);
 
     application.setStyleSheet(QStringLiteral(R"(
-        QMainWindow { background: #eef1f5; }
-        QDockWidget { font-size: 9pt; color: #263241; }
+        QMainWindow { background: #dfe5ed; }
+        QDockWidget { font-size: 9.5pt; color: #263241; }
+        QDockWidget QWidget { background: #f8fafc; }
+        QStatusBar {
+            background: #e7ecf3;
+            border-top: 1px solid #bcc7d5;
+            color: #344054;
+        }
+        QLabel#cameraStateIndicator {
+            padding: 3px 10px;
+            margin: 1px 5px 1px 3px;
+            color: #174f86;
+            background: #dce9f7;
+            border: 1px solid #b4cce4;
+            border-radius: 3px;
+            font-size: 8.5pt;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        QPlainTextEdit#cameraOutputLog {
+            background: #ffffff;
+            color: #263241;
+            border: none;
+            selection-background-color: #cfe2f5;
+            font-family: Menlo, monospace;
+            font-size: 9pt;
+        }
+        QTabWidget#documentWorkspace::pane {
+            border: 1px solid #b9c4d2;
+            background: #151a21;
+            top: -1px;
+        }
+        QTabWidget#documentWorkspace QTabBar::tab {
+            background: #e7ecf3;
+            color: #475467;
+            padding: 7px 16px;
+            min-height: 25px;
+            border: 1px solid #c6ced9;
+            border-bottom: none;
+            margin-right: 1px;
+        }
+        QTabWidget#documentWorkspace QTabBar::tab:selected {
+            background: #ffffff;
+            color: #174f86;
+            border-top: 2px solid #2b78bd;
+            font-weight: 600;
+        }
         QDockWidget::title {
             background: #e5e9ef;
             color: #263241;
@@ -3494,8 +3658,22 @@ void applyProfessionalStyle(QApplication& application) {
             border-radius: 4px;
         }
         QMenuBar {
-            background: #f7f8fa;
-            border-bottom: 1px solid #d8dee7;
+            background: #f5f7fa;
+            color: #263241;
+            border-bottom: 1px solid #cbd3de;
+            padding: 2px 4px;
+        }
+        QToolBar {
+            background: #edf1f6;
+            border: none;
+            border-bottom: 1px solid #cbd3de;
+            spacing: 4px;
+            padding: 3px 5px;
+        }
+        QToolBar::separator {
+            background: #c5ced9;
+            width: 1px;
+            margin: 3px 5px;
         }
         QMenuBar::item {
             padding: 4px 9px;

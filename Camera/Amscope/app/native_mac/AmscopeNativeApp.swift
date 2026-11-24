@@ -22,6 +22,7 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
     private let cameraModel = NativeCameraModel.shared
     private var mainWindowController: NSWindowController?
     private var cameraControlsWindowController: NSWindowController?
+    private var microscopeConfigurationWindowController: NSWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
@@ -94,6 +95,30 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @objc private func openMicroscopeConfiguration(_ sender: Any?) {
+        if let existingController = microscopeConfigurationWindowController {
+            existingController.showWindow(sender)
+            existingController.window?.makeKeyAndOrderFront(sender)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hostingController = NSHostingController(
+            rootView: MicroscopeConfigurationWindow(model: cameraModel)
+        )
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Microscope Configuration"
+        window.setContentSize(NSSize(width: 720, height: 760))
+        window.minSize = NSSize(width: 560, height: 480)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.center()
+
+        let windowController = NSWindowController(window: window)
+        microscopeConfigurationWindowController = windowController
+        windowController.showWindow(sender)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func showMainWindow() {
         let hostingController = NSHostingController(
             rootView: MainWindowView(model: cameraModel)
@@ -140,6 +165,14 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         controlsItem.target = self
         fileMenu.addItem(controlsItem)
+
+        let microscopeConfigurationItem = NSMenuItem(
+            title: "Microscope Configuration…",
+            action: #selector(openMicroscopeConfiguration(_:)),
+            keyEquivalent: ""
+        )
+        microscopeConfigurationItem.target = self
+        fileMenu.addItem(microscopeConfigurationItem)
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(NSMenuItem(
             title: "Close Window",

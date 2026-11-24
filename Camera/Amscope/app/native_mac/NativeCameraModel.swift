@@ -1,6 +1,40 @@
 import Foundation
 import SwiftUI
 
+private struct NativeCameraResolutionMode {
+    let symbol: String
+    let width: Int
+    let height: Int
+
+    var pixelCount: Int { width * height }
+
+    init?(symbol: String) {
+        guard let separator = symbol.firstIndex(of: ":") else { return nil }
+        let dimensions = symbol[symbol.index(after: separator)...]
+            .lowercased()
+            .split(separator: "x")
+        guard dimensions.count == 2,
+              let width = Int(dimensions[0]),
+              let height = Int(dimensions[1]),
+              width > 0,
+              height > 0 else {
+            return nil
+        }
+        self.symbol = symbol
+        self.width = width
+        self.height = height
+    }
+}
+
+private struct NativeAutomaticResolutionChoice {
+    let symbol: String
+    let width: Int
+    let height: Int
+    let pixelCount: Int
+    let samplingFactor: Double
+    let meetsTarget: Bool
+}
+
 enum NativeSlideID: String, CaseIterable, Identifiable, Hashable {
     case slide1
     case slide2
@@ -37,8 +71,43 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var featureValues: [String: AmscopeCameraFeatureValue] = [:]
     @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
+    @Published var microscopeConfiguration: MicroscopeOpticalConfiguration = .optikaB293 {
+        didSet {
+            guard microscopeConfiguration != oldValue else { return }
+            persistMicroscopeConfiguration()
+            reconcileAutomaticResolution()
+        }
+    }
+    @Published private(set) var isAutomaticResolutionEnabled = false {
+        didSet {
+            UserDefaults.standard.set(
+                isAutomaticResolutionEnabled,
+                forKey: Self.automaticResolutionDefaultsKey
+            )
+        }
+    }
+
+    private static let microscopeConfigurationDefaultsKey =
+        "AmscopeNative.MicroscopeConfiguration.v1"
+    private static let automaticResolutionDefaultsKey =
+        "AmscopeNative.AutomaticResolutionEnabled.v1"
 
     private init() {
+        if let data = UserDefaults.standard.data(
+            forKey: Self.microscopeConfigurationDefaultsKey
+        ),
+        let saved = try? JSONDecoder().decode(
+            MicroscopeOpticalConfiguration.self,
+            from: data
+        ) {
+            microscopeConfiguration = saved
+        } else {
+            microscopeConfiguration = .optikaB293
+        }
+        isAutomaticResolutionEnabled = UserDefaults.standard.bool(
+            forKey: Self.automaticResolutionDefaultsKey
+        )
+
         bridge.onAcquisitionError = { [weak self] error in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
@@ -71,6 +140,147 @@ final class NativeCameraModel: ObservableObject {
 
     func selectActiveSlide(_ slide: NativeSlideID) {
         activeSlide = slide
+    }
+
+    func selectMicroscopeObjective(_ objectiveID: String) {
+        guard microscopeConfiguration.objectives.contains(where: {
+            $0.id == objectiveID
+        }) else { return }
+
+        var updated = microscopeConfiguration
+        updated.activeObjectiveID = objectiveID
+        microscopeConfiguration = updated
+    }
+
+    func updateMicroscopeConfiguration(
+        _ configuration: MicroscopeOpticalConfiguration
+    ) {
+        microscopeConfiguration = configuration
+    }
+
+    func setAutomaticResolutionEnabled(_ enabled: Bool) {
+        guard enabled != isAutomaticResolutionEnabled else { return }
+        isAutomaticResolutionEnabled = enabled
+        if enabled {
+            reconcileAutomaticResolution()
+        }
+    }
+
+    func selectManualPreviewResolution(to symbol: String) {
+        setAutomaticResolutionEnabled(false)
+        changePreviewResolution(to: symbol)
+    }
+
+    var automaticResolutionHelp: String {
+        "Automatically chooses the lowest supported camera mode that meets the configured Rayleigh sampling factor for the selected objective. The calculation uses sensor pixel pitch, total camera-relay magnification, and the reported mode dimensions."
+    }
+
+    var automaticResolutionSummary: String {
+        guard let descriptor = featureDescriptors.first(where: {
+            $0.name == "AmcamResolutionIndex"
+        }) else {
+            return "Camera modes unavailable"
+        }
+        guard let choice = automaticResolutionChoice(for: descriptor) else {
+            return "Check microscope calibration"
+        }
+        let result = String(format: "%.2f", choice.samplingFactor)
+        return "\(choice.width) × \(choice.height) · RF \(result)" +
+            (choice.meetsTarget ? "" : " · target not met")
+    }
+
+    private func persistMicroscopeConfiguration() {
+        guard let data = try? JSONEncoder().encode(microscopeConfiguration) else {
+            return
+        }
+        UserDefaults.standard.set(
+            data,
+            forKey: Self.microscopeConfigurationDefaultsKey
+        )
+    }
+
+    private func reconcileAutomaticResolution() {
+        guard isAutomaticResolutionEnabled,
+              canChangePreviewResolution,
+              let descriptor = featureDescriptors.first(where: {
+                  $0.name == "AmcamResolutionIndex"
+              }),
+              descriptor.isAvailable,
+              let current = featureValues[descriptor.name]?.enumerationSymbol,
+              let choice = automaticResolutionChoice(for: descriptor),
+              current != choice.symbol else {
+            return
+        }
+
+        changePreviewResolution(to: choice.symbol)
+    }
+
+    private func automaticResolutionChoice(
+        for descriptor: AmscopeCameraFeatureDescriptor
+    ) -> NativeAutomaticResolutionChoice? {
+        guard let objective = microscopeConfiguration.objectives.first(where: {
+            $0.id == microscopeConfiguration.activeObjectiveID
+        }) else { return nil }
+
+        let configuration = microscopeConfiguration
+        guard objective.magnification.isFinite,
+              objective.magnification > 0,
+              objective.numericalAperture.isFinite,
+              objective.numericalAperture > 0,
+              configuration.cameraPixelPitchMicrometers.isFinite,
+              configuration.cameraPixelPitchMicrometers > 0,
+              configuration.cameraRelayMagnification.isFinite,
+              configuration.cameraRelayMagnification > 0,
+              configuration.referenceWavelengthNanometers.isFinite,
+              configuration.referenceWavelengthNanometers > 0,
+              configuration.targetRayleighSamplingFactor.isFinite,
+              configuration.targetRayleighSamplingFactor > 0 else {
+            return nil
+        }
+
+        let modes = descriptor.enumerationValues.compactMap {
+            NativeCameraResolutionMode(symbol: $0)
+        }
+        guard !modes.isEmpty,
+              let maximumMode = modes.max(by: {
+                  $0.pixelCount < $1.pixelCount
+              }) else {
+            return nil
+        }
+
+        let rayleighDistanceMicrometers =
+            0.61 * (configuration.referenceWavelengthNanometers / 1000.0) /
+            objective.numericalAperture
+        let candidates = modes.map { mode -> NativeAutomaticResolutionChoice in
+            // The MU503's advertised modes are initially modeled as full-field
+            // modes whose effective sample pitch scales with output dimensions.
+            let scaleX = Double(maximumMode.width) / Double(mode.width)
+            let scaleY = Double(maximumMode.height) / Double(mode.height)
+            let samplingScale = max(scaleX, scaleY)
+            let objectPixelPitchMicrometers =
+                configuration.cameraPixelPitchMicrometers * samplingScale /
+                (objective.magnification * configuration.cameraRelayMagnification)
+            let factor = rayleighDistanceMicrometers /
+                objectPixelPitchMicrometers
+            return NativeAutomaticResolutionChoice(
+                symbol: mode.symbol,
+                width: mode.width,
+                height: mode.height,
+                pixelCount: mode.pixelCount,
+                samplingFactor: factor,
+                meetsTarget: factor >= configuration.targetRayleighSamplingFactor
+            )
+        }
+
+        if let smallestValid = candidates
+            .filter({ $0.meetsTarget })
+            .min(by: { $0.pixelCount < $1.pixelCount }) {
+            return smallestValid
+        }
+
+        // No mode reaches the requested factor: use maximum resolution and
+        // report the shortfall instead of claiming that the target is met.
+        return candidates.max(by: { $0.pixelCount < $1.pixelCount })
     }
 
     func setBottomDockDetached(_ detached: Bool) {
@@ -301,6 +511,9 @@ final class NativeCameraModel: ObservableObject {
                 self.featureValues[name] = value
                 self.featureDrafts[name] = self.stringValue(for: value)
                 self.featureErrors[name] = nil
+                if name == "AmcamResolutionIndex" {
+                    self.reconcileAutomaticResolution()
+                }
             }
         }
     }

@@ -231,6 +231,7 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
         app/native_mac/MainWindowView.swift
         app/native_mac/NativePreviewSurface.swift
         app/native_mac/CameraControlsWindow.swift
+        app/native_mac/MicroscopeConfigurationWindow.swift
         app/native_mac/NativeCameraController.cpp
         app/native_mac/NativeCameraController.h
         app/native_mac/AmscopeNativeCameraBridge.mm

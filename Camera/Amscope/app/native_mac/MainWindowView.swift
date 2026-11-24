@@ -54,6 +54,23 @@ private struct BottomControlDock: View {
 
                 SlideNavigationControl(model: model)
 
+                Rectangle()
+                    .fill(Color(nsColor: NSColor.separatorColor))
+                    .frame(width: 1, height: 28)
+
+                ObjectiveDockControl(model: model)
+
+                Toggle(
+                    "Auto Res",
+                    isOn: Binding(
+                        get: { model.isAutomaticResolutionEnabled },
+                        set: { model.setAutomaticResolutionEnabled($0) }
+                    )
+                )
+                .toggleStyle(CheckboxToggleStyle())
+                .font(.system(size: 9))
+                .help(model.automaticResolutionHelp)
+
                 if model.isBottomDockCollapsed {
                     Spacer(minLength: 0)
                     Text("CONTROLS")
@@ -277,6 +294,36 @@ private struct SlideNavigationControl: View {
     }
 }
 
+private struct ObjectiveDockControl: View {
+    @ObservedObject var model: NativeCameraModel
+
+    var body: some View {
+        Picker(
+            "Objective",
+            selection: Binding(
+                get: { model.microscopeConfiguration.activeObjectiveID },
+                set: { model.selectMicroscopeObjective($0) }
+            )
+        ) {
+            ForEach(model.microscopeConfiguration.objectives) { objective in
+                Text(String(format: "%.0f×", objective.magnification))
+                    .tag(objective.id)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(MenuPickerStyle())
+        .frame(width: 68)
+        .disabled(model.isCameraOperationPending)
+        .help(
+            "Current manually selected microscope objective. Numerical aperture: " +
+            (model.microscopeConfiguration.objectives.first(where: {
+                $0.id == model.microscopeConfiguration.activeObjectiveID
+            }).map { String(format: "%.2f", $0.numericalAperture) } ?? "unknown") +
+            ". Configure objectives in File → Microscope Configuration."
+        )
+    }
+}
+
 private struct DockCameraFeatureControl: View {
     @ObservedObject var model: NativeCameraModel
     let descriptor: AmscopeCameraFeatureDescriptor
@@ -288,6 +335,7 @@ private struct DockCameraFeatureControl: View {
     private var editingDisabled: Bool {
         !model.canAccessFeatures ||
         !descriptor.isAvailable ||
+        (isResolutionControl && model.isAutomaticResolutionEnabled) ||
         !(isResolutionControl
             ? model.canChangePreviewResolution
             : descriptor.isWritable) ||
@@ -424,7 +472,7 @@ private struct DockCameraFeatureControl: View {
                             get: { model.enumerationValue(for: descriptor) },
                             set: { symbol in
                                 if isResolutionControl {
-                                    model.changePreviewResolution(to: symbol)
+                                    model.selectManualPreviewResolution(to: symbol)
                                 } else {
                                     model.writeEnumeration(symbol, for: descriptor)
                                 }

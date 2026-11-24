@@ -310,3 +310,29 @@ capture, embedded light source, filter wheel, ST4, focuser, lens focus/aperture)
 are not yet connected to the native bridge/controller and are not claimed as
 available dock controls.
 
+
+
+## Phase 5 addition — microscope optics and automatic resolution (2026-11-24)
+
+- [x] Add a persisted OPTIKA B-293 optical profile with N-PLAN objectives,
+  magnifications, N.A., immersion, 160 mm tube system, and Abbe condenser N.A.
+- [x] Add a separate Microscope Configuration window for optical-profile,
+  sensor-pitch, camera-relay, wavelength, and sampling-target configuration.
+- [x] Add the manually selected active-objective state to the compact dock.
+- [x] Add an Auto Resolution policy that evaluates only camera-reported modes,
+  chooses the lowest-pixel-count mode meeting the configured Rayleigh sampling
+  target, and falls back to maximum mode with a visible shortfall when no mode
+  meets the target.
+- [x] Manual selection of camera resolution disables Auto Resolution.
+- [ ] Verify the actual MU503 mode-to-binning/full-field mapping.
+- [ ] Confirm whether the installed camera relay is 0.5×, OPTIKA M-115 0.35×,
+  or a stacked combination; calibrate against a stage micrometer.
+- [ ] Verify mode selection and stream recovery for all four objectives on the
+  user's hardware.
+- [ ] Implement and verify the separate preview-pane auto-expansion policy;
+  it must not be coupled to camera acquisition resolution.
+
+**Important model boundary:** the B-293 objective nosepiece is manual. The active
+objective is a user-confirmed state, not an electronically sensed state. The
+configuration's default 0.5× relay is only the AmScope MU503 reducer preset and
+must be corrected if the physical optical path differs.

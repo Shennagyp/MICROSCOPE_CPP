@@ -413,7 +413,7 @@ private final class NativeSlideImageScrollView: NSScrollView {
             : event.deltaY * 0.12
         guard delta != 0 else { return }
 
-        let anchor = contentView.convert(event.locationInWindow, from: nil)
+        let anchor = imageView.viewportPoint(fromWindowPoint: event.locationInWindow)
         imageView.zoom(by: delta, anchoredAt: anchor)
     }
 
@@ -425,7 +425,7 @@ private final class NativeSlideImageScrollView: NSScrollView {
 
         let magnification = max(-0.95, event.magnification)
         let delta = log(1 + magnification) / log(2) * 0.35
-        let anchor = contentView.convert(event.locationInWindow, from: nil)
+        let anchor = imageView.viewportPoint(fromWindowPoint: event.locationInWindow)
         imageView.zoom(by: delta, anchoredAt: anchor)
     }
 }
@@ -655,11 +655,20 @@ private final class NativeSlideImageView: NSView {
 
     // MARK: - Panning
 
+    /// Converts the event position into viewport-local coordinates. The
+    /// document view conversion includes the scrolled document origin, so
+    /// subtract the clip origin to obtain a stable point inside the viewport.
+    func viewportPoint(fromWindowPoint point: NSPoint) -> CGPoint {
+        let documentPoint = convert(point, from: nil)
+        let clipOrigin = clipView?.bounds.origin ?? .zero
+        return CGPoint(
+            x: documentPoint.x - clipOrigin.x,
+            y: documentPoint.y - clipOrigin.y
+        )
+    }
+
     private func viewportPoint(from event: NSEvent) -> CGPoint {
-        guard let clipView else {
-            return convert(event.locationInWindow, from: nil)
-        }
-        return clipView.convert(event.locationInWindow, from: nil)
+        viewportPoint(fromWindowPoint: event.locationInWindow)
     }
 
     override func mouseDown(with event: NSEvent) {

@@ -233,6 +233,13 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     }
 }
 
+private enum NativeSlideImageSizingMode {
+    /// Recalculate image scale whenever this pane's viewport changes.
+    case resizable
+    /// Keep a manually selected scale independent of viewport resizing.
+    case fullResolution
+}
+
 private final class NativeSlidePreviewPane: NSView {
     private let slide: NativeSlideID
     private let imageView: NativeSlideImageView
@@ -240,6 +247,7 @@ private final class NativeSlidePreviewPane: NSView {
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
     private let frameStatisticsLabel = NSTextField(labelWithString: "FRAMES 0 · VIEWED 0 · DROPS 0")
     private let selectButton = NSButton(title: "Set Live Target", target: nil, action: nil)
+    private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "Maximize", target: nil, action: nil)
     private let headerStack = NSStackView()
 
@@ -279,6 +287,22 @@ private final class NativeSlidePreviewPane: NSView {
         selectButton.target = self
         selectButton.action = #selector(selectLiveTargetAction(_:))
 
+        imageSizingButton.bezelStyle = .texturedRounded
+        imageSizingButton.controlSize = .small
+        imageSizingButton.imagePosition = .imageOnly
+        imageSizingButton.target = self
+        imageSizingButton.action = #selector(toggleImageSizingModeAction(_:))
+        imageSizingButton.setContentHuggingPriority(.required, for: .horizontal)
+        imageSizingButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        imageSizingButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            imageSizingButton.widthAnchor.constraint(equalToConstant: 24),
+            imageSizingButton.heightAnchor.constraint(equalToConstant: 22)
+        ])
+        imageView.onSizingModeChanged = { [weak self] in
+            self?.updateImageSizingButton()
+        }
+
         maximizeButton.bezelStyle = .rounded
         maximizeButton.controlSize = .small
         maximizeButton.target = self
@@ -296,10 +320,11 @@ private final class NativeSlidePreviewPane: NSView {
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         headerStack.addArrangedSubview(spacer)
         headerStack.addArrangedSubview(selectButton)
+        headerStack.addArrangedSubview(imageSizingButton)
         headerStack.addArrangedSubview(maximizeButton)
 
-        // The image view is always exactly the size of this existing pane
-        // viewport. Only the CGImage's drawing rectangle changes.
+        // The viewer remains the same fixed-size pane. Only the image
+        // container inside it is allowed to change dimensions.
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(headerStack)
         addSubview(imageView)
@@ -313,6 +338,24 @@ private final class NativeSlidePreviewPane: NSView {
             imageView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 6),
             imageView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+        updateImageSizingButton()
+    }
+
+    private func updateImageSizingButton() {
+        let isResizable = imageView.sizingMode == .resizable
+        let symbolName = isResizable ? "arrow.left.and.right" : "viewfinder"
+        let description = isResizable
+            ? "Resizable image mode"
+            : "Full-resolution image mode"
+        imageSizingButton.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: description
+        )
+        imageSizingButton.title = isResizable ? "↔" : "1:1"
+        imageSizingButton.toolTip = isResizable
+            ? "Resizable: image follows viewer size. Click to lock full resolution."
+            : "Full Resolution: keep image scale when viewer size changes. Click to resize with viewer."
+        imageSizingButton.setAccessibilityLabel(description)
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
@@ -352,10 +395,16 @@ private final class NativeSlidePreviewPane: NSView {
             ? NSColor.systemRed.cgColor
             : NSColor.separatorColor.cgColor
         maximizeButton.title = isMaximized ? "Restore" : "Maximize"
+        updateImageSizingButton()
     }
 
     @objc private func selectLiveTargetAction(_ sender: NSButton) {
         onSelectLiveTarget?()
+    }
+
+    @objc private func toggleImageSizingModeAction(_ sender: NSButton) {
+        imageView.toggleSizingMode()
+        updateImageSizingButton()
     }
 
     @objc private func toggleMaximizeAction(_ sender: NSButton) {
@@ -365,12 +414,15 @@ private final class NativeSlidePreviewPane: NSView {
 
 private final class NativeSlideImageView: NSView {
     private let slideTitle: String
+    private let imageContainer = NativeSlideImageContainerView()
     private var currentImage: CGImage?
 
-    /// The automatic zoom value starts at the largest aspect-preserving scale
-    /// that covers the pane without outer black bars. It never changes this
-    /// NSView's frame or the dimensions of its parent pane.
-    private var zoomProgress: CGFloat = 0
+    private(set) var sizingMode: NativeSlideImageSizingMode = .resizable
+    var onSizingModeChanged: (() -> Void)?
+
+    /// Retained only in Full Resolution mode. This is capped at the physical
+    /// 1:1 scale, so the image container can never exceed source dimensions.
+    private var lockedScale: CGFloat?
     private var imageOrigin: CGPoint?
     private var dragLocation: CGPoint?
     private var contextMenuAnchor: CGPoint?
@@ -381,7 +433,10 @@ private final class NativeSlideImageView: NSView {
     init(slideTitle: String) {
         self.slideTitle = slideTitle
         super.init(frame: .zero)
-        toolTip = "Scroll or pinch to zoom · Drag to pan · Double-click toggles Fill / 1:1 · Right-click for viewing modes"
+        wantsLayer = true
+        layer?.masksToBounds = true
+        addSubview(imageContainer)
+        toolTip = "Scroll or pinch to zoom · Drag to pan · Double-click toggles image sizing mode"
     }
 
     required init?(coder: NSCoder) {
@@ -393,51 +448,61 @@ private final class NativeSlideImageView: NSView {
     }
 
     override func setFrameSize(_ newSize: NSSize) {
+        let oldSize = bounds.size
         super.setFrameSize(newSize)
-        if let imageOrigin {
-            self.imageOrigin = clampedOrigin(imageOrigin, at: currentScale)
+        guard oldSize != bounds.size else { return }
+
+        switch sizingMode {
+        case .resizable:
+            updateImageContainer(scale: automaticFillScale, origin: nil)
+        case .fullResolution:
+            updateImageContainer(
+                scale: currentScale,
+                origin: imageOrigin
+            )
         }
-        needsDisplay = true
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        if zoomProgress >= 0.999 {
-            zoomProgress = 1
+        if sizingMode == .fullResolution {
+            lockedScale = actualPixelScale
         }
-        if let imageOrigin {
-            self.imageOrigin = clampedOrigin(imageOrigin, at: currentScale)
-        }
-        needsDisplay = true
+        updateImageContainer(
+            scale: currentScale,
+            origin: sizingMode == .resizable ? nil : imageOrigin
+        )
     }
 
     func display(_ image: CGImage) {
         let dimensionsChanged = currentImage?.width != image.width ||
             currentImage?.height != image.height
         currentImage = image
+        imageContainer.display(image)
 
-        // A new sensor mode gets a fresh automatic fill scale. Same-size
-        // frames preserve the user's current zoom and pan position.
-        if dimensionsChanged {
-            zoomProgress = 0
-            imageOrigin = nil
-        } else if let imageOrigin {
-            self.imageOrigin = clampedOrigin(imageOrigin, at: currentScale)
+        if sizingMode == .resizable {
+            updateImageContainer(scale: automaticFillScale, origin: nil)
+        } else if dimensionsChanged {
+            // A different camera mode has a different native frame size.
+            // Preserve the selected mode, but reset its scale to exact 1:1.
+            lockedScale = actualPixelScale
+            updateImageContainer(scale: currentScale, origin: nil)
+        } else {
+            updateImageContainer(scale: currentScale, origin: imageOrigin)
         }
         needsDisplay = true
     }
 
-    // MARK: - Image geometry
+    // MARK: - Image scale and container bounds
 
     /// AppKit points per camera pixel for one physical display pixel.
     private var actualPixelScale: CGFloat {
         1 / max(window?.backingScaleFactor ?? 1, 1)
     }
 
-    /// The maximum initial zoom that fills the whole pane. Using max rather
-    /// than min removes letterboxing: one image dimension exactly covers the
-    /// viewport and the other may be cropped. Cap at 1:1 to avoid upscaling
-    /// acquired pixels in the diagnostic viewer.
+    /// Largest aspect-preserving scale that covers the entire viewer viewport.
+    /// It is capped at native 1:1: the image is never enlarged beyond its
+    /// acquired pixel dimensions.
     private var automaticFillScale: CGFloat {
         guard let image = currentImage,
               image.width > 0,
@@ -449,40 +514,41 @@ private final class NativeSlideImageView: NSView {
 
         let widthScale = bounds.width / CGFloat(image.width)
         let heightScale = bounds.height / CGFloat(image.height)
-        let fillScale = max(widthScale, heightScale)
-        return min(fillScale, actualPixelScale)
+        return min(max(widthScale, heightScale), actualPixelScale)
     }
 
-    /// Continuous zoom from the automatic no-bars fill value to exact 1:1.
     private var currentScale: CGFloat {
-        let fillScale = automaticFillScale
-        guard zoomProgress > 0, actualPixelScale > fillScale else {
-            return fillScale
+        switch sizingMode {
+        case .resizable:
+            return automaticFillScale
+        case .fullResolution:
+            return min(lockedScale ?? actualPixelScale, actualPixelScale)
         }
-        return fillScale * pow(actualPixelScale / fillScale, zoomProgress)
     }
 
-    private func imageSize(at scale: CGFloat) -> CGSize {
+    private func imageContainerSize(at scale: CGFloat) -> CGSize {
         guard let image = currentImage else { return .zero }
+        let boundedScale = min(scale, actualPixelScale)
         return CGSize(
-            width: CGFloat(image.width) * scale,
-            height: CGFloat(image.height) * scale
+            width: min(
+                CGFloat(image.width) * boundedScale,
+                CGFloat(image.width) * actualPixelScale
+            ),
+            height: min(
+                CGFloat(image.height) * boundedScale,
+                CGFloat(image.height) * actualPixelScale
+            )
         )
     }
 
-    private func centeredOrigin(at scale: CGFloat) -> CGPoint {
-        let size = imageSize(at: scale)
-        return CGPoint(
+    private func centeredOrigin(for size: CGSize) -> CGPoint {
+        CGPoint(
             x: (bounds.width - size.width) / 2,
             y: (bounds.height - size.height) / 2
         )
     }
 
-    private func clampedOrigin(_ proposed: CGPoint, at scale: CGFloat) -> CGPoint {
-        let size = imageSize(at: scale)
-
-        // If a dimension is larger than the pane, clamp it so no empty
-        // margins can enter from that edge. Smaller dimensions stay centered.
+    private func clampedOrigin(_ proposed: CGPoint, for size: CGSize) -> CGPoint {
         let x: CGFloat
         if size.width <= bounds.width {
             x = (bounds.width - size.width) / 2
@@ -496,77 +562,86 @@ private final class NativeSlideImageView: NSView {
         } else {
             y = min(0, max(bounds.height - size.height, proposed.y))
         }
-
         return CGPoint(x: x, y: y)
     }
 
-    private func resolvedOrigin(at scale: CGFloat) -> CGPoint {
-        clampedOrigin(imageOrigin ?? centeredOrigin(at: scale), at: scale)
-    }
+    private func updateImageContainer(scale: CGFloat, origin: CGPoint?) {
+        guard currentImage != nil else { return }
+        let size = imageContainerSize(at: scale)
+        let proposedOrigin = origin ?? centeredOrigin(for: size)
+        let boundedOrigin = clampedOrigin(proposedOrigin, for: size)
 
-    // MARK: - Automatic fill and zoom
-
-    private func setAutomaticFill() {
-        zoomProgress = 0
-        imageOrigin = nil
+        imageContainer.setFrame(
+            CGRect(origin: boundedOrigin, size: size)
+        )
+        imageContainer.setNeedsDisplay(bounds)
+        imageOrigin = boundedOrigin
         needsDisplay = true
     }
 
-    private func setActualPixels(anchor: CGPoint? = nil) {
+    // MARK: - Sizing mode
+
+    func toggleSizingMode() {
         guard currentImage != nil else { return }
-        zoom(
-            to: 1,
-            anchoredAt: anchor ?? CGPoint(x: bounds.midX, y: bounds.midY)
-        )
+
+        switch sizingMode {
+        case .resizable:
+            sizingMode = .fullResolution
+            lockedScale = actualPixelScale
+            updateImageContainer(scale: currentScale, origin: nil)
+        case .fullResolution:
+            sizingMode = .resizable
+            lockedScale = nil
+            updateImageContainer(scale: currentScale, origin: nil)
+        }
+        onSizingModeChanged?()
     }
 
-    private func toggleFillAndActualPixels() {
-        if zoomProgress >= 0.999 {
-            setAutomaticFill()
-        } else {
-            setActualPixels()
-        }
-    }
+    // MARK: - Manual zoom
 
     private func zoom(by delta: CGFloat, anchoredAt anchor: CGPoint) {
         guard currentImage != nil,
               delta.isFinite,
-              delta != 0,
-              actualPixelScale > automaticFillScale else {
+              delta != 0 else {
             return
         }
 
-        zoom(to: min(1, max(0, zoomProgress + delta)), anchoredAt: anchor)
-    }
-
-    private func zoom(to nextProgress: CGFloat, anchoredAt anchor: CGPoint) {
-        guard currentImage != nil else { return }
-        let clampedProgress = min(1, max(0, nextProgress))
-        guard clampedProgress != zoomProgress else { return }
-
         let oldScale = currentScale
-        let oldOrigin = resolvedOrigin(at: oldScale)
+        let maximumScale = actualPixelScale
+        let minimumScale = min(automaticFillScale, maximumScale)
+        let oldOrigin = imageOrigin ?? centeredOrigin(
+            for: imageContainerSize(at: oldScale)
+        )
         let imagePoint = CGPoint(
             x: (anchor.x - oldOrigin.x) / oldScale,
             y: (anchor.y - oldOrigin.y) / oldScale
         )
 
-        zoomProgress = clampedProgress
-        let nextScale = currentScale
+        // Manual zoom locks this pane against later automatic resizing when
+        // the split divider changes its viewport dimensions.
+        if sizingMode == .resizable {
+            sizingMode = .fullResolution
+            lockedScale = oldScale
+            onSizingModeChanged?()
+        }
+
+        let factor = pow(2, delta)
+        let nextScale = min(
+            maximumScale,
+            max(minimumScale, oldScale * factor)
+        )
+        guard abs(nextScale - oldScale) > 0.000001 else { return }
+
+        lockedScale = nextScale
+        let nextSize = imageContainerSize(at: nextScale)
         let proposedOrigin = CGPoint(
             x: anchor.x - imagePoint.x * nextScale,
             y: anchor.y - imagePoint.y * nextScale
         )
-
-        if clampedProgress <= 0.0001 {
-            imageOrigin = nil
-        } else {
-            imageOrigin = clampedOrigin(proposedOrigin, at: nextScale)
-        }
-        needsDisplay = true
+        updateImageContainer(scale: nextScale, origin: proposedOrigin)
     }
 
-    // MARK: - Mouse and trackpad interaction
+    // MARK: - Pointer interaction and panning
 
     override func scrollWheel(with event: NSEvent) {
         guard currentImage != nil else {
@@ -600,15 +675,13 @@ private final class NativeSlideImageView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if event.clickCount >= 2 {
-            toggleFillAndActualPixels()
+            toggleSizingMode()
             dragLocation = nil
             return
         }
 
-        let imageSize = imageSize(at: currentScale)
-        let imageIsLargerThanPane =
-            imageSize.width > bounds.width || imageSize.height > bounds.height
-        guard zoomProgress > 0 || imageIsLargerThanPane else {
+        let size = imageContainer.frame.size
+        guard size.width > bounds.width || size.height > bounds.height else {
             dragLocation = nil
             return
         }
@@ -623,13 +696,12 @@ private final class NativeSlideImageView: NSView {
             x: point.x - previousPoint.x,
             y: point.y - previousPoint.y
         )
-        let proposed = CGPoint(
-            x: resolvedOrigin(at: currentScale).x + delta.x,
-            y: resolvedOrigin(at: currentScale).y + delta.y
+        let proposedOrigin = CGPoint(
+            x: (imageOrigin ?? imageContainer.frame.origin).x + delta.x,
+            y: (imageOrigin ?? imageContainer.frame.origin).y + delta.y
         )
-        imageOrigin = clampedOrigin(proposed, at: currentScale)
+        updateImageContainer(scale: currentScale, origin: proposedOrigin)
         dragLocation = point
-        needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -640,69 +712,79 @@ private final class NativeSlideImageView: NSView {
         contextMenuAnchor = convert(event.locationInWindow, from: nil)
 
         let menu = NSMenu()
-        let fillItem = NSMenuItem(
-            title: "Fill Pane (No Black Margins)",
-            action: #selector(selectAutomaticFill(_:)),
+        let resizableItem = NSMenuItem(
+            title: "Resizable: Follow Viewer Size",
+            action: #selector(selectResizableMode(_:)),
             keyEquivalent: ""
         )
-        fillItem.target = self
-        fillItem.isEnabled = currentImage != nil
-        menu.addItem(fillItem)
+        resizableItem.target = self
+        resizableItem.state = sizingMode == .resizable ? .on : .off
+        resizableItem.isEnabled = currentImage != nil
+        menu.addItem(resizableItem)
 
-        let actualItem = NSMenuItem(
-            title: "Actual Pixels (1:1)",
-            action: #selector(selectActualPixels(_:)),
+        let fullResolutionItem = NSMenuItem(
+            title: "Full Resolution: Actual Pixels (1:1)",
+            action: #selector(selectFullResolutionMode(_:)),
             keyEquivalent: ""
         )
-        actualItem.target = self
-        actualItem.isEnabled = currentImage != nil
-        menu.addItem(actualItem)
+        fullResolutionItem.target = self
+        fullResolutionItem.state = sizingMode == .fullResolution ? .on : .off
+        fullResolutionItem.isEnabled = currentImage != nil
+        menu.addItem(fullResolutionItem)
         return menu
     }
 
-    @objc private func selectAutomaticFill(_ sender: Any?) {
-        setAutomaticFill()
+    @objc private func selectResizableMode(_ sender: Any?) {
+        guard currentImage != nil else { return }
+        if sizingMode != .resizable {
+            toggleSizingMode()
+        }
     }
 
-    @objc private func selectActualPixels(_ sender: Any?) {
-        setActualPixels(anchor: contextMenuAnchor)
+    @objc private func selectFullResolutionMode(_ sender: Any?) {
+        guard currentImage != nil else { return }
+        if sizingMode != .fullResolution {
+            toggleSizingMode()
+        }
+        lockedScale = actualPixelScale
+        updateImageContainer(scale: actualPixelScale, origin: nil)
     }
 
     // MARK: - Rendering
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-
         NSColor(calibratedWhite: 0.075, alpha: 1).setFill()
         dirtyRect.fill()
+    }
+}
+
+private final class NativeSlideImageContainerView: NSView {
+    private var currentImage: CGImage?
+    private var interpolationQuality: CGInterpolationQuality = .high
+
+    override var isFlipped: Bool { true }
+
+    func display(_ image: CGImage) {
+        currentImage = image
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
 
         guard let image = currentImage,
               let context = NSGraphicsContext.current?.cgContext else {
-            let message = "No image stored for \(slideTitle)"
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 13, weight: .medium),
-                .foregroundColor: NSColor.secondaryLabelColor
-            ]
-            let textSize = (message as NSString).size(withAttributes: attributes)
-            let textRect = NSRect(
-                x: (bounds.width - textSize.width) / 2,
-                y: (bounds.height - textSize.height) / 2,
-                width: textSize.width,
-                height: textSize.height
-            )
-            (message as NSString).draw(in: textRect, withAttributes: attributes)
             return
         }
 
-        let scale = currentScale
-        let size = imageSize(at: scale)
-        let targetRect = CGRect(
-            origin: resolvedOrigin(at: scale),
-            size: size
-        )
-
+        let physicalScale = 1 / max(window?.backingScaleFactor ?? 1, 1)
+        let displayedScale = bounds.width / max(CGFloat(image.width), 1)
         context.interpolationQuality =
-            abs(scale - actualPixelScale) > 0.000001 ? .high : .none
-        context.draw(image, in: targetRect)
+            displayedScale < physicalScale * 0.999 ? .high : .none
+        context.draw(
+            image,
+            in: CGRect(origin: .zero, size: bounds.size)
+        )
     }
 }

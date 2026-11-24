@@ -1,0 +1,359 @@
+# OPTIKA B293 Dual-Slide Application Architecture
+
+**Status:** Target architecture for the `OPTIKA-B293-DUALSLIDE-APP` branch  
+**Baseline:** `f25e5d8e6fdefea7f742fb71fa5f4ead69291626`  
+**Product:** OPTIKA B293 Dual-Slide Microscope Workstation  
+**Scope:** Application architecture, UI architecture, capability boundaries and migration rules
+
+---
+
+## 1. Product boundary
+
+The product is a **microscope workstation**, not a camera application.
+
+The camera is one hardware capability of the workstation. It must not own the application, the workspace, the slide model, image processing, microscope configuration, measurements, motorization or future laboratory workflows.
+
+The application is expected to coordinate independent capabilities, initially:
+
+- Camera acquisition and camera configuration.
+- Two-slide preview and image presentation.
+- Microscope optics and physical-scale calibration.
+- Image processing, including future cell detection and segmentation.
+- Motorized stage or other microscope motion.
+- Capture, annotation, measurement and persistence.
+- Future instrument and workflow capabilities without restructuring the camera subsystem.
+
+The application may initially support one camera stream routed to one of two slide destinations. The two slide panes are separate presentation documents: each can retain its own last image, freeze state, view transform and overlays. This does **not** imply two cameras or two simultaneous acquisition streams.
+
+The current v0.8 native camera application is a transitional implementation and migration source. It is not the target ownership model. It remains available on its existing branch and must not be deleted or destabilized as part of establishing this branch.
+
+## 2. Architectural objective
+
+Reduce incidental complexity and make behavior easier to understand, test and extend. The objective is not to minimize source lines mechanically. It is to reduce the number of places where a behavior is defined, the amount of state that must be understood together, and the number of components that must change for one feature.
+
+The target should make these statements true:
+
+1. A camera driver does not know that an OPTIKA B293 application exists.
+2. A motor controller does not depend on a camera implementation.
+3. Image-processing algorithms do not depend on SwiftUI, AppKit, camera vendor SDKs or UI state.
+4. A view renders state and emits user intent; it does not implement hardware policy.
+5. Domain calculations are ordinary deterministic functions wherever possible.
+6. Side effects have explicit owners and lifecycles.
+7. The application composition root decides which implementations are connected.
+8. The same capability can be replaced or tested without rewriting unrelated capabilities.
+
+## 3. Top-level repository boundaries
+
+The repository should evolve toward sibling capabilities and an application host:
+
+```text
+/
+├── Application/
+│   └── OptikaB293/
+│       ├── CMakeLists.txt
+│       ├── Sources/
+│       │   ├── App/                 # Entry point and application lifecycle
+│       │   ├── Composition/         # Dependency construction and wiring
+│       │   ├── Features/            # Product workflows and use cases
+│       │   ├── Presentation/        # SwiftUI and AppKit presentation
+│       │   ├── Adapters/            # UI/application adapters to capabilities
+│       │   └── Persistence/         # Application-owned saved settings and records
+│       └── Tests/
+│
+├── Camera/
+│   ├── Common/                      # Vendor-neutral camera contracts and frame types
+│   ├── Amscope/                     # AmScope SDK-backed implementation
+│   ├── Qt/                          # Optional Qt adapter
+│   ├── QtWidgets/                   # Optional Qt preview widgets
+│   └── VendorSDK/
+│
+├── Motion/                          # Future motor/stage capability
+├── ImageProcessing/                 # Future image-processing capability
+├── Optics/                           # Optical specifications and calibration primitives
+├── docs/
+└── scripts/
+```
+
+This is the intended ownership direction, not a demand to create empty directories or speculative frameworks immediately. A capability is introduced when it has a real contract and an implementation or a concrete consumer.
+
+### 3.1 Ownership rules
+
+| Concern | Owner |
+|---|---|
+| Native camera session, vendor handle, acquisition worker | `Camera/Amscope` |
+| Vendor-neutral camera types, descriptors and frame contracts | `Camera/Common` |
+| Camera-to-application adaptation | `Application/OptikaB293/Adapters/Camera` |
+| Application lifecycle and capability composition | `Application/OptikaB293/App` and `Composition` |
+| Slide workflow and active live destination | Application feature/workspace state |
+| Slide image, view transform, freeze and overlays | Slide presentation/document feature |
+| Microscope/objective specifications and optical calculations | `Optics` or a focused application domain module until reuse is real |
+| Stage axes, position, movement and homing | `Motion` |
+| Image transforms, segmentation and detection | `ImageProcessing` |
+| UI layout and visual interaction | `Presentation` |
+| User preferences and application records | Application persistence |
+
+A layer may depend inward on contracts. A capability must not depend outward on the product UI. In particular, `Camera` must never import or link against `Application/OptikaB293`.
+
+## 4. Dependency direction
+
+The intended dependency graph is:
+
+```text
+                     Application composition root
+                                |
+                +---------------+----------------+
+                |               |                |
+          Camera adapter   Motion adapter   Processing adapter
+                |               |                |
+          Camera contracts  Motion contracts  Processing contracts
+                |               |                |
+          AmScope driver    Stage driver      Algorithm implementations
+
+Presentation -> application state/actions -> application use cases
+                                      |
+                                      v
+                               capability ports
+```
+
+More precisely:
+
+- Presentation depends on application-facing state and action contracts.
+- Application workflows depend on capability interfaces and domain values.
+- Infrastructure adapters implement those interfaces.
+- Capability implementations depend on their own contracts and required platform/vendor SDKs.
+- The composition root is the only place that knows the concrete implementations of all capabilities.
+
+No dependency should point from Camera, Motion or ImageProcessing into the application or presentation layer.
+
+Do not add a generic plugin system, service locator, message bus, dependency container framework or universal device abstraction merely to satisfy this diagram. Plain constructors and explicit protocols/interfaces are sufficient until actual scale requires more.
+
+## 5. Functional programming with object-oriented boundaries
+
+The target combines functional programming principles with object-oriented lifecycle management. These are complementary tools, not competing architectural styles.
+
+### 5.1 Functional core
+
+Prefer pure functions for behavior that can be expressed as values:
+
+- Optical calibration and unit conversion.
+- Automatic resolution policy.
+- Image coordinate and viewport transformations.
+- Measurement geometry and specimen-plane distance calculation.
+- Segmentation post-processing and object filtering.
+- Stage coordinate transforms and motion-limit calculations.
+- Validation, formatting and deterministic state transitions.
+
+A pure function takes explicit inputs and returns an explicit result. It does not read global state, access hardware, mutate a shared model, write preferences or schedule UI work.
+
+Example:
+
+```swift
+struct ResolutionCandidate {
+    let mode: CameraReadoutMode
+    let sampling: SamplingAssessment
+}
+
+func chooseResolution(
+    from candidates: [ResolutionCandidate],
+    target: SamplingTarget
+) -> ResolutionDecision
+```
+
+The example expresses a boundary, not a commitment to these exact types. The policy must use verified readout semantics; output width and height alone must not be treated as proof of sensor sampling behavior.
+
+### 5.2 Imperative shell and OOP
+
+Use objects where identity, resource ownership or lifecycle is real:
+
+- Camera session and acquisition controller.
+- Motor/stage connection and motion controller.
+- Frame source and frame consumer.
+- File store and capture writer.
+- Application coordinator and capability adapters.
+- AppKit view objects that own native rendering resources.
+
+These objects encapsulate side effects and resource lifecycles. They should delegate calculations and policy to pure functions instead of accumulating business rules.
+
+Use protocols at genuine replacement or testing boundaries: camera source, stage controller, processing engine, settings store. Avoid one protocol for every concrete type.
+
+### 5.3 State and event semantics
+
+Each state value must have one clear owner and lifecycle. Prefer immutable value types for snapshots and explicit commands for mutations.
+
+A useful feature transition shape is:
+
+```text
+(previous state, user intent) -> (next state, requested effects)
+```
+
+The transition should be deterministic. The effect executor performs camera, stage, file or other side effects and returns results as new events.
+
+Do not create a universal Redux clone. A small reducer or pure transition function is appropriate where it simplifies a real state machine. A normal object with a few explicit methods is better where there is no useful reducer model.
+
+Avoid:
+- A single giant ObservableObject containing camera, dock, microscope, image, stage and processing state.
+- UI views directly invoking vendor APIs.
+- Hidden global singletons as dependencies.
+- Duplicating a business rule in a view, view model and hardware adapter.
+- Mutable shared state where immutable snapshots suffice.
+- Excessive wrappers and one-line forwarding layers that add no policy or ownership.
+
+## 6. Application state is not hardware state
+
+The product workspace, a slide document and a camera session are different things.
+
+### 6.1 Camera session
+
+The camera capability owns connection and acquisition state. Application UI observes a projection of that state. It does not own the native camera handle or acquisition lifecycle.
+
+### 6.2 Slide documents
+
+Each slide pane owns presentation/document state such as:
+
+- Last displayed source image or retained immutable image reference.
+- Freeze/hold state.
+- Image-space measurements and annotations.
+- Zoom, pan, fit/locked/1:1 mode.
+- Display metadata associated with that image.
+
+The slide document must not own the physical camera session.
+
+### 6.3 Live-feed routing
+
+The application workspace owns the selected destination for the live feed. The frame router sends each accepted frame to that destination. Inactive panes retain their previous image. Frozen panes continue to respect the existing acquisition/frame-pool contract; presentation decisions must not create a second acquisition queue or an unbounded image history.
+
+The active destination is application routing state, not a camera property.
+
+### 6.4 Microscope configuration
+
+The microscope configuration describes the optical path and hardware configuration used by application calculations. It is not inferred from the camera brand. Camera sensor specifications, output/readout behavior, objective magnification, numerical aperture and relay/reducer magnification must be represented explicitly, with provenance and validation.
+
+An unknown calibration must remain unknown. The application must not silently display a precise physical measurement derived from guessed hardware assumptions.
+
+## 7. UI architecture
+
+The UI will be refactored, not merely moved to another directory.
+
+### 7.1 Presentation rules
+
+- SwiftUI describes composition, controls and low-frequency application state.
+- AppKit remains appropriate for the high-rate image presentation surface and native interaction where it provides a real advantage.
+- Views are small compositions of focused subviews.
+- A view receives the state it needs and emits intent through explicit actions.
+- Formatting and layout decisions are derived from state, not stored as duplicated mutable state.
+- Views do not discover hardware, implement optical formulas, choose camera readout modes or directly persist application configuration.
+- Reusable controls should be shared where behavior and semantics are actually the same, not merely because two controls look similar.
+
+### 7.2 Preview performance is a hard boundary
+
+The preview pipeline is already deliberately designed to avoid per-frame SwiftUI observation. Preserve these invariants throughout UI refactoring:
+
+1. One owner of the native camera session.
+2. One acquisition worker and one SDK image-pull path.
+3. Immutable frame lease ownership.
+4. Bounded event transfer and latest-frame-wins presentation.
+5. One latest-frame mailbox and one presentation consumer.
+6. No unbounded main-queue work per frame.
+7. No per-frame SwiftUI state publication.
+8. No extra frame copies, image histories or retained leases introduced by pane composition.
+9. No camera I/O blocking the UI thread.
+10. Session-generation checks continue to reject stale frames.
+
+A UI simplification is invalid if it weakens any of these invariants.
+
+### 7.3 Presentation decomposition
+
+The two-slide viewer should be composed from focused units with explicit boundaries:
+
+- Workspace composition: placement of panes, rail and tool overlays.
+- Dual-slide coordinator: owns the single frame consumer and routes frames.
+- Slide pane: pane-level controls and presentation status.
+- Image document view: image display, scale, pan, freeze and 1:1.
+- Overlay model/renderer: measurements and annotations in source-image coordinates.
+- Calibration projection: converts source-pixel distance to physical units using a stable calibration snapshot.
+
+Do not split code mechanically into many tiny files. Each extraction must establish a meaningful ownership boundary or make a pure policy independently testable.
+
+## 8. Capability boundaries
+
+### 8.1 Camera
+
+Camera owns discovery, connection, vendor-specific controls, acquisition, frame transport and camera metadata. It does not own motorization, image segmentation, microscope workflow, slide identity or product UI.
+
+The generic camera frame contract should remain vendor-neutral. Algorithms should not require AmScope-specific types.
+
+### 8.2 Motion
+
+Motion will own stage axes, position representation, movement commands, velocity/acceleration constraints, homing, limit handling, connection lifecycle and motion feedback.
+
+It must not be embedded in the camera driver or camera UI. Motion and camera may be coordinated by an application workflow, but neither capability owns the other.
+
+### 8.3 Image processing
+
+Image processing will expose functional operations over explicit image/frame inputs and typed parameters/results. It must not depend on SwiftUI/AppKit or camera acquisition lifecycle.
+
+The future blood-film and bone-marrow workflow is individual-cell detection, accurate segmentation and position recording at low/moderate magnification. It is not high-magnification whole-slide imaging, whole-slide scanning or stitching.
+
+Processing results should preserve a traceable relationship to the source image, pixel coordinate system, calibration context and algorithm/configuration used.
+
+### 8.4 Optics and calibration
+
+Optical calculations must distinguish sensor pixel pitch, output pixel mapping, objective magnification, relay magnification and numerical aperture. Cropping, binning, subsampling and resizing are not interchangeable transformations.
+
+Physical measurement and automatic resolution decisions must be based on the same validated source/readout semantics, not separate assumptions embedded in UI code.
+
+## 9. Build and integration boundary
+
+The existing native macOS executable is currently defined inside `Camera/Amscope/CMakeLists.txt`, and application-facing files are currently stored below `Camera/Amscope/app/native_mac`. This is a historical organization, not the desired final ownership.
+
+The migration target is:
+
+- Camera CMake targets build camera libraries and optional camera-specific adapters/probes.
+- The OPTIKA B293 application build is owned by `Application/OptikaB293`.
+- The application links against camera contracts and the selected camera implementation; camera does not link against the app.
+- The Objective-C++/Swift bridge and native application controller are application integration adapters, not part of the reusable AmScope driver.
+- The vendor SDK remains isolated in the AmScope implementation.
+- Application-specific UI and microscope workflows are never compiled as part of the generic camera library.
+
+A root-level build entry point can be introduced when it is useful for coordinating capabilities. Do not break existing camera build workflows during the migration.
+
+## 10. Migration and compatibility rules
+
+The migration is incremental and behavior-preserving until a behavior is intentionally changed.
+
+- The old v0.8 app is a reference implementation and temporary migration source.
+- Move ownership before changing behavior.
+- Keep the existing camera backend and frame pipeline intact.
+- Extract and test pure calculations before wiring them to UI.
+- Replace shared global state with composition-root-owned dependencies.
+- Maintain the dual-slide behavior and its single-stream routing semantics.
+- Do not add speculative motor or processing implementations to this branch merely to populate the architecture.
+- Do not delete the old app path until the new app target has equivalent required behavior and documented acceptance evidence.
+
+## 11. Definition of done
+
+The new architecture is established when:
+
+1. The application entry point and UI live outside `Camera/`.
+2. Camera builds independently of the OPTIKA application.
+3. Camera, Motion and ImageProcessing have no dependency on the application UI.
+4. The application composition root wires concrete adapters to capability contracts.
+5. Camera lifecycle and frame transport remain isolated from UI state.
+6. Slide presentation state is independent of camera session state.
+7. Optical and image-coordinate calculations are pure, explicit and tested independently.
+8. The main UI is composed from focused presentation units rather than one central view/model.
+9. The existing two-slide workflow and preview performance invariants are preserved.
+10. New hardware capabilities can be added as siblings without expanding the camera module's responsibility.
+
+---
+
+## Appendix A. Terminology
+
+- **Camera frame:** immutable acquired pixel payload plus frame metadata.
+- **Source image:** the image coordinate system used by a slide document and its overlays.
+- **Slide pane:** a presentation surface; it is not a physical slide database record by definition.
+- **Live destination:** application routing choice for the single incoming camera stream.
+- **Capability:** a replaceable hardware or computational subsystem such as Camera, Motion or ImageProcessing.
+- **Application adapter:** code that translates an application use case into a capability contract.
+- **Functional core:** deterministic calculations and state transitions without external side effects.
+- **Imperative shell:** lifecycle-owning objects that perform I/O and coordinate external resources.

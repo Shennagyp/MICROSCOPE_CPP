@@ -27,18 +27,45 @@ struct NativeWorkspaceDock: View {
     let onClose: () -> Void
 
     var body: some View {
-        Group {
-            switch model.selectedWorkspaceDockTab {
-            case .cameraControls:
-                NativeCameraControlsDock(model: model, onClose: onClose)
-            case .smartGallery:
-                NativeSmartGalleryDock(
-                    gallery: model.captureGallery,
-                    onClose: onClose
-                )
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: model.selectedWorkspaceDockTab.symbolName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                Text(model.selectedWorkspaceDockTab.title.uppercased())
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+
+                Spacer(minLength: 8)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .foregroundColor(.secondary)
+                .help("Close dock")
+                .accessibilityLabel("Close \(model.selectedWorkspaceDockTab.title) dock")
             }
+            .padding(.horizontal, 10)
+            .frame(height: 36)
+            .background(Color(nsColor: NSColor.controlBackgroundColor))
+
+            Divider()
+
+            Group {
+                switch model.selectedWorkspaceDockTab {
+                case .cameraControls:
+                    NativeCameraControlsDock(model: model)
+                case .smartGallery:
+                    NativeSmartGalleryDock(gallery: model.captureGallery)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: NSColor.controlBackgroundColor))
         .overlay(
             Rectangle()
@@ -126,12 +153,11 @@ struct NativeWorkspaceDockTabRail: View {
 
 private struct NativeCameraControlsDock: View {
     @ObservedObject var model: NativeCameraModel
-    let onClose: () -> Void
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 14) {
-                CameraDockConnectionSection(model: model, onClose: onClose)
+                CameraDockConnectionSection(model: model)
 
                 Divider()
 
@@ -253,7 +279,6 @@ private struct NativeCameraControlsDock: View {
 
 private struct CameraDockConnectionSection: View {
     @ObservedObject var model: NativeCameraModel
-    let onClose: () -> Void
 
     private var isConnected: Bool {
         model.openedCameraDeviceID != nil && model.cameraState != .closed
@@ -286,14 +311,6 @@ private struct CameraDockConnectionSection: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.secondary)
 
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 22, height: 22)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Close Camera Controls dock")
-                .accessibilityLabel("Close Camera Controls dock")
             }
 
             Text(isConnected ? model.activeCameraName : "No camera connected")
@@ -414,7 +431,6 @@ private struct CameraDockConnectionSection: View {
 
 private struct NativeSmartGalleryDock: View {
     @ObservedObject var gallery: NativeCaptureGalleryStore
-    let onClose: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -437,14 +453,6 @@ private struct NativeSmartGalleryDock: View {
                         .foregroundColor(.secondary)
                 }
 
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 22, height: 22)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Close Smart Gallery dock")
-                .accessibilityLabel("Close Smart Gallery dock")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)

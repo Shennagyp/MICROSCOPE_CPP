@@ -219,9 +219,13 @@ start, stop or close a camera.
 
 The session model owns the feature model and supplies its session-access snapshot
 through a weak provider. Session lifecycle callbacks notify the feature model when
-operations complete and clear its feature snapshot after a successful Close.
-The special preview-resolution mutation remains in the session model because the
-native controller may stop, reconfigure and restart acquisition to apply it.
+operations complete and reconcile the snapshot against the resulting camera state.
+The application delegate requests termination close through `NativeCameraModel`;
+it does not invoke the bridge directly. The session model keeps a termination gate
+active while a close is queued behind an already accepted command, preventing
+intervening UI commands or feature reads. The special preview-resolution mutation
+also remains in the session model because the native controller may stop,
+reconfigure and restart acquisition to apply it.
 Generic feature state is not duplicated in the session model.
 
 The generic feature editor excludes `AmcamResolutionIndex`. Applying that mode may

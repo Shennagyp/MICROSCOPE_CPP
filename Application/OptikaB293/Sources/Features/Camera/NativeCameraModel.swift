@@ -21,8 +21,13 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var openedCameraDeviceID: String?
     @Published var errorMessage = ""
     @Published var isShowingError = false
-    @Published private(set) var isCameraOperationPending = false
+    @Published private var isCameraCommandPending = false
+    @Published private(set) var isCameraTerminationPending = false
     @Published private(set) var isEnumeratingCameras = false
+
+    var isCameraOperationPending: Bool {
+        isCameraCommandPending || isCameraTerminationPending
+    }
 
     init(bridge: AmscopeNativeCameraBridge) {
         self.bridge = bridge
@@ -136,11 +141,11 @@ final class NativeCameraModel: ObservableObject {
 
         selectedDeviceID = deviceID
         features.beginNewCameraSession()
-        isCameraOperationPending = true
+        isCameraCommandPending = true
         bridge.openDeviceID(deviceID) { [weak self] error, _, _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                self.isCameraOperationPending = false
+                self.isCameraCommandPending = false
                 self.features.finishCameraOperation()
                 self.refreshState()
                 if let error = error {
@@ -160,11 +165,11 @@ final class NativeCameraModel: ObservableObject {
     }
     func closeCamera() {
         guard canClose else { return }
-        isCameraOperationPending = true
+        isCameraCommandPending = true
         bridge.close { [weak self] error, _, _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                self.isCameraOperationPending = false
+                self.isCameraCommandPending = false
                 self.features.finishCameraOperation()
                 self.refreshState()
                 if let error = error {
@@ -175,13 +180,52 @@ final class NativeCameraModel: ObservableObject {
         }
     }
 
+    func closeForTermination(completion: @escaping (Error?) -> Void) {
+        guard !isCameraTerminationPending else {
+            let error = NSError(
+                domain: "OPTIKA-B293.Camera",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "A camera shutdown is already pending."]
+            )
+            completion(error)
+            return
+        }
+
+        if cameraState == .closed && !isCameraCommandPending {
+            completion(nil)
+            return
+        }
+
+        // Keep all camera controls and feature access gated while this close is
+        // queued behind any command that was already accepted by the controller.
+        isCameraTerminationPending = true
+        bridge.close { [weak self] error, _, _ in
+            MainActor.assumeIsolated {
+                guard let self = self else {
+                    completion(error)
+                    return
+                }
+
+                self.isCameraCommandPending = false
+                self.features.finishCameraOperation()
+                self.refreshState()
+                if let error = error {
+                    self.present(error)
+                }
+                self.isCameraTerminationPending = false
+                self.reconcileFeatureSnapshotForCurrentCameraState()
+                completion(error)
+            }
+        }
+    }
+
     func startAcquisition() {
         guard canStart else { return }
-        isCameraOperationPending = true
+        isCameraCommandPending = true
         bridge.start { [weak self] error, _, _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                self.isCameraOperationPending = false
+                self.isCameraCommandPending = false
                 self.features.finishCameraOperation()
                 self.refreshState()
                 if let error = error {
@@ -194,11 +238,11 @@ final class NativeCameraModel: ObservableObject {
 
     func stopAcquisition() {
         guard canStop else { return }
-        isCameraOperationPending = true
+        isCameraCommandPending = true
         bridge.stop { [weak self] error, _, _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                self.isCameraOperationPending = false
+                self.isCameraCommandPending = false
                 self.features.finishCameraOperation()
                 self.refreshState()
                 if let error = error {
@@ -216,12 +260,12 @@ final class NativeCameraModel: ObservableObject {
             return
         }
 
-        isCameraOperationPending = true
+        isCameraCommandPending = true
         features.beginExternalMutation()
         bridge.changePreviewResolution(symbol) { [weak self] error, _, _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                self.isCameraOperationPending = false
+                self.isCameraCommandPending = false
                 self.features.finishExternalMutation()
                 self.refreshState()
                 if let error = error {
@@ -240,6 +284,11 @@ final class NativeCameraModel: ObservableObject {
     }
 
     private func reconcileFeatureSnapshotForCurrentCameraState() {
+        guard !isCameraTerminationPending else {
+            features.finishCameraOperation()
+            return
+        }
+
         guard canAccessFeatures else {
             if cameraState == .closed {
                 openedCameraDeviceID = nil
@@ -255,11 +304,6 @@ final class NativeCameraModel: ObservableObject {
 
     private func refreshState() {
         cameraState = bridge.state
-    }
-
-    func handleTerminationCloseFailure(_ error: Error) {
-        refreshState()
-        present(error)
     }
 
     private func present(_ error: Error) {

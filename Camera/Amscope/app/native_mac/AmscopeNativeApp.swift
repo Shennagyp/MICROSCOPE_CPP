@@ -125,6 +125,9 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "AmScope"
+        // Keep the native title-bar controls and title fully visible while
+        // removing only the title-bar's opaque material surface.
+        window.titlebarAppearsTransparent = true
         window.setContentSize(NSSize(width: 1440, height: 900))
         window.minSize = NSSize(width: 960, height: 640)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]

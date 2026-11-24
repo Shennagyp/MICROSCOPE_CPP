@@ -244,8 +244,10 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 private enum NativeSlideImageSizingMode {
     /// Recalculate image scale whenever this pane's viewport changes.
     case resizable
-    /// Keep the current/manual scale independent of viewport resizing.
-    case manualScale
+    /// Keep the selected display scale independent of viewport resizing.
+    case lockedScale
+    /// Map every source pixel to one physical display pixel.
+    case fullResolution
 }
 
 private final class NativeSlidePreviewPane: NSView {
@@ -501,7 +503,7 @@ private final class NativeSlideImageView: NSView {
         switch sizingMode {
         case .resizable:
             updateImageContainer(scale: automaticFillScale, origin: nil)
-        case .manualScale:
+        case .lockedScale, .fullResolution:
             updateImageContainer(
                 scale: currentScale,
                 origin: imageOrigin
@@ -511,9 +513,8 @@ private final class NativeSlideImageView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        if sizingMode == .manualScale {
-            lockedScale = actualPixelScale
-        }
+        // Full Resolution derives its scale from the current display's
+        // backing scale. A user-locked scale is intentionally left untouched.
         updateImageContainer(
             scale: currentScale,
             origin: sizingMode == .resizable ? nil : imageOrigin
@@ -529,9 +530,9 @@ private final class NativeSlideImageView: NSView {
         if sizingMode == .resizable {
             updateImageContainer(scale: automaticFillScale, origin: nil)
         } else if dimensionsChanged {
-            // A different camera mode has a different native frame size.
-            // Preserve the selected mode, but reset its scale to exact 1:1.
-            lockedScale = actualPixelScale
+            // Camera mode changes replace the source document dimensions.
+            // Keep the selected display scale; Full Resolution remains 1:1
+            // because currentScale is derived from the new source pixel grid.
             updateImageContainer(scale: currentScale, origin: nil)
         } else {
             updateImageContainer(scale: currentScale, origin: imageOrigin)
@@ -567,8 +568,10 @@ private final class NativeSlideImageView: NSView {
         switch sizingMode {
         case .resizable:
             return automaticFillScale
-        case .manualScale:
-            return min(lockedScale ?? actualPixelScale, actualPixelScale)
+        case .lockedScale:
+            return min(lockedScale ?? automaticFillScale, actualPixelScale)
+        case .fullResolution:
+            return actualPixelScale
         }
     }
 
@@ -646,13 +649,12 @@ private final class NativeSlideImageView: NSView {
 
         switch sizingMode {
         case .resizable:
-            // Lock the scale currently on screen; this is not the same as
-            // switching to native 1:1 resolution.
+            // Lock the scale currently on screen; do not silently jump to 1:1.
             let scaleToLock = currentScale
-            sizingMode = .manualScale
+            sizingMode = .lockedScale
             lockedScale = scaleToLock
             updateImageContainer(scale: scaleToLock, origin: imageOrigin)
-        case .manualScale:
+        case .lockedScale, .fullResolution:
             sizingMode = .resizable
             lockedScale = nil
             updateImageContainer(scale: currentScale, origin: nil)
@@ -660,12 +662,12 @@ private final class NativeSlideImageView: NSView {
         onSizingModeChanged?()
     }
 
-    /// Show the original camera pixels at physical 1:1 scale. This is a
-    /// separate command from locking the current scale.
+    /// Show the complete source image at physical 1:1 scale. This is a
+    /// distinct state from locking the current (possibly reduced) scale.
     func showFullResolution() {
         guard currentImage != nil else { return }
-        sizingMode = .manualScale
-        lockedScale = actualPixelScale
+        sizingMode = .fullResolution
+        lockedScale = nil
         updateImageContainer(scale: actualPixelScale, origin: nil)
         onSizingModeChanged?()
     }
@@ -698,12 +700,17 @@ private final class NativeSlideImageView: NSView {
         guard abs(nextScale - oldScale) > 0.000001 else { return }
 
         // Manual zoom locks this pane only when the scale actually changes.
-        // A scroll-down gesture at the automatic minimum leaves Auto Resize on.
-        if sizingMode == .resizable {
-            sizingMode = .manualScale
+        // Exactly 1:1 is represented separately so backing-scale changes can
+        // preserve native-pixel mapping without changing ordinary locked zoom.
+        let nextMode: NativeSlideImageSizingMode =
+            abs(nextScale - maximumScale) < 0.000001
+                ? .fullResolution
+                : .lockedScale
+        if sizingMode != nextMode {
+            sizingMode = nextMode
             onSizingModeChanged?()
         }
-        lockedScale = nextScale
+        lockedScale = nextMode == .lockedScale ? nextScale : nil
         let proposedOrigin = CGPoint(
             x: anchor.x - imagePoint.x * nextScale,
             y: anchor.y - imagePoint.y * nextScale
@@ -796,7 +803,7 @@ private final class NativeSlideImageView: NSView {
             keyEquivalent: ""
         )
         manualScaleItem.target = self
-        manualScaleItem.state = sizingMode == .manualScale ? .on : .off
+        manualScaleItem.state = sizingMode == .resizable ? .off : .on
         manualScaleItem.isEnabled = currentImage != nil
         menu.addItem(manualScaleItem)
 
@@ -820,9 +827,11 @@ private final class NativeSlideImageView: NSView {
 
     @objc private func selectManualScaleMode(_ sender: Any?) {
         guard currentImage != nil else { return }
-        if sizingMode != .manualScale {
-            toggleSizingMode()
-        }
+        let scaleToLock = currentScale
+        sizingMode = .lockedScale
+        lockedScale = scaleToLock
+        updateImageContainer(scale: scaleToLock, origin: imageOrigin)
+        onSizingModeChanged?()
     }
 
     @objc private func showFullResolutionFromMenu(_ sender: Any?) {

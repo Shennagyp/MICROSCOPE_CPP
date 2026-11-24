@@ -110,4 +110,15 @@ if(BUILD_TESTING)
         "${OPTIKA_FOUNDATION_FRAMEWORK}"
         "${OPTIKA_COREGRAPHICS_FRAMEWORK}")
     add_test(NAME optika_slide_image_geometry_tests COMMAND optika_slide_image_geometry_tests)
+
+    add_executable(optika_automatic_resolution_policy_tests
+        Sources/Features/Optics/MicroscopeOpticalConfiguration.swift
+        Sources/Features/Optics/NativeAutomaticResolutionPolicy.swift
+        Tests/NativeAutomaticResolutionPolicyTests.swift)
+    target_compile_options(optika_automatic_resolution_policy_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
+        "$<$<COMPILE_LANGUAGE:Swift>:5>")
+    target_link_libraries(optika_automatic_resolution_policy_tests PRIVATE
+        "${OPTIKA_FOUNDATION_FRAMEWORK}")
+    add_test(NAME optika_automatic_resolution_policy_tests COMMAND optika_automatic_resolution_policy_tests)
 endif()

@@ -69,7 +69,20 @@ private struct EditableFeatureInformationField: View {
     @ObservedObject var model: NativeCameraModel
     let descriptor: AmscopeCameraFeatureDescriptor
 
-    @State private var isEditing = false
+    private var isEditing: Binding<Bool> {
+        Binding(
+            get: {
+                model.informationBarEditingFeatureName == descriptor.name
+            },
+            set: { presented in
+                if presented {
+                    model.informationBarEditingFeatureName = descriptor.name
+                } else if model.informationBarEditingFeatureName == descriptor.name {
+                    model.informationBarEditingFeatureName = nil
+                }
+            }
+        )
+    }
 
     private var displayValue: String {
         let value = model.displayValue(for: descriptor)
@@ -96,9 +109,9 @@ private struct EditableFeatureInformationField: View {
                           !model.isFeatureSnapshotLoading else {
                         return
                     }
-                    isEditing = true
+                    model.informationBarEditingFeatureName = descriptor.name
                 }
-                .popover(isPresented: $isEditing) {
+                .popover(isPresented: isEditing) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Edit \(descriptor.displayName)")
                             .font(.headline)
@@ -123,11 +136,11 @@ private struct EditableFeatureInformationField: View {
                         HStack {
                             Spacer()
                             Button("Cancel") {
-                                isEditing = false
+                                model.informationBarEditingFeatureName = nil
                             }
                             Button("Apply") {
                                 model.commitDraft(for: descriptor)
-                                isEditing = false
+                                model.informationBarEditingFeatureName = nil
                             }
                             .keyboardShortcut(.defaultAction)
                             .disabled(model.isFeatureWritePending)

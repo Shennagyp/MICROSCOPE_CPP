@@ -343,3 +343,27 @@ The same panel ID may not be simultaneously hosted in a dock region and a floati
 - Do not recreate panel controllers during reparenting.
 - Keep each phase reviewable and commit it independently.
 - Do not claim build, test or visual verification unless it has actually been performed. The implementation work here will not run local builds or hardware tests; the user will run the provided local build and report diagnostics.
+
+## 11. Implementation progress
+
+### Phase 0 — complete
+
+- New branch created from the recorded v0.8 base commit.
+- This plan committed without changes to the base branch.
+
+### Phase 1 — model implementation in progress
+
+Committed source increments:
+
+- `NativeDockSystemModel.swift`: stable panel IDs; edge, axis, tab-group, recursive split, auto-hide and floating-window models; versioned Codable layout snapshot; default layout matching the existing trailing two-tab dock; placement traversal; structural validator.
+- `NativeDockSystemModelTests.swift`: executable checks for default placement, Codable round-trip, duplicate panel placement, active-tab membership, invalid split proportions and invalid floating frames.
+- `Camera/Amscope/CMakeLists.txt`: model source registered with the native app and a dedicated `amscope_native_dock_model_tests` target registered with CTest when the native app and testing are enabled.
+
+**Verification status:** source and build-target registration were reviewed statically. No CMake configure, build, test, app launch or hardware test was run. Phase 1 remains open until the user runs the native model test target and reports any compiler/runtime diagnostics.
+
+### Immediate next work
+
+1. Confirm the model test target compiles on the user's macOS/Swift toolchain.
+2. Add the panel registry and main-window-scoped controller.
+3. Implement model mutations and persistence before replacing the current renderer.
+4. Adapt the existing two panels through the registry while preserving the current UI behavior.

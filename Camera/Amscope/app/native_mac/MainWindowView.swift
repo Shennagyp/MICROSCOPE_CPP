@@ -411,17 +411,17 @@ private struct DockCameraFeatureControl: View {
 
     private var featureHelpText: String {
         var parts = [descriptor.displayName, featureGroupTitle(descriptor.group.rawValue)]
-        if let unit = descriptor.unit, !unit.isEmpty { parts.append("Unit: \\(unit)") }
+        if let unit = descriptor.unit, !unit.isEmpty { parts.append("Unit: \(unit)") }
         if descriptor.hasNumericRange {
             if descriptor.integerRange {
-                parts.append("Range: \\(descriptor.minimumInteger)–\\(descriptor.maximumInteger)")
+                parts.append("Range: \(descriptor.minimumInteger)–\(descriptor.maximumInteger)")
                 if descriptor.hasIntegerIncrement {
-                    parts.append("Step: \\(descriptor.integerIncrement)")
+                    parts.append("Step: \(descriptor.integerIncrement)")
                 }
             } else {
-                parts.append("Range: \\(descriptor.minimumFloatingPoint)–\\(descriptor.maximumFloatingPoint)")
+                parts.append("Range: \(descriptor.minimumFloatingPoint)–\(descriptor.maximumFloatingPoint)")
                 if descriptor.hasFloatingPointIncrement {
-                    parts.append("Step: \\(descriptor.floatingPointIncrement)")
+                    parts.append("Step: \(descriptor.floatingPointIncrement)")
                 }
             }
         }
@@ -464,7 +464,7 @@ private struct DockCameraFeatureControl: View {
                             set: { model.writeInteger($0, for: descriptor) }
                         )
                     ) {
-                        ForEach(descriptor.discreteIntegerValues.map(\\.int64Value), id: \\.self) { value in
+                        ForEach(descriptor.discreteIntegerValues.map(\.int64Value), id: \.self) { value in
                             Text(String(value)).tag(value)
                         }
                     }
@@ -494,7 +494,7 @@ private struct DockCameraFeatureControl: View {
                             }
                         )
                     ) {
-                        ForEach(descriptor.enumerationValues, id: \\.self) { symbol in
+                        ForEach(descriptor.enumerationValues, id: \.self) { symbol in
                             Text(displayOption(symbol)).tag(symbol)
                         }
                     }

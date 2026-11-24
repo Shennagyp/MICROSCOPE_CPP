@@ -41,8 +41,9 @@ struct NativeFeatureSections: View {
                     .font(.headline)
                 Spacer()
                 if model.isFeatureSnapshotLoading {
-                    ProgressView()
-                        .controlSize(.small)
+                    Text("Loading…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 Button("Refresh") {
                     model.refreshFeatures()

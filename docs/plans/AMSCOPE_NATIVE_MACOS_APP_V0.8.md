@@ -257,7 +257,7 @@ path has no new consumer, queue, or per-frame SwiftUI observation.
 **Verification pending:** rebuild and inspect on macOS; resize the main dock;
 float and re-dock it; switch Camera Controls / Smart Gallery; capture from both
 slides; confirm output files and startup recovery; verify one-at-a-time capture
-behavior and 80-item disk retention; select tools independently on both slides;
+behavior, an 80-thumbnail in-memory limit, and no automatic deletion of older PNGs; select tools independently on both slides;
 drag distance measurements and add notes; pan/zoom and verify overlays remain
 at their original image coordinates; confirm overlays clear on a source
 dimension change; and monitor frame-pool availability, drops, and memory.

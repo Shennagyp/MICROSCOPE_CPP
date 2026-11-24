@@ -58,8 +58,9 @@ struct CameraControlsWindow: View {
                     Spacer()
 
                     if model.isCameraOperationPending {
-                        ProgressView()
-                            .controlSize(.small)
+                        Text("Working…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
             }

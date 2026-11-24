@@ -69,8 +69,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitView.delegate = self
-        splitView.addSubview(slideOnePane)
-        splitView.addSubview(slideTwoPane)
+        splitView.addArrangedSubview(slideOnePane)
+        splitView.addArrangedSubview(slideTwoPane)
         splitView.frame = bounds
         splitView.autoresizingMask = [.width, .height]
         addSubview(splitView)

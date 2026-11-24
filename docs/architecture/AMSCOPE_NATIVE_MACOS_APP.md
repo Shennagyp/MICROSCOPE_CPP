@@ -16,7 +16,7 @@ The v0.8 user-interface structure is:
 - The camera preview begins at the top of the main window; there is no separate camera toolbar above it.
 - One thin bottom dock contains the camera connection indicator/actions, slide target selector, and every available generic camera feature descriptor. The feature strip scrolls horizontally so the dock remains compact. It can collapse or detach into a floating utility panel and re-dock.
 - The camera connection state and name are shown beside the camera actions on the left; camera name, resolution, pixel format, and acquisition metadata are not repeated as read-only property fields in the dock.
-- Each slide pane exposes a persistent `Switch Live` control. The selected live pane is identified by a thin red outer border; the inactive pane retains its last image.
+- Each slide pane exposes a persistent `Switch Live` control, and the dock provides a segmented Slide 1 / Slide 2 selector. The selected live pane is identified by a 1-point red outer border; the inactive pane retains its last image.
 - Both images are rendered by a single purpose-built AppKit preview owner hosted in SwiftUI, not by SwiftUI `Image` views or per-frame observable properties.
 - The dedicated camera-controls window uses a width-flexible vertical layout inside an explicit scroll viewport; camera, acquisition, and descriptor groups remain reachable when the window is resized or the camera exposes many features.
 
@@ -72,7 +72,7 @@ The current acquisition implementation uses a four-frame pool. The two-slide pre
 
 Owns macOS window composition, menus, control-window presentation, settings, user interaction, and low-frequency application state.
 
-SwiftUI observes camera state, feature descriptors/values, errors, active-slide intent, and command completions. Controls are generated from the backend's feature metadata and preserve the feature's declared type, range, unit, discrete options, and writability. The bottom bar promotes a small set of writable numeric features as direct editable controls; it does **not** observe every incoming frame.
+SwiftUI observes camera state, feature descriptors/values, errors, active-slide intent, and command completions. The bottom dock renders every available generic feature descriptor returned by the native bridge, preserving each feature's declared type, range, unit, discrete options, and writability. Writable descriptors receive type-appropriate editors; read-only descriptors show their current values. The dock scrolls horizontally and does **not** observe every incoming frame.
 
 ### Preview surface — AppKit
 
@@ -154,6 +154,7 @@ generic camera feature descriptors. The feature controls are laid out horizontal
 and scroll inside the dock; writable descriptors use type-appropriate editors,
 while read-only descriptors show their current values. The dock does not repeat
 camera name, resolution, pixel format, or acquisition state as separate properties.
+The connection indicator, selected device, and state remain on the left of the dock.
 
 **Current hardware boundary:** selecting Slide 1 or Slide 2 currently changes
 only the UI's live-frame destination. It does not physically move the microscope

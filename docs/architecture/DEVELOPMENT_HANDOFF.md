@@ -368,3 +368,29 @@ At the end of each meaningful development increment, update:
 - Next concrete implementation task and blockers.
 
 Never write that a phase is complete from source inspection or CI alone. Never invent camera model identity, hardware results, test duration, or SDK behavior.
+
+
+## Native macOS UI handoff — 2026-11-24
+
+The active UI direction is native macOS controls through Qt Widgets' platform
+style, not FluentQt or a custom global visual language. See
+[AMSCOPE_NATIVE_MACOS_UI.md](AMSCOPE_NATIVE_MACOS_UI.md).
+
+**Root cause:** `PreviewWindow::applyProfessionalStyle()` forced Fusion,
+overrode the application font, and installed a large global stylesheet. The
+new branch `amscope-native-ui` removes that entire override function and its
+invocation. The standard Qt Widgets controls now use the platform style
+selected by the installed Qt/macOS runtime.
+
+The workspace, `FrameView`, `ImageInfoBar`, camera facade, native session,
+worker, queue, mailbox and frame lease are unchanged. No FluentQt dependency or
+Qt Quick integration is present on this branch.
+
+**Current evidence:** source diff reviewed only. No owner build, CTest,
+application launch, screenshot, visual inspection, or physical camera test has
+been reported for this branch. The next step is to build and launch the normal
+preview on the target Mac, inspect both system appearances, then run the
+existing MU503 smoke test and compare frame metrics.
+
+The earlier branch `amscope-fluent-ui-components` is superseded and must not
+be merged into the native application.

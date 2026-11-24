@@ -115,7 +115,7 @@ struct NativeWorkspaceDock: View {
     }
 }
 
-private struct NativeWorkspaceDockPanelAnchor: NSViewRepresentable {
+struct NativeWorkspaceDockPanelAnchor: NSViewRepresentable {
     let model: NativeCameraModel
 
     func makeNSView(context: Context) -> NativeWorkspaceDockPanelAnchorNSView {
@@ -133,7 +133,7 @@ private struct NativeWorkspaceDockPanelAnchor: NSViewRepresentable {
 }
 
 @MainActor
-private final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
+final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
     private let model: NativeCameraModel
     private var floatingPanel: NSPanel?
 

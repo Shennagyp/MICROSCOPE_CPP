@@ -238,15 +238,22 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         // One feed call snapshots counters and transfers the newest lease. The
         // value snapshot does not copy image bytes or create another frame queue.
         let snapshot = frameFeed.takeLatestFrameSnapshot()
-        slideOnePane.updateAcquisitionCounters(
-            pulled: snapshot.framesPulled,
-            dropped: snapshot.droppedFrames
-        )
-        slideTwoPane.updateAcquisitionCounters(
-            pulled: snapshot.framesPulled,
-            dropped: snapshot.droppedFrames
-        )
-        guard let lease = snapshot.lease else { return }
+
+        func updateBothPaneCounters() {
+            slideOnePane.updateAcquisitionCounters(
+                pulled: snapshot.framesPulled,
+                dropped: snapshot.droppedFrames
+            )
+            slideTwoPane.updateAcquisitionCounters(
+                pulled: snapshot.framesPulled,
+                dropped: snapshot.droppedFrames
+            )
+        }
+
+        guard let lease = snapshot.lease else {
+            updateBothPaneCounters()
+            return
+        }
 
         // A frozen destination still consumes/releases the newest lease, but
         // does not allocate a color space, provider or CGImage for a frame it
@@ -255,15 +262,35 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         case .slide1:
             guard !slideOnePane.isImageFrozen,
                   let image = lease.createCGImage() else {
+                updateBothPaneCounters()
                 return
             }
-            slideOnePane.display(image)
+            // The active pane updates its counters and pane-frame count together,
+            // so its statistics label is written only once for this frame.
+            slideOnePane.display(
+                image,
+                pulled: snapshot.framesPulled,
+                dropped: snapshot.droppedFrames
+            )
+            slideTwoPane.updateAcquisitionCounters(
+                pulled: snapshot.framesPulled,
+                dropped: snapshot.droppedFrames
+            )
         case .slide2:
             guard !slideTwoPane.isImageFrozen,
                   let image = lease.createCGImage() else {
+                updateBothPaneCounters()
                 return
             }
-            slideTwoPane.display(image)
+            slideTwoPane.display(
+                image,
+                pulled: snapshot.framesPulled,
+                dropped: snapshot.droppedFrames
+            )
+            slideOnePane.updateAcquisitionCounters(
+                pulled: snapshot.framesPulled,
+                dropped: snapshot.droppedFrames
+            )
         }
 
         // Frozen panes keep acquisition counters current without replacing

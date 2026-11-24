@@ -160,6 +160,8 @@ Deliverables:
   invalidation; do not recompute unchanged geometry or re-publish overlay state.
 - Frozen destinations consume/release frame leases without allocating discarded
   `CGImage` objects. Empty overlay sets bypass overlay geometry/drawing setup.
+- Pane diagnostics update only when their values change; the active pane combines
+  acquisition counters and its displayed-frame increment in one label update.
 - Preserve floating overlay dock, permanent rail, resize behavior and the current 80% panel transparency requirement unless the user changes it.
 - Keep control visibility and minimum-pane-width behavior explicit.
 - Keep keyboard/accessibility and narrow-pane behavior in scope rather than treating it as decoration.

@@ -351,6 +351,9 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
 12. Frozen destinations still consume and release the newest frame lease, but do
     not create a `CGImage` that will be discarded. Empty overlay sets bypass
     overlay-coordinate calculations and graphics-state setup.
+13. Frame-statistics tooltips are configured once; pane labels update only when
+    counters actually change, and the active pane combines its displayed-frame
+    count with the incoming acquisition counters in one label update.
 
 A UI simplification is invalid if it weakens any of these invariants.
 

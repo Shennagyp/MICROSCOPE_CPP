@@ -64,6 +64,8 @@ final class NativeSlidePreviewPane: NSView {
         frameStatisticsLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
         frameStatisticsLabel.textColor = OptikaPalette.nsSecondaryText
         frameStatisticsLabel.lineBreakMode = .byTruncatingTail
+        frameStatisticsLabel.toolTip =
+            "PULLED: cumulative driver frames pulled. PANE: images assigned to this slide preview. DROPS: cumulative driver-reported dropped frames."
         frameStatisticsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         imageSizingButton.bezelStyle = .texturedRounded
@@ -373,6 +375,9 @@ final class NativeSlidePreviewPane: NSView {
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
+        guard pulledFrameCount != pulled || droppedFrameCount != dropped else {
+            return
+        }
         pulledFrameCount = pulled
         droppedFrameCount = dropped
         updateFrameStatisticsLabel()
@@ -426,10 +431,12 @@ final class NativeSlidePreviewPane: NSView {
         microscopeControlsPlate.isHidden = bounds.width < OptikaLayout.microscopeControlsMinimumWidth
     }
 
-    func display(_ image: CGImage) {
+    func display(_ image: CGImage, pulled: UInt64, dropped: UInt64) {
         let hadImage = imageView.hasImage
         let hadOverlays = imageView.hasOverlays
 
+        pulledFrameCount = pulled
+        droppedFrameCount = dropped
         paneFrameCount &+= 1
         imageView.display(image)
 
@@ -447,10 +454,10 @@ final class NativeSlidePreviewPane: NSView {
     }
 
     private func updateFrameStatisticsLabel() {
-        frameStatisticsLabel.stringValue =
+        let value =
             "PULLED \(pulledFrameCount) · PANE \(paneFrameCount) · DROPS \(droppedFrameCount)"
-        frameStatisticsLabel.toolTip =
-            "PULLED: cumulative driver frames pulled. PANE: images assigned to this slide preview. DROPS: cumulative driver-reported dropped frames."
+        guard frameStatisticsLabel.stringValue != value else { return }
+        frameStatisticsLabel.stringValue = value
     }
 
     func updatePresentationState(isActiveTarget: Bool, isMaximized: Bool) {

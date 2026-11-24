@@ -17,6 +17,7 @@ The v0.8 user-interface structure preserves the established interaction requirem
 - Acquisition and image metadata are shown in a compact bottom information bar.
 - An information-bar value can be double-clicked to edit that value where it is writable.
 - The preview is a purpose-built AppKit view hosted in SwiftUI, not a SwiftUI `Image` fed by a per-frame observable property.
+- The dedicated camera-controls window uses a width-flexible vertical layout inside an explicit scroll viewport; camera, acquisition, and descriptor groups remain reachable when the window is resized or the camera exposes many features.
 
 ## 2. Non-negotiable streaming contract
 

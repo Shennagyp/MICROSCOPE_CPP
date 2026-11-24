@@ -2,7 +2,9 @@
 
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QString>
 
 #include <utility>
@@ -25,12 +27,21 @@ QString deviceLabel(const CameraDeviceInfo& device) {
 
 CameraControlPanel::CameraControlPanel(QWidget* parent)
     : QWidget(parent) {
-    auto* layout = new QHBoxLayout(this);
+    auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(5);
+
+    auto* deviceRow = new QHBoxLayout();
+    deviceRow->setContentsMargins(0, 0, 0, 0);
+    deviceRow->setSpacing(5);
+    auto* actionRow = new QHBoxLayout();
+    actionRow->setContentsMargins(0, 0, 0, 0);
+    actionRow->setSpacing(5);
 
     deviceSelector_ = new QComboBox(this);
     deviceSelector_->setObjectName(QStringLiteral("cameraDeviceSelector"));
-    deviceSelector_->setMinimumWidth(320);
+    deviceSelector_->setMinimumWidth(140);
+    deviceSelector_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     refreshButton_ = new QPushButton(QStringLiteral("Refresh cameras"), this);
     refreshButton_->setObjectName(QStringLiteral("refreshCamerasButton"));
@@ -47,12 +58,14 @@ CameraControlPanel::CameraControlPanel(QWidget* parent)
     closeButton_ = new QPushButton(QStringLiteral("Close"), this);
     closeButton_->setObjectName(QStringLiteral("closeCameraButton"));
 
-    layout->addWidget(deviceSelector_, 1);
-    layout->addWidget(refreshButton_);
-    layout->addWidget(openButton_);
-    layout->addWidget(startButton_);
-    layout->addWidget(stopButton_);
-    layout->addWidget(closeButton_);
+    deviceRow->addWidget(deviceSelector_, 1);
+    deviceRow->addWidget(refreshButton_);
+    actionRow->addWidget(openButton_, 1);
+    actionRow->addWidget(startButton_, 1);
+    actionRow->addWidget(stopButton_, 1);
+    actionRow->addWidget(closeButton_, 1);
+    layout->addLayout(deviceRow);
+    layout->addLayout(actionRow);
 
     connect(refreshButton_, &QPushButton::clicked, this, [this]() {
         if (refreshRequestedHandler_)

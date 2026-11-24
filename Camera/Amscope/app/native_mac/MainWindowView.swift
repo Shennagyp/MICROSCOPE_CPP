@@ -13,7 +13,8 @@ struct MainWindowView: View {
                 280,
                 geometry.size.width -
                     minimumPreviewWidth -
-                    dockDividerWidth
+                    dockDividerWidth -
+                    NativeWorkspaceDockTabRail.width
             )
             let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
 
@@ -55,16 +56,14 @@ struct MainWindowView: View {
                     .layoutPriority(0)
                 }
 
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .overlay(alignment: .trailing) {
+                // Reserve a real layout column for the permanent rail. An
+                // overlay would sit above the dock's trailing controls and
+                // intercept their mouse events.
                 NativeWorkspaceDockTabRail(model: model)
                     .frame(width: NativeWorkspaceDockTabRail.width)
                     .frame(maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .allowsHitTesting(true)
-                    .zIndex(100)
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)

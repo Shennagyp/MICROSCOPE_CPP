@@ -23,7 +23,6 @@ struct MainWindowView: View {
                     model: model,
                     activeSlide: model.activeSlide,
                     measurementCalibration: model.measurementCalibration,
-                    onActiveSlideChanged: model.selectActiveSlide,
                     onCapture: { slide, image in
                         model.captureGallery.capture(image, for: slide)
                     }

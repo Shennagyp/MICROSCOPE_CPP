@@ -11,10 +11,19 @@ struct MainWindowView: View {
                 activeSlide: model.activeSlide,
                 onActiveSlideChanged: model.selectActiveSlide
             )
+            // The slide workspace owns only the space above the dock.
+            // Clip the representable at this boundary so a native child view
+            // can never paint over the pathologist's control strip.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .layoutPriority(1)
 
             if !model.isBottomDockDetached {
+                // The dock is a separate, vertically reserved sibling, never
+                // an overlay on either specimen viewport.
                 BottomControlDock(model: model, isDetached: false)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(0)
             }
         }
         .frame(minWidth: 960, minHeight: 560)

@@ -171,7 +171,7 @@ struct MicroscopeConfigurationWindow: View {
                             .frame(width: 90)
                         }
 
-                        Text("Use 1.0 for native sensor readout. For binning or camera-side resampling, enter the linear factor by which one output pixel represents sensor pixels (for example 2.0 for 2×). Cropping or ROI alone remains 1.0. This value is explicit camera configuration; the app does not guess it from the camera model or image dimensions.")
+                        Text("Use 1.0 for native sensor readout. For binning or camera-side resampling, enter the linear sensor-to-output pixel factor (2.0 for 2× linear binning). Cropping or ROI alone remains 1.0. Update it when the camera readout mode changes. This is explicit setup data; the app does not guess it from a camera model or frame dimensions.")
                             .font(.caption)
                             .foregroundColor(.secondary)
 
@@ -606,10 +606,22 @@ extension MicroscopeOpticalConfiguration {
             Double.self,
             forKey: .cameraRelayMagnification
         )
-        cameraRelayPreset = (try? container.decode(
+        if let savedPreset = try? container.decode(
             CameraRelayPreset.self,
             forKey: .cameraRelayPreset
-        )) ?? .custom
+        ) {
+            cameraRelayPreset = savedPreset
+        } else {
+            // Older builds named the same 0.50× relay preset after the MU503.
+            // Preserve its optical value without retaining a camera coupling.
+            let legacyPreset = try? container.decode(
+                String.self,
+                forKey: .cameraRelayPreset
+            )
+            cameraRelayPreset = legacyPreset == "amscopeMU503Included"
+                ? .touptekFMA050
+                : .custom
+        }
         cameraRelayCustomName = try container.decodeIfPresent(
             String.self,
             forKey: .cameraRelayCustomName

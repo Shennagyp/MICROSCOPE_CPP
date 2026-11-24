@@ -107,39 +107,49 @@ The two existing side-by-side slide panes, headers, divider, and window remain
 unchanged. Each pane is a fixed viewport containing a separate image container.
 The container is the only element whose size changes.
 
-Each pane has an independent icon toggle with two modes:
+Each pane has two distinct header controls because locking a scale and viewing
+the source at full resolution are different operations:
 
-- **Resizable:** the image container automatically recalculates its scale when
-  that pane's viewport is resized by the split divider or maximize/restore.
-  It scales down when the pane becomes smaller, preserves aspect ratio, and
-  uses the largest cover scale that avoids black margins. It never upscales
-  beyond native 1:1 physical-pixel size.
-- **Full Resolution / manual scale:** the image container keeps its selected
-  scale when the pane viewport changes. Selecting this mode from the icon
-  starts at exact 1:1. Scroll-wheel or trackpad zoom from Resizable mode
-  automatically locks the pane into this mode at the manually selected scale.
-  The original full-resolution CGImage remains the source.
+- **Lock / Auto Resize control:** the open-lock icon means the image currently
+  follows the viewer size. Clicking it locks the scale currently on screen;
+  it does not jump to 1:1. The closed-lock icon means the current/manual scale
+  is retained when that pane's viewport changes. Clicking it resumes automatic
+  resizing.
+- **1:1 control:** explicitly switches that pane to full-resolution viewing,
+  mapping one camera pixel to one physical display pixel. This is a direct
+  command, not a toggle. It centers the image initially; if the source image
+  is larger than the viewport, the fixed pane clips it and dragging pans the
+  view with movement clamped to the image edges.
+
+In **Resizable** mode, the image container automatically recalculates its
+scale when that pane's viewport is resized by the split divider or
+maximize/restore. It scales to cover the viewport without black margins,
+preserves aspect ratio, and never upscales beyond native 1:1 physical-pixel
+size. In **Manual Scale** mode, the container keeps its selected scale when
+the pane viewport changes. Scroll-wheel or trackpad zoom from Resizable mode
+locks the pane only after the scale actually changes. The original
+full-resolution CGImage remains the source.
 
 The image container is capped independently in both dimensions to the
 source-image width and height at 1:1 physical-pixel scale. It can never become
-larger than the original camera image. The fixed pane clips any overflow;
-dragging pans the image and clamps it to its edges. The other slide has its
-own independent mode, scale, and pan position.
+larger than the original camera image. The other slide has its own independent
+mode, scale, and pan position.
 
-The context menu exposes Resizable and Full Resolution / Manual Scale. The
-compact icon in each existing pane header toggles the same two modes. No new
-toolbar, pane, splitter, or application-window resizing is introduced.
+The context menu exposes Resizable, Lock Current Scale, and View Full
+Resolution (1:1). No new toolbar, pane, splitter, or application-window
+resizing is introduced.
 
 Downsampling uses high-quality interpolation; native 1:1 mapping disables
 interpolation. The provider-backed full-resolution CGImage remains the source;
 no pixel-buffer copy or frame history is added. Camera resolution selection
 and optical Auto Res remain independent of image presentation.
 
-**Verification pending:** rebuild and verify the per-pane icon state, resize
-each pane with the divider in both modes, confirm that Resizable follows the
-pane, Full Resolution/manual zoom retains scale, each container remains
-within source dimensions at 1:1, panning is edge-clamped, and Retina backing
-scale behaves correctly. No local build or hardware test is claimed.
+**Verification pending:** rebuild and verify both header controls independently
+in each pane, resize each pane with the divider in Resizable and Manual Scale
+modes, confirm the 1:1 command shows native pixels and permits edge-clamped
+panning, ensure each container remains within source dimensions at 1:1, and
+verify Retina backing-scale behavior. No local build or hardware test is
+claimed.
 
 ## Two-slide workspace and compact camera dock (2026-11-24)
 

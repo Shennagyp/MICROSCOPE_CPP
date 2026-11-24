@@ -144,7 +144,7 @@ final class NativeSlideImageView: NSView {
     private var automaticFitScale: CGFloat {
         guard let image = currentImage else { return actualPixelScale }
         return SlideImageGeometry.automaticFitScale(
-            imageSize: CGSize(width: image.width, height: image.height),
+            imageSize: CGSize(width: CGFloat(image.width), height: CGFloat(image.height)),
             viewportSize: bounds.size,
             physicalPixelScale: actualPixelScale
         )
@@ -165,7 +165,7 @@ final class NativeSlideImageView: NSView {
     private func imageContainerSize(at scale: CGFloat) -> CGSize {
         guard let image = currentImage else { return .zero }
         return SlideImageGeometry.documentSize(
-            imageSize: CGSize(width: image.width, height: image.height),
+            imageSize: CGSize(width: CGFloat(image.width), height: CGFloat(image.height)),
             requestedScale: scale,
             physicalPixelScale: actualPixelScale
         )
@@ -251,7 +251,7 @@ final class NativeSlideImageView: NSView {
             at: viewportPoint,
             imageOrigin: imageContainer.frame.origin,
             imageScale: currentScale,
-            imageSize: CGSize(width: image.width, height: image.height)
+            imageSize: CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
         )
     }
 
@@ -321,7 +321,7 @@ final class NativeSlideImageView: NSView {
         )
 
         guard let transform = SlideImageGeometry.zoomTransform(
-            imageSize: CGSize(width: image.width, height: image.height),
+            imageSize: CGSize(width: CGFloat(image.width), height: CGFloat(image.height)),
             viewportSize: bounds.size,
             currentScale: oldScale,
             currentOrigin: oldOrigin,

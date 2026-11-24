@@ -2069,13 +2069,12 @@ struct AmcamCamera::Impl {
                 // while retaining vector capacity for later frames of this size.
                 writable->pixels.resize(required);
 
+                // Pixel format and bit-depth metadata are immutable pool
+                // invariants initialized once when each slot is allocated.
+                // Only SDK-reported dimensions and stride are refreshed per frame.
                 writable->width = w;
                 writable->height = h;
                 writable->strideBytes = static_cast<std::uint32_t>(stride64);
-                writable->pixelFormat = activePool->pixelFormat;
-                writable->significantBitsPerPixel =
-                    activePool->significantBitsPerPixel;
-                writable->storageBitsPerPixel = activePool->storageBitsPerPixel;
                 assignAmcamFrameMetadata(*writable, info.v3);
 
                 FramePtr lease = std::move(writable);

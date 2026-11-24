@@ -394,6 +394,17 @@ There is no separate heap allocation for a FramePtr holder per displayed
 frame. This changes only lease bookkeeping; it does not change pixel storage,
 provider ownership, or frame delivery.
 
+The per-frame Core Graphics data provider and CGImage remain frame-specific.
+The provider retains the immutable lease, and the view may retain an older image
+while acquisition advances to newer slots. Reusing or mutating those objects
+would break the image-to-buffer lifetime guarantee; pooling them would require
+copying pixels into separate stable storage, which defeats the zero-copy path.
+
+The vendor callback-to-worker handoff is a fixed-capacity 256-entry ring backed
+by std::array. Enqueueing image notifications does not allocate a queue node
+per frame. Overflow is explicit and faults acquisition rather than silently
+dropping callbacks or allowing the event queue to grow without a bound.
+
 Still capture is a separate, explicit one-shot path. It submits Amcam_SnapN
 or Amcam_SnapR, waits for the still-image event, queries the still dimensions,
 allocates one dedicated AmcamFrame, and pulls the still payload into that

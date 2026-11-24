@@ -8,13 +8,15 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
     let activeSlide: NativeSlideID
     let onActiveSlideChanged: (NativeSlideID) -> Void
+    let bottomDockHeight: CGFloat
 
     func makeNSView(context: Context) -> NativeDualPreviewNSView {
         let view = NativeDualPreviewNSView(frame: .zero)
         view.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged
+            onActiveSlideChanged: onActiveSlideChanged,
+            bottomDockHeight: bottomDockHeight
         )
         return view
     }
@@ -23,7 +25,8 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
         nsView.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged
+            onActiveSlideChanged: onActiveSlideChanged,
+            bottomDockHeight: bottomDockHeight
         )
     }
 }
@@ -41,6 +44,12 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var onActiveSlideChanged: ((NativeSlideID) -> Void)?
     private let minimumPaneWidth: CGFloat = 240
     private var didConfigureSubviews = false
+    private var bottomDockHeight: CGFloat = 51
+    private var latestFramePixelSize: CGSize?
+    private var lastAutoSizedFramePixelSize: CGSize?
+    private var isApplyingAutomaticWindowSize = false
+    private let previewHeaderHeight: CGFloat = 40
+    private let windowSizingMargin: CGFloat = 24
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -91,11 +100,25 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         }
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        resizeWindowForLatestFrame(force: true)
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        resizeWindowForLatestFrame(force: true)
+    }
+
     func attach(
         to bridge: AmscopeNativeCameraBridge,
         activeSlide: NativeSlideID,
-        onActiveSlideChanged: @escaping (NativeSlideID) -> Void
+        onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
+        bottomDockHeight: CGFloat
     ) {
+        let normalizedDockHeight = max(0, bottomDockHeight)
+        let dockHeightChanged = self.bottomDockHeight != normalizedDockHeight
+        self.bottomDockHeight = normalizedDockHeight
         if self.bridge !== bridge {
             self.bridge = bridge
             bridge.onFrameAvailable = { [weak self] in
@@ -111,6 +134,9 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         // Recover a frame if the view was recreated while a notification
         // was already pending. This remains the single mailbox consumer.
         consumeLatestFrame()
+        if dockHeightChanged {
+            resizeWindowForLatestFrame(force: true)
+        }
     }
 
     private func selectActiveSlide(_ slide: NativeSlideID) {
@@ -138,6 +164,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private func toggleMaximizedSlide(_ slide: NativeSlideID) {
         if maximizedSlide == slide {
             maximizedSlide = nil
+            resizeWindowForLatestFrame(force: true)
             let availableWidth = max(1, splitView.bounds.width - splitView.dividerThickness)
             splitView.setPosition(
                 availableWidth * previousDividerFraction,
@@ -155,6 +182,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
                 )
             }
             maximizedSlide = slide
+            resizeWindowForLatestFrame(force: true)
             applyMaximizedPosition()
         }
         updatePaneStates()
@@ -172,6 +200,16 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             return
         }
         splitView.setPosition(position, ofDividerAt: 0)
+    }
+
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard maximizedSlide == nil, !isApplyingAutomaticWindowSize else { return }
+        let availableWidth = splitView.bounds.width - splitView.dividerThickness
+        guard availableWidth > 0 else { return }
+        previousDividerFraction = min(
+            max(slideOnePane.frame.width / availableWidth, 0.1),
+            0.9
+        )
     }
 
     func splitView(
@@ -222,6 +260,11 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             return
         }
 
+        latestFramePixelSize = CGSize(
+            width: CGFloat(image.width),
+            height: CGFloat(image.height)
+        )
+
         switch activeSlide {
         case .slide1:
             slideOnePane.display(image)
@@ -229,7 +272,101 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             slideTwoPane.display(image)
         }
 
+        resizeWindowForLatestFrame()
         updatePaneStates()
+    }
+
+    /// Sizes the preview workspace from the actual frame dimensions. A source
+    /// pixel targets one display backing pixel; the screen bounds cap that
+    /// target when the full image cannot fit. This is a presentation policy,
+    /// independent of the camera's optical Auto Res selection.
+    private func resizeWindowForLatestFrame(force: Bool = false) {
+        guard !isApplyingAutomaticWindowSize,
+              let pixelSize = latestFramePixelSize,
+              pixelSize.width.isFinite,
+              pixelSize.height.isFinite,
+              pixelSize.width > 0,
+              pixelSize.height > 0,
+              let window = window,
+              let screen = window.screen ?? NSScreen.main else {
+            return
+        }
+
+        guard force || pixelSize != lastAutoSizedFramePixelSize else { return }
+
+        let backingScale = max(window.backingScaleFactor, 1)
+        let paneCount: CGFloat = maximizedSlide == nil ? 2 : 1
+        let desiredContentSize = NSSize(
+            width: ceil(pixelSize.width / backingScale * paneCount + splitView.dividerThickness),
+            height: ceil(
+                pixelSize.height / backingScale +
+                previewHeaderHeight +
+                bottomDockHeight
+            )
+        )
+
+        let safeWindowFrame = screen.visibleFrame.insetBy(
+            dx: windowSizingMargin,
+            dy: windowSizingMargin
+        )
+        let maximumContentSize = window.contentRect(
+            forFrameRect: safeWindowFrame
+        ).size
+
+        let minimumContentWidth: CGFloat = 960
+        let minimumContentHeight: CGFloat = 560
+        let targetContentSize = NSSize(
+            width: min(
+                max(desiredContentSize.width, minimumContentWidth),
+                max(maximumContentSize.width, minimumContentWidth)
+            ),
+            height: min(
+                max(desiredContentSize.height, minimumContentHeight),
+                max(maximumContentSize.height, minimumContentHeight)
+            )
+        )
+
+        lastAutoSizedFramePixelSize = pixelSize
+
+        let currentContentSize = window.contentView?.bounds.size ?? .zero
+        guard abs(currentContentSize.width - targetContentSize.width) > 1 ||
+              abs(currentContentSize.height - targetContentSize.height) > 1 else {
+            return
+        }
+
+        let previousFrame = window.frame
+        isApplyingAutomaticWindowSize = true
+        window.setContentSize(targetContentSize)
+
+        var resizedFrame = window.frame
+        resizedFrame.origin.x = previousFrame.midX - resizedFrame.width / 2
+        resizedFrame.origin.y = previousFrame.midY - resizedFrame.height / 2
+
+        let visibleFrame = screen.visibleFrame
+        resizedFrame.origin.x = min(
+            max(resizedFrame.origin.x, visibleFrame.minX),
+            visibleFrame.maxX - resizedFrame.width
+        )
+        resizedFrame.origin.y = min(
+            max(resizedFrame.origin.y, visibleFrame.minY),
+            visibleFrame.maxY - resizedFrame.height
+        )
+        window.setFrame(resizedFrame, display: true, animate: false)
+
+        if maximizedSlide == nil {
+            let availableWidth = max(
+                1,
+                splitView.bounds.width - splitView.dividerThickness
+            )
+            splitView.setPosition(
+                availableWidth * previousDividerFraction,
+                ofDividerAt: 0
+            )
+        } else {
+            applyMaximizedPosition()
+        }
+
+        isApplyingAutomaticWindowSize = false
     }
 }
 

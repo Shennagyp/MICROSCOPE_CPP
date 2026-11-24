@@ -32,11 +32,114 @@ private struct NativeSlideTextAnnotation {
     let text: String
 }
 
+
+/// Compact acquisition controls hosted independently inside each slide pane.
+/// Both copies observe the same camera model and stay synchronized.
+private struct NativeMicroscopePaneControls: View {
+    @ObservedObject var model: NativeCameraModel
+    let slide: NativeSlideID
+
+    private var resolutionDescriptor: AmscopeCameraFeatureDescriptor? {
+        model.previewResolutionDescriptor
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("OBJECTIVE")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Picker(
+                    "Objective",
+                    selection: Binding(
+                        get: { model.microscopeConfiguration.activeObjectiveID },
+                        set: { model.selectMicroscopeObjective($0) }
+                    )
+                ) {
+                    ForEach(model.microscopeConfiguration.objectives) { objective in
+                        Text(String(format: "%.0f×", objective.magnification))
+                            .tag(objective.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(PopUpButtonPickerStyle())
+                .frame(width: 62)
+                .disabled(model.isCameraOperationPending)
+                .help("Select the active microscope objective")
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("RESOLUTION")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                if let descriptor = resolutionDescriptor {
+                    Picker(
+                        "Resolution",
+                        selection: Binding(
+                            get: { model.selectedPreviewResolutionSymbol ?? "" },
+                            set: { model.selectManualPreviewResolution(to: $0) }
+                        )
+                    ) {
+                        if model.selectedPreviewResolutionSymbol == nil {
+                            Text("Select…").tag("")
+                        }
+                        ForEach(descriptor.enumerationValues, id: \.self) { symbol in
+                            Text(resolutionOptionTitle(symbol)).tag(symbol)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(PopUpButtonPickerStyle())
+                    .frame(width: 98)
+                    .disabled(!model.canChangePreviewResolution)
+                    .help("Choose a resolution. Manual selection disables automatic resolution.")
+                } else {
+                    Text(model.canAccessFeatures ? "Unavailable" : "—")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .frame(width: 98, height: 22, alignment: .leading)
+                }
+            }
+
+            Toggle(
+                "AUTO",
+                isOn: Binding(
+                    get: { model.isAutomaticResolutionEnabled },
+                    set: { model.setAutomaticResolutionEnabled($0) }
+                )
+            )
+            .font(.system(size: 9, weight: .semibold))
+            .toggleStyle(SwitchToggleStyle())
+            .disabled(resolutionDescriptor == nil ||
+                      !model.canAccessFeatures ||
+                      model.isCameraOperationPending ||
+                      model.isFeatureWritePending ||
+                      model.isFeatureSnapshotLoading)
+            .help(model.automaticResolutionHelp)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .fixedSize(horizontal: true, vertical: true)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(slide.title) microscope controls")
+    }
+
+    private func resolutionOptionTitle(_ symbol: String) -> String {
+        guard let separator = symbol.firstIndex(of: ":") else {
+            return symbol
+        }
+        return String(symbol[symbol.index(after: separator)...])
+            .replacingOccurrences(of: "x", with: " × ")
+    }
+}
+
 /// One AppKit consumer owns the bridge's single latest-frame mailbox and
 /// routes frames to the selected slide pane. Each pane retains only its own
 /// most recently presented CGImage; SwiftUI never observes individual frames.
 struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
+    let model: NativeCameraModel
     let activeSlide: NativeSlideID
     let measurementCalibration: NativeMicroscopeMeasurementCalibration?
     let onActiveSlideChanged: (NativeSlideID) -> Void
@@ -48,6 +151,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
             to: bridge,
             activeSlide: activeSlide,
             measurementCalibration: measurementCalibration,
+            model: model,
             onActiveSlideChanged: onActiveSlideChanged,
             onCapture: onCapture
         )
@@ -59,6 +163,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
             to: bridge,
             activeSlide: activeSlide,
             measurementCalibration: measurementCalibration,
+            model: model,
             onActiveSlideChanged: onActiveSlideChanged,
             onCapture: onCapture
         )
@@ -148,6 +253,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         to bridge: AmscopeNativeCameraBridge,
         activeSlide: NativeSlideID,
         measurementCalibration: NativeMicroscopeMeasurementCalibration?,
+        model: NativeCameraModel,
         onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
         onCapture: @escaping (NativeSlideID, CGImage) -> Void
     ) {
@@ -163,6 +269,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         self.measurementCalibration = measurementCalibration
         slideOnePane.updateMeasurementCalibration(measurementCalibration)
         slideTwoPane.updateMeasurementCalibration(measurementCalibration)
+        slideOnePane.updateMicroscopeControls(model)
+        slideTwoPane.updateMicroscopeControls(model)
         self.onActiveSlideChanged = onActiveSlideChanged
         self.onCapture = onCapture
         setActiveSlide(activeSlide)
@@ -329,6 +437,8 @@ private final class NativeSlidePreviewPane: NSView {
     private let annotationPlate = NSView()
     private let actionPlate = NSView()
     private let toolPlate = NSView()
+    private let microscopeControlsPlate = NSView()
+    private var microscopeControlsHost: NSHostingView<NativeMicroscopePaneControls>?
 
     var onSelectLiveTarget: (() -> Void)?
     var onToggleMaximize: (() -> Void)?
@@ -484,6 +594,7 @@ private final class NativeSlidePreviewPane: NSView {
         configureAnnotationPlate(annotationPlate)
         configureAnnotationPlate(actionPlate)
         configureAnnotationPlate(toolPlate)
+        configureAnnotationPlate(microscopeControlsPlate)
 
         annotationStack.orientation = .horizontal
         annotationStack.alignment = .centerY
@@ -530,6 +641,7 @@ private final class NativeSlidePreviewPane: NSView {
         addSubview(annotationPlate)
         addSubview(actionPlate)
         addSubview(toolPlate)
+        addSubview(microscopeControlsPlate)
         NSLayoutConstraint.activate([
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -555,7 +667,17 @@ private final class NativeSlidePreviewPane: NSView {
             toolStack.topAnchor.constraint(equalTo: toolPlate.topAnchor, constant: 4),
             toolStack.bottomAnchor.constraint(equalTo: toolPlate.bottomAnchor, constant: -4),
             toolPlate.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            toolPlate.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+            toolPlate.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+
+            microscopeControlsPlate.leadingAnchor.constraint(
+                equalTo: toolPlate.trailingAnchor,
+                constant: 8
+            ),
+            microscopeControlsPlate.bottomAnchor.constraint(equalTo: toolPlate.bottomAnchor),
+            microscopeControlsPlate.trailingAnchor.constraint(
+                lessThanOrEqualTo: trailingAnchor,
+                constant: -10
+            )
         ])
         updateImageSizingButton()
         updateToolButtonStates()
@@ -682,6 +804,48 @@ private final class NativeSlidePreviewPane: NSView {
         _ calibration: NativeMicroscopeMeasurementCalibration?
     ) {
         imageView.updateMeasurementCalibration(calibration)
+    }
+
+    func updateMicroscopeControls(_ model: NativeCameraModel) {
+        if let host = microscopeControlsHost {
+            host.rootView = NativeMicroscopePaneControls(model: model, slide: slide)
+            return
+        }
+
+        let host = NSHostingView(
+            rootView: NativeMicroscopePaneControls(model: model, slide: slide)
+        )
+        host.translatesAutoresizingMaskIntoConstraints = false
+        host.setContentHuggingPriority(.required, for: .horizontal)
+        host.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        microscopeControlsHost = host
+        microscopeControlsPlate.addSubview(host)
+
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(
+                equalTo: microscopeControlsPlate.leadingAnchor,
+                constant: 5
+            ),
+            host.trailingAnchor.constraint(
+                equalTo: microscopeControlsPlate.trailingAnchor,
+                constant: -5
+            ),
+            host.topAnchor.constraint(
+                equalTo: microscopeControlsPlate.topAnchor,
+                constant: 4
+            ),
+            host.bottomAnchor.constraint(
+                equalTo: microscopeControlsPlate.bottomAnchor,
+                constant: -4
+            )
+        ])
+    }
+
+    override func layout() {
+        super.layout()
+        // At minimum preview width with the dock open, each pane can become
+        // too narrow for both bottom plates. The dock retains the controls.
+        microscopeControlsPlate.isHidden = bounds.width < 410
     }
 
     func display(_ image: CGImage) {

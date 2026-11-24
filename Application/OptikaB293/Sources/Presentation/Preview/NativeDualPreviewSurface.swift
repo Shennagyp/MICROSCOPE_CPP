@@ -235,19 +235,18 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 
     private func consumeLatestFrame() {
         guard let frameFeed = frameFeed else { return }
-        // Read the bridge counters once per notification and share the snapshot
-        // across panes. Frame transfer below remains a single mailbox exchange.
-        let pulled = frameFeed.framesPulled
-        let dropped = frameFeed.droppedFrames
+        // One feed call snapshots counters and transfers the newest lease. The
+        // value snapshot does not copy image bytes or create another frame queue.
+        let snapshot = frameFeed.takeLatestFrameSnapshot()
         slideOnePane.updateAcquisitionCounters(
-            pulled: pulled,
-            dropped: dropped
+            pulled: snapshot.framesPulled,
+            dropped: snapshot.droppedFrames
         )
         slideTwoPane.updateAcquisitionCounters(
-            pulled: pulled,
-            dropped: dropped
+            pulled: snapshot.framesPulled,
+            dropped: snapshot.droppedFrames
         )
-        guard let lease = frameFeed.takeLatestFrame(),
+        guard let lease = snapshot.lease,
               let image = lease.createCGImage() else {
             return
         }

@@ -9,6 +9,7 @@
 #include <new>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -69,6 +70,44 @@ static void releaseFrameProviderData(
     (void)size;
     id retainedLease = (__bridge_transfer id)info;
     (void)retainedLease;
+}
+
+
+std::string utf8String(NSString *value) {
+    if (!value)
+        return {};
+    NSData *bytes = [value dataUsingEncoding:NSUTF8StringEncoding];
+    if (!bytes)
+        return {};
+    return std::string(
+        static_cast<const char *>(bytes.bytes),
+        static_cast<std::size_t>(bytes.length));
+}
+
+camera::CameraFeatureValue cameraValueFromObjectiveC(
+    AmscopeCameraFeatureValue *value) {
+    switch (value.kind) {
+    case AmscopeCameraFeatureKindBoolean:
+        return camera::CameraFeatureValue(value.booleanValue);
+    case AmscopeCameraFeatureKindInteger:
+        return camera::CameraFeatureValue(
+            static_cast<std::int64_t>(value.integerValue));
+    case AmscopeCameraFeatureKindIntegerVector: {
+        std::vector<std::int64_t> values;
+        values.reserve(value.integerVectorValue.count);
+        for (NSNumber *entry in value.integerVectorValue)
+            values.push_back(static_cast<std::int64_t>(entry.longLongValue));
+        return camera::CameraFeatureValue(std::move(values));
+    }
+    case AmscopeCameraFeatureKindFloatingPoint:
+        return camera::CameraFeatureValue(value.floatingPointValue);
+    case AmscopeCameraFeatureKindString:
+        return camera::CameraFeatureValue(utf8String(value.stringValue));
+    case AmscopeCameraFeatureKindEnumeration:
+        return camera::CameraFeatureValue(
+            camera::FeatureEnumeration{utf8String(value.enumerationSymbol)});
+    }
+    return camera::CameraFeatureValue(std::string{});
 }
 
 const camera::Frame *frameFromStorage(void *storage) {
@@ -673,6 +712,154 @@ const camera::Frame *frameFromStorage(void *storage) {
         });
     if (requestID == 0) {
         NSError *error = requestRejectedError(@"Stop acquisition");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completionCopy(error, 0, 0);
+        });
+    }
+}
+
+
+- (void)requestFeatureDescriptorsWithCompletion:
+    (AmscopeFeatureDescriptorsCompletion)completion {
+    if (!completion)
+        return;
+
+    AmscopeFeatureDescriptorsCompletion completionCopy = [completion copy];
+    __weak AmscopeNativeCameraBridge *weakSelf = self;
+    const auto requestID = [self controller]->requestFeatureDescriptors(
+        [weakSelf, completionCopy](
+            std::uint64_t completedRequestID,
+            std::uint64_t sessionGeneration,
+            std::uint64_t featureStateGeneration,
+            amscope::native_mac::NativeCameraController::FeatureDescriptorsResult result) {
+            NSMutableArray<AmscopeCameraFeatureDescriptor *> *descriptors =
+                [NSMutableArray array];
+            NSError *error = nil;
+
+            if (const auto *failure =
+                    std::get_if<camera::CameraFeatureAccessError>(&result)) {
+                error = errorFromFeatureAccessError(*failure);
+            } else if (const auto *items =
+                           std::get_if<
+                               amscope::native_mac::NativeCameraController::FeatureDescriptors>(
+                               &result)) {
+                for (const auto& item : *items) {
+                    AmscopeCameraFeatureDescriptor *descriptor =
+                        [[AmscopeCameraFeatureDescriptor alloc]
+                            initWithDescriptor:item];
+                    if (descriptor)
+                        [descriptors addObject:descriptor];
+                }
+            }
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                AmscopeNativeCameraBridge *target = weakSelf;
+                if (target &&
+                    [target controller]->isFeatureSnapshotCurrent(
+                        sessionGeneration, featureStateGeneration)) {
+                    completionCopy(
+                        descriptors,
+                        error,
+                        completedRequestID,
+                        sessionGeneration,
+                        featureStateGeneration);
+                }
+            });
+        });
+
+    if (requestID == 0) {
+        NSError *error = requestRejectedError(@"Read camera feature descriptors");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completionCopy(@[], error, 0, 0, 0);
+        });
+    }
+}
+
+- (void)readFeatureNamed:(NSString *)name
+              completion:(AmscopeFeatureReadCompletion)completion {
+    if (!completion)
+        return;
+
+    const std::string featureName = utf8String(name);
+    AmscopeFeatureReadCompletion completionCopy = [completion copy];
+    __weak AmscopeNativeCameraBridge *weakSelf = self;
+    const auto requestID = [self controller]->requestReadFeature(
+        featureName,
+        [weakSelf, completionCopy](
+            std::uint64_t completedRequestID,
+            std::uint64_t sessionGeneration,
+            std::uint64_t featureStateGeneration,
+            amscope::native_mac::NativeCameraController::FeatureReadResult result) {
+            AmscopeCameraFeatureValue *value = nil;
+            NSError *error = nil;
+
+            if (const auto *failure =
+                    std::get_if<camera::CameraFeatureAccessError>(&result)) {
+                error = errorFromFeatureAccessError(*failure);
+            } else if (const auto *item =
+                           std::get_if<camera::CameraFeatureValue>(&result)) {
+                value = [[AmscopeCameraFeatureValue alloc]
+                    initWithCameraValue:*item];
+            }
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                AmscopeNativeCameraBridge *target = weakSelf;
+                if (target &&
+                    [target controller]->isFeatureSnapshotCurrent(
+                        sessionGeneration, featureStateGeneration)) {
+                    completionCopy(
+                        value,
+                        error,
+                        completedRequestID,
+                        sessionGeneration,
+                        featureStateGeneration);
+                }
+            });
+        });
+
+    if (requestID == 0) {
+        NSError *error = requestRejectedError(@"Read camera feature");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completionCopy(nil, error, 0, 0, 0);
+        });
+    }
+}
+
+- (void)writeFeatureNamed:(NSString *)name
+                    value:(AmscopeCameraFeatureValue *)value
+               completion:(AmscopeFeatureWriteCompletion)completion {
+    if (!completion || !value)
+        return;
+
+    const std::string featureName = utf8String(name);
+    camera::CameraFeatureValue nativeValue =
+        cameraValueFromObjectiveC(value);
+    AmscopeFeatureWriteCompletion completionCopy = [completion copy];
+    __weak AmscopeNativeCameraBridge *weakSelf = self;
+    const auto requestID = [self controller]->requestWriteFeature(
+        featureName,
+        std::move(nativeValue),
+        [weakSelf, completionCopy](
+            std::uint64_t completedRequestID,
+            std::uint64_t sessionGeneration,
+            amscope::native_mac::NativeCameraController::FeatureWriteResult result) {
+            NSError *error = nil;
+            if (const auto *failure =
+                    std::get_if<camera::CameraFeatureAccessError>(&result)) {
+                error = errorFromFeatureAccessError(*failure);
+            }
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                AmscopeNativeCameraBridge *target = weakSelf;
+                if (target &&
+                    [target controller]->isSessionCurrent(sessionGeneration)) {
+                    completionCopy(error, completedRequestID, sessionGeneration);
+                }
+            });
+        });
+
+    if (requestID == 0) {
+        NSError *error = requestRejectedError(@"Write camera feature");
         dispatch_async(dispatch_get_main_queue(), ^{
             completionCopy(error, 0, 0);
         });

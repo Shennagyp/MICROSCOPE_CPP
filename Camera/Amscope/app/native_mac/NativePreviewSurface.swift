@@ -317,8 +317,10 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         )
         let presentationScale = min(
             1,
-            availableImageWidth / requestedImageWidth,
-            availableImageHeight / requestedImageHeight
+            min(
+                availableImageWidth / requestedImageWidth,
+                availableImageHeight / requestedImageHeight
+            )
         )
         let desiredContentSize = NSSize(
             width: ceil(
@@ -405,14 +407,6 @@ private final class NativeSlidePreviewPane: NSView {
     private var pulledFrameCount: UInt64 = 0
     private var droppedFrameCount: UInt64 = 0
     private var paneFrameCount: UInt64 = 0
-
-    var displayPixelSize: (width: Int, height: Int) {
-        let backingBounds = imageView.convertToBacking(imageView.bounds)
-        return (
-            width: Int(ceil(backingBounds.width)),
-            height: Int(ceil(backingBounds.height))
-        )
-    }
 
     init(slide: NativeSlideID) {
         self.slide = slide

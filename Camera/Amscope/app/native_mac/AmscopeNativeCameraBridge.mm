@@ -195,7 +195,7 @@ const camera::Frame *frameFromStorage(void *storage) {
                  : static_cast<NSInteger>(camera::PixelFormat::Unknown);
 }
 
-- (CGImageRef)newCGImage {
+- (CGImageRef)createCGImage {
     const camera::Frame *frame = frameFromStorage(_frameStorage);
     if (!frame || !frame->data() || frame->width == 0 || frame->height == 0)
         return nullptr;

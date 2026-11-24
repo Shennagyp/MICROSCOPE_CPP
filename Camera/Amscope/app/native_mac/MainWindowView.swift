@@ -114,7 +114,7 @@ private struct BottomControlDock: View {
                 .padding(.trailing, 7)
             }
             .frame(height: model.isBottomDockCollapsed ? 28 : 50)
-            .background(Color(nsColor: NSColor.windowBackgroundColor))
+            .background(Color.clear)
         }
         .fixedSize(horizontal: false, vertical: true)
     }

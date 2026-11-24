@@ -22,6 +22,7 @@ struct MainWindowView: View {
                     bridge: model.bridge,
                     activeSlide: model.activeSlide,
                     onActiveSlideChanged: model.selectActiveSlide,
+                    measurementCalibration: model.measurementCalibration,
                     onCapture: { slide, image in
                         model.captureGallery.capture(image, for: slide)
                     }
@@ -34,7 +35,7 @@ struct MainWindowView: View {
                 .clipped()
                 .layoutPriority(1)
 
-                if model.isWorkspaceDockVisible && !model.isWorkspaceDockFloating {
+                if model.isWorkspaceDockVisible {
                     NativeWorkspaceDockResizeDivider(
                         dockWidth: dockWidth,
                         maximumWidth: maximumDockWidth,
@@ -47,9 +48,7 @@ struct MainWindowView: View {
 
                     NativeWorkspaceDock(
                         model: model,
-                        isFloating: false,
-                        onClose: { model.closeWorkspaceDock() },
-                        onToggleFloating: { model.isWorkspaceDockFloating = true }
+                        onClose: { model.closeWorkspaceDock() }
                     )
                     .frame(width: dockWidth)
                     .frame(maxHeight: .infinity)
@@ -69,11 +68,6 @@ struct MainWindowView: View {
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)
-        .background(
-            NativeWorkspaceDockPanelAnchor(model: model)
-                .frame(width: 1, height: 1)
-                .opacity(0)
-        )
         .onAppear {
             if model.cameras.isEmpty {
                 model.refreshCameras()

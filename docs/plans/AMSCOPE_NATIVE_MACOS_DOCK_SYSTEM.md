@@ -15,7 +15,7 @@ The intended interaction model is comparable to an IDE tool-window system:
 - Tabs can be reordered and moved between groups.
 - A panel or tab group can detach into a floating window and later return.
 - Panel placement and window geometry survive application restarts.
-- A permanent, narrow vertical tool rail occupies a dedicated 26-point column at the main window's right edge. It is a launcher/selector, not a panel title bar.
+- A permanent, narrow vertical tool rail remains overlaid on the main window's right edge. It is a launcher/selector, not a layout region and not a panel title bar.
 - Auto-hidden panels may be revealed as temporary overlays without resizing the microscope preview.
 
 Initial registered panels are **Camera Controls** and **Smart Gallery**. The model must accommodate additional tool panels without adding more panel-specific conditionals to the main window.
@@ -191,7 +191,7 @@ These states are distinct and must not be collapsed into two booleans:
 | Floating | Panel or tab group belongs to a detached native window. |
 | Unplaced | Registered panel has no current location; this is a recoverable state, not destruction. |
 
-The permanent tool rail is independent of panel placement. It occupies a fixed 26-point column at the main window's right edge, keeps the current compact vertical labels and cannot overlap panel controls.
+The permanent tool rail is independent of placement. It remains overlaid on the main window's right edge, keeps the current compact vertical labels and does not reserve workspace width.
 
 Rail activation behavior is placement-aware:
 
@@ -296,7 +296,7 @@ The same panel ID may not be simultaneously hosted in a dock region and a floati
 - Reveal auto-hidden content as an overlay that does not resize the preview.
 - Support pinning a flyout into a dock region and auto-hiding it again.
 - Define outside-click, Escape, focus, hover and activation behavior without making the panel inaccessible to keyboard users.
-- Keep the rail permanently mounted in the reserved right-edge layout column.
+- Keep the rail permanently overlaid at the main window's right edge.
 
 **Exit condition:** docked, auto-hidden, revealed and floating states are independently reachable and have deterministic transitions.
 
@@ -379,12 +379,12 @@ Committed source increments:
 
 **Verification:** source paths and state transitions statically inspected. Build and runtime verification remain pending on the user's Mac.
 
-## 12. Follow-up implementation — floating dock title chip and generic measurement scale
+## 12. Follow-up implementation — dock caption and generic measurement scale
 
 ### Dock chrome
 
 - The composite workspace dock remains docked in the main window. The whole-dock floating `NSPanel` host and the "Float this dock" action have been removed.
-- The active panel title and close action share a compact elevated capsule anchored to the dock's top edge. It overlays the panel instead of consuming a dedicated title row. Camera state and gallery save status remain positioned outside the chip's footprint.
+- The close control is part of a fixed 36-point dock caption header, alongside the active tool title. It is not an overlay floating over panel content and does not scroll with the content.
 - Individual tool panels may still become floating windows as a future docking-system operation. That is distinct from floating the entire right-side dock.
 
 ### Application-level optical measurement

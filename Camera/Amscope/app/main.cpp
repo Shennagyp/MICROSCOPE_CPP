@@ -667,7 +667,7 @@ protected:
     void closeEvent(QCloseEvent* event) override {
         QSettings settings;
         settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
-        settings.setValue(QStringLiteral("window/dock-layout"), saveState(1));
+        settings.setValue(QStringLiteral("window/dock-layout"), saveState(2));
         QMainWindow::closeEvent(event);
     }
 

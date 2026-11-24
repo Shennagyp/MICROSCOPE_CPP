@@ -19,19 +19,27 @@ public:
     explicit Field(QWidget* parent = nullptr)
         : QFrame(parent) {
         setObjectName(QStringLiteral("imageInfoField"));
-        setFrameShape(QFrame::StyledPanel);
+        setFrameShape(QFrame::NoFrame);
         setFrameShadow(QFrame::Plain);
+        setStyleSheet(QStringLiteral(
+            "#imageInfoField { background: transparent; border: none; "
+            "border-right: 1px solid #d8dee7; }"));
         setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
         setFocusPolicy(Qt::StrongFocus);
 
         auto* layout = new QVBoxLayout(this);
-        layout->setContentsMargins(8, 4, 8, 4);
-        layout->setSpacing(1);
+        layout->setContentsMargins(6, 1, 8, 1);
+        layout->setSpacing(0);
+        setMinimumHeight(38);
 
         label_ = new QLabel(this);
         label_->setAttribute(Qt::WA_TransparentForMouseEvents);
         value_ = new QLabel(this);
         value_->setAttribute(Qt::WA_TransparentForMouseEvents);
+        label_->setStyleSheet(QStringLiteral(
+            "font-size: 8pt; font-weight: 500; color: #667085;"));
+        value_->setStyleSheet(QStringLiteral(
+            "font-size: 9pt; font-weight: 600; color: #202938;"));
 
         layout->addWidget(label_);
         layout->addWidget(value_);
@@ -111,8 +119,8 @@ ImageInfoBar::ImageInfoBar(QWidget* parent)
     content_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
 
     layout_ = new QHBoxLayout(content_);
-    layout_->setContentsMargins(2, 2, 2, 2);
-    layout_->setSpacing(4);
+    layout_->setContentsMargins(6, 1, 6, 1);
+    layout_->setSpacing(2);
 
     emptyLabel_ = new QLabel(QStringLiteral("No imaging information"), content_);
     emptyLabel_->setObjectName(QStringLiteral("imageInfoEmptyLabel"));
@@ -121,8 +129,12 @@ ImageInfoBar::ImageInfoBar(QWidget* parent)
     scrollArea_->setWidget(content_);
     root->addWidget(scrollArea_);
 
-    setMinimumHeight(58);
-    setMaximumHeight(72);
+    setMinimumHeight(42);
+    setMaximumHeight(48);
+    setStyleSheet(QStringLiteral(
+        "QScrollArea { background: #f7f8fa; border: none; }"
+        "QWidget#imageInfoContent { background: #f7f8fa; }"
+        "QLabel#imageInfoEmptyLabel { color: #667085; font-size: 8pt; }"));
 }
 
 void ImageInfoBar::setItems(std::vector<ImageInfoBarItem> items) {

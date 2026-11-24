@@ -82,7 +82,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 
         // Establish a hard AppKit clipping boundary matching the SwiftUI
         // workspace frame. Oversized image documents must remain inside the
-        // slide viewport and must never paint into the bottom control dock.
+        // slide viewport and must never paint into the right workspace dock.
         wantsLayer = true
         layer?.masksToBounds = true
 
@@ -558,7 +558,12 @@ private final class NativeSlidePreviewPane: NSView {
         panToolButton.state = imageView.toolMode == .pan ? .on : .off
         distanceToolButton.state = imageView.toolMode == .distance ? .on : .off
         annotationToolButton.state = imageView.toolMode == .annotation ? .on : .off
-        captureButton.isEnabled = imageView.hasImage
+
+        let hasImage = imageView.hasImage
+        panToolButton.isEnabled = hasImage
+        distanceToolButton.isEnabled = hasImage
+        annotationToolButton.isEnabled = hasImage
+        captureButton.isEnabled = hasImage
         clearOverlayButton.isEnabled = imageView.hasOverlays
     }
 

@@ -28,11 +28,13 @@ final class NativeCameraModel: ObservableObject {
 
     private init() {
         bridge.onAcquisitionError = { [weak self] error in
-            guard let self = self else { return }
-            self.present(error)
-            self.refreshState()
-            self.isFeatureWritePending = false
-            self.isFeatureSnapshotLoading = false
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.present(error)
+                self.refreshState()
+                self.isFeatureWritePending = false
+                self.isFeatureSnapshotLoading = false
+            }
         }
     }
 
@@ -117,18 +119,20 @@ final class NativeCameraModel: ObservableObject {
         guard !isEnumeratingCameras && !isCameraOperationPending else { return }
         isEnumeratingCameras = true
         bridge.enumerateCameras { [weak self] devices, error, _, _ in
-            guard let self = self else { return }
-            self.isEnumeratingCameras = false
-            if let error = error {
-                self.present(error)
-                return
-            }
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isEnumeratingCameras = false
+                if let error = error {
+                    self.present(error)
+                    return
+                }
 
-            self.cameras = devices
-            if !devices.contains(where: { $0.deviceID == self.selectedDeviceID }) {
-                self.selectedDeviceID = devices.first?.deviceID ?? ""
+                self.cameras = devices
+                if !devices.contains(where: { $0.deviceID == self.selectedDeviceID }) {
+                    self.selectedDeviceID = devices.first?.deviceID ?? ""
+                }
+                self.refreshState()
             }
-            self.refreshState()
         }
     }
 
@@ -136,15 +140,17 @@ final class NativeCameraModel: ObservableObject {
         guard canOpen else { return }
         isCameraOperationPending = true
         bridge.openDeviceID(selectedDeviceID) { [weak self] error, _, _ in
-            guard let self = self else { return }
-            self.isCameraOperationPending = false
-            self.isFeatureWritePending = false
-            self.isFeatureSnapshotLoading = false
-            self.refreshState()
-            if let error = error {
-                self.present(error)
-            } else {
-                self.refreshFeatures()
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isCameraOperationPending = false
+                self.isFeatureWritePending = false
+                self.isFeatureSnapshotLoading = false
+                self.refreshState()
+                if let error = error {
+                    self.present(error)
+                } else {
+                    self.refreshFeatures()
+                }
             }
         }
     }
@@ -153,20 +159,22 @@ final class NativeCameraModel: ObservableObject {
         guard canClose else { return }
         isCameraOperationPending = true
         bridge.close { [weak self] error, _, _ in
-            guard let self = self else { return }
-            self.isCameraOperationPending = false
-            self.isFeatureWritePending = false
-            self.isFeatureSnapshotLoading = false
-            self.refreshState()
-            if let error = error {
-                self.present(error)
-            } else {
-                self.featureDescriptors = []
-                self.featureValues = [:]
-                self.featureErrors = [:]
-                self.featureDrafts = [:]
-                self.informationBarEditingFeatureName = nil
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isCameraOperationPending = false
+                self.isFeatureWritePending = false
                 self.isFeatureSnapshotLoading = false
+                self.refreshState()
+                if let error = error {
+                    self.present(error)
+                } else {
+                    self.featureDescriptors = []
+                    self.featureValues = [:]
+                    self.featureErrors = [:]
+                    self.featureDrafts = [:]
+                    self.informationBarEditingFeatureName = nil
+                    self.isFeatureSnapshotLoading = false
+                }
             }
         }
     }
@@ -175,15 +183,17 @@ final class NativeCameraModel: ObservableObject {
         guard canStart else { return }
         isCameraOperationPending = true
         bridge.start { [weak self] error, _, _ in
-            guard let self = self else { return }
-            self.isCameraOperationPending = false
-            self.isFeatureWritePending = false
-            self.isFeatureSnapshotLoading = false
-            self.refreshState()
-            if let error = error {
-                self.present(error)
-            } else {
-                self.refreshFeatures()
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isCameraOperationPending = false
+                self.isFeatureWritePending = false
+                self.isFeatureSnapshotLoading = false
+                self.refreshState()
+                if let error = error {
+                    self.present(error)
+                } else {
+                    self.refreshFeatures()
+                }
             }
         }
     }
@@ -192,15 +202,17 @@ final class NativeCameraModel: ObservableObject {
         guard canStop else { return }
         isCameraOperationPending = true
         bridge.stop { [weak self] error, _, _ in
-            guard let self = self else { return }
-            self.isCameraOperationPending = false
-            self.isFeatureWritePending = false
-            self.isFeatureSnapshotLoading = false
-            self.refreshState()
-            if let error = error {
-                self.present(error)
-            } else {
-                self.refreshFeatures()
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isCameraOperationPending = false
+                self.isFeatureWritePending = false
+                self.isFeatureSnapshotLoading = false
+                self.refreshState()
+                if let error = error {
+                    self.present(error)
+                } else {
+                    self.refreshFeatures()
+                }
             }
         }
     }
@@ -211,35 +223,37 @@ final class NativeCameraModel: ObservableObject {
 
         isFeatureSnapshotLoading = true
         bridge.requestFeatureDescriptors { [weak self] descriptors, error, _, _, _ in
-            guard let self = self else { return }
-            self.isFeatureSnapshotLoading = false
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isFeatureSnapshotLoading = false
 
-            if let error = error {
-                self.present(error)
-                return
-            }
-
-            self.featureDescriptors = descriptors
-                .filter { $0.isAvailable }
-                .sorted {
-                    if $0.group.rawValue != $1.group.rawValue {
-                        return $0.group.rawValue < $1.group.rawValue
-                    }
-                    return $0.displayName.localizedCaseInsensitiveCompare(
-                        $1.displayName
-                    ) == .orderedAscending
+                if let error = error {
+                    self.present(error)
+                    return
                 }
 
-            // Start a fresh feature snapshot. Old values are not shown as if
-            // they still describe the current camera state.
-            self.featureValues = [:]
-            self.featureErrors = [:]
-            self.featureDrafts = [:]
+                self.featureDescriptors = descriptors
+                    .filter { $0.isAvailable }
+                    .sorted {
+                        if $0.group.rawValue != $1.group.rawValue {
+                            return $0.group.rawValue < $1.group.rawValue
+                        }
+                        return $0.displayName.localizedCaseInsensitiveCompare(
+                            $1.displayName
+                        ) == .orderedAscending
+                    }
 
-            // Reads are serialized by the native command worker. Each is a
-            // feature snapshot and is discarded if a later write supersedes it.
-            for descriptor in self.featureDescriptors where descriptor.isReadable {
-                self.readFeature(descriptor.name)
+                // Start a fresh feature snapshot. Old values are not shown as if
+                // they still describe the current camera state.
+                self.featureValues = [:]
+                self.featureErrors = [:]
+                self.featureDrafts = [:]
+
+                // Reads are serialized by the native command worker. Each is a
+                // feature snapshot and is discarded if a later write supersedes it.
+                for descriptor in self.featureDescriptors where descriptor.isReadable {
+                    self.readFeature(descriptor.name)
+                }
             }
         }
     }
@@ -383,8 +397,12 @@ final class NativeCameraModel: ObservableObject {
     }
 
     private func restoreDraft(for descriptor: AmscopeCameraFeatureDescriptor) {
-        featureDrafts[descriptor.name] =
-            featureValues[descriptor.name].map { stringValue(for: $0) } ?? ""
+        restoreDraft(forFeatureName: descriptor.name)
+    }
+
+    private func restoreDraft(forFeatureName name: String) {
+        featureDrafts[name] =
+            featureValues[name].map { stringValue(for: $0) } ?? ""
     }
 
     private func writeFeature(
@@ -401,17 +419,20 @@ final class NativeCameraModel: ObservableObject {
         }
 
         isFeatureWritePending = true
-        bridge.writeFeatureNamed(descriptor.name, value: value) {
+        let featureName = descriptor.name
+        bridge.writeFeatureNamed(featureName, value: value) {
             [weak self] error, _, _ in
-            guard let self = self else { return }
-            self.isFeatureWritePending = false
-            if let error = error {
-                self.present(error)
-                self.restoreDraft(for: descriptor)
-            } else {
-                // A feature mutation may change availability/ranges of related
-                // features, so refresh descriptors and values as one snapshot.
-                self.refreshFeatures()
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isFeatureWritePending = false
+                if let error = error {
+                    self.present(error)
+                    self.restoreDraft(forFeatureName: featureName)
+                } else {
+                    // A feature mutation may change availability/ranges of related
+                    // features, so refresh descriptors and values as one snapshot.
+                    self.refreshFeatures()
+                }
             }
         }
     }
@@ -448,6 +469,11 @@ final class NativeCameraModel: ObservableObject {
 
     private func refreshState() {
         cameraState = bridge.state
+    }
+
+    func handleTerminationCloseFailure(_ error: Error) {
+        refreshState()
+        present(error)
     }
 
     private func present(_ error: Error) {

@@ -29,16 +29,8 @@ struct NativeWorkspaceDock: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: model.selectedWorkspaceDockTab.symbolName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.secondary)
-
-                Text(model.selectedWorkspaceDockTab.title.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.primary)
-
-                Spacer(minLength: 8)
-
+                // Keep the close hit target on the leading edge. The permanent
+                // floating tool rail overlays the dock's trailing edge.
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .semibold))
@@ -49,6 +41,16 @@ struct NativeWorkspaceDock: View {
                 .foregroundColor(.secondary)
                 .help("Close dock")
                 .accessibilityLabel("Close \(model.selectedWorkspaceDockTab.title) dock")
+
+                Image(systemName: model.selectedWorkspaceDockTab.symbolName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+
+                Text(model.selectedWorkspaceDockTab.title.uppercased())
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+
+                Spacer(minLength: 8)
             }
             .padding(.horizontal, 10)
             .frame(height: 36)

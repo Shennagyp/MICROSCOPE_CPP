@@ -3,33 +3,36 @@ import SwiftUI
 
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var workspace: NativeWorkspaceModel
+    @ObservedObject var gallery: NativeCaptureGalleryStore
 
-    private let dockDividerWidth: CGFloat = 6
-    private let maximumDockWidth: CGFloat = 520
+    private let dockDividerWidth = OptikaLayout.workspaceDockResizeDividerWidth
+    private let maximumDockWidth = OptikaLayout.workspaceDockMaximumWidth
 
     var body: some View {
         GeometryReader { geometry in
-            let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
+            let dockWidth = min(workspace.workspaceDockWidth, OptikaLayout.workspaceDockMaximumWidth)
 
             NativeDualPreviewSurface(
                 bridge: model.bridge,
                 model: model,
-                activeSlide: model.activeSlide,
+                workspace: workspace,
+                activeSlide: workspace.activeSlide,
                 measurementCalibration: model.measurementCalibration,
                 onCapture: { slide, image in
-                    model.captureGallery.capture(image, for: slide)
+                    gallery.capture(image, for: slide)
                 }
             )
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
             .overlay(alignment: .trailing) {
-                if model.isWorkspaceDockVisible {
+                if workspace.isWorkspaceDockVisible {
                     HStack(spacing: 0) {
                         NativeWorkspaceDockResizeDivider(
                             dockWidth: dockWidth,
                             maximumWidth: maximumDockWidth,
                             onResize: {
-                                model.setWorkspaceDockWidth($0, maximum: maximumDockWidth)
+                                workspace.setWorkspaceDockWidth($0, maximum: OptikaLayout.workspaceDockMaximumWidth)
                             }
                         )
                         .frame(width: dockDividerWidth)
@@ -37,7 +40,9 @@ struct MainWindowView: View {
 
                         NativeWorkspaceDock(
                             model: model,
-                            onClose: { model.closeWorkspaceDock() }
+                            workspace: workspace,
+                            gallery: gallery,
+                            onClose: { workspace.closeWorkspaceDock() }
                         )
                         .frame(width: dockWidth)
                         .frame(maxHeight: .infinity)
@@ -47,7 +52,7 @@ struct MainWindowView: View {
                     // permanent title rail. It never participates in preview layout.
                     .padding(.trailing, NativeWorkspaceDockTabRail.width)
                     .shadow(
-                        color: Color.black.opacity(0.20),
+                        color: OptikaPalette.shadow.opacity(0.20),
                         radius: 14,
                         x: -6,
                         y: 0
@@ -56,7 +61,7 @@ struct MainWindowView: View {
                 }
             }
             .overlay(alignment: .trailing) {
-                NativeWorkspaceDockTabRail(model: model)
+                NativeWorkspaceDockTabRail(workspace: workspace)
                     .frame(width: NativeWorkspaceDockTabRail.width)
                     .frame(maxHeight: .infinity)
                     .contentShape(Rectangle())
@@ -64,8 +69,8 @@ struct MainWindowView: View {
                     .zIndex(100)
             }
         }
-        .frame(minWidth: 960, minHeight: 640)
-        .background(Color.clear)
+        .frame(minWidth: OptikaLayout.minimumWindowWidth, minHeight: OptikaLayout.minimumWindowHeight)
+        .background(OptikaPalette.clear)
         .onAppear {
             if model.cameras.isEmpty {
                 model.refreshCameras()
@@ -128,7 +133,7 @@ final class NativeWorkspaceDockResizeDividerView: NSView {
         self.onResize = onResize
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.backgroundColor = OptikaPalette.nsClear.cgColor
     }
 
     required init?(coder: NSCoder) {
@@ -207,7 +212,7 @@ final class NativeWorkspaceDockResizeDividerView: NSView {
             height: max(0, bounds.height - 10)
         )
 
-        (emphasized ? NSColor.controlAccentColor : NSColor.separatorColor).setFill()
+        (emphasized ? OptikaPalette.nsAccent : OptikaPalette.nsSeparator).setFill()
         NSBezierPath(
             roundedRect: lineRect,
             xRadius: lineWidth / 2,
@@ -246,7 +251,7 @@ struct DockCameraFeatureControl: View {
             // and keep the editor on its own line.
             Text(descriptor.displayName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.primary)
+                .foregroundColor(OptikaPalette.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -258,11 +263,11 @@ struct DockCameraFeatureControl: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.20))
+                .fill(OptikaPalette.controlSurface.opacity(0.20))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.65), lineWidth: 0.5)
+                .stroke(OptikaPalette.separator.opacity(0.65), lineWidth: 0.5)
         )
         .help(featureHelpText)
         .accessibilityElement(children: .contain)
@@ -295,7 +300,7 @@ struct DockCameraFeatureControl: View {
         if !descriptor.isWritable {
             Text(model.displayValue(for: descriptor))
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(.secondary)
+                .foregroundColor(OptikaPalette.secondaryText)
                 .lineLimit(1)
                 .multilineTextAlignment(.leading)
         } else {
@@ -336,7 +341,7 @@ struct DockCameraFeatureControl: View {
                 if descriptor.enumerationValues.isEmpty {
                     Text("No options")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(OptikaPalette.secondaryText)
                 } else {
                     Picker(
                         "",
@@ -360,7 +365,7 @@ struct DockCameraFeatureControl: View {
             @unknown default:
                 Text(model.displayValue(for: descriptor))
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(OptikaPalette.secondaryText)
             }
         }
     }

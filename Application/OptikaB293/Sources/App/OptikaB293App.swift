@@ -3,10 +3,10 @@ import SwiftUI
 
 @main
 @MainActor
-struct AmscopeNativeApp {
+struct OptikaB293App {
     // NSApplication.delegate is not the owner. Retain it for the complete
     // application lifetime rather than relying on a local variable's lifetime.
-    private static var applicationDelegate: AmscopeApplicationDelegate?
+    private static var applicationDelegate: OptikaB293ApplicationDelegate?
 
     static func main() {
         let application = NSApplication.shared
@@ -121,12 +121,16 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func showMainWindow() {
         let hostingController = NSHostingController(
-            rootView: MainWindowView(model: cameraModel)
+            rootView: MainWindowView(
+                model: cameraModel,
+                workspace: composition.workspace,
+                gallery: composition.gallery
+            )
         )
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "AmScope"
-        window.setContentSize(NSSize(width: 1440, height: 900))
-        window.minSize = NSSize(width: 960, height: 640)
+        window.title = "OPTIKA B293 — Dual Slide"
+        window.setContentSize(NSSize(width: OptikaLayout.defaultWindowWidth, height: OptikaLayout.defaultWindowHeight))
+        window.minSize = NSSize(width: OptikaLayout.minimumWindowWidth, height: OptikaLayout.minimumWindowHeight)
         window.styleMask = [
             .titled,
             .closable,
@@ -144,10 +148,10 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
         hostingController.view.wantsLayer = true
-        hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingController.view.layer?.backgroundColor = OptikaPalette.nsClear.cgColor
         hostingController.view.layer?.isOpaque = false
         window.contentView?.wantsLayer = true
-        window.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+        window.contentView?.layer?.backgroundColor = OptikaPalette.nsClear.cgColor
         window.contentView?.layer?.isOpaque = false
         window.center()
 
@@ -161,15 +165,15 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
 
         let appMenuItem = NSMenuItem()
-        let appMenu = NSMenu(title: "AmScope")
+        let appMenu = NSMenu(title: "OPTIKA B293")
         appMenu.addItem(NSMenuItem(
-            title: "About AmScope",
+            title: "About OPTIKA B293",
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: ""
         ))
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(
-            title: "Quit AmScope",
+            title: "Quit OPTIKA B293",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         ))

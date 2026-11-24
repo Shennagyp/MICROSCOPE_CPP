@@ -1,168 +1,7 @@
 import AppKit
 import SwiftUI
 
-enum NativeWorkspaceDockTab: String, CaseIterable, Identifiable {
-    case cameraControls
-    case smartGallery
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .cameraControls: return "Camera Controls"
-        case .smartGallery: return "Smart Gallery"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .cameraControls: return "slider.horizontal.3"
-        case .smartGallery: return "rectangle.stack"
-        }
-    }
-}
-
-struct NativeWorkspaceDock: View {
-    @ObservedObject var model: NativeCameraModel
-    let onClose: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                // Keep the close hit target on the leading edge. The permanent
-                // title rail sits immediately outside the floating panel.
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .foregroundColor(.secondary)
-                .help("Close dock")
-                .accessibilityLabel("Close \(model.selectedWorkspaceDockTab.title) dock")
-
-                Image(systemName: model.selectedWorkspaceDockTab.symbolName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.secondary)
-
-                Text(model.selectedWorkspaceDockTab.title.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.primary)
-
-                Spacer(minLength: 8)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 36)
-            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.20))
-
-            Divider()
-
-            Group {
-                switch model.selectedWorkspaceDockTab {
-                case .cameraControls:
-                    NativeCameraControlsDock(model: model)
-                case .smartGallery:
-                    NativeSmartGalleryDock(gallery: model.captureGallery)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.20))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(
-                    Color(nsColor: NSColor.separatorColor).opacity(0.85),
-                    lineWidth: 0.8
-                )
-        )
-    }
-}
-
-struct NativeWorkspaceDockTabRail: View {
-    @ObservedObject var model: NativeCameraModel
-
-    static let width: CGFloat = 26
-    private let tabHeight: CGFloat = 104
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-
-            VStack(spacing: 0) {
-                dockTabButton(.cameraControls)
-                dockTabButton(.smartGallery)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .frame(width: Self.width)
-        .frame(maxHeight: .infinity)
-    }
-
-    private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
-        let isSelected = model.selectedWorkspaceDockTab == tab
-        let isOpen = model.isWorkspaceDockVisible && isSelected
-        let accent = Color(nsColor: NSColor.controlAccentColor)
-
-        return Button {
-            model.toggleWorkspaceDock(tab)
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: tab.symbolName)
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 11, height: 11)
-
-                Text(tab.title)
-                    .font(.system(size: 9, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(width: 82, height: 12)
-                    .rotationEffect(.degrees(90))
-                    .frame(width: 12, height: 82)
-            }
-            .frame(width: Self.width, height: tabHeight)
-            .contentShape(Rectangle())
-            .background(
-                Rectangle().fill(
-                    isOpen
-                        ? accent
-                        : Color(nsColor: NSColor.windowBackgroundColor)
-                )
-            )
-            .overlay(
-                Rectangle().stroke(
-                    isOpen
-                        ? accent
-                        : Color(nsColor: NSColor.separatorColor),
-                    lineWidth: isOpen ? 1 : 0.7
-                )
-            )
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(isOpen ? Color.white.opacity(0.82) : .clear)
-                    .frame(width: 1.5)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PlainButtonStyle())
-        .frame(width: Self.width, height: tabHeight)
-        .contentShape(Rectangle())
-        .foregroundColor(isOpen ? .white : Color(nsColor: NSColor.labelColor))
-        .help(isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock")
-        .accessibilityLabel(
-            isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock"
-        )
-        .accessibilityHint(
-            isOpen
-                ? "Hides the floating dock without resizing the viewer."
-                : "Shows the \(tab.title) dock over the viewer."
-        )
-    }
-}
-
-private struct NativeCameraControlsDock: View {
+struct NativeCameraControlsDock: View {
     @ObservedObject var model: NativeCameraModel
 
     private var additionalFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
@@ -181,7 +20,7 @@ private struct NativeCameraControlsDock: View {
                         HStack {
                             Text("CAMERA FEATURES")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(OptikaPalette.secondaryText)
 
                             Spacer()
 
@@ -202,13 +41,13 @@ private struct NativeCameraControlsDock: View {
                         if !model.canAccessFeatures {
                             Text("Open a camera to load its controls.")
                                 .font(.system(size: 12))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(OptikaPalette.secondaryText)
                         } else if additionalFeatureDescriptors.isEmpty {
                             Text(model.previewResolutionDescriptor == nil
                                  ? "The camera reported no feature controls."
                                  : "No additional camera feature controls.")
                                 .font(.system(size: 12))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(OptikaPalette.secondaryText)
                         } else {
                             ForEach(
                                 Array(additionalFeatureDescriptors.enumerated()),
@@ -218,7 +57,7 @@ private struct NativeCameraControlsDock: View {
                                    additionalFeatureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
                                     Text(featureGroupTitle(descriptor.group.rawValue).uppercased())
                                         .font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(OptikaPalette.secondaryText)
                                         .padding(.top, index == 0 ? 0 : 5)
                                 }
 
@@ -241,12 +80,12 @@ private struct NativeCameraControlsDock: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("MICROSCOPE")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(OptikaPalette.secondaryText)
 
                 HStack(spacing: 8) {
                     Text("Objective")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(OptikaPalette.secondaryText)
 
                     Spacer(minLength: 6)
 
@@ -289,7 +128,7 @@ private struct NativeCameraControlsDock: View {
                     if model.isAutomaticResolutionEnabled {
                         Text(model.automaticResolutionSummary)
                             .font(.system(size: 10))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(OptikaPalette.secondaryText)
                             .lineLimit(2)
                             .multilineTextAlignment(.trailing)
                     }
@@ -298,7 +137,7 @@ private struct NativeCameraControlsDock: View {
                 HStack(spacing: 8) {
                     Text("Live frame destination")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(OptikaPalette.secondaryText)
 
                     Spacer(minLength: 6)
 
@@ -320,7 +159,7 @@ private struct NativeCameraControlsDock: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.20))
+            .background(OptikaPalette.controlSurface.opacity(0.20))
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -380,7 +219,7 @@ private struct CameraDockConnectionSection: View {
                  ? "Loading resolution modes…"
                  : "Resolution selection is unavailable for this camera.")
                 .font(.system(size: 11))
-                .foregroundColor(.secondary)
+                .foregroundColor(OptikaPalette.secondaryText)
         }
     }
 
@@ -397,7 +236,7 @@ private struct CameraDockConnectionSection: View {
             HStack(spacing: 6) {
                 Text("CAMERA")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(OptikaPalette.secondaryText)
 
                 Spacer()
 
@@ -407,7 +246,7 @@ private struct CameraDockConnectionSection: View {
 
                 Text(model.cameraStateText.uppercased())
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(OptikaPalette.secondaryText)
 
             }
 
@@ -480,7 +319,7 @@ private struct CameraDockConnectionSection: View {
                         .padding(.vertical, 5)
                         .background(
                             RoundedRectangle(cornerRadius: 5)
-                                .fill(Color.accentColor.opacity(0.18))
+                                .fill(OptikaPalette.accentSelectionFill)
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -498,7 +337,7 @@ private struct CameraDockConnectionSection: View {
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 5)
-                            .fill(Color.accentColor.opacity(0.18))
+                            .fill(OptikaPalette.accent.opacity(0.18))
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -506,205 +345,27 @@ private struct CameraDockConnectionSection: View {
             } else if model.cameraState == .streaming {
                 Text("Preview is running. Right-click the camera name to Stop or Close.")
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(OptikaPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             } else if model.cameraState == .starting || model.cameraState == .stopping {
                 Text("Camera operation in progress…")
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(OptikaPalette.secondaryText)
             } else if model.cameraState == .faulted {
                 Text("Camera faulted. Right-click the camera name to Close the session.")
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(OptikaPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 7)
-                .fill(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.20))
+                .fill(OptikaPalette.windowSurface.opacity(0.20))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 7)
-                .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.7), lineWidth: 0.7)
+                .stroke(OptikaPalette.separator.opacity(0.7), lineWidth: 0.7)
         )
-    }
-}
-
-private struct NativeSmartGalleryDock: View {
-    @ObservedObject var gallery: NativeCaptureGalleryStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("CAPTURES")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.secondary)
-                    Text(gallery.captures.count == 80
-                         ? "Latest 80 captures"
-                         : "\(gallery.captures.count) captures")
-                        .font(.system(size: 13, weight: .semibold))
-                }
-
-                Spacer()
-
-                if gallery.isCapturing {
-                    Text("● Saving…")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-
-            if let error = gallery.captureErrorMessage {
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    Text(error)
-                        .font(.system(size: 11))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
-                        gallery.dismissCaptureError()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(BorderlessButtonStyle())
-                }
-                .padding(8)
-                .background(Color.orange.opacity(0.10))
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
-            }
-
-            Divider()
-
-            if gallery.captures.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundColor(.secondary)
-                    Text("No captures yet")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Use the camera button on a slide's floating toolbar to save its current image.")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 220)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(16)
-            } else {
-                ScrollView(.vertical, showsIndicators: true) {
-                    VStack(spacing: 8) {
-                        ForEach(gallery.captures) { item in
-                            captureRow(item)
-                        }
-                    }
-                    .padding(10)
-                }
-            }
-
-            Divider()
-            HStack {
-                Image(systemName: "folder")
-                    .foregroundColor(.secondary)
-                Button {
-                    gallery.revealCaptureFolder()
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "folder")
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Pictures / AmScope Captures")
-                                .font(.system(size: 11))
-                            Text("Latest 80 shown; older PNGs stay on disk.")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Open the complete capture folder in Finder")
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-        }
-    }
-
-    private func captureRow(_ item: NativeCaptureItem) -> some View {
-        Button {
-            NSWorkspace.shared.open(item.fileURL)
-        } label: {
-            HStack(spacing: 9) {
-                Group {
-                    if let image = NSImage(data: item.thumbnailData) {
-                        Image(nsImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } else {
-                        ZStack {
-                            Color.black.opacity(0.08)
-                            Image(systemName: "photo")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .frame(width: 116, height: 84)
-                .background(Color.black.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(item.slide.title)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(item.dimensionsText)
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(.secondary)
-                    Text(item.capturedAt, style: .date)
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    Text(item.capturedAt, style: .time)
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
-            .padding(7)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.20))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.7), lineWidth: 0.6)
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .help("Open capture in the default image viewer")
-        .contextMenu {
-            Button {
-                gallery.reveal(item)
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "folder")
-                    Text("Show in Finder")
-                }
-            }
-
-            Button {
-                gallery.delete(item)
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "trash")
-                    Text("Delete Capture")
-                }
-            }
-        }
     }
 }

@@ -1,69 +1,13 @@
 import Foundation
 import SwiftUI
 
-private struct NativeCameraResolutionMode {
-    let symbol: String
-    let width: Int
-    let height: Int
-
-    var pixelCount: Int { width * height }
-
-    init?(symbol: String) {
-        guard let separator = symbol.firstIndex(of: ":") else { return nil }
-        let dimensions = symbol[symbol.index(after: separator)...]
-            .lowercased()
-            .split(separator: "x")
-        guard dimensions.count == 2,
-              let width = Int(dimensions[0]),
-              let height = Int(dimensions[1]),
-              width > 0,
-              height > 0 else {
-            return nil
-        }
-        self.symbol = symbol
-        self.width = width
-        self.height = height
-    }
-}
-
-private struct NativeAutomaticResolutionChoice {
-    let symbol: String
-    let width: Int
-    let height: Int
-    let pixelCount: Int
-    let minimumBandSamplingFactor: Double
-    let maximumBandSamplingFactor: Double
-    let meetsTarget: Bool
-}
-
-enum NativeSlideID: String, CaseIterable, Identifiable, Hashable {
-    case slide1
-    case slide2
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .slide1: return "Slide 1"
-        case .slide2: return "Slide 2"
-        }
-    }
-}
 @MainActor
 final class NativeCameraModel: ObservableObject {
-    static let shared = NativeCameraModel()
-
     let bridge = AmscopeNativeCameraBridge()
-    let captureGallery = NativeCaptureGalleryStore()
-
     @Published private(set) var cameras: [AmscopeCameraDevice] = []
     @Published var selectedDeviceID = ""
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
     @Published private(set) var openedCameraDeviceID: String?
-    @Published private(set) var activeSlide: NativeSlideID = .slide1
-    @Published var selectedWorkspaceDockTab: NativeWorkspaceDockTab = .cameraControls
-    @Published var isWorkspaceDockVisible = true
-    @Published private(set) var workspaceDockWidth: CGFloat = 350
     @Published var errorMessage = ""
     @Published var isShowingError = false
     @Published private(set) var isCameraOperationPending = false
@@ -98,17 +42,8 @@ final class NativeCameraModel: ObservableObject {
         "AmscopeNative.MicroscopeConfiguration.v1"
     private static let automaticResolutionDefaultsKey =
         "AmscopeNative.AutomaticResolutionEnabled.v1"
-    private static let workspaceDockWidthDefaultsKey =
-        "AmscopeNative.WorkspaceDockWidth.v1"
 
-    private init() {
-        let savedDockWidth = UserDefaults.standard.double(
-            forKey: Self.workspaceDockWidthDefaultsKey
-        )
-        if savedDockWidth.isFinite && savedDockWidth > 0 {
-            workspaceDockWidth = min(max(CGFloat(savedDockWidth), 280), 520)
-        }
-
+    init() {
         if let data = UserDefaults.standard.data(
             forKey: Self.microscopeConfigurationDefaultsKey
         ),
@@ -173,35 +108,6 @@ final class NativeCameraModel: ObservableObject {
         cameraState == .closed &&
             !isCameraOperationPending &&
             !isEnumeratingCameras
-    }
-
-    func selectActiveSlide(_ slide: NativeSlideID) {
-        activeSlide = slide
-    }
-
-    /// Every dock-title click toggles visibility. The clicked title also
-    /// selects which tool will be shown when the dock is opened.
-    func toggleWorkspaceDock(_ tab: NativeWorkspaceDockTab) {
-        selectedWorkspaceDockTab = tab
-        isWorkspaceDockVisible.toggle()
-    }
-
-    /// Hide the workspace tool dock without affecting camera or gallery state.
-    func closeWorkspaceDock() {
-        isWorkspaceDockVisible = false
-    }
-
-    func setWorkspaceDockWidth(_ width: CGFloat, maximum: CGFloat = 520) {
-        guard width.isFinite, maximum.isFinite else { return }
-        let upperBound = max(280, min(520, maximum))
-        let boundedWidth = min(max(width, 280), upperBound)
-        guard abs(boundedWidth - workspaceDockWidth) >= 0.5 else { return }
-
-        workspaceDockWidth = boundedWidth
-        UserDefaults.standard.set(
-            Double(boundedWidth),
-            forKey: Self.workspaceDockWidthDefaultsKey
-        )
     }
 
     func selectMicroscopeObjective(_ objectiveID: String) {
@@ -284,85 +190,14 @@ final class NativeCameraModel: ObservableObject {
         changePreviewResolution(to: choice.symbol)
     }
 
+
     private func automaticResolutionChoice(
         for descriptor: AmscopeCameraFeatureDescriptor
     ) -> NativeAutomaticResolutionChoice? {
-        guard let objective = microscopeConfiguration.objectives.first(where: {
-            $0.id == microscopeConfiguration.activeObjectiveID
-        }) else { return nil }
-
-        let configuration = microscopeConfiguration
-        guard objective.magnification.isFinite,
-              objective.magnification > 0,
-              objective.numericalAperture.isFinite,
-              objective.numericalAperture > 0,
-              configuration.cameraPixelPitchMicrometers.isFinite,
-              configuration.cameraPixelPitchMicrometers > 0,
-              configuration.cameraRelayMagnification.isFinite,
-              configuration.cameraRelayMagnification > 0,
-              configuration.chromatinBandLowerNanometers.isFinite,
-              configuration.chromatinBandLowerNanometers > 0,
-              configuration.chromatinBandUpperNanometers.isFinite,
-              configuration.chromatinBandUpperNanometers >=
-                configuration.chromatinBandLowerNanometers,
-              configuration.targetRayleighSamplingFactor.isFinite,
-              configuration.targetRayleighSamplingFactor > 0 else {
-            return nil
-        }
-
-        let modes = descriptor.enumerationValues.compactMap {
-            NativeCameraResolutionMode(symbol: $0)
-        }
-        guard !modes.isEmpty,
-              let maximumMode = modes.max(by: {
-                  $0.pixelCount < $1.pixelCount
-              }) else {
-            return nil
-        }
-
-        // The shortest wavelength has the smallest Rayleigh distance and
-        // therefore defines the conservative camera-sampling requirement.
-        let lowerBandRayleighMicrometers =
-            0.61 * (configuration.chromatinBandLowerNanometers / 1000.0) /
-            objective.numericalAperture
-        let upperBandRayleighMicrometers =
-            0.61 * (configuration.chromatinBandUpperNanometers / 1000.0) /
-            objective.numericalAperture
-
-        let candidates = modes.map { mode -> NativeAutomaticResolutionChoice in
-            // MU503 modes are provisionally modeled as full-field modes whose
-            // effective sample pitch scales with output dimensions. This
-            // hardware mapping remains unverified.
-            let scaleX = Double(maximumMode.width) / Double(mode.width)
-            let scaleY = Double(maximumMode.height) / Double(mode.height)
-            let samplingScale = max(scaleX, scaleY)
-            let objectPixelPitchMicrometers =
-                configuration.cameraPixelPitchMicrometers * samplingScale /
-                (objective.magnification * configuration.cameraRelayMagnification)
-            let minimumBandFactor = lowerBandRayleighMicrometers /
-                objectPixelPitchMicrometers
-            let maximumBandFactor = upperBandRayleighMicrometers /
-                objectPixelPitchMicrometers
-            return NativeAutomaticResolutionChoice(
-                symbol: mode.symbol,
-                width: mode.width,
-                height: mode.height,
-                pixelCount: mode.pixelCount,
-                minimumBandSamplingFactor: minimumBandFactor,
-                maximumBandSamplingFactor: maximumBandFactor,
-                meetsTarget: minimumBandFactor >= configuration.targetRayleighSamplingFactor
-            )
-        }
-
-        if let smallestValid = candidates
-            .filter({ $0.meetsTarget })
-            .min(by: { $0.pixelCount < $1.pixelCount }) {
-            return smallestValid
-        }
-
-        // No mode reaches the requested factor: use maximum resolution and
-        // report the shortfall instead of claiming that the target is met.
-        return candidates.max(by: { $0.pixelCount < $1.pixelCount })
+        NativeAutomaticResolutionPolicy.choose(
+            modeSymbols: descriptor.enumerationValues,
+            configuration: microscopeConfiguration
+        )
     }
 
     var cameraStateText: String {

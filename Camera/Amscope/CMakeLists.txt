@@ -98,24 +98,6 @@ add_custom_command(TARGET amscope_driver POST_BUILD
 
 option(AMSCOPE_BUILD_QT_ADAPTER "Build the Qt 6 Core adapter" ON)
 option(AMSCOPE_BUILD_PREVIEW_APP "Build the Qt Widgets preview application" ON)
-option(AMSCOPE_BUILD_NATIVE_MAC_APP
-    "Build the native SwiftUI/AppKit macOS application" OFF)
-
-if(AMSCOPE_BUILD_NATIVE_MAC_APP)
-    if(NOT APPLE)
-        message(FATAL_ERROR "The native macOS application can only be built on Apple platforms.")
-    endif()
-    if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
-        message(FATAL_ERROR
-            "AMSCOPE_BUILD_NATIVE_MAC_APP requires the Ninja generator. "
-            "The standalone Command Line Tools toolchain is sufficient; "
-            "full Xcode and xcodebuild are not required. "
-            "Configure a separate build directory with -G Ninja.")
-    endif()
-    enable_language(Swift)
-    enable_language(OBJCXX)
-endif()
-
 # Standalone diagnostics. These tools intentionally use different acquisition
 # paths and are never part of the production camera session or Qt preview.
 option(AMSCOPE_BUILD_NATIVE_PROBE
@@ -216,84 +198,6 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
             "$<INSTALL_INTERFACE:include>")
     target_link_libraries(amscope_qt PUBLIC Amscope::Driver Camera::Qt Qt6::Core)
-endif()
-
-if(AMSCOPE_BUILD_NATIVE_MAC_APP)
-    find_library(AMSCOPE_SWIFTUI_FRAMEWORK SwiftUI REQUIRED)
-    find_library(AMSCOPE_APPKIT_FRAMEWORK AppKit REQUIRED)
-    find_library(AMSCOPE_FOUNDATION_FRAMEWORK Foundation REQUIRED)
-    find_library(AMSCOPE_COREGRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
-    find_library(AMSCOPE_IMAGEIO_FRAMEWORK ImageIO REQUIRED)
-
-    add_executable(amscope_native_mac_app MACOSX_BUNDLE
-        app/native_mac/AmscopeNativeApp.swift
-        app/native_mac/NativeCameraModel.swift
-        app/native_mac/NativeMicroscopeCalibration.swift
-        app/native_mac/NativeDockSystemModel.swift
-        app/native_mac/NativeCaptureGallery.swift
-        app/native_mac/NativeWorkspaceDock.swift
-        app/native_mac/NativeFeatureEditor.swift
-        app/native_mac/MainWindowView.swift
-        app/native_mac/NativePreviewSurface.swift
-        app/native_mac/CameraControlsWindow.swift
-        app/native_mac/MicroscopeConfigurationWindow.swift
-        app/native_mac/NativeCameraController.cpp
-        app/native_mac/NativeCameraController.h
-        app/native_mac/AmscopeNativeCameraBridge.mm
-        app/native_mac/AmscopeNativeCameraBridge.h
-        app/native_mac/NativeMac-Bridging-Header.h)
-    target_include_directories(amscope_native_mac_app PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/app/native_mac")
-    target_compile_options(amscope_native_mac_app PRIVATE
-        "$<$<COMPILE_LANGUAGE:Swift>:-import-objc-header>"
-        "$<$<COMPILE_LANGUAGE:Swift>:${CMAKE_CURRENT_LIST_DIR}/app/native_mac/NativeMac-Bridging-Header.h>"
-        "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
-    target_link_libraries(amscope_native_mac_app PRIVATE
-        Amscope::Driver
-        "${AMSCOPE_SWIFTUI_FRAMEWORK}"
-        "${AMSCOPE_APPKIT_FRAMEWORK}"
-        "${AMSCOPE_FOUNDATION_FRAMEWORK}"
-        "${AMSCOPE_COREGRAPHICS_FRAMEWORK}"
-        "${AMSCOPE_IMAGEIO_FRAMEWORK}")
-    set_target_properties(amscope_native_mac_app PROPERTIES
-        MACOSX_BUNDLE_GUI_IDENTIFIER "com.shennagyp.amscope.native"
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.8.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.8.0"
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        OBJCXX_STANDARD 17
-        OBJCXX_STANDARD_REQUIRED YES)
-    target_compile_options(amscope_native_mac_app PRIVATE
-        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
-        "$<$<COMPILE_LANGUAGE:Swift>:5>")
-endif()
-
-if(BUILD_TESTING AND AMSCOPE_BUILD_NATIVE_MAC_APP)
-    add_executable(amscope_native_dock_model_tests
-        app/native_mac/NativeDockSystemModel.swift
-        tests/NativeDockSystemModelTests.swift)
-    target_compile_options(amscope_native_dock_model_tests PRIVATE
-        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
-        "$<$<COMPILE_LANGUAGE:Swift>:5>")
-    target_link_libraries(amscope_native_dock_model_tests PRIVATE
-        "${AMSCOPE_FOUNDATION_FRAMEWORK}")
-    add_test(
-        NAME amscope_native_dock_model_tests
-        COMMAND amscope_native_dock_model_tests)
-endif()
-
-if(BUILD_TESTING AND AMSCOPE_BUILD_NATIVE_MAC_APP)
-    add_executable(amscope_native_microscope_calibration_tests
-        app/native_mac/NativeMicroscopeCalibration.swift
-        tests/NativeMicroscopeCalibrationTests.swift)
-    target_compile_options(amscope_native_microscope_calibration_tests PRIVATE
-        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
-        "$<$<COMPILE_LANGUAGE:Swift>:5>")
-    target_link_libraries(amscope_native_microscope_calibration_tests PRIVATE
-        "${AMSCOPE_FOUNDATION_FRAMEWORK}")
-    add_test(
-        NAME amscope_native_microscope_calibration_tests
-        COMMAND amscope_native_microscope_calibration_tests)
 endif()
 
 if(BUILD_TESTING AND AMSCOPE_BUILD_QT_ADAPTER)

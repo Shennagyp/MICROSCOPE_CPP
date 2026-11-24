@@ -228,6 +228,7 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
     add_executable(amscope_native_mac_app MACOSX_BUNDLE
         app/native_mac/AmscopeNativeApp.swift
         app/native_mac/NativeCameraModel.swift
+        app/native_mac/NativeMicroscopeCalibration.swift
         app/native_mac/NativeDockSystemModel.swift
         app/native_mac/NativeCaptureGallery.swift
         app/native_mac/NativeWorkspaceDock.swift
@@ -279,6 +280,20 @@ if(BUILD_TESTING AND AMSCOPE_BUILD_NATIVE_MAC_APP)
     add_test(
         NAME amscope_native_dock_model_tests
         COMMAND amscope_native_dock_model_tests)
+endif()
+
+if(BUILD_TESTING AND AMSCOPE_BUILD_NATIVE_MAC_APP)
+    add_executable(amscope_native_microscope_calibration_tests
+        app/native_mac/NativeMicroscopeCalibration.swift
+        tests/NativeMicroscopeCalibrationTests.swift)
+    target_compile_options(amscope_native_microscope_calibration_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
+        "$<$<COMPILE_LANGUAGE:Swift>:5>")
+    target_link_libraries(amscope_native_microscope_calibration_tests PRIVATE
+        "${AMSCOPE_FOUNDATION_FRAMEWORK}")
+    add_test(
+        NAME amscope_native_microscope_calibration_tests
+        COMMAND amscope_native_microscope_calibration_tests)
 endif()
 
 if(BUILD_TESTING AND AMSCOPE_BUILD_QT_ADAPTER)

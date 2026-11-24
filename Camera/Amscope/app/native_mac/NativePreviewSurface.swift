@@ -295,7 +295,14 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         guard force || pixelSize != lastAutoSizedFramePixelSize else { return }
 
         let backingScale = max(window.backingScaleFactor, 1)
-        let paneCount: CGFloat = maximizedSlide == nil ? 2 : 1
+        let activePaneFraction: CGFloat
+        if maximizedSlide != nil {
+            activePaneFraction = 1
+        } else {
+            activePaneFraction = activeSlide == .slide1
+                ? previousDividerFraction
+                : 1 - previousDividerFraction
+        }
         let dividerAllowance = splitView.dividerThickness
         let safeWindowFrame = screen.visibleFrame.insetBy(
             dx: windowSizingMargin,
@@ -309,7 +316,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         let requestedImageHeight = pixelSize.height / backingScale
         let availableImageWidth = max(
             1,
-            (maximumContentSize.width - dividerAllowance) / paneCount
+            (maximumContentSize.width - dividerAllowance) * activePaneFraction
         )
         let availableImageHeight = max(
             1,
@@ -324,7 +331,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         )
         let desiredContentSize = NSSize(
             width: ceil(
-                requestedImageWidth * presentationScale * paneCount +
+                requestedImageWidth * presentationScale / activePaneFraction +
                 dividerAllowance
             ),
             height: ceil(

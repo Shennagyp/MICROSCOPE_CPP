@@ -56,6 +56,13 @@ which are editable, and how to validate and execute an edit. This permits frame
 metadata and camera-feature readbacks to share one compact information strip
 without coupling the reusable widget to a particular camera backend.
 
+In the AmScope preview host, the bar is placed in a movable, floatable, and
+closable `QDockWidget`, initially docked at the bottom. The View menu can
+show it again after closing it. Transient application messages are represented
+as items in that same bar; the host does not create a separate `QStatusBar`.
+Docking and application-status presentation belong to the host, not to the
+backend-neutral widget contract.
+
 The `camera_qt_widgets_image_info_bar_tests` offscreen test covers item
 creation/removal, double-click routing for editable items, and no edit callback
 for read-only items.

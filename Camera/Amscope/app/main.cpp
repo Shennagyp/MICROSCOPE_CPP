@@ -3158,9 +3158,17 @@ private:
             panelState.lifecycle =
                 camera::qtwidgets::CameraPanelLifecycleState::Open;
             break;
+        case amscope::CameraState::Starting:
+            panelState.lifecycle =
+                camera::qtwidgets::CameraPanelLifecycleState::Starting;
+            break;
         case amscope::CameraState::Streaming:
             panelState.lifecycle =
                 camera::qtwidgets::CameraPanelLifecycleState::Streaming;
+            break;
+        case amscope::CameraState::Stopping:
+            panelState.lifecycle =
+                camera::qtwidgets::CameraPanelLifecycleState::Stopping;
             break;
         case amscope::CameraState::Faulted:
             panelState.lifecycle =

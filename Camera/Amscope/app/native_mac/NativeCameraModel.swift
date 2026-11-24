@@ -61,8 +61,6 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
     @Published private(set) var openedCameraDeviceID: String?
     @Published private(set) var activeSlide: NativeSlideID = .slide1
-    @Published private(set) var isBottomDockDetached = false
-    @Published private(set) var isBottomDockCollapsed = false
     @Published var errorMessage = ""
     @Published var isShowingError = false
     @Published private(set) var isCameraOperationPending = false
@@ -307,14 +305,6 @@ final class NativeCameraModel: ObservableObject {
         // No mode reaches the requested factor: use maximum resolution and
         // report the shortfall instead of claiming that the target is met.
         return candidates.max(by: { $0.pixelCount < $1.pixelCount })
-    }
-
-    func setBottomDockDetached(_ detached: Bool) {
-        isBottomDockDetached = detached
-    }
-
-    func setBottomDockCollapsed(_ collapsed: Bool) {
-        isBottomDockCollapsed = collapsed
     }
 
     var cameraStateText: String {

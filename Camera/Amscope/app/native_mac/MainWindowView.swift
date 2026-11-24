@@ -13,8 +13,7 @@ struct MainWindowView: View {
                 280,
                 geometry.size.width -
                     minimumPreviewWidth -
-                    dockDividerWidth -
-                    NativeWorkspaceDockTabRail.width
+                    dockDividerWidth
             )
             let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
 
@@ -57,11 +56,14 @@ struct MainWindowView: View {
                     .layoutPriority(0)
                 }
 
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .overlay(alignment: .trailing) {
                 NativeWorkspaceDockTabRail(model: model)
                     .frame(width: NativeWorkspaceDockTabRail.width)
                     .frame(maxHeight: .infinity)
+                    .zIndex(10)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)

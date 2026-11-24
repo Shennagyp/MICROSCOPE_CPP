@@ -24,8 +24,9 @@ enum NativeWorkspaceDockTab: String, CaseIterable, Identifiable {
 
 struct NativeWorkspaceDock: View {
     @ObservedObject var model: NativeCameraModel
-    @Binding var selectedTab: NativeWorkspaceDockTab
+    let isFloating: Bool
     let onClose: () -> Void
+    let onToggleFloating: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +35,15 @@ struct NativeWorkspaceDock: View {
                 dockTabButton(.smartGallery)
 
                 Spacer(minLength: 4)
+
+                Button(action: onToggleFloating) {
+                    Image(systemName: isFloating ? "sidebar.right" : "arrow.up.right.square")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .help(isFloating ? "Dock in the main window" : "Float this dock")
+                .accessibilityLabel(isFloating ? "Dock in the main window" : "Float this dock")
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
@@ -69,7 +79,7 @@ struct NativeWorkspaceDock: View {
 
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
         Button {
-            selectedTab = tab
+            model.selectedWorkspaceDockTab = tab
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: tab.symbolName)
@@ -82,7 +92,7 @@ struct NativeWorkspaceDock: View {
             .background(
                 RoundedRectangle(cornerRadius: 5)
                     .fill(
-                        selectedTab == tab
+                        model.selectedWorkspaceDockTab == tab
                             ? Color.accentColor.opacity(0.16)
                             : Color.clear
                     )
@@ -101,6 +111,100 @@ struct NativeWorkspaceDock: View {
         .foregroundColor(selectedTab == tab ? .primary : .secondary)
         .help(tab.title)
         .accessibilityLabel(tab.title)
+    }
+}
+
+private struct NativeWorkspaceDockPanelAnchor: NSViewRepresentable {
+    let model: NativeCameraModel
+
+    func makeNSView(context: Context) -> NativeWorkspaceDockPanelAnchorNSView {
+        let view = NativeWorkspaceDockPanelAnchorNSView(model: model)
+        view.synchronize()
+        return view
+    }
+
+    func updateNSView(
+        _ nsView: NativeWorkspaceDockPanelAnchorNSView,
+        context: Context
+    ) {
+        nsView.synchronize()
+    }
+}
+
+@MainActor
+private final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
+    private let model: NativeCameraModel
+    private var floatingPanel: NSPanel?
+
+    init(model: NativeCameraModel) {
+        self.model = model
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("NativeWorkspaceDockPanelAnchorNSView does not support NSCoder initialization")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        synchronize()
+    }
+
+    func synchronize() {
+        guard model.isWorkspaceDockVisible && model.isWorkspaceDockFloating else {
+            floatingPanel?.orderOut(nil)
+            return
+        }
+
+        if floatingPanel == nil {
+            let panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 360, height: 680),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .utilityWindow],
+                backing: .buffered,
+                defer: false
+            )
+            panel.title = "AmScope Workspace"
+            panel.isFloatingPanel = true
+            panel.isReleasedWhenClosed = false
+            panel.level = .floating
+            panel.minSize = NSSize(width: 300, height: 420)
+            panel.contentViewController = NSHostingController(
+                rootView: NativeWorkspaceDock(
+                    model: model,
+                    isFloating: true,
+                    onClose: { [weak self] in
+                        guard let self = self else { return }
+                        self.model.isWorkspaceDockVisible = false
+                        self.model.isWorkspaceDockFloating = false
+                    },
+                    onToggleFloating: { [weak self] in
+                        self?.model.isWorkspaceDockFloating = false
+                    }
+                )
+            )
+            panel.delegate = self
+            floatingPanel = panel
+        }
+
+        guard let panel = floatingPanel, !panel.isVisible else { return }
+        if let mainWindow = window {
+            let mainFrame = mainWindow.frame
+            let panelSize = panel.frame.size
+            panel.setFrameOrigin(
+                NSPoint(
+                    x: mainFrame.maxX - panelSize.width - 24,
+                    y: mainFrame.maxY - panelSize.height - 72
+                )
+            )
+        } else {
+            panel.center()
+        }
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        model.isWorkspaceDockFloating = false
+        model.isWorkspaceDockVisible = false
     }
 }
 

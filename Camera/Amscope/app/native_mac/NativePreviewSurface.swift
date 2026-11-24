@@ -1247,5 +1247,118 @@ private final class NativeSlideImageContainerView: NSView {
             image,
             in: CGRect(origin: .zero, size: bounds.size)
         )
+
+        let scaleX = bounds.width / CGFloat(image.width)
+        let scaleY = bounds.height / CGFloat(image.height)
+
+        NSGraphicsContext.saveGraphicsState()
+        for measurement in measurements {
+            drawMeasurement(
+                measurement,
+                scaleX: scaleX,
+                scaleY: scaleY,
+                color: NSColor.systemYellow
+            )
+        }
+        if let preview = previewMeasurement {
+            drawMeasurement(
+                preview,
+                scaleX: scaleX,
+                scaleY: scaleY,
+                color: NSColor.systemOrange
+            )
+        }
+        for annotation in annotations {
+            drawAnnotation(annotation, scaleX: scaleX, scaleY: scaleY)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func drawMeasurement(
+        _ measurement: NativeDistanceMeasurement,
+        scaleX: CGFloat,
+        scaleY: CGFloat,
+        color: NSColor
+    ) {
+        let start = CGPoint(
+            x: measurement.start.x * scaleX,
+            y: measurement.start.y * scaleY
+        )
+        let end = CGPoint(
+            x: measurement.end.x * scaleX,
+            y: measurement.end.y * scaleY
+        )
+
+        let path = NSBezierPath()
+        path.lineWidth = 2
+        path.move(to: start)
+        path.line(to: end)
+        color.setStroke()
+        path.stroke()
+
+        for point in [start, end] {
+            let marker = NSBezierPath(
+                ovalIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)
+            )
+            color.setFill()
+            marker.fill()
+        }
+
+        let label = String(format: "%.1f px", measurement.distanceInPixels)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let textSize = (label as NSString).size(withAttributes: attributes)
+        let midpoint = CGPoint(
+            x: (start.x + end.x) / 2 + 7,
+            y: (start.y + end.y) / 2 + 5
+        )
+        let labelRect = CGRect(
+            x: midpoint.x - 4,
+            y: midpoint.y - 2,
+            width: textSize.width + 8,
+            height: textSize.height + 4
+        )
+        NSColor(calibratedWhite: 0.05, alpha: 0.82).setFill()
+        NSBezierPath(roundedRect: labelRect, xRadius: 4, yRadius: 4).fill()
+        (label as NSString).draw(
+            at: CGPoint(x: midpoint.x, y: midpoint.y),
+            withAttributes: attributes
+        )
+    }
+
+    private func drawAnnotation(
+        _ annotation: NativeSlideTextAnnotation,
+        scaleX: CGFloat,
+        scaleY: CGFloat
+    ) {
+        let point = CGPoint(
+            x: annotation.location.x * scaleX,
+            y: annotation.location.y * scaleY
+        )
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: NSColor.white
+        ]
+        let size = (annotation.text as NSString).size(withAttributes: attributes)
+        let rect = CGRect(
+            x: point.x + 7,
+            y: point.y + 7,
+            width: size.width + 10,
+            height: size.height + 6
+        )
+        NSColor(calibratedWhite: 0.05, alpha: 0.84).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+        (annotation.text as NSString).draw(
+            at: CGPoint(x: rect.minX + 5, y: rect.minY + 3),
+            withAttributes: attributes
+        )
+
+        let anchor = NSBezierPath(
+            ovalIn: CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4)
+        )
+        NSColor.systemYellow.setFill()
+        anchor.fill()
     }
 }

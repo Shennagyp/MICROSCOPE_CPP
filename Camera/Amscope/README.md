@@ -10,6 +10,19 @@ integration and does not modify vendor sample code.
 The current AmScope-native release scope, revised implementation phases, and release acceptance criteria are maintained in [AMSCOPE_NATIVE_RELEASE_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md). The previous [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is retained as a historical technical reference; its original phase sequence is superseded. Common/backend-specific public type ownership and Phase 2 semantic decisions are recorded in [CAMERA_COMMON_TYPE_OWNERSHIP.md](../../docs/architecture/CAMERA_COMMON_TYPE_OWNERSHIP.md).
 The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/architecture/DEVELOPMENT_HANDOFF.md), the source/test mapping is in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md), the GenTL/GenApi dependency assessment is in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md), and the per-phase hardware record template is in [PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md](../../docs/testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
 
+## Native macOS UI
+
+The preview uses Qt Widgets' native macOS platform style. Do not force Fusion,
+apply a global style sheet, or replace standard controls with a third-party
+visual system. The rationale, platform-style contract, and verification gates
+are recorded in [AMSCOPE_NATIVE_MACOS_UI.md](../../docs/architecture/AMSCOPE_NATIVE_MACOS_UI.md).
+
+The `amscope-native-ui` branch removes the previous application-wide
+Fusion/QSS overrides. The production executable remains a QWidget application;
+the live image viewport, frame lease, camera feature model and acquisition path
+are unchanged. Owner-side build, CTest, macOS visual acceptance and MU503
+regression are still required.
+
 ## Implemented
 
 - One AmcamCamera owns one HAmcam handle for the complete open session.

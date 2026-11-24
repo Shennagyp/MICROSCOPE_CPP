@@ -179,10 +179,15 @@ final class NativeCameraModel: ObservableObject {
         activeSlide = slide
     }
 
-    /// Show the requested workspace tool from the permanent edge rail.
-    /// Selecting from the rail always restores the in-window dock, avoiding
-    /// stale floating state after a panel/window close transition.
-    func showWorkspaceDock(_ tab: NativeWorkspaceDockTab) {
+    /// Toggle the dock from its permanent edge rail.
+    /// Clicking the open tab closes the overlay; selecting another tab
+    /// switches tools while keeping the dock visible.
+    func toggleWorkspaceDock(_ tab: NativeWorkspaceDockTab) {
+        if isWorkspaceDockVisible && selectedWorkspaceDockTab == tab {
+            isWorkspaceDockVisible = false
+            return
+        }
+
         selectedWorkspaceDockTab = tab
         isWorkspaceDockVisible = true
     }

@@ -504,7 +504,6 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         case condenserNumericalAperture
         case cameraPixelPitchMicrometers
         case cameraOutputPixelFactor
-        case cameraCustomBinningFactor
         case cameraRelayPreset
         case cameraRelayCustomName
         case cameraRelayMagnification
@@ -578,6 +577,10 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
 }
 
 extension MicroscopeOpticalConfiguration {
+    private enum LegacyCodingKeys: String, CodingKey {
+        case cameraCustomBinningFactor
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         microscopeName = try container.decode(String.self, forKey: .microscopeName)
@@ -591,10 +594,11 @@ extension MicroscopeOpticalConfiguration {
             Double.self,
             forKey: .cameraPixelPitchMicrometers
         )
+        let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         cameraOutputPixelFactor = try container.decodeIfPresent(
             Double.self,
             forKey: .cameraOutputPixelFactor
-        ) ?? (try container.decodeIfPresent(
+        ) ?? (try legacyContainer.decodeIfPresent(
             Double.self,
             forKey: .cameraCustomBinningFactor
         ) ?? 1)

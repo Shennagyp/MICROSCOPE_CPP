@@ -9,44 +9,50 @@ struct MainWindowView: View {
 
     var body: some View {
         GeometryReader { geometry in
-                let maximumDockWidth = max(
-                    280,
-                    geometry.size.width - minimumPreviewWidth - dockDividerWidth
-                )
-                let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
+            let maximumDockWidth = max(
+                280,
+                geometry.size.width - minimumPreviewWidth - dockDividerWidth
+            )
+            let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
 
-                HStack(spacing: 0) {
-                    NativeDualPreviewSurface(
-                        bridge: model.bridge,
-                        activeSlide: model.activeSlide,
-                        onActiveSlideChanged: model.selectActiveSlide,
-                        onCapture: { slide, image in
-                            model.captureGallery.capture(image, for: slide)
+            HStack(spacing: 0) {
+                NativeDualPreviewSurface(
+                    bridge: model.bridge,
+                    activeSlide: model.activeSlide,
+                    onActiveSlideChanged: model.selectActiveSlide,
+                    onCapture: { slide, image in
+                        model.captureGallery.capture(image, for: slide)
+                    }
+                )
+                .frame(
+                    minWidth: minimumPreviewWidth,
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+                .clipped()
+                .layoutPriority(1)
+
+                if model.isWorkspaceDockVisible && !model.isWorkspaceDockFloating {
+                    NativeWorkspaceDockResizeDivider(
+                        dockWidth: dockWidth,
+                        maximumWidth: maximumDockWidth,
+                        onResize: {
+                            model.setWorkspaceDockWidth($0, maximum: maximumDockWidth)
                         }
                     )
-                    .frame(minWidth: minimumPreviewWidth, maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .layoutPriority(1)
 
-                    if model.isWorkspaceDockVisible && !model.isWorkspaceDockFloating {
-                        NativeWorkspaceDockResizeDivider(
-                            dockWidth: dockWidth,
-                            maximumWidth: maximumDockWidth,
-                            onResize: { model.setWorkspaceDockWidth($0, maximum: maximumDockWidth) }
-                        )
-
-                        NativeWorkspaceDock(
-                            model: model,
-                            isFloating: false,
-                            onClose: { model.isWorkspaceDockVisible = false },
-                            onToggleFloating: { model.isWorkspaceDockFloating = true }
-                        )
-                        .frame(width: dockWidth)
-                        .frame(maxHeight: .infinity)
-                        .layoutPriority(0)
-                    }
+                    NativeWorkspaceDock(
+                        model: model,
+                        isFloating: false,
+                        onClose: { model.isWorkspaceDockVisible = false },
+                        onToggleFloating: { model.isWorkspaceDockFloating = true }
+                    )
+                    .frame(width: dockWidth)
+                    .frame(maxHeight: .infinity)
+                    .layoutPriority(0)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)
@@ -68,7 +74,6 @@ struct MainWindowView: View {
             )
         }
     }
-
 }
 
 

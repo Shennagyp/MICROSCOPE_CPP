@@ -97,6 +97,13 @@ final class NativeCameraModel: ObservableObject {
         cameraState == .open || cameraState == .streaming
     }
 
+    var canChangePreviewResolution: Bool {
+        canAccessFeatures &&
+            !isCameraOperationPending &&
+            !isFeatureWritePending &&
+            !isFeatureSnapshotLoading
+    }
+
     var canOpen: Bool {
         cameraState == .closed &&
             !selectedDeviceID.isEmpty &&
@@ -366,6 +373,36 @@ final class NativeCameraModel: ObservableObject {
             AmscopeCameraFeatureValue.enumerationFeatureValue(symbol),
             for: descriptor
         )
+    }
+
+    func changePreviewResolution(to symbol: String) {
+        guard canChangePreviewResolution,
+              let descriptor = featureDescriptors.first(where: {
+                  $0.name == "AmcamResolutionIndex"
+              }),
+              descriptor.isAvailable,
+              descriptor.isReadable,
+              descriptor.enumerationValues.contains(symbol) else {
+            return
+        }
+
+        isCameraOperationPending = true
+        isFeatureWritePending = true
+        bridge.changePreviewResolution(symbol) { [weak self] error, _, _ in
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.isCameraOperationPending = false
+                self.isFeatureWritePending = false
+                self.refreshState()
+                if let error = error {
+                    self.present(error)
+                }
+
+                // Restart can fail after the new resolution was applied. Refresh
+                // in either outcome so the UI reports the camera's actual state.
+                self.refreshFeatures()
+            }
+        }
     }
 
     func commitDraft(for descriptor: AmscopeCameraFeatureDescriptor) {

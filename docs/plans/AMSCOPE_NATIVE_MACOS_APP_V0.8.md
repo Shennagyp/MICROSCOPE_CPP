@@ -107,7 +107,20 @@ The existing two-pane design remains unchanged: Slide 1 and Slide 2 stay
 side-by-side, each in its existing half of the preview split. This change is
 limited to the image renderer inside each pane.
 
-Each slide image has independent presentation state:
+Each slide image has independent presentation state. Its pane remains a
+fixed viewport; the image's document/container view is what resizes:
+
+- In Fit, the document container is no larger than the pane viewport and the
+  full camera frame is downsampled inside it while preserving aspect ratio.
+- During zoom, the document container grows with the displayed image dimensions.
+  At Actual Pixels, its size represents the complete source frame at one
+  physical display pixel per camera pixel (converted to AppKit points using
+  the backing scale factor).
+- The fixed pane viewport clips the oversized image container. Dragging pans
+  the document inside that viewport; the application window and split-pane
+  bounds do not change.
+- A frame larger than the screen is therefore retained at full resolution,
+  even though only the viewport-sized portion is visible at one time.
 
 - **Fit Image to Pane:** show the complete image in that pane, preserve aspect
   ratio, and downsample only for rendering when the source exceeds the pane.

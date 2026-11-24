@@ -34,6 +34,21 @@ public:
         std::function<void(RequestId, std::uint64_t, LifecycleResult)>;
     using CameraListCallback =
         std::function<void(RequestId, std::uint64_t, CameraListResult)>;
+
+    using FeatureDescriptors = std::vector<camera::CameraFeatureDescriptor>;
+    using FeatureDescriptorsResult =
+        camera::CameraFeatureResult<FeatureDescriptors>;
+    using FeatureReadResult =
+        camera::CameraFeatureResult<camera::CameraFeatureValue>;
+    using FeatureWriteResult =
+        camera::CameraFeatureResult<std::monostate>;
+    using FeatureDescriptorsCallback = std::function<void(
+        RequestId, std::uint64_t, std::uint64_t, FeatureDescriptorsResult)>;
+    using FeatureReadCallback = std::function<void(
+        RequestId, std::uint64_t, std::uint64_t, FeatureReadResult)>;
+    using FeatureWriteCallback = std::function<void(
+        RequestId, std::uint64_t, FeatureWriteResult)>;
+
     using ErrorCallback =
         std::function<void(std::uint64_t, CameraError)>;
     using FrameAvailableCallback = std::function<void()>;
@@ -55,6 +70,20 @@ public:
     [[nodiscard]] RequestId requestStart(LifecycleCallback callback);
     [[nodiscard]] RequestId requestStop(LifecycleCallback callback);
 
+    [[nodiscard]] RequestId requestFeatureDescriptors(
+        FeatureDescriptorsCallback callback);
+    [[nodiscard]] RequestId requestReadFeature(
+        std::string name, FeatureReadCallback callback);
+    [[nodiscard]] RequestId requestWriteFeature(
+        std::string name, camera::CameraFeatureValue value,
+        FeatureWriteCallback callback);
+
+    [[nodiscard]] bool isSessionCurrent(
+        std::uint64_t sessionGeneration) const noexcept;
+    [[nodiscard]] bool isFeatureSnapshotCurrent(
+        std::uint64_t sessionGeneration,
+        std::uint64_t featureStateGeneration) const noexcept;
+
     [[nodiscard]] CameraState state() const noexcept;
     [[nodiscard]] std::uint64_t droppedFrames() const noexcept;
     [[nodiscard]] std::uint64_t framesPulled() const noexcept;
@@ -65,10 +94,18 @@ public:
     [[nodiscard]] camera::FramePtr takeLatestFrame();
 
 private:
+    enum class RequestSemantics : std::uint8_t {
+        SessionBound,
+        FeatureSnapshot,
+        FeatureMutation,
+        LifecycleMutation
+    };
+
     struct PendingRequest {
         RequestId id = 0;
         std::uint64_t sessionGeneration = 0;
-        bool lifecycleMutation = false;
+        std::uint64_t featureStateGeneration = 0;
+        RequestSemantics semantics = RequestSemantics::SessionBound;
         std::function<void(RequestId, std::uint64_t)> execute;
     };
 
@@ -77,6 +114,9 @@ private:
     [[nodiscard]] RequestId enqueue(
         bool lifecycleMutation,
         std::function<void(RequestId, std::uint64_t)> execute);
+    [[nodiscard]] RequestId enqueueFeatureRequest(
+        RequestSemantics semantics,
+        std::function<void(RequestId, std::uint64_t, std::uint64_t)> execute);
     [[nodiscard]] std::uint64_t nextSessionGenerationLocked() noexcept;
     void runCommandWorker();
     void notifyFrameAvailable() noexcept;
@@ -97,6 +137,8 @@ private:
     RequestId nextRequestId_ = 1;
     std::uint64_t scheduledSessionGeneration_ = 0;
     std::atomic<std::uint64_t> activeSessionGeneration_{0};
+    std::uint64_t scheduledFeatureStateGeneration_ = 0;
+    std::atomic<std::uint64_t> featureStateGeneration_{0};
     bool stopping_ = false;
 
     // Accessed only by the serialized command worker (and after join in dtor).

@@ -879,7 +879,8 @@ buildAmcamFeatureDescriptors(
         "ExposureAuto", "Automatic Exposure", CameraFeatureKind::Enumeration,
         std::nullopt, autoValid && exposureAutoAllowed, autoValid,
         autoValid && exposureAutoAllowed, std::nullopt, std::nullopt,
-        {"Off", "Once", "Continuous"}
+        {"Off", "Once", "Continuous"},
+        camera::CameraFeatureGroup::Exposure
     });
     descriptors.push_back({
         "ExposureTime", "Exposure Time", CameraFeatureKind::Integer,
@@ -893,7 +894,8 @@ buildAmcamFeatureDescriptors(
                       static_cast<std::int64_t>(maxExposure),
                       std::nullopt}})
             : std::nullopt,
-        std::nullopt, {}
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Exposure
     });
     descriptors.push_back({
         "AmcamAnalogGainPercent", "Analog Gain", CameraFeatureKind::Integer,
@@ -905,13 +907,15 @@ buildAmcamFeatureDescriptors(
                       static_cast<std::int64_t>(maxGain),
                       std::nullopt}})
             : std::nullopt,
-        std::nullopt, {}
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Exposure
     });
     descriptors.push_back({
         "AmcamColorMatrixEnabled", "Color Matrix", CameraFeatureKind::Boolean,
         std::nullopt, colorMatrixProbe && colorCorrectionAllowed,
         colorMatrixProbe, colorMatrixProbe && colorCorrectionAllowed,
-        std::nullopt, std::nullopt, {}
+        std::nullopt, std::nullopt, {},
+        camera::CameraFeatureGroup::Color
     });
     descriptors.push_back({
         "AmcamPixelFormat", "Pixel Format", CameraFeatureKind::Enumeration,
@@ -925,20 +929,23 @@ buildAmcamFeatureDescriptors(
         std::string("K"), tempTintProbe && whiteBalanceAllowed,
         tempTintProbe, tempTintProbe && whiteBalanceAllowed,
         CameraFeatureNumericRange{CameraIntegerRange{2000, 15000, std::nullopt}},
-        std::nullopt, {}
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Color
     });
     descriptors.push_back({
         "AmcamWhiteBalanceTint", "White Balance Tint", CameraFeatureKind::Integer,
         std::nullopt, tempTintProbe && whiteBalanceAllowed,
         tempTintProbe, tempTintProbe && whiteBalanceAllowed,
         CameraFeatureNumericRange{CameraIntegerRange{200, 2500, std::nullopt}},
-        std::nullopt, {}
+        std::nullopt, {},
+        camera::CameraFeatureGroup::Color
     });
     descriptors.push_back({
         "AmcamWhiteBalanceRGBGain", "White Balance RGB Gain", CameraFeatureKind::IntegerVector,
         std::string("SDK units"), rgbGainProbe && whiteBalanceAllowed,
         rgbGainProbe && whiteBalanceAllowed, rgbGainProbe && whiteBalanceAllowed,
-        std::nullopt, std::size_t{3}, {}
+        std::nullopt, std::size_t{3}, {},
+        camera::CameraFeatureGroup::Color
     });
     descriptors.push_back({
         "AmcamFixedFrameRate", "Fixed Frame Rate", CameraFeatureKind::FloatingPoint,

@@ -130,18 +130,61 @@ struct MicroscopeConfigurationWindow: View {
                             .frame(width: 90)
                         }
                         HStack {
-                            Text("Total camera relay magnification")
+                            Text("Camera adapter")
                             Spacer()
-                            TextField(
-                                "Relay",
-                                text: configurationNumberBinding(
-                                    \.cameraRelayMagnification,
-                                    precision: 3
+                            Picker(
+                                "Camera adapter",
+                                selection: Binding(
+                                    get: { draft.cameraRelayPreset },
+                                    set: { preset in
+                                        var updated = draft
+                                        updated.cameraRelayPreset = preset
+                                        if let magnification = preset.nominalMagnification {
+                                            updated.cameraRelayMagnification = magnification
+                                        }
+                                        draft = updated
+                                        hasAppliedChanges = false
+                                    }
                                 )
-                            )
-                            .frame(width: 90)
+                            ) {
+                                ForEach(CameraRelayPreset.allCases) { preset in
+                                    Text(preset.title).tag(preset)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 260)
                         }
-                        Text("Enter the product of all lenses/reducers between the microscope camera port and the sensor. MU503's supplied reducer is 0.5×; OPTIKA M-115 is 0.35×. Use 0.175× if both are physically stacked.")
+                        if draft.cameraRelayPreset == .custom {
+                            HStack {
+                                Text("Custom path name")
+                                Spacer()
+                                TextField(
+                                    "Adapter or combined path",
+                                    text: $draft.cameraRelayCustomName
+                                )
+                                .frame(width: 260)
+                            }
+                            HStack {
+                                Text("Total relay magnification")
+                                Spacer()
+                                TextField(
+                                    "Relay",
+                                    text: configurationNumberBinding(
+                                        \.cameraRelayMagnification,
+                                        precision: 3
+                                    )
+                                )
+                                .frame(width: 90)
+                            }
+                        } else {
+                            HStack {
+                                Text("Nominal relay magnification")
+                                Spacer()
+                                Text(String(format: "%.3f×", draft.cameraRelayMagnification))
+                                    .monospacedDigit()
+                            }
+                        }
+                        Text("The optical model uses one effective relay magnification. Presets identify common adapters; Custom lets you enter a measured value or the combined product of multiple elements that are physically installed. No second reducer is assumed automatically.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -337,12 +380,56 @@ struct MicroscopeObjective: Codable, Equatable, Identifiable {
     }
 }
 
+enum CameraRelayPreset: String, Codable, CaseIterable, Identifiable {
+    case touptekFMA050
+    case optikaM115
+    case optikaM114
+    case custom
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .touptekFMA050: return "ToupTek FMA050 (0.50×)"
+        case .optikaM115: return "OPTIKA M-115 (0.35×)"
+        case .optikaM114: return "OPTIKA M-114 (0.50×)"
+        case .custom: return "Custom / combined path"
+        }
+    }
+
+    var nominalMagnification: Double? {
+        switch self {
+        case .touptekFMA050, .optikaM114: return 0.5
+        case .optikaM115: return 0.35
+        case .custom: return nil
+        }
+    }
+}
+
 struct MicroscopeOpticalConfiguration: Codable, Equatable {
+    private enum CodingKeys: String, CodingKey {
+        case microscopeName
+        case objectiveSeries
+        case opticalTubeSystem
+        case condenserNumericalAperture
+        case cameraPixelPitchMicrometers
+        case cameraRelayPreset
+        case cameraRelayCustomName
+        case cameraRelayMagnification
+        case chromatinBandLowerNanometers
+        case chromatinBandUpperNanometers
+        case targetRayleighSamplingFactor
+        case objectives
+        case activeObjectiveID
+    }
+
     var microscopeName: String
     var objectiveSeries: String
     var opticalTubeSystem: String
     var condenserNumericalAperture: Double
     var cameraPixelPitchMicrometers: Double
+    var cameraRelayPreset: CameraRelayPreset
+    var cameraRelayCustomName: String
     var cameraRelayMagnification: Double
     var chromatinBandLowerNanometers: Double
     var chromatinBandUpperNanometers: Double
@@ -356,6 +443,8 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         opticalTubeSystem: "Finite, 160 mm",
         condenserNumericalAperture: 1.25,
         cameraPixelPitchMicrometers: 2.2,
+        cameraRelayPreset: .touptekFMA050,
+        cameraRelayCustomName: "",
         cameraRelayMagnification: 0.5,
         chromatinBandLowerNanometers: 540,
         chromatinBandUpperNanometers: 600,
@@ -392,4 +481,47 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         ],
         activeObjectiveID: "4x"
     )
+}
+
+extension MicroscopeOpticalConfiguration {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        microscopeName = try container.decode(String.self, forKey: .microscopeName)
+        objectiveSeries = try container.decode(String.self, forKey: .objectiveSeries)
+        opticalTubeSystem = try container.decode(String.self, forKey: .opticalTubeSystem)
+        condenserNumericalAperture = try container.decode(
+            Double.self,
+            forKey: .condenserNumericalAperture
+        )
+        cameraPixelPitchMicrometers = try container.decode(
+            Double.self,
+            forKey: .cameraPixelPitchMicrometers
+        )
+        cameraRelayMagnification = try container.decode(
+            Double.self,
+            forKey: .cameraRelayMagnification
+        )
+        cameraRelayPreset = try container.decodeIfPresent(
+            CameraRelayPreset.self,
+            forKey: .cameraRelayPreset
+        ) ?? .custom
+        cameraRelayCustomName = try container.decodeIfPresent(
+            String.self,
+            forKey: .cameraRelayCustomName
+        ) ?? "Previously configured relay"
+        chromatinBandLowerNanometers = try container.decode(
+            Double.self,
+            forKey: .chromatinBandLowerNanometers
+        )
+        chromatinBandUpperNanometers = try container.decode(
+            Double.self,
+            forKey: .chromatinBandUpperNanometers
+        )
+        targetRayleighSamplingFactor = try container.decode(
+            Double.self,
+            forKey: .targetRayleighSamplingFactor
+        )
+        objectives = try container.decode([MicroscopeObjective].self, forKey: .objectives)
+        activeObjectiveID = try container.decode(String.self, forKey: .activeObjectiveID)
+    }
 }

@@ -320,7 +320,8 @@ available dock controls.
   chromatin band (initially 540–600 nm); report RF across the band and use its
   shortest wavelength for conservative mode qualification.
 - [x] Add a separate Microscope Configuration window for optical-profile,
-  sensor-pitch, camera-relay, wavelength, and sampling-target configuration.
+  sensor-pitch, named camera-adapter presets (FMA050, M-115, M-114), custom
+  total-relay configuration, wavelength, and sampling-target configuration.
 - [x] Add the manually selected active-objective state to the compact dock.
 - [x] Add an Auto Resolution policy that evaluates only camera-reported modes,
   chooses the lowest-pixel-count mode meeting the configured Rayleigh sampling
@@ -328,8 +329,11 @@ available dock controls.
   meets the target.
 - [x] Manual selection of camera resolution disables Auto Resolution.
 - [ ] Verify the actual MU503 mode-to-binning/full-field mapping.
-- [ ] Confirm whether the installed camera relay is 0.5×, OPTIKA M-115 0.35×,
-  or a stacked combination; calibrate against a stage micrometer.
+- [ ] Verify that the configured ToupTek FMA050 preset matches the physical
+  optical path; confirm whether any additional relay element is actually stacked
+  and calibrate effective magnification against a stage micrometer.
+- [ ] Verify preset switching, custom-path entry, persistence across restart, and
+  migration of an older numeric-only profile.
 - [ ] Verify mode selection and stream recovery for all four objectives on the
   user's hardware.
 - [ ] Implement and verify the separate preview-pane auto-expansion policy;
@@ -337,5 +341,7 @@ available dock controls.
 
 **Important model boundary:** the B-293 objective nosepiece is manual. The active
 objective is a user-confirmed state, not an electronically sensed state. The
-configuration's default 0.5× relay is only the AmScope MU503 reducer preset and
-must be corrected if the physical optical path differs.
+default camera-path preset is ToupTek FMA050 at 0.50×, based on the user's
+identified adapter. Adapter selection remains editable and is not electronically
+detected; the user must keep it aligned with the physically installed optical
+path.

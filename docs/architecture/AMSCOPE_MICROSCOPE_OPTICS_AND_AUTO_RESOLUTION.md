@@ -50,13 +50,30 @@ The initial camera profile is the user's AmScope MU503:
 - Advertised 1×1, 2×2, and 4×4 binning modes.
 - Advertised output modes 2560×1922, 1280×960, and 640×480.
 
-The default total camera relay magnification is 0.5×, matching the MU503
-compensating/reduction lens specification. It is editable because the OPTIKA
-M-115 camera adapter is a 0.35× accessory. The configured value represents the
-**product of all optical relay elements** between the microscope camera port and
-the sensor. For example, 0.35× and 0.5× elements stacked together represent
-0.175× total relay. The user must enter the actual installed optical path;
-software cannot infer which reducer is physically fitted.
+The configured camera adapter is the **ToupTek FMA050 (0.50×)**. This is a
+user-selected optical-path setting, not a value detected from the camera
+hardware. The application exposes adapter presets in the Microscope
+Configuration window:
+
+- ToupTek FMA050 — 0.50×
+- OPTIKA M-115 — 0.35×
+- OPTIKA M-114 — 0.50×
+- Custom / combined optical path — user-entered name and magnification
+
+Selecting a named preset sets its nominal magnification. Custom mode accepts a
+user-defined effective magnification and an optional path label. The numerical
+value used by the optical calculation is the **total effective relay
+magnification**, applied once between the microscope image plane and the sensor.
+If multiple optical elements are physically stacked, select Custom and enter
+their measured or calculated combined product. The application never assumes
+that a camera's packaged reducer and a separate microscope adapter are both
+installed, and it must not multiply them merely because both appear in product
+documentation.
+
+Older saved profiles contain only a numeric relay magnification and no adapter
+identity. They are migrated to Custom while preserving that numeric value;
+the application does not invent an adapter identity for an older profile. The
+user can explicitly select FMA050 after confirming the physical path.
 
 The configuration window also exposes sensor pixel pitch so the profile can be
 reused with a different camera.

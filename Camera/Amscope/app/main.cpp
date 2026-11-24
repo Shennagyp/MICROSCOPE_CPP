@@ -9,9 +9,10 @@
 #include <QAction>
 #include <QApplication>
 #include <QDialog>
-#include <QDockWidget>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QSizePolicy>
+#include <QStyle>
 #include <QDialogButtonBox>
 #include <QCheckBox>
 #include <QComboBox>

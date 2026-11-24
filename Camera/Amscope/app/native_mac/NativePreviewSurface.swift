@@ -431,7 +431,6 @@ private final class NativeSlideImageView: NSView {
     private var lockedScale: CGFloat?
     private var imageOrigin: CGPoint?
     private var dragLocation: CGPoint?
-    private var contextMenuAnchor: CGPoint?
 
     var hasImage: Bool { currentImage != nil }
     override var isFlipped: Bool { true }
@@ -645,7 +644,6 @@ private final class NativeSlideImageView: NSView {
             onSizingModeChanged?()
         }
         lockedScale = nextScale
-        let nextSize = imageContainerSize(at: nextScale)
         let proposedOrigin = CGPoint(
             x: anchor.x - imagePoint.x * nextScale,
             y: anchor.y - imagePoint.y * nextScale
@@ -721,8 +719,6 @@ private final class NativeSlideImageView: NSView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        contextMenuAnchor = convert(event.locationInWindow, from: nil)
-
         let menu = NSMenu()
         let resizableItem = NSMenuItem(
             title: "Resizable: Follow Viewer Size",

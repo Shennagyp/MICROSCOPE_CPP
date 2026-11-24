@@ -142,9 +142,9 @@ void ImageInfoBar::setItems(std::vector<ImageInfoBarItem> items) {
         if (found == fields_.end()) {
             auto* field = new Field(content_);
             const std::string id = item.id;
-            field->setEditHandler([this, id]() {
+            field->setEditHandler([this](const std::string& fieldId) {
                 if (editRequestedHandler_) {
-                    editRequestedHandler_(id);
+                    editRequestedHandler_(fieldId);
                 }
             });
             found = fields_.emplace(id, field).first;

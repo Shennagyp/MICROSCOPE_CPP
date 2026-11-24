@@ -9,6 +9,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QDialog>
+#include <QDockWidget>
 #include <QDialogButtonBox>
 #include <QCheckBox>
 #include <QComboBox>
@@ -35,7 +36,6 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStringList>
-#include <QStatusBar>
 #include <QTimer>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -197,16 +197,28 @@ public:
         auto* central = new QWidget(this);
         auto* root = new QVBoxLayout(central);
         preview_ = new camera::qtwidgets::FrameView(central);
-        imageInfoBar_ = new camera::qtwidgets::ImageInfoBar(central);
+        root->addWidget(preview_, 1);
+        setCentralWidget(central);
+
+        auto* infoDock = new QDockWidget("Imaging Information", this);
+        infoDock->setObjectName(QStringLiteral("imagingInformationDock"));
+        infoDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        infoDock->setFeatures(
+            QDockWidget::DockWidgetClosable |
+            QDockWidget::DockWidgetMovable |
+            QDockWidget::DockWidgetFloatable);
+        imageInfoBar_ = new camera::qtwidgets::ImageInfoBar(infoDock);
         imageInfoBar_->setEditRequestedHandler([this](const std::string& id) {
             constexpr const char* prefix = "feature:";
             if (id.rfind(prefix, 0) == 0) {
                 editFeatureFromInfoBar(id.substr(std::char_traits<char>::length(prefix)));
             }
         });
-        root->addWidget(preview_, 1);
-        root->addWidget(imageInfoBar_);
-        setCentralWidget(central);
+        infoDock->setWidget(imageInfoBar_);
+        addDockWidget(Qt::BottomDockWidgetArea, infoDock);
+
+        auto* viewMenu = menuBar()->addMenu("&View");
+        viewMenu->addAction(infoDock->toggleViewAction());
 
         cameraControlsWindow_ = new QDialog(this, Qt::Window);
         cameraControlsWindow_->setWindowTitle("Camera Controls");
@@ -502,7 +514,7 @@ public:
                 // is active: feature probes share the SDK lock with PullImage.
                 setFeatureControlsEnabled(false);
                 featureStatus_->setText(
-                    "Acquisition active. Stop streaming to refresh or edit camera settings.");
+                    "Acquisition active. Stop streaming to edit stopped-only settings; use the Imaging Information bar for live Exposure and Color adjustments.");
             } else {
                 frameRateTimer_->stop();
                 lastPullRateAt_.reset();
@@ -527,7 +539,7 @@ public:
         });
         connect(&camera_, &amscope::QtAmcamCamera::errorOccurred,
                 this, [this](const QString& message, qint32) {
-            statusBar()->showMessage(message);
+            showStatusMessage(message);
         });
 
         updateControls(camera_.state());
@@ -566,7 +578,7 @@ private:
 
         const std::uint64_t generation = ++cameraEnumerationGeneration_;
         cameraEnumerationPending_ = true;
-        statusBar()->showMessage("Refreshing cameras…");
+        showStatusMessage("Refreshing cameras…");
         updateControls(camera_.state());
 
         const auto requestId = camera_.requestEnumerateCameras(
@@ -578,7 +590,7 @@ private:
 
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
                     cameraControls_->setDevices({});
-                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    showStatusMessage(QString::fromStdString(error->message));
                     updateControls(camera_.state());
                     return;
                 }
@@ -597,9 +609,9 @@ private:
                 cameraControls_->setDevices(std::move(commonDevices));
 
                 if (discoveredCameras.empty()) {
-                    statusBar()->showMessage("No AmScope camera detected.");
+                    showStatusMessage("No AmScope camera detected.");
                 } else {
-                    statusBar()->showMessage(
+                    showStatusMessage(
                         QString("%1 camera(s) detected.")
                             .arg(static_cast<qulonglong>(discoveredCameras.size())));
                 }
@@ -608,7 +620,7 @@ private:
 
         if (requestId == 0) {
             cameraEnumerationPending_ = false;
-            statusBar()->showMessage("Camera enumeration could not be queued.");
+            showStatusMessage("Camera enumeration could not be queued.");
         }
         updateControls(camera_.state());
     }
@@ -616,7 +628,7 @@ private:
     void openCamera(const std::string& deviceId) {
         if (lifecycleRequestPending_) return;
         if (deviceId.empty()) {
-            statusBar()->showMessage("Select a camera first.");
+            showStatusMessage("Select a camera first.");
             return;
         }
         const QString id = QString::fromStdString(deviceId);
@@ -625,7 +637,7 @@ private:
         lifecycleRequestPending_ = true;
         setFeatureControlsEnabled(false);
         featureStatus_->setText("Opening camera…");
-        statusBar()->showMessage("Opening camera…");
+        showStatusMessage("Opening camera…");
         updateControls(camera_.state());
 
         const auto requestId = camera_.requestOpen(
@@ -635,10 +647,10 @@ private:
                 if (generation != lifecycleUiGeneration_) return;
                 lifecycleRequestPending_ = false;
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
-                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    showStatusMessage(QString::fromStdString(error->message));
                 } else {
                     preview_->setMessage("Camera opened. Press Start to begin acquisition.");
-                    statusBar()->showMessage("Camera session opened.");
+                    showStatusMessage("Camera session opened.");
                     refreshStillResolutions();
                 }
                 updateControls(camera_.state());
@@ -646,7 +658,7 @@ private:
 
         if (requestId == 0) {
             lifecycleRequestPending_ = false;
-            statusBar()->showMessage("The camera open request could not be queued.");
+            showStatusMessage("The camera open request could not be queued.");
             updateControls(camera_.state());
         }
     }
@@ -658,7 +670,7 @@ private:
         lifecycleRequestPending_ = true;
         setFeatureControlsEnabled(false);
         featureStatus_->setText("Starting acquisition…");
-        statusBar()->showMessage("Starting acquisition…");
+        showStatusMessage("Starting acquisition…");
         updateControls(camera_.state());
 
         const auto requestId = camera_.requestStart(
@@ -667,11 +679,11 @@ private:
                 if (generation != lifecycleUiGeneration_) return;
                 lifecycleRequestPending_ = false;
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
-                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    showStatusMessage(QString::fromStdString(error->message));
                 } else if (camera_.state() == amscope::CameraState::Streaming) {
-                    statusBar()->showMessage("Acquisition started.");
+                    showStatusMessage("Acquisition started.");
                 } else if (camera_.state() == amscope::CameraState::Faulted) {
-                    statusBar()->showMessage(
+                    showStatusMessage(
                         "Camera acquisition faulted; close and reopen the camera.");
                 }
                 // A native acquisition can fail immediately after Start returns.
@@ -682,7 +694,7 @@ private:
 
         if (requestId == 0) {
             lifecycleRequestPending_ = false;
-            statusBar()->showMessage("The acquisition start request could not be queued.");
+            showStatusMessage("The acquisition start request could not be queued.");
             setFeatureControlsEnabled(true);
             updateControls(camera_.state());
         }
@@ -694,7 +706,7 @@ private:
         lifecycleRequestPending_ = true;
         setFeatureControlsEnabled(false);
         featureStatus_->setText("Stopping acquisition…");
-        statusBar()->showMessage("Stopping acquisition…");
+        showStatusMessage("Stopping acquisition…");
         updateControls(camera_.state());
 
         const auto requestId = camera_.requestStop(
@@ -703,11 +715,11 @@ private:
                 if (generation != lifecycleUiGeneration_) return;
                 lifecycleRequestPending_ = false;
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
-                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    showStatusMessage(QString::fromStdString(error->message));
                 } else if (camera_.state() == amscope::CameraState::Open) {
-                    statusBar()->showMessage("Acquisition stopped.");
+                    showStatusMessage("Acquisition stopped.");
                 } else if (camera_.state() == amscope::CameraState::Faulted) {
-                    statusBar()->showMessage(
+                    showStatusMessage(
                         "Camera session is faulted; close and reopen the camera.");
                 }
                 // A Stop that races a native fatal transition may succeed at
@@ -717,7 +729,7 @@ private:
 
         if (requestId == 0) {
             lifecycleRequestPending_ = false;
-            statusBar()->showMessage("The acquisition stop request could not be queued.");
+            showStatusMessage("The acquisition stop request could not be queued.");
             setFeatureControlsEnabled(true);
             updateControls(camera_.state());
         }
@@ -740,7 +752,7 @@ private:
                 stillResolutionSelector_->clear();
 
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
-                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    showStatusMessage(QString::fromStdString(error->message));
                     updateControls(camera_.state());
                     return;
                 }
@@ -772,7 +784,7 @@ private:
         if (requestId == 0) {
             stillResolutionsPending_ = false;
             stillResolutionSelector_->clear();
-            statusBar()->showMessage("Still-resolution discovery could not be queued.");
+            showStatusMessage("Still-resolution discovery could not be queued.");
             updateControls(camera_.state());
         }
     }
@@ -784,7 +796,7 @@ private:
         }
 
         if (stillResolutionSelector_->currentIndex() < 0) {
-            statusBar()->showMessage("The camera has no available still-resolution mode.");
+            showStatusMessage("The camera has no available still-resolution mode.");
             return;
         }
 
@@ -795,7 +807,7 @@ private:
         request.timeoutMilliseconds = 30000;
 
         stillCapturePending_ = true;
-        statusBar()->showMessage(
+        showStatusMessage(
             request.mode == amscope::StillCaptureMode::Raw
                 ? "Capturing RAW still image…"
                 : "Capturing processed still image…");
@@ -809,14 +821,14 @@ private:
                 updateControls(camera_.state());
 
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
-                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    showStatusMessage(QString::fromStdString(error->message));
                     return;
                 }
 
                 const amscope::FramePtr frame =
                     std::get<amscope::FramePtr>(std::move(result));
                 if (!frame || !frame->data()) {
-                    statusBar()->showMessage("Still capture returned an empty frame.");
+                    showStatusMessage("Still capture returned an empty frame.");
                     return;
                 }
 
@@ -824,7 +836,7 @@ private:
                     frame->pixelFormat == camera::PixelFormat::Raw8 ||
                     frame->pixelFormat == camera::PixelFormat::Raw16;
                 if (!raw && frame->pixelFormat != camera::PixelFormat::RGB24) {
-                    statusBar()->showMessage(
+                    showStatusMessage(
                         "Still capture returned an unknown image-buffer layout.");
                     return;
                 }
@@ -857,7 +869,7 @@ private:
                     suggested,
                     raw ? "RAW sensor data (*.raw)" : "PNG image (*.png)");
                 if (path.isEmpty()) {
-                    statusBar()->showMessage("Still image captured; save cancelled.");
+                    showStatusMessage("Still image captured; save cancelled.");
                     return;
                 }
 
@@ -869,10 +881,10 @@ private:
                         static_cast<int>(frame->strideBytes),
                         QImage::Format_RGB888);
                     if (!image.copy().save(path, "PNG")) {
-                        statusBar()->showMessage("Could not save the processed still image.");
+                        showStatusMessage("Could not save the processed still image.");
                         return;
                     }
-                    statusBar()->showMessage("Processed still image saved.");
+                    showStatusMessage("Processed still image saved.");
                     return;
                 }
 
@@ -882,7 +894,7 @@ private:
                     rawFile.write(reinterpret_cast<const char*>(frame->data()),
                                   byteCount) != byteCount ||
                     !rawFile.commit()) {
-                    statusBar()->showMessage("Could not save the RAW still payload.");
+                    showStatusMessage("Could not save the RAW still payload.");
                     return;
                 }
 
@@ -952,16 +964,16 @@ private:
                 if (!metadataFile.open(QIODevice::WriteOnly) ||
                     metadataFile.write(json) != json.size() ||
                     !metadataFile.commit()) {
-                    statusBar()->showMessage(
+                    showStatusMessage(
                         "RAW payload saved, but its metadata sidecar could not be saved.");
                     return;
                 }
-                statusBar()->showMessage("RAW still image and metadata sidecar saved.");
+                showStatusMessage("RAW still image and metadata sidecar saved.");
             });
 
         if (requestId == 0) {
             stillCapturePending_ = false;
-            statusBar()->showMessage("The still-capture request could not be queued.");
+            showStatusMessage("The still-capture request could not be queued.");
             updateControls(camera_.state());
         }
     }
@@ -979,7 +991,7 @@ private:
         clearFeatureControls();
         featureStatus_->setText("Closing camera session…");
         preview_->setMessage("Closing camera session…");
-        statusBar()->showMessage("Closing camera session…");
+        showStatusMessage("Closing camera session…");
         updateControls(camera_.state());
 
         const auto requestId = camera_.requestClose(
@@ -988,7 +1000,7 @@ private:
                 if (generation != lifecycleUiGeneration_) return;
                 lifecycleRequestPending_ = false;
                 if (const auto* error = std::get_if<amscope::CameraError>(&result)) {
-                    statusBar()->showMessage(QString::fromStdString(error->message));
+                    showStatusMessage(QString::fromStdString(error->message));
                     featureStatus_->setText(
                         "Camera feature controls are unavailable in the current state.");
                 } else {
@@ -1002,7 +1014,7 @@ private:
                     lastFrameBytes_ = 0;
                     stillPrecisionLabel_->setText("Last still: —");
                     updateFrameInfoLabel();
-                    statusBar()->showMessage("Camera session closed.");
+                    showStatusMessage("Camera session closed.");
                     featureStatus_->setText(
                         "Open a camera to inspect its available features.");
                 }
@@ -1011,7 +1023,7 @@ private:
 
         if (requestId == 0) {
             lifecycleRequestPending_ = false;
-            statusBar()->showMessage("The camera close request could not be queued.");
+            showStatusMessage("The camera close request could not be queued.");
             setFeatureControlsEnabled(true);
             updateControls(camera_.state());
         }
@@ -1346,21 +1358,50 @@ private:
         return editor;
     }
 
+    bool canEditFeatureFromInfoBar(const FeatureControl& control) const {
+        const auto& descriptor = control.descriptor;
+        if (!control.currentValue || !descriptor.isAvailable ||
+            !descriptor.isReadable || !descriptor.isWritable ||
+            !featureReadbackReady_ || pendingFeatureWrite_ ||
+            lifecycleRequestPending_) {
+            return false;
+        }
+
+        const bool hasEditor =
+            descriptor.kind == camera::CameraFeatureKind::Boolean ||
+            descriptor.kind == camera::CameraFeatureKind::Integer ||
+            descriptor.kind == camera::CameraFeatureKind::IntegerVector ||
+            descriptor.kind == camera::CameraFeatureKind::FloatingPoint ||
+            descriptor.kind == camera::CameraFeatureKind::String ||
+            (descriptor.kind == camera::CameraFeatureKind::Enumeration &&
+             !descriptor.enumerationValues.empty());
+        if (!hasEditor) return false;
+
+        const auto state = camera_.state();
+        if (state == amscope::CameraState::Open) return true;
+
+        // The current AmScope descriptor model reports Exposure and Color
+        // controls as live-writable without a stopped-state restriction.
+        // Other groups can contain stopped-only settings. Keep those disabled
+        // while streaming, using the last Open-state descriptor snapshot, and
+        // let the backend revalidate every accepted write against live state.
+        return state == amscope::CameraState::Streaming &&
+               (descriptor.group == camera::CameraFeatureGroup::Exposure ||
+                descriptor.group == camera::CameraFeatureGroup::Color);
+    }
+
     void editFeatureFromInfoBar(const std::string& featureName) {
         const auto found = featureControls_.find(featureName);
-        if (found == featureControls_.end() || !found->second.currentValue) return;
+        if (found == featureControls_.end() ||
+            !canEditFeatureFromInfoBar(found->second)) {
+            return;
+        }
 
         // The modal dialog runs a nested Qt event loop. Copy the descriptor
         // and readback so an asynchronous descriptor refresh cannot invalidate
         // references into featureControls_ while the dialog is open.
         const auto descriptor = found->second.descriptor;
         const auto currentValue = *found->second.currentValue;
-        if (!descriptor.isAvailable || !descriptor.isReadable ||
-            !descriptor.isWritable || !featureReadbackReady_ ||
-            pendingFeatureWrite_ ||
-            camera_.state() != amscope::CameraState::Open) {
-            return;
-        }
 
         QDialog dialog(this);
         dialog.setWindowTitle(
@@ -1485,7 +1526,7 @@ private:
                 const qlonglong number =
                     qobject_cast<QLineEdit*>(editor)->text().trimmed().toLongLong(&ok);
                 if (!ok) {
-                    statusBar()->showMessage("Enter a valid signed integer.", 5000);
+                    showStatusMessage("Enter a valid signed integer.", 5000);
                     return;
                 }
                 value = static_cast<std::int64_t>(number);
@@ -1502,7 +1543,7 @@ private:
                 number = qobject_cast<QLineEdit*>(editor)->text().trimmed().toDouble(&ok);
             }
             if (!ok || !std::isfinite(number)) {
-                statusBar()->showMessage("Enter a finite numeric value.", 5000);
+                showStatusMessage("Enter a finite numeric value.", 5000);
                 return;
             }
             value = number;
@@ -1536,7 +1577,7 @@ private:
                 valid = false;
             }
             if (!valid) {
-                statusBar()->showMessage(
+                showStatusMessage(
                     "Enter the required number of comma-separated integers.", 5000);
                 return;
             }
@@ -1554,7 +1595,7 @@ private:
         const auto validation = camera::validateFeatureWrite(descriptor, value);
         if (const auto* error =
                 std::get_if<camera::CameraFeatureAccessError>(&validation)) {
-            statusBar()->showMessage(QString::fromStdString(error->message), 6000);
+            showStatusMessage(QString::fromStdString(error->message), 6000);
             return;
         }
         submitFeatureValue(featureName, std::move(value));
@@ -1997,6 +2038,20 @@ private:
                name.contains("demosaic");
     }
 
+    void showStatusMessage(const QString& message, int timeoutMilliseconds = 0) {
+        statusMessage_ = message;
+        const std::uint64_t generation = ++statusMessageGeneration_;
+        updateFrameInfoLabel();
+
+        if (timeoutMilliseconds > 0) {
+            QTimer::singleShot(timeoutMilliseconds, this, [this, generation]() {
+                if (generation != statusMessageGeneration_) return;
+                statusMessage_.clear();
+                updateFrameInfoLabel();
+            });
+        }
+    }
+
     void updateFrameInfoLabel() {
         std::vector<camera::qtwidgets::ImageInfoBarItem> items;
         items.reserve(12 + featureOrder_.size());
@@ -2078,18 +2133,7 @@ private:
                 continue;
             }
 
-            const bool hasValueEditor =
-                descriptor.kind == camera::CameraFeatureKind::Boolean ||
-                descriptor.kind == camera::CameraFeatureKind::Integer ||
-                descriptor.kind == camera::CameraFeatureKind::IntegerVector ||
-                descriptor.kind == camera::CameraFeatureKind::FloatingPoint ||
-                descriptor.kind == camera::CameraFeatureKind::String ||
-                (descriptor.kind == camera::CameraFeatureKind::Enumeration &&
-                 !descriptor.enumerationValues.empty());
-            const bool editable =
-                hasValueEditor && descriptor.isWritable &&
-                featureReadbackReady_ && !pendingFeatureWrite_ &&
-                camera_.state() == amscope::CameraState::Open;
+            const bool editable = canEditFeatureFromInfoBar(control);
 
             std::string tooltip;
             if (descriptor.disabledReason) {
@@ -2107,6 +2151,12 @@ private:
                 descriptor.unit.value_or(std::string{}),
                 std::move(tooltip),
                 editable});
+        }
+
+        if (!statusMessage_.isEmpty()) {
+            items.push_back({
+                "application-status", "Status", statusMessage_.toStdString(), {},
+                "Most recent application operation status.", false});
         }
 
         imageInfoBar_->setItems(std::move(items));
@@ -3164,6 +3214,8 @@ private:
     amscope::QtAmcamCamera camera_;
     camera::FrameRateEstimator previewFrameRateEstimator_;
     std::optional<double> previewFramesPerSecond_;
+    QString statusMessage_;
+    std::uint64_t statusMessageGeneration_ = 0;
     std::optional<double> imageEventsPerSecond_;
     std::optional<double> pulledFramesPerSecond_;
     std::optional<std::chrono::steady_clock::time_point> lastPullRateAt_;

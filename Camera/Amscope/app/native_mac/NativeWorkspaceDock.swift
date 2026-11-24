@@ -1,0 +1,523 @@
+import AppKit
+import SwiftUI
+
+enum NativeWorkspaceDockTab: String, CaseIterable, Identifiable {
+    case cameraControls
+    case smartGallery
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .cameraControls: return "Camera Controls"
+        case .smartGallery: return "Smart Gallery"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .cameraControls: return "slider.horizontal.3"
+        case .smartGallery: return "rectangle.stack"
+        }
+    }
+}
+
+struct NativeWorkspaceDock: View {
+    @ObservedObject var model: NativeCameraModel
+    @Binding var selectedTab: NativeWorkspaceDockTab
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                dockTabButton(.cameraControls)
+                dockTabButton(.smartGallery)
+
+                Spacer(minLength: 4)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
+                .help("Hide dock")
+                .accessibilityLabel("Hide dock")
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+
+            Divider()
+
+            Group {
+                switch selectedTab {
+                case .cameraControls:
+                    NativeCameraControlsDock(model: model)
+                case .smartGallery:
+                    NativeSmartGalleryDock(gallery: model.captureGallery)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color(nsColor: NSColor.separatorColor))
+                .frame(width: 1)
+        }
+    }
+
+    private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
+        Button {
+            selectedTab = tab
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: tab.symbolName)
+                    .font(.system(size: 11, weight: .medium))
+                Text(tab.title)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(
+                        selectedTab == tab
+                            ? Color.accentColor.opacity(0.16)
+                            : Color.clear
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(
+                        selectedTab == tab
+                            ? Color.accentColor.opacity(0.38)
+                            : Color.clear,
+                        lineWidth: 0.8
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(selectedTab == tab ? .primary : .secondary)
+        .help(tab.title)
+        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+    }
+}
+
+private struct NativeCameraControlsDock: View {
+    @ObservedObject var model: NativeCameraModel
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 12) {
+                CameraDockConnectionSection(model: model)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MICROSCOPE")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.secondary)
+
+                    Picker(
+                        "Objective",
+                        selection: Binding(
+                            get: { model.microscopeConfiguration.activeObjectiveID },
+                            set: { model.selectMicroscopeObjective($0) }
+                        )
+                    ) {
+                        ForEach(model.microscopeConfiguration.objectives) { objective in
+                            Text(String(format: "%.0f×", objective.magnification))
+                                .tag(objective.id)
+                        }
+                    }
+                    .disabled(model.isCameraOperationPending)
+                    .help("Current objective. Configure objectives in File → Microscope Configuration.")
+
+                    Toggle(
+                        "Automatic resolution",
+                        isOn: Binding(
+                            get: { model.isAutomaticResolutionEnabled },
+                            set: { model.setAutomaticResolutionEnabled($0) }
+                        )
+                    )
+                    .font(.system(size: 10))
+                    .disabled(!model.canAccessFeatures || model.isCameraOperationPending)
+                    .help(model.automaticResolutionHelp)
+
+                    HStack {
+                        Text("Live frame destination")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        Spacer(minLength: 6)
+                        Picker(
+                            "Live frame destination",
+                            selection: Binding(
+                                get: { model.activeSlide },
+                                set: { model.selectActiveSlide($0) }
+                            )
+                        ) {
+                            Text("Slide 1").tag(NativeSlideID.slide1)
+                            Text("Slide 2").tag(NativeSlideID.slide2)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(SegmentedPickerStyle())
+                        .frame(width: 112)
+                        .disabled(model.isCameraOperationPending)
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("CAMERA FEATURES")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Button {
+                            model.refreshFeatures()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Refresh camera feature values")
+                        .disabled(!model.canAccessFeatures ||
+                                  model.isFeatureSnapshotLoading ||
+                                  model.isFeatureWritePending ||
+                                  model.isCameraOperationPending)
+                    }
+
+                    if !model.canAccessFeatures {
+                        Text("Open a camera to load its controls.")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    } else if model.featureDescriptors.isEmpty {
+                        Text(model.isFeatureSnapshotLoading
+                             ? "Loading camera features…"
+                             : "The camera reported no feature controls.")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(
+                            Array(model.featureDescriptors.enumerated()),
+                            id: \.element.name
+                        ) { index, descriptor in
+                            if index == 0 ||
+                               model.featureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
+                                Text(featureGroupTitle(descriptor.group.rawValue).uppercased())
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                    .padding(.top, index == 0 ? 0 : 5)
+                            }
+
+                            DockCameraFeatureControl(
+                                model: model,
+                                descriptor: descriptor
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct CameraDockConnectionSection: View {
+    @ObservedObject var model: NativeCameraModel
+
+    private var isConnected: Bool {
+        model.openedCameraDeviceID != nil && model.cameraState != .closed
+    }
+
+    private var stateColor: Color {
+        switch model.cameraState {
+        case .open, .streaming: return .green
+        case .starting, .stopping: return .orange
+        case .faulted: return .red
+        case .closed: return .secondary
+        @unknown default: return .secondary
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("CAMERA")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Circle()
+                    .fill(stateColor)
+                    .frame(width: 7, height: 7)
+
+                Text(model.cameraStateText.uppercased())
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+
+            Text(isConnected ? model.activeCameraName : "No camera connected")
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .help("Right-click the camera name for Stop and Close actions.")
+                .contextMenu {
+                    if model.cameraState == .streaming {
+                        Button {
+                            model.stopAcquisition()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "stop.fill")
+                                Text("Stop")
+                            }
+                        }
+                        .disabled(!model.canStop)
+                    }
+
+                    if model.canClose {
+                        Button {
+                            model.closeCamera()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "xmark.circle")
+                                Text("Close")
+                            }
+                        }
+                        .disabled(!model.canClose)
+                    }
+                }
+
+            if !isConnected {
+                Picker("Device", selection: $model.selectedDeviceID) {
+                    Text("Select a camera").tag("")
+                    ForEach(model.cameras, id: \.deviceID) { camera in
+                        Text(camera.displayName).tag(camera.deviceID)
+                    }
+                }
+                .disabled(!model.canConnectDetectedCamera)
+
+                HStack {
+                    Button {
+                        model.refreshCameras()
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(model.isEnumeratingCameras || model.isCameraOperationPending)
+
+                    Spacer()
+
+                    Button {
+                        model.openAndStartCamera(deviceID: model.selectedDeviceID)
+                    } label: {
+                        Label("Open + Start", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!model.canConnectDetectedCamera || model.selectedDeviceID.isEmpty)
+                }
+            } else if model.cameraState == .open {
+                Button {
+                    model.startAcquisition()
+                } label: {
+                    Label("Start preview", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!model.canStart)
+            } else if model.cameraState == .streaming {
+                Text("Preview is running. Right-click the camera name to Stop or Close.")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if model.cameraState == .starting || model.cameraState == .stopping {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Camera operation in progress…")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+            } else if model.cameraState == .faulted {
+                Text("Camera faulted. Right-click the camera name to Close the session.")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.7), lineWidth: 0.7)
+        )
+    }
+}
+
+private struct NativeSmartGalleryDock: View {
+    @ObservedObject var gallery: NativeCaptureGalleryStore
+
+    private let columns = [
+        GridItem(.flexible(minimum: 100), spacing: 8),
+        GridItem(.flexible(minimum: 100), spacing: 8)
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CAPTURES")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.secondary)
+                    Text("\(gallery.captures.count) saved")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+
+                Spacer()
+
+                if gallery.isCapturing {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Saving…")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+
+            if let error = gallery.captureErrorMessage {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.system(size: 9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        gallery.dismissCaptureError()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.10))
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
+            }
+
+            Divider()
+
+            if gallery.captures.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundColor(.secondary)
+                    Text("No captures yet")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("Use the camera button on a slide's floating toolbar to save its current image.")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 220)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(16)
+            } else {
+                ScrollView(.vertical, showsIndicators: true) {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(gallery.captures) { item in
+                            Button {
+                                NSWorkspace.shared.open(item.fileURL)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Group {
+                                        if let image = NSImage(data: item.thumbnailData) {
+                                            Image(nsImage: image)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                        } else {
+                                            ZStack {
+                                                Color.black.opacity(0.08)
+                                                Image(systemName: "photo")
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                    }
+                                    .frame(height: 104)
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.black.opacity(0.06))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+
+                                    HStack(spacing: 4) {
+                                        Text(item.slide.title)
+                                            .font(.system(size: 9, weight: .semibold))
+                                        Spacer(minLength: 0)
+                                        Text(item.dimensionsText)
+                                            .font(.system(size: 8, design: .monospaced))
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Text(item.capturedAt, style: .time)
+                                        .font(.system(size: 8))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color(nsColor: NSColor.windowBackgroundColor))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.7), lineWidth: 0.6)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open capture in the default image viewer")
+                            .contextMenu {
+                                Button {
+                                    gallery.reveal(item)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "folder")
+                                        Text("Show in Finder")
+                                    }
+                                }
+
+                                Button(role: .destructive) {
+                                    gallery.delete(item)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "trash")
+                                        Text("Delete Capture")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(10)
+                }
+            }
+
+            Divider()
+            HStack {
+                Image(systemName: "folder")
+                    .foregroundColor(.secondary)
+                Text("Pictures / AmScope Captures")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+        }
+    }
+}

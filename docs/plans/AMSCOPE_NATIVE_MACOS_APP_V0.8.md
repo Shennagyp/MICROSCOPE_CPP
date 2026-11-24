@@ -242,8 +242,8 @@ the raw displayed camera image without overlay burn-in.
 
 The capture button saves the current pane image as a PNG under
 `~/Pictures/AmScope Captures`. Encoding and thumbnail creation run away from
-the UI thread. A single capture is processed at a time; the gallery retains at
-most 80 PNGs on disk and loads thumbnails capped at 320 pixels. It uses the
+the UI thread. A single capture is processed at a time; the gallery loads at
+most 80 recent thumbnails into memory, while older PNG captures remain on disk; thumbnails are capped at 320 pixels. It uses the
 existing pane image as its source; it does not add a mailbox consumer or claim
 the camera driver's separate hardware still-capture API.
 

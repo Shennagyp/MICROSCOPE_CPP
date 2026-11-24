@@ -101,6 +101,38 @@
 
 **Gate:** The native UI covers the existing supported camera workflows selected for v0.8 without changing driver semantics.
 
+## Independent slide-image presentation (2026-11-24)
+
+The existing two-pane design remains unchanged: Slide 1 and Slide 2 stay
+side-by-side, each in its existing half of the preview split. This change is
+limited to the image renderer inside each pane.
+
+Each slide image has independent presentation state:
+
+- **Fit Image to Pane:** show the complete image in that pane, preserve aspect
+  ratio, and downsample only for rendering when the source exceeds the pane.
+  Fit never enlarges beyond one source pixel per physical display pixel.
+- **Actual Pixels (1:1):** map each source camera pixel to one physical display
+  pixel using the current window backing scale. If the frame exceeds the pane,
+  show the visible portion and allow panning.
+- Scroll-wheel zoom and trackpad pinch move continuously from Fit to 1:1,
+  anchored around the pointer. Drag pans while zoomed. Double-click toggles
+  Fit / Actual Pixels; the image-view context menu exposes both exact modes.
+- Each pane retains its own zoom and pan state while new live frames replace
+  its previous image. The inactive pane retains both its last image and view.
+- Downsampling uses high-quality interpolation; native 1:1 presentation
+  disables interpolation. The full-resolution `CGImage` remains the source;
+  overview scaling does not modify the acquired image or frame lease.
+
+No split-view, pane sizing, window sizing, header, dock, slide routing, or
+maximize/restore design changes are part of this update. Camera resolution
+selection and optical Auto Res remain independent of presentation scale.
+
+**Verification pending:** rebuild and verify Fit, continuous zoom, exact 1:1,
+panning, independent Slide 1 / Slide 2 state, changing camera resolution while
+zoomed, and Retina backing-scale behavior. No local build or hardware test is
+claimed by this source change.
+
 ## Two-slide workspace and compact camera dock (2026-11-24)
 
 The main window now has two side-by-side slide panes and one thin bottom dock; the

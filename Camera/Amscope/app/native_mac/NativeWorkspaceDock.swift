@@ -313,18 +313,6 @@ private struct CameraDockConnectionSection: View {
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
                 .help("Right-click the camera name for Stop and Close actions.")
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(stateColor)
-                    .frame(width: 7, height: 7)
-
-                Text(model.cameraStateText.uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
-
-                Spacer(minLength: 0)
-            }
-
                 .contextMenu {
                     if model.cameraState == .streaming {
                         Button {
@@ -350,6 +338,18 @@ private struct CameraDockConnectionSection: View {
                         .disabled(!model.canClose)
                     }
                 }
+
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(stateColor)
+                    .frame(width: 7, height: 7)
+
+                Text(model.cameraStateText.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                Spacer(minLength: 0)
+            }
 
             if !isConnected {
                 Picker("Device", selection: $model.selectedDeviceID) {
@@ -459,6 +459,7 @@ private struct NativeSmartGalleryDock: View {
                 }
 
                 Spacer(minLength: 0)
+            }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
 

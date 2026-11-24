@@ -189,6 +189,29 @@ application. The app has not yet been launched, and the build result does not
 establish camera connectivity, frame rendering correctness, lease lifetime,
 pool availability, or streaming performance parity.
 
+## Controls-window layout correction (2026-11-24)
+
+The first native controls-window inspection exposed a layout defect: the SwiftUI root
+imposed a 620-point minimum width while the `NSWindow` opened at 520 points, and
+the long descriptor-driven feature list had no explicit vertical scroll viewport.
+Maximizing the window could not reliably make the full control set accessible.
+
+The UI correction:
+
+- Replaces the `Form` root with a vertical `ScrollView` containing a width-flexible
+  `VStack`, so the viewport tracks the resizable window while the complete feature
+  list remains reachable by scrolling.
+- Uses `GroupBox` for Camera, Acquisition, and each feature group; feature rows
+  wrap long labels and explanatory text within the available width.
+- Removes the conflicting 620-point content minimum and opens the controls window
+  at 680 × 700 points while retaining a 480 × 420 minimum window size.
+- Leaves the C++ controller, Objective-C++ bridge, feature API, acquisition path,
+  frame mailbox, and preview path unchanged.
+
+**Verification pending:** pull the change, rebuild the native target, then verify
+that the controls window resizes in both dimensions and that all feature groups
+remain reachable by vertical scrolling at the minimum size and when maximized.
+
 ## Implementation rules
 
 - Do not change `AmcamCamera.cpp`, the SDK callback, event queue, pull loop, or frame-pool layout for UI convenience.

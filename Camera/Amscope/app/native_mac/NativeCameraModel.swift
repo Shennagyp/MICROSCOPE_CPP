@@ -63,7 +63,6 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var activeSlide: NativeSlideID = .slide1
     @Published var selectedWorkspaceDockTab: NativeWorkspaceDockTab = .cameraControls
     @Published var isWorkspaceDockVisible = true
-    @Published var isWorkspaceDockFloating = false
     @Published private(set) var workspaceDockWidth: CGFloat = 350
     @Published var errorMessage = ""
     @Published var isShowingError = false
@@ -150,6 +149,28 @@ final class NativeCameraModel: ObservableObject {
             ?? "Connected camera"
     }
 
+    /// Current specimen-plane scale inputs. The exact source-frame dimensions
+    /// are supplied by the preview pane so known sensor binning can be applied.
+    var measurementCalibration: NativeMicroscopeMeasurementCalibration? {
+        let configuration = microscopeConfiguration
+        guard let objective = configuration.objectives.first(where: {
+            $0.id == configuration.activeObjectiveID
+        }) else {
+            return nil
+        }
+
+        let sensorPixelPitch = configuration.cameraSensorPreset.nominalPixelPitchMicrometers
+            ?? configuration.cameraPixelPitchMicrometers
+
+        return NativeMicroscopeMeasurementCalibration(
+            sensorPixelPitchMicrometers: sensorPixelPitch,
+            objectiveMagnification: objective.magnification,
+            reductionLensMagnification: configuration.cameraRelayMagnification,
+            sensorPreset: configuration.cameraSensorPreset,
+            customBinningFactor: configuration.cameraCustomBinningFactor
+        )
+    }
+
     var canConnectDetectedCamera: Bool {
         cameraState == .closed &&
             !isCameraOperationPending &&
@@ -165,14 +186,12 @@ final class NativeCameraModel: ObservableObject {
     /// stale floating state after a panel/window close transition.
     func showWorkspaceDock(_ tab: NativeWorkspaceDockTab) {
         selectedWorkspaceDockTab = tab
-        isWorkspaceDockFloating = false
         isWorkspaceDockVisible = true
     }
 
     /// Hide the workspace tool dock without affecting camera or gallery state.
     func closeWorkspaceDock() {
         isWorkspaceDockVisible = false
-        isWorkspaceDockFloating = false
     }
 
     func setWorkspaceDockWidth(_ width: CGFloat, maximum: CGFloat = 520) {

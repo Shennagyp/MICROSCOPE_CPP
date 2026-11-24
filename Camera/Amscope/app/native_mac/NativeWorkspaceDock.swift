@@ -32,9 +32,11 @@ struct NativeWorkspaceDock: View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 dockTabButton(.cameraControls)
+                    .frame(maxWidth: .infinity)
                 dockTabButton(.smartGallery)
+                    .frame(maxWidth: .infinity)
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
 
                 Button(action: onToggleFloating) {
                     Image(systemName: isFloating ? "sidebar.right" : "arrow.up.right.square")
@@ -56,6 +58,7 @@ struct NativeWorkspaceDock: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
+            .background(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.72))
 
             Divider()
 
@@ -88,8 +91,8 @@ struct NativeWorkspaceDock: View {
                 Text(tab.title)
                     .font(.system(size: 10, weight: .semibold))
             }
-            .padding(.horizontal, 8)
-            .frame(height: 26)
+            .padding(.horizontal, 5)
+            .frame(maxWidth: .infinity, minHeight: 30)
             .background(
                 RoundedRectangle(cornerRadius: 5)
                     .fill(

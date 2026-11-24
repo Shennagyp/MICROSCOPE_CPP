@@ -37,9 +37,6 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var featureValues: [String: AmscopeCameraFeatureValue] = [:]
     @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
-    // Shared popover identity avoids SwiftUI @State macro plug-in requirements
-    // when building with the standalone Command Line Tools Swift compiler.
-    @Published var informationBarEditingFeatureName: String? = nil
 
     private init() {
         bridge.onAcquisitionError = { [weak self] error in
@@ -196,7 +193,6 @@ final class NativeCameraModel: ObservableObject {
                     self.featureValues = [:]
                     self.featureErrors = [:]
                     self.featureDrafts = [:]
-                    self.informationBarEditingFeatureName = nil
                     self.isFeatureSnapshotLoading = false
                 }
             }

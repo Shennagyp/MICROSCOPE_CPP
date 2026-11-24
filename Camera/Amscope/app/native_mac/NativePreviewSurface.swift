@@ -8,15 +8,13 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
     let activeSlide: NativeSlideID
     let onActiveSlideChanged: (NativeSlideID) -> Void
-    let onMetadataChanged: (String, String) -> Void
 
     func makeNSView(context: Context) -> NativeDualPreviewNSView {
         let view = NativeDualPreviewNSView(frame: .zero)
         view.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged,
-            onMetadataChanged: onMetadataChanged
+            onActiveSlideChanged: onActiveSlideChanged
         )
         return view
     }
@@ -31,11 +29,6 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     }
 }
 
-private struct NativeSlideFrameMetadata {
-    let resolution: String
-    let pixelFormat: String
-}
-
 final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private let splitView = NSSplitView()
     private let slideOnePane = NativeSlidePreviewPane(slide: .slide1)
@@ -47,8 +40,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var previousDividerFraction: CGFloat = 0.5
     private var didSetInitialSplitPosition = false
     private var onActiveSlideChanged: ((NativeSlideID) -> Void)?
-    private var onMetadataChanged: ((String, String) -> Void)?
-    private var slideMetadata: [NativeSlideID: NativeSlideFrameMetadata] = [:]
     private let minimumPaneWidth: CGFloat = 240
     private var didConfigureSubviews = false
 
@@ -104,8 +95,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     func attach(
         to bridge: AmscopeNativeCameraBridge,
         activeSlide: NativeSlideID,
-        onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
-        onMetadataChanged: @escaping (String, String) -> Void
+        onActiveSlideChanged: @escaping (NativeSlideID) -> Void
     ) {
         if self.bridge !== bridge {
             self.bridge = bridge
@@ -117,8 +107,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         }
 
         self.onActiveSlideChanged = onActiveSlideChanged
-        self.onMetadataChanged = onMetadataChanged
-        setActiveSlide(activeSlide, notifyMetadata: true)
+        setActiveSlide(activeSlide)
 
         // Recover a frame if the view was recreated while a notification
         // was already pending. This remains the single mailbox consumer.
@@ -126,25 +115,14 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     }
 
     private func selectActiveSlide(_ slide: NativeSlideID) {
-        setActiveSlide(slide, notifyMetadata: true)
+        setActiveSlide(slide)
         onActiveSlideChanged?(slide)
     }
 
-    private func setActiveSlide(
-        _ slide: NativeSlideID,
-        notifyMetadata: Bool
-    ) {
+    private func setActiveSlide(_ slide: NativeSlideID) {
         activeSlide = slide
         updatePaneStates()
-        if notifyMetadata {
-            let metadata = slideMetadata[slide]
-            onMetadataChanged?(
-                metadata?.resolution ?? "—",
-                metadata?.pixelFormat ?? "—"
-            )
-        }
     }
-
     private func updatePaneStates() {
         slideOnePane.updatePresentationState(
             isActiveTarget: activeSlide == .slide1,
@@ -235,21 +213,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             return
         }
 
-        let resolution = "\(lease.width) × \(lease.height)"
-        let pixelFormat: String
-        switch lease.pixelFormat {
-        case 1: pixelFormat = "RGB24"
-        case 2: pixelFormat = "RAW8"
-        case 3: pixelFormat = "RAW16"
-        default: pixelFormat = "Unknown"
-        }
-
-        let metadata = NativeSlideFrameMetadata(
-            resolution: resolution,
-            pixelFormat: pixelFormat
-        )
-        slideMetadata[activeSlide] = metadata
-
         switch activeSlide {
         case .slide1:
             slideOnePane.display(image)
@@ -258,7 +221,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         }
 
         updatePaneStates()
-        onMetadataChanged?(resolution, pixelFormat)
     }
 }
 

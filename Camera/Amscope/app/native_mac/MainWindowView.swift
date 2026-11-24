@@ -265,13 +265,23 @@ private struct DockCameraFeatureControl: View {
     @ObservedObject var model: NativeCameraModel
     let descriptor: AmscopeCameraFeatureDescriptor
 
+    private var isResolutionControl: Bool {
+        descriptor.name == "AmcamResolutionIndex"
+    }
+
     private var editingDisabled: Bool {
         !model.canAccessFeatures ||
         !descriptor.isAvailable ||
-        !descriptor.isWritable ||
+        !(isResolutionControl
+            ? model.canChangePreviewResolution
+            : descriptor.isWritable) ||
         model.isFeatureWritePending ||
         model.isFeatureSnapshotLoading ||
         model.isCameraOperationPending
+    }
+
+    private var editorWidth: CGFloat {
+        isResolutionControl ? 118 : 94
     }
 
     var body: some View {
@@ -298,16 +308,26 @@ private struct DockCameraFeatureControl: View {
                     .font(.system(size: 9, weight: .medium))
                     .lineLimit(1)
                     .frame(width: 76, alignment: .leading)
-                editor
-                    .frame(width: 94)
+                if descriptor.isWritable || isResolutionControl {
+                    editor
+                        .frame(width: editorWidth)
+                } else {
+                    editor
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
         }
-        .frame(width: 178, height: 40, alignment: .leading)
+        .frame(
+            minWidth: descriptor.isWritable || isResolutionControl ? 200 : 0,
+            minHeight: 40,
+            alignment: .leading
+        )
         .padding(.horizontal, 5)
         .background(
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(nsColor: NSColor.controlBackgroundColor))
         )
+        .fixedSize(horizontal: true, vertical: false)
         .help(featureHelpText)
     }
 
@@ -328,17 +348,21 @@ private struct DockCameraFeatureControl: View {
             }
         }
         if let reason = descriptor.disabledReason, !reason.isEmpty { parts.append(reason) }
+        if isResolutionControl {
+            parts.append("Changing resolution briefly stops and restarts acquisition")
+        }
         if let error = model.featureError(for: descriptor) { parts.append(error) }
         return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
     private var editor: some View {
-        if !descriptor.isWritable {
+        if !descriptor.isWritable && !isResolutionControl {
             Text(model.displayValue(for: descriptor))
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
+                .multilineTextAlignment(.leading)
         } else {
             switch descriptor.kind {
             case .boolean:
@@ -382,11 +406,17 @@ private struct DockCameraFeatureControl: View {
                         "",
                         selection: Binding(
                             get: { model.enumerationValue(for: descriptor) },
-                            set: { model.writeEnumeration($0, for: descriptor) }
+                            set: { symbol in
+                                if isResolutionControl {
+                                    model.changePreviewResolution(to: symbol)
+                                } else {
+                                    model.writeEnumeration(symbol, for: descriptor)
+                                }
+                            }
                         )
                     ) {
                         ForEach(descriptor.enumerationValues, id: \.self) { symbol in
-                            Text(symbol).tag(symbol)
+                            Text(displayOption(symbol)).tag(symbol)
                         }
                     }
                     .labelsHidden()
@@ -403,6 +433,15 @@ private struct DockCameraFeatureControl: View {
                     .foregroundColor(.secondary)
             }
         }
+    }
+
+    private func displayOption(_ symbol: String) -> String {
+        guard isResolutionControl,
+              let separator = symbol.firstIndex(of: ":") else {
+            return symbol
+        }
+        let dimensions = symbol[symbol.index(after: separator)...]
+        return String(dimensions).replacingOccurrences(of: "x", with: " × ")
     }
 
     private var textEditor: some View {

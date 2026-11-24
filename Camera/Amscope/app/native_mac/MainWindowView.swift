@@ -32,6 +32,16 @@ struct MainWindowView: View {
                     maxWidth: .infinity,
                     maxHeight: .infinity
                 )
+                .overlay(alignment: .topLeading) {
+                    // These are acquisition controls, not settings-dock content.
+                    // Keep them available in the normal workspace when the dock
+                    // is closed; the dock contains the same controls while open.
+                    if !model.isWorkspaceDockVisible {
+                        NativeMicroscopeQuickControls(model: model)
+                            .padding(10)
+                            .zIndex(20)
+                    }
+                }
                 .clipped()
                 .layoutPriority(1)
 
@@ -82,6 +92,119 @@ struct MainWindowView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+    }
+}
+
+private struct NativeMicroscopeQuickControls: View {
+    @ObservedObject var model: NativeCameraModel
+
+    private var resolutionDescriptor: AmscopeCameraFeatureDescriptor? {
+        model.previewResolutionDescriptor
+    }
+
+    var body: some View {
+        HStack(spacing: 9) {
+            HStack(spacing: 5) {
+                Text("Objective")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                Picker(
+                    "Objective",
+                    selection: Binding(
+                        get: { model.microscopeConfiguration.activeObjectiveID },
+                        set: { model.selectMicroscopeObjective($0) }
+                    )
+                ) {
+                    ForEach(model.microscopeConfiguration.objectives) { objective in
+                        Text(String(format: "%.0f×", objective.magnification))
+                            .tag(objective.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(PopUpButtonPickerStyle())
+                .frame(width: 76)
+                .disabled(model.isCameraOperationPending)
+                .help("Select the active microscope objective")
+            }
+
+            Divider()
+                .frame(height: 22)
+
+            HStack(spacing: 5) {
+                Text("Resolution")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                if let descriptor = resolutionDescriptor {
+                    Picker(
+                        "Resolution",
+                        selection: Binding(
+                            get: { model.selectedPreviewResolutionSymbol ?? "" },
+                            set: { model.selectManualPreviewResolution(to: $0) }
+                        )
+                    ) {
+                        if model.selectedPreviewResolutionSymbol == nil {
+                            Text("Select…").tag("")
+                        }
+                        ForEach(descriptor.enumerationValues, id: \.self) { symbol in
+                            Text(resolutionOptionTitle(symbol)).tag(symbol)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(PopUpButtonPickerStyle())
+                    .frame(width: 136)
+                    .disabled(!model.canChangePreviewResolution)
+                    .help("Choose a resolution. Manual selection turns automatic resolution off.")
+                } else {
+                    Text(model.canAccessFeatures ? "Unavailable" : "—")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .frame(width: 136, alignment: .leading)
+                }
+            }
+
+            Divider()
+                .frame(height: 22)
+
+            Toggle(
+                "Auto",
+                isOn: Binding(
+                    get: { model.isAutomaticResolutionEnabled },
+                    set: { model.setAutomaticResolutionEnabled($0) }
+                )
+            )
+            .font(.system(size: 11, weight: .medium))
+            .toggleStyle(SwitchToggleStyle())
+            .disabled(resolutionDescriptor == nil ||
+                      !model.canAccessFeatures ||
+                      model.isCameraOperationPending ||
+                      model.isFeatureWritePending ||
+                      model.isFeatureSnapshotLoading)
+            .help(model.automaticResolutionHelp)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.96))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.75), lineWidth: 0.7)
+        )
+        .shadow(color: Color.black.opacity(0.16), radius: 5, x: 0, y: 2)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Microscope quick controls")
+    }
+
+    private func resolutionOptionTitle(_ symbol: String) -> String {
+        guard let separator = symbol.firstIndex(of: ":") else {
+            return symbol
+        }
+        return String(symbol[symbol.index(after: separator)...])
+            .replacingOccurrences(of: "x", with: " × ")
     }
 }
 

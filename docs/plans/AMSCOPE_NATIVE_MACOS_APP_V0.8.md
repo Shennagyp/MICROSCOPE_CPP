@@ -74,7 +74,7 @@
 - [ ] Verify the dual-pane layout, active-slide routing, image persistence, and compact dock on macOS.
 - [x] Keep camera discovery and lifecycle controls accessible through the File menu.
 - [x] Add one compact bottom dock with camera connection indicator and lifecycle actions, slide target selection, and horizontally scrollable generic camera feature controls.
-- [x] Remove the duplicate Camera, Resolution, Format, State, and Live read-only property fields; show connection state and selected camera beside the lifecycle controls on the left.
+- [x] Remove the duplicate Camera, Resolution, Format, State, and Live read-only property fields and their unused observable frame-metadata properties; show camera identity/state only beside lifecycle controls on the left.
 - [x] Prevent overlapping lifecycle requests and selection changes while a camera session is active.
 - [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
 - [x] Render all available generic feature descriptors in the bottom dock: writable boolean, integer, floating-point, string, integer-vector, and enumeration controls; read-only descriptor values remain visible.

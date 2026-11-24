@@ -506,7 +506,9 @@ private struct NativeSmartGalleryDock: View {
                     Text("CAPTURES")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(.secondary)
-                    Text("\(gallery.captures.count) saved")
+                    Text(gallery.captures.count == 80
+                         ? "Latest 80 captures"
+                         : "\(gallery.captures.count) captures")
                         .font(.system(size: 11, weight: .semibold))
                 }
 
@@ -573,9 +575,14 @@ private struct NativeSmartGalleryDock: View {
             HStack {
                 Image(systemName: "folder")
                     .foregroundColor(.secondary)
-                Text("Pictures / AmScope Captures")
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Pictures / AmScope Captures")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    Text("Shows the latest 80; older PNG files remain on disk.")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
             }
             .padding(.horizontal, 10)

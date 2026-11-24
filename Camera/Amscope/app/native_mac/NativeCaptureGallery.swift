@@ -153,6 +153,7 @@ final class NativeCaptureGalleryStore: ObservableObject {
                 let currentIDs = Set(self.captures.map(\.id))
                 let merged = self.captures + loadedItems.filter { !currentIDs.contains($0.id) }
                 self.captures = merged.sorted { $0.capturedAt > $1.capturedAt }
+                self.trimGallery()
             }
         }
     }

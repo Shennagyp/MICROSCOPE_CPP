@@ -16,11 +16,18 @@ struct MainWindowView: View {
 
             Divider()
 
-            HStack(spacing: 22) {
+            HStack(spacing: 20) {
                 InformationBarField(title: "Camera", value: model.selectedCameraName)
                 InformationBarField(title: "Resolution", value: model.resolutionText)
                 InformationBarField(title: "Pixel Format", value: model.pixelFormatText)
                 InformationBarField(title: "State", value: model.cameraStateText)
+
+                ForEach(model.informationBarFeatures, id: \.name) { descriptor in
+                    EditableFeatureInformationField(
+                        model: model,
+                        descriptor: descriptor
+                    )
+                }
 
                 Spacer(minLength: 8)
             }
@@ -53,6 +60,82 @@ private struct InformationBarField: View {
             Text(value)
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundColor(.primary)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+private struct EditableFeatureInformationField: View {
+    @ObservedObject var model: NativeCameraModel
+    let descriptor: AmscopeCameraFeatureDescriptor
+
+    @State private var isEditing = false
+
+    private var displayValue: String {
+        let value = model.displayValue(for: descriptor)
+        guard let unit = descriptor.unit, !unit.isEmpty else {
+            return value
+        }
+        return "\(value) \(unit)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(descriptor.displayName)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary)
+
+            Text(displayValue)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundColor(descriptor.isWritable ? .primary : .secondary)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    guard descriptor.isWritable && !model.isFeatureWritePending else {
+                        return
+                    }
+                    isEditing = true
+                }
+                .popover(isPresented: $isEditing) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Edit \(descriptor.displayName)")
+                            .font(.headline)
+
+                        HStack(spacing: 8) {
+                            TextField(
+                                "Value",
+                                text: Binding(
+                                    get: { model.draftValue(for: descriptor) },
+                                    set: { model.setDraftValue($0, for: descriptor) }
+                                )
+                            )
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .frame(width: 150)
+
+                            if let unit = descriptor.unit {
+                                Text(unit)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        HStack {
+                            Spacer()
+                            Button("Cancel") {
+                                isEditing = false
+                            }
+                            Button("Apply") {
+                                model.commitDraft(for: descriptor)
+                                isEditing = false
+                            }
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(model.isFeatureWritePending)
+                        }
+                    }
+                    .padding(14)
+                    .frame(width: 300)
+                }
+                .help(descriptor.isWritable
+                    ? "Double-click to edit"
+                    : descriptor.displayName)
         }
         .fixedSize(horizontal: true, vertical: false)
     }

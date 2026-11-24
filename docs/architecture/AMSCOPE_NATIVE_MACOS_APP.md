@@ -74,7 +74,7 @@ SwiftUI observes camera state, feature descriptors/values, errors, and command c
 
 ### Preview surface — AppKit
 
-A custom `NSView`, integrated through `NSViewRepresentable`, owns the rendering lifecycle. It consumes the latest published frame only when AppKit schedules a draw.
+A custom `NSView`, integrated through `NSViewRepresentable`, owns the rendering lifecycle. It consumes the latest published lease on the coalesced main-thread callback and retains one current `CGImage` for AppKit drawing.
 
 Do not route frames through SwiftUI `Image`, `@Published` frame properties, `NSBitmapImageRep`, or `Data` as an intermediate pixel container. Those abstractions obscure ownership and can introduce copying or excessive state invalidation.
 
@@ -121,7 +121,7 @@ This is an application-side no-copy handoff: the bridge does not allocate a seco
 
 Use exact width, height, stride, pixel format, significant depth, and byte-order semantics. Preserve the existing preview interpretation: RGB24 as RGB and RAW8/RAW16 as preview grayscale; do not add demosaicing or precision conversion in the stream path.
 
-A draw consumes the newest available frame. Replacing the displayed lease must release the old lease promptly. Disable implicit image animations and do not retain a sequence of prior `CGImage` objects. Test provider release timing against the four-frame pool to rule out pool starvation.
+Frame consumption is separate from `draw(_:)`: the main-thread notification transfers the newest lease from the mailbox and constructs the `CGImage`; drawing only renders that image. Replacing the displayed image must release the old provider lease promptly. Disable implicit image animations and do not retain a sequence of prior `CGImage` objects. Test provider release timing against the four-frame pool to rule out pool starvation.
 
 ## 5. Notification and thread model
 
@@ -129,7 +129,7 @@ The acquisition callback publishes to the C++ mailbox and returns. It does not d
 
 When the mailbox transitions to pending, the native adapter schedules one main-thread callback. The AppKit view consumes the latest lease in that callback, builds the direct-access `CGImage`, and requests a redraw. Further camera frames overwrite the mailbox slot while the notification is pending; they do not add more main-thread work items. The display image is not stored as per-frame SwiftUI state.
 
-The view must tolerate being detached, resized, hidden, or closed while acquisition continues. Closing a window may stop presentation, but it must not implicitly close the camera unless an explicit application lifecycle command requests that action.
+The view must tolerate being detached, resized, hidden, or closed while acquisition continues. Closing a window may stop presentation, but it must not implicitly close the camera unless an explicit application lifecycle command requests that action. Application termination explicitly queues camera Close and waits for its completion before exiting.
 
 Camera lifecycle and feature operations execute on one serialized non-UI command executor. Their result callbacks are marshaled to the main actor only after the operation completes. The acquisition worker never waits for that executor or for the UI.
 

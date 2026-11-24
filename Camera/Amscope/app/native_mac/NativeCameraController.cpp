@@ -343,28 +343,33 @@ void NativeCameraController::handleAcquisitionFailure(
     if (!frameGate)
         return;
 
-    const std::uint64_t acquisitionGeneration = frameGate->generation();
-    if (acquisitionGeneration == 0 ||
-        !frameGate->invalidateIfCurrent(acquisitionGeneration)) {
-        return;
+    try {
+        const std::uint64_t acquisitionGeneration = frameGate->generation();
+        if (acquisitionGeneration == 0 ||
+            !frameGate->invalidateIfCurrent(acquisitionGeneration)) {
+            return;
+        }
+
+        // Stop publication immediately. The queued error notification is kept
+        // off the acquisition callback and serialized with lifecycle operations.
+        frameMailbox_.clear();
+
+        const CameraError errorCopy = error;
+        (void)enqueue(
+            false,
+            [this, acquisitionGeneration, errorCopy](
+                RequestId, std::uint64_t) {
+                const bool stillOwnsAcquisition =
+                    activeSessionGeneration_.load(std::memory_order_acquire) ==
+                        acquisitionGeneration &&
+                    camera_.state() == CameraState::Faulted;
+                if (stillOwnsAcquisition)
+                    invokeSafely(onAcquisitionError_, acquisitionGeneration, errorCopy);
+            });
+    } catch (...) {
+        // Acquisition-failure reporting is best-effort under allocation failure;
+        // exceptions must never escape into the vendor acquisition worker.
     }
-
-    // Stop publication immediately. The queued error notification is kept
-    // off the acquisition callback and serialized with lifecycle operations.
-    frameMailbox_.clear();
-
-    const CameraError errorCopy = error;
-    (void)enqueue(
-        false,
-        [this, acquisitionGeneration, errorCopy](
-            RequestId, std::uint64_t) {
-            const bool stillOwnsAcquisition =
-                activeSessionGeneration_.load(std::memory_order_acquire) ==
-                    acquisitionGeneration &&
-                camera_.state() == CameraState::Faulted;
-            if (stillOwnsAcquisition)
-                invokeSafely(onAcquisitionError_, acquisitionGeneration, errorCopy);
-        });
 }
 
 } // namespace amscope::native_mac

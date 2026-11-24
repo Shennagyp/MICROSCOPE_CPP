@@ -72,6 +72,28 @@ static void releaseFrameProviderData(
     (void)retainedLease;
 }
 
+// Device color spaces are immutable; keep one RGB and one gray instance for
+// the process lifetime rather than allocating/releasing one for every frame.
+CGColorSpaceRef cachedDeviceColorSpace(camera::PixelFormat pixelFormat) {
+    static dispatch_once_t onceToken;
+    static CGColorSpaceRef deviceRGB = nullptr;
+    static CGColorSpaceRef deviceGray = nullptr;
+    dispatch_once(&onceToken, ^{
+        deviceRGB = CGColorSpaceCreateDeviceRGB();
+        deviceGray = CGColorSpaceCreateDeviceGray();
+    });
+
+    switch (pixelFormat) {
+    case camera::PixelFormat::RGB24:
+        return deviceRGB;
+    case camera::PixelFormat::Raw8:
+    case camera::PixelFormat::Raw16:
+        return deviceGray;
+    case camera::PixelFormat::Unknown:
+        return nullptr;
+    }
+    return nullptr;
+}
 
 std::string utf8String(NSString *value) {
     if (!value)
@@ -211,13 +233,11 @@ const camera::Frame *frameFromStorage(void *storage) {
         bytesPerPixel = 3;
         bitsPerComponent = 8;
         bitsPerPixel = 24;
-        colorSpace = CGColorSpaceCreateDeviceRGB();
         break;
     case camera::PixelFormat::Raw8:
         bytesPerPixel = 1;
         bitsPerComponent = 8;
         bitsPerPixel = 8;
-        colorSpace = CGColorSpaceCreateDeviceGray();
         break;
     case camera::PixelFormat::Raw16:
         bytesPerPixel = 2;
@@ -225,11 +245,12 @@ const camera::Frame *frameFromStorage(void *storage) {
         bitsPerPixel = 16;
         bitmapInfo = static_cast<CGBitmapInfo>(
             kCGImageAlphaNone | kCGBitmapByteOrder16Little);
-        colorSpace = CGColorSpaceCreateDeviceGray();
         break;
     case camera::PixelFormat::Unknown:
         return nullptr;
     }
+
+    colorSpace = cachedDeviceColorSpace(frame->pixelFormat);
 
     const std::uint64_t minimumRowBytes =
         static_cast<std::uint64_t>(frame->width) * bytesPerPixel;
@@ -240,11 +261,8 @@ const camera::Frame *frameFromStorage(void *storage) {
         frame->strideBytes >= minimumRowBytes &&
         requiredBytes <= frame->byteSize();
 
-    if (!validBuffer || !colorSpace) {
-        if (colorSpace)
-            CGColorSpaceRelease(colorSpace);
+    if (!validBuffer || !colorSpace)
         return nullptr;
-    }
 
     // The provider retains this lease until Core Graphics releases the
     // provider. No intermediate pixel buffer or NSData is created.
@@ -258,7 +276,6 @@ const camera::Frame *frameFromStorage(void *storage) {
     if (!provider) {
         id retainedLease = (__bridge_transfer id)providerInfo;
         (void)retainedLease;
-        CGColorSpaceRelease(colorSpace);
         return nullptr;
     }
 
@@ -276,7 +293,6 @@ const camera::Frame *frameFromStorage(void *storage) {
         kCGRenderingIntentDefault);
 
     CGDataProviderRelease(provider);
-    CGColorSpaceRelease(colorSpace);
     return image;
 }
 

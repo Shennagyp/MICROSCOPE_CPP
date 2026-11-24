@@ -211,7 +211,7 @@ struct NativeDockLayoutSnapshot: Codable, Equatable {
     var floatingWindows: [NativeDockFloatingWindowState]
 
     init(
-        version: Int = Self.currentVersion,
+        version: Int = NativeDockLayoutSnapshot.currentVersion,
         dockedRegions: [NativeDockEdgeRegion] = [],
         autoHiddenGroups: [NativeDockAutoHideGroup] = [],
         floatingWindows: [NativeDockFloatingWindowState] = []

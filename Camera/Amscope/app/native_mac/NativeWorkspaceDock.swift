@@ -24,37 +24,21 @@ enum NativeWorkspaceDockTab: String, CaseIterable, Identifiable {
 
 struct NativeWorkspaceDock: View {
     @ObservedObject var model: NativeCameraModel
-    let isFloating: Bool
     let onClose: () -> Void
-    let onToggleFloating: () -> Void
 
     var body: some View {
         Group {
             switch model.selectedWorkspaceDockTab {
             case .cameraControls:
-                NativeCameraControlsDock(model: model)
+                NativeCameraControlsDock(model: model, onClose: onClose)
             case .smartGallery:
-                NativeSmartGalleryDock(gallery: model.captureGallery)
+                NativeSmartGalleryDock(
+                    gallery: model.captureGallery,
+                    onClose: onClose
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topTrailing) {
-            HStack(spacing: 5) {
-                dockChromeButton(
-                    symbol: isFloating ? "sidebar.right" : "arrow.up.right.square",
-                    description: isFloating ? "Dock in the main window" : "Float this dock",
-                    action: onToggleFloating
-                )
-                dockChromeButton(
-                    symbol: "xmark",
-                    description: "Hide dock",
-                    action: onClose
-                )
-            }
-            .padding(.top, 8)
-            .padding(.trailing, 9)
-            .zIndex(2)
-        }
         .background(Color(nsColor: NSColor.controlBackgroundColor))
         .overlay(
             Rectangle()
@@ -62,32 +46,6 @@ struct NativeWorkspaceDock: View {
                 .frame(width: 1),
             alignment: .leading
         )
-    }
-
-
-    private func dockChromeButton(
-        symbol: String,
-        description: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.94))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7)
-                        .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.75), lineWidth: 0.7)
-                )
-                .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .foregroundColor(.primary)
-        .help(description)
-        .accessibilityLabel(description)
     }
 }
 
@@ -166,161 +124,14 @@ struct NativeWorkspaceDockTabRail: View {
     }
 }
 
-struct NativeWorkspaceDockPanelAnchor: NSViewRepresentable {
-    let model: NativeCameraModel
-
-    func makeNSView(context: Context) -> NativeWorkspaceDockPanelAnchorNSView {
-        let view = NativeWorkspaceDockPanelAnchorNSView(model: model)
-        view.synchronize()
-        return view
-    }
-
-    func updateNSView(
-        _ nsView: NativeWorkspaceDockPanelAnchorNSView,
-        context: Context
-    ) {
-        nsView.synchronize()
-    }
-}
-
-@MainActor
-final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
-    private let model: NativeCameraModel
-    private var floatingPanel: NSPanel?
-    private var floatingPanelFrameWasRestored = false
-
-    init(model: NativeCameraModel) {
-        self.model = model
-        super.init(frame: .zero)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("NativeWorkspaceDockPanelAnchorNSView does not support NSCoder initialization")
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-
-        guard window != nil else {
-            // SwiftUI may temporarily detach/re-host representable views while
-            // reconciling the root hierarchy. Preserve the user's dock state;
-            // only hide and detach the panel until a host window is available.
-            if let panel = floatingPanel {
-                panel.parent?.removeChildWindow(panel)
-                panel.orderOut(nil)
-            }
-            return
-        }
-
-        synchronize()
-    }
-
-    func synchronize() {
-        guard let mainWindow = window else {
-            floatingPanel?.orderOut(nil)
-            return
-        }
-
-        guard model.isWorkspaceDockVisible && model.isWorkspaceDockFloating else {
-            if let panel = floatingPanel {
-                if panel.parent === mainWindow {
-                    mainWindow.removeChildWindow(panel)
-                }
-                panel.orderOut(nil)
-            }
-            return
-        }
-
-        if floatingPanel == nil {
-            let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 360, height: 680),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable, .utilityWindow],
-                backing: .buffered,
-                defer: false
-            )
-            panel.title = "AmScope Workspace"
-            panel.isFloatingPanel = true
-            panel.isReleasedWhenClosed = false
-            panel.minSize = NSSize(width: 280, height: 320)
-            panel.setFrameAutosaveName("AmscopeWorkspaceDock")
-            floatingPanelFrameWasRestored = panel.setFrameUsingName("AmscopeWorkspaceDock")
-            panel.contentViewController = NSHostingController(
-                rootView: NativeWorkspaceDock(
-                    model: model,
-                    isFloating: true,
-                    onClose: { [weak self] in
-                        guard let self = self else { return }
-                        self.model.closeWorkspaceDock()
-                    },
-                    onToggleFloating: { [weak self] in
-                        self?.model.isWorkspaceDockFloating = false
-                    }
-                )
-            )
-            panel.delegate = self
-            floatingPanel = panel
-        }
-
-        guard let panel = floatingPanel else { return }
-        if panel.parent !== mainWindow {
-            panel.parent?.removeChildWindow(panel)
-            mainWindow.addChildWindow(panel, ordered: .above)
-        }
-
-        guard !panel.isVisible else { return }
-
-        let mainFrame = mainWindow.frame
-        var panelFrame = panel.frame
-        let visibleFrame = mainWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
-
-        if let visibleFrame = visibleFrame {
-            panelFrame.size.width = min(panelFrame.size.width, visibleFrame.width)
-            panelFrame.size.height = min(panelFrame.size.height, visibleFrame.height)
-
-            if floatingPanelFrameWasRestored {
-                // Keep the user's saved panel position and size, clamping only
-                // when the current display cannot contain the saved frame.
-                panelFrame.origin.x = min(
-                    max(panelFrame.origin.x, visibleFrame.minX),
-                    visibleFrame.maxX - panelFrame.width
-                )
-                panelFrame.origin.y = min(
-                    max(panelFrame.origin.y, visibleFrame.minY),
-                    visibleFrame.maxY - panelFrame.height
-                )
-            } else {
-                panelFrame.origin.x = min(
-                    max(mainFrame.maxX - panelFrame.width - 18, visibleFrame.minX),
-                    visibleFrame.maxX - panelFrame.width
-                )
-                panelFrame.origin.y = min(
-                    max(mainFrame.maxY - panelFrame.height - 54, visibleFrame.minY),
-                    visibleFrame.maxY - panelFrame.height
-                )
-            }
-        } else if !floatingPanelFrameWasRestored {
-            panelFrame.origin = NSPoint(
-                x: mainFrame.maxX - panelFrame.width - 18,
-                y: mainFrame.maxY - panelFrame.height - 54
-            )
-        }
-
-        panel.setFrame(panelFrame, display: false)
-        panel.makeKeyAndOrderFront(nil)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        model.closeWorkspaceDock()
-    }
-}
-
 private struct NativeCameraControlsDock: View {
     @ObservedObject var model: NativeCameraModel
+    let onClose: () -> Void
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 14) {
-                CameraDockConnectionSection(model: model)
+                CameraDockConnectionSection(model: model, onClose: onClose)
 
                 Divider()
 
@@ -442,6 +253,7 @@ private struct NativeCameraControlsDock: View {
 
 private struct CameraDockConnectionSection: View {
     @ObservedObject var model: NativeCameraModel
+    let onClose: () -> Void
 
     private var isConnected: Bool {
         model.openedCameraDeviceID != nil && model.cameraState != .closed
@@ -473,6 +285,15 @@ private struct CameraDockConnectionSection: View {
                 Text(model.cameraStateText.uppercased())
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.secondary)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .help("Close Camera Controls dock")
+                .accessibilityLabel("Close Camera Controls dock")
             }
 
             Text(isConnected ? model.activeCameraName : "No camera connected")
@@ -593,6 +414,7 @@ private struct CameraDockConnectionSection: View {
 
 private struct NativeSmartGalleryDock: View {
     @ObservedObject var gallery: NativeCaptureGalleryStore
+    let onClose: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -614,6 +436,15 @@ private struct NativeSmartGalleryDock: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
                 }
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .help("Close Smart Gallery dock")
+                .accessibilityLabel("Close Smart Gallery dock")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)

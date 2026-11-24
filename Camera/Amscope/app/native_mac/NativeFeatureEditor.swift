@@ -32,7 +32,7 @@ struct NativeFeatureSections: View {
     @ObservedObject var model: NativeCameraModel
 
     var body: some View {
-        if model.cameraState == .closed {
+        if !model.canAccessFeatures {
             Text("Open a camera to inspect its supported features.")
                 .foregroundColor(.secondary)
         } else {

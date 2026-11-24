@@ -347,14 +347,20 @@ private final class NativeSlidePreviewPane: NSView {
         let description = isResizable
             ? "Resizable image mode"
             : "Full-resolution image mode"
-        imageSizingButton.image = NSImage(
-            systemSymbolName: symbolName,
-            accessibilityDescription: description
-        )
-        imageSizingButton.title = isResizable ? "↔" : "1:1"
+        if #available(macOS 11.0, *) {
+            imageSizingButton.image = NSImage(
+                systemSymbolName: symbolName,
+                accessibilityDescription: description
+            )
+            imageSizingButton.imagePosition = .imageOnly
+        } else {
+            imageSizingButton.image = nil
+            imageSizingButton.imagePosition = .noImage
+            imageSizingButton.title = isResizable ? "↔" : "1:1"
+        }
         imageSizingButton.toolTip = isResizable
-            ? "Resizable: image follows viewer size. Click to lock full resolution."
-            : "Full Resolution: keep image scale when viewer size changes. Click to resize with viewer."
+            ? "Resizable: image follows viewer size. Click to lock the current scale and preserve source resolution."
+            : "Full Resolution: preserve the manual image scale when the viewer changes size. Click to resume automatic resizing."
         imageSizingButton.setAccessibilityLabel(description)
     }
 
@@ -632,6 +638,12 @@ private final class NativeSlideImageView: NSView {
         )
         guard abs(nextScale - oldScale) > 0.000001 else { return }
 
+        // Lock only after the scale actually changes. A scroll-down gesture
+        // at the automatic minimum must not disable Resizable mode.
+        if sizingMode == .resizable {
+            sizingMode = .fullResolution
+            onSizingModeChanged?()
+        }
         lockedScale = nextScale
         let nextSize = imageContainerSize(at: nextScale)
         let proposedOrigin = CGPoint(
@@ -723,7 +735,7 @@ private final class NativeSlideImageView: NSView {
         menu.addItem(resizableItem)
 
         let fullResolutionItem = NSMenuItem(
-            title: "Full Resolution: Actual Pixels (1:1)",
+            title: "Full Resolution / Manual Scale (maximum 1:1)",
             action: #selector(selectFullResolutionMode(_:)),
             keyEquivalent: ""
         )
@@ -761,7 +773,6 @@ private final class NativeSlideImageView: NSView {
 
 private final class NativeSlideImageContainerView: NSView {
     private var currentImage: CGImage?
-    private var interpolationQuality: CGInterpolationQuality = .high
 
     override var isFlipped: Bool { true }
 

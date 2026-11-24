@@ -187,33 +187,44 @@ private struct CameraConnectionControl: View {
 
                 if model.cameraState == .open {
                     Button("Start") { model.startAcquisition() }
-                        .controlSize(.small)
+                        .font(.system(size: 9))
                         .disabled(!model.canStart)
                 }
                 if model.cameraState == .streaming {
                     Button("Stop") { model.stopAcquisition() }
-                        .controlSize(.small)
+                        .font(.system(size: 9))
                         .disabled(!model.canStop)
                 }
                 if model.canClose {
                     Button("Close") { model.closeCamera() }
-                        .controlSize(.small)
+                        .font(.system(size: 9))
                         .disabled(!model.canClose)
                 }
+            } else if model.cameras.isEmpty {
+                Text(model.isEnumeratingCameras ? "Detecting…" : "No camera")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
             } else {
-                Menu {
+                Picker(
+                    "Camera",
+                    selection: $model.selectedDeviceID
+                ) {
                     ForEach(model.cameras, id: \.deviceID) { camera in
-                        Button(camera.displayName) {
-                            model.openAndStartCamera(deviceID: camera.deviceID)
-                        }
+                        Text(camera.displayName).tag(camera.deviceID)
                     }
-                } label: {
-                    Text(model.cameras.isEmpty ? "No camera" : "Connect camera")
-                        .font(.system(size: 10, weight: .medium))
                 }
-                .menuStyle(BorderlessButtonMenuStyle())
-                .disabled(model.cameras.isEmpty || !model.canConnectDetectedCamera)
+                .labelsHidden()
+                .pickerStyle(PopUpButtonPickerStyle())
+                .frame(width: 136)
+                .disabled(!model.canConnectDetectedCamera)
+
+                Button("Open + Start") {
+                    model.openAndStartCamera(deviceID: model.selectedDeviceID)
+                }
+                .font(.system(size: 9, weight: .medium))
+                .disabled(!model.canConnectDetectedCamera || model.selectedDeviceID.isEmpty)
             }
+
 
             Button {
                 model.refreshCameras()
@@ -325,7 +336,6 @@ private struct DockCameraFeatureControl: View {
                     )
                 )
                 .labelsHidden()
-                .controlSize(.small)
                 .disabled(editingDisabled)
 
             case .integer:
@@ -343,7 +353,6 @@ private struct DockCameraFeatureControl: View {
                     }
                     .labelsHidden()
                     .pickerStyle(MenuPickerStyle())
-                    .controlSize(.small)
                     .disabled(editingDisabled)
                 } else {
                     textEditor
@@ -368,7 +377,6 @@ private struct DockCameraFeatureControl: View {
                     }
                     .labelsHidden()
                     .pickerStyle(MenuPickerStyle())
-                    .controlSize(.small)
                     .disabled(editingDisabled)
                 }
 
@@ -400,7 +408,6 @@ private struct DockCameraFeatureControl: View {
             Button("Set") {
                 model.commitDraft(for: descriptor)
             }
-            .controlSize(.mini)
             .disabled(editingDisabled)
         }
     }

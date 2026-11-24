@@ -110,7 +110,9 @@ allocated area, and the native AppKit preview/split-view hierarchy has matching
 clipping boundaries. An oversized image document may be clipped by its own
 slide viewport, but it cannot draw into the dock.
 
-The two existing slide panes, headers, divider, and window remain unchanged.
+The two existing slide panes, divider, and window remain unchanged. The
+former upper header row is removed and replaced by specimen-view annotations
+and a compact floating action cluster.
 Each pane is a fixed viewport containing a separate image document. The
 viewport is the visible window onto the specimen; it is not the image itself.
 
@@ -173,10 +175,18 @@ not only by assigning a clear fill to an inner control stack.
 - Each slide pane and its upper control header use clear, non-opaque layers.
 - The bottom dock's outer stack and control row use clear SwiftUI backgrounds.
 
-Only the bar and parent surfaces are transparent. Native buttons, symbols,
-labels, status text, toggles, and feature controls retain their normal
-foreground opacity and native styling. Feature-control cards retain their
-own control-background fills.
+The former full-width upper slide header is removed. Slide identity, live/held
+status, and frame statistics are now compact specimen-view annotations at the
+upper-left corner. They retain the same text and values, with a restrained
+annotation plate for legibility. The existing slide actions remain available
+in a separate compact upper-right floating control plate; they no longer
+occupy a dedicated header row or reduce the image viewport height.
+
+The annotation and action plates are overlays inside the clipped slide pane,
+not a replacement opaque bar. Native buttons, symbols, labels, status text,
+toggles, and feature controls retain their normal foreground opacity and
+native styling. Feature-control cards retain their own control-background
+fills.
 
 The bottom dock remains a separate reserved layout row. Transparency does
 not turn it into an overlay or allow it to cover the specimen viewport.
@@ -214,6 +224,34 @@ verified before acceptance.
 maximize and restore each pane; switch the live destination repeatedly; confirm
 the inactive slide image does not change; Stop and Close must not erase either
 image; and verify no frame-pool starvation, unexpected drops, or memory growth.
+
+## Deferred comparison workflow roadmap (not part of current implementation)
+
+The following are product-direction requirements for a later comparison
+workflow. They are intentionally **not** implementation tasks for the current
+v0.8 UI change.
+
+1. **Default to a single-slide workspace.** Opening the application should
+   present one primary slide at full viewer priority. Provide an immediate,
+   one-click transition to a split/compare workspace when the user needs a
+   second slide. Returning to single-slide mode must be equally direct.
+2. **Prioritize registration and synchronization over analytics.** The
+   comparison workflow should support linked pan and zoom, with an explicit
+   lock/unlock state, plus rapid navigation to corresponding regions between
+   slides. Percentage/delta metrics should not dominate the default workflow.
+   Consider quantitative analytics only for workflows explicitly centered on
+   biomarker measurement, AI output comparison, or similar validated tasks.
+3. **Protect primary-viewer responsiveness and resource budgets.** Opening a
+   second slide must not degrade the primary viewer's interaction latency or
+   frame presentation. Define memory, CPU, GPU, decode, and cache budgets;
+   use bounded caches and explicit lifecycle/release policies, particularly
+   for large whole-slide images (WSIs) and constrained RAM/GPU systems. Measure
+   the single-slide baseline and enforce a performance budget before enabling
+   comparison at scale.
+
+**Status:** Deferred. Do not implement these items as part of the current
+annotation/header change. They require a separate design and performance
+milestone.
 
 ## Phase 7 — Streaming performance and hardware sign-off
 

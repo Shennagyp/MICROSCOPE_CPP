@@ -82,7 +82,7 @@ struct NativeWorkspaceDock: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .frame(width: 30, height: 30)
                 .background(
                     RoundedRectangle(cornerRadius: 7)
@@ -105,9 +105,9 @@ struct NativeWorkspaceDock: View {
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: tab.symbolName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                 Text(tab.title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
             }
             .padding(.horizontal, 11)
             .frame(minHeight: 32)
@@ -292,7 +292,7 @@ private struct NativeCameraControlsDock: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 CameraDockConnectionSection(model: model)
 
                 Divider()
@@ -325,13 +325,13 @@ private struct NativeCameraControlsDock: View {
                             set: { model.setAutomaticResolutionEnabled($0) }
                         )
                     )
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .disabled(!model.canAccessFeatures || model.isCameraOperationPending)
                     .help(model.automaticResolutionHelp)
 
                     HStack {
                         Text("Live frame destination")
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundColor(.secondary)
                         Spacer(minLength: 6)
                         Picker(
@@ -346,7 +346,7 @@ private struct NativeCameraControlsDock: View {
                         }
                         .labelsHidden()
                         .pickerStyle(SegmentedPickerStyle())
-                        .frame(width: 112)
+                        .frame(width: 132)
                         .disabled(model.isCameraOperationPending)
                     }
                 }
@@ -365,7 +365,7 @@ private struct NativeCameraControlsDock: View {
                             model.refreshFeatures()
                         } label: {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: 13, weight: .medium))
                         }
                         .buttonStyle(BorderlessButtonStyle())
                         .help("Refresh camera feature values")
@@ -377,13 +377,13 @@ private struct NativeCameraControlsDock: View {
 
                     if !model.canAccessFeatures {
                         Text("Open a camera to load its controls.")
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     } else if model.featureDescriptors.isEmpty {
                         Text(model.isFeatureSnapshotLoading
                              ? "Loading camera features…"
                              : "The camera reported no feature controls.")
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     } else {
                         ForEach(
@@ -393,7 +393,7 @@ private struct NativeCameraControlsDock: View {
                             if index == 0 ||
                                model.featureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
                                 Text(featureGroupTitle(descriptor.group.rawValue).uppercased())
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(.system(size: 13, weight: .bold))
                                     .foregroundColor(.secondary)
                                     .padding(.top, index == 0 ? 0 : 5)
                             }
@@ -407,7 +407,7 @@ private struct NativeCameraControlsDock: View {
                     }
                 }
             }
-            .padding(12)
+            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -444,12 +444,12 @@ private struct CameraDockConnectionSection: View {
                     .frame(width: 7, height: 7)
 
                 Text(model.cameraStateText.uppercased())
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.secondary)
             }
 
             Text(isConnected ? model.activeCameraName : "No camera connected")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
                 .help("Right-click the camera name for Stop and Close actions.")
                 .contextMenu {
@@ -508,7 +508,7 @@ private struct CameraDockConnectionSection: View {
                             Image(systemName: "play.fill")
                             Text("Open + Start")
                         }
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
                         .background(
@@ -538,21 +538,21 @@ private struct CameraDockConnectionSection: View {
                 .disabled(!model.canStart)
             } else if model.cameraState == .streaming {
                 Text("Preview is running. Right-click the camera name to Stop or Close.")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else if model.cameraState == .starting || model.cameraState == .stopping {
                 Text("Camera operation in progress…")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
             } else if model.cameraState == .faulted {
                 Text("Camera faulted. Right-click the camera name to Close the session.")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(10)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 7)
                 .fill(Color(nsColor: NSColor.windowBackgroundColor))
@@ -596,7 +596,7 @@ private struct NativeSmartGalleryDock: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
                     Text(error)
-                        .font(.system(size: 9))
+                        .font(.system(size: 11))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button {
                         gallery.dismissCaptureError()
@@ -619,9 +619,9 @@ private struct NativeSmartGalleryDock: View {
                         .font(.system(size: 28, weight: .light))
                         .foregroundColor(.secondary)
                     Text("No captures yet")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                     Text("Use the camera button on a slide's floating toolbar to save its current image.")
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 220)
@@ -650,9 +650,9 @@ private struct NativeSmartGalleryDock: View {
                         Image(systemName: "folder")
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Pictures / AmScope Captures")
-                                .font(.system(size: 9))
+                                .font(.system(size: 11))
                             Text("Latest 80 shown; older PNGs stay on disk.")
-                                .font(.system(size: 8))
+                                .font(.system(size: 10))
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -684,27 +684,27 @@ private struct NativeSmartGalleryDock: View {
                         }
                     }
                 }
-                .frame(width: 108, height: 78)
+                .frame(width: 116, height: 84)
                 .background(Color.black.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 4))
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.slide.title)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                     Text(item.dimensionsText)
                         .font(.system(size: 13, design: .monospaced))
                         .foregroundColor(.secondary)
                     Text(item.capturedAt, style: .date)
-                        .font(.system(size: 8))
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                     Text(item.capturedAt, style: .time)
-                        .font(.system(size: 8))
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
 
                 Spacer(minLength: 0)
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
             .padding(7)

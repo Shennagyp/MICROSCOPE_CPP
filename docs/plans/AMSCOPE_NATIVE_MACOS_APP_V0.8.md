@@ -312,37 +312,6 @@ available dock controls.
 
 
 
-## Preview workspace auto-sizing (2026-11-24)
-
-The AppKit preview now sizes the main preview workspace from the dimensions of
-the received `CGImage`, rather than from a selected resolution feature value.
-The policy is presentation-only:
-
-- It targets one source-image pixel per display backing pixel, accounting for
-  the current window's backing scale factor.
-- It budgets for the live-target pane's actual share of the split, or the full
-  preview width when a pane is maximized; the held pane keeps its image and
-  continues to aspect-fit independently.
-- It uniformly downscales the target when the screen's usable content area
-  cannot contain the requested image dimensions; it does not distort the frame.
-- It includes the actual bottom-dock height (expanded, collapsed, or detached),
-  preserves the split fraction, and keeps the resized window within the screen's
-  visible frame.
-- It runs when the received frame dimensions or backing scale change, not for
-  every frame. The single mailbox consumer and provider-backed frame lifetime
-  remain unchanged.
-- The image renderer does not upscale beyond one source pixel per backing pixel.
-  Existing minimum window constraints still apply to small camera modes.
-
-This policy does not select, write, or modify the camera resolution. Optical
-Auto Res remains governed only by its Rayleigh sampling criterion.
-
-**Verification pending:** rebuild and launch on the user's Mac; change the camera
-resolution and confirm that the preview workspace resizes to the received frame
-dimensions, remains within the usable screen, preserves image aspect ratio and
-split position, and handles maximize/restore plus display-scale changes. No
-build or hardware verification is claimed by this source update.
-
 ## Phase 5 addition — microscope optics and automatic resolution (2026-11-24)
 
 - [x] Add a persisted OPTIKA B-293 optical profile with N-PLAN objectives,
@@ -367,10 +336,8 @@ build or hardware verification is claimed by this source update.
   migration of an older numeric-only profile.
 - [ ] Verify mode selection and stream recovery for all four objectives on the
   user's hardware.
-- [x] Implement a separate preview-workspace auto-sizing policy driven by the
-  dimensions of received frames; keep it independent of camera Auto Res.
-- [ ] Verify preview sizing on the user's display at each supported camera mode,
-  including dual-pane, maximized-pane, and Retina/backing-scale behavior.
+- [ ] Implement and verify the separate preview-pane auto-expansion policy;
+  it must not be coupled to camera acquisition resolution.
 
 **Important model boundary:** the B-293 objective nosepiece is manual. The active
 objective is a user-confirmed state, not an electronically sensed state. The

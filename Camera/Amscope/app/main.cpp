@@ -531,6 +531,7 @@ public:
         });
 
         updateControls(camera_.state());
+        updateFrameInfoLabel();
     }
 
     ~PreviewWindow() override {

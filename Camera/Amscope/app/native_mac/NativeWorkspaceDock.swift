@@ -22,28 +22,6 @@ enum NativeWorkspaceDockTab: String, CaseIterable, Identifiable {
     }
 }
 
-private struct NativeWorkspaceToolTabShape: Shape {
-    private let radius: CGFloat = 4
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX + radius, y: rect.minY),
-            control: CGPoint(x: rect.minX, y: rect.minY)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
-            control: CGPoint(x: rect.maxX, y: rect.minY)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.closeSubpath()
-        return path
-    }
-}
-
 struct NativeWorkspaceDock: View {
     @ObservedObject var model: NativeCameraModel
     let isFloating: Bool
@@ -59,15 +37,15 @@ struct NativeWorkspaceDock: View {
                 NativeSmartGalleryDock(gallery: model.captureGallery)
             }
         }
-        .padding(.top, 46)
+        .padding(.trailing, 38)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topLeading) {
-            HStack(spacing: 0) {
+        .overlay(alignment: .trailing) {
+            VStack(spacing: 1) {
                 dockTabButton(.cameraControls)
                 dockTabButton(.smartGallery)
             }
-            .padding(.top, 7)
-            .padding(.leading, 9)
+            .padding(.top, 42)
+            .frame(maxHeight: .infinity, alignment: .top)
             .zIndex(2)
         }
         .overlay(alignment: .topTrailing) {
@@ -128,46 +106,41 @@ struct NativeWorkspaceDock: View {
         return Button {
             model.selectedWorkspaceDockTab = tab
         } label: {
-            HStack(spacing: 7) {
+            VStack(spacing: 5) {
                 Image(systemName: tab.symbolName)
                     .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 14, height: 14)
+
                 Text(tab.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .frame(width: 110, height: 14)
+                    .rotationEffect(.degrees(90))
+                    .frame(width: 14, height: 110)
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 33)
-            .background {
-                NativeWorkspaceToolTabShape()
-                    .fill(
-                        isSelected
-                            ? accent
-                            : Color(nsColor: NSColor.windowBackgroundColor).opacity(0.88)
-                    )
-            }
-            .overlay {
-                NativeWorkspaceToolTabShape()
-                    .stroke(
-                        isSelected
-                            ? accent
-                            : Color(nsColor: NSColor.separatorColor).opacity(0.9),
-                        lineWidth: isSelected ? 1.2 : 0.8
-                    )
-            }
-            .overlay(alignment: .top) {
-                if isSelected {
-                    Capsule()
-                        .fill(Color.white.opacity(0.62))
-                        .frame(height: 1.5)
-                        .padding(.horizontal, 7)
-                        .padding(.top, 1)
-                }
-            }
-            .shadow(
-                color: isSelected ? accent.opacity(0.32) : Color.black.opacity(0.10),
-                radius: isSelected ? 4 : 2,
-                x: 0,
-                y: 1
+            .frame(width: 38, height: 136)
+            .background(
+                Rectangle().fill(
+                    isSelected
+                        ? accent
+                        : Color(nsColor: NSColor.windowBackgroundColor)
+                )
             )
+            .overlay(
+                Rectangle().stroke(
+                    isSelected
+                        ? accent
+                        : Color(nsColor: NSColor.separatorColor),
+                    lineWidth: isSelected ? 1.2 : 0.8
+                )
+            )
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(isSelected ? Color.white.opacity(0.82) : .clear)
+                    .frame(width: 2)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
         .foregroundColor(isSelected ? .white : Color(nsColor: NSColor.labelColor))

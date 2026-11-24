@@ -2,7 +2,7 @@
 
 **Branch:** `amscope-native-app-mac.v.0.8`  
 **Base branch:** `amscope-native-driver-0.7`  
-**Current state:** Branch created from the validated driver baseline. The opt-in SwiftUI/AppKit app target, Objective-C++ bridge, serialized native lifecycle controller, common latest-frame mailbox, and direct-access AppKit preview are committed. Local build, visual inspection, feature parity, and hardware performance validation remain pending.
+**Current state:** Branch created from the validated driver baseline. The opt-in SwiftUI/AppKit target, Objective-C++ bridge, serialized native controller, shared latest-frame mailbox, lease-backed AppKit preview, and descriptor-driven feature editors are committed. Accessory workflows, local build/visual validation, and hardware performance sign-off remain pending.
 
 ## Phase 0 — Baseline and architecture
 
@@ -36,7 +36,8 @@
 - [x] Include request IDs and session generations in operation completions; reject stale frame publication through the acquisition generation gate.
 - [x] Keep blocking camera commands and all completion callbacks off the main actor; the Objective-C++ bridge marshals completion blocks to the main thread.
 - [x] Keep the native controller independent of `QtAmcamCamera`; it calls the same C++ driver directly.
-- [ ] Port the generic feature descriptor/read/write API and the supported accessory command/telemetry API.
+- [x] Port the generic feature descriptor/read/write API with type-preserving Objective-C++ conversion and snapshot-generation rejection.
+- [ ] Port the supported accessory command/telemetry API (trigger configuration, I/O lines, filter wheel, guide port, focuser, still capture, and device-specific controls).
 - [ ] Add controller tests for FIFO ordering, queue saturation, shutdown, generation changes, failed Start/Stop recovery, and stale completions.
 
 **Gate:** Lifecycle and feature-request tests cover FIFO ordering, shutdown, cancellation, generation changes, failed Start/Stop recovery, and stale completion rejection.
@@ -70,19 +71,21 @@
 - [x] Add the bottom information bar with camera, resolution, pixel format, and acquisition state.
 - [x] Update SwiftUI metadata only when dimensions or pixel format change, not on every frame.
 - [x] Prevent overlapping lifecycle requests and selection changes while a camera session is active.
-- [ ] Populate imaging and hardware controls from the existing feature descriptor model.
-- [ ] Make only writable information-bar values (for example exposure/gain when supported) double-click editable and commit them through the existing feature model.
+- [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
+- [x] Make up to three supported writable numeric imaging values (selected from camera descriptors, such as exposure or gain) double-click editable in the bottom information bar; commit through the backend feature-validation path.
+- [ ] Port dedicated accessory workflows and telemetry from the existing Qt/native contract.
 - [ ] Preserve and verify explicit camera lifecycle behavior when the window is hidden or closed.
 
-**Current limitation:** The native UI currently has camera discovery and lifecycle controls only. Feature settings, accessory workflows, and editable imaging values are not yet bridged.
+**Current limitation:** Native discovery, lifecycle, generic feature reads/writes, and preview are connected. Dedicated accessory workflows, local compile validation, visual QA, and hardware performance validation remain outstanding.
 
 **Gate:** All controls use asynchronous controller requests; no camera call blocks the main actor; UI state cannot issue stale commands to a newly selected device.
 
 ## Phase 6 — Functional parity and application lifecycle
 
-- Port the required discovery, open/close, start/stop, feature controls, telemetry, and supported accessories.
-- Verify close/stop sequencing, application termination, view teardown, device disconnect, reconnect, and stale callback behavior.
-- Keep the Qt application as a separate fallback while parity remains incomplete.
+- [x] Port discovery, open/close, start/stop, and generic feature descriptor/read/write workflows.
+- [ ] Port trigger, I/O, filter-wheel, ST4, focuser, still-capture, and other supported device workflows.
+- [ ] Verify close/stop sequencing, application termination, view teardown, device disconnect, reconnect, and stale callback behavior.
+- [x] Keep the Qt application as a separate fallback while parity remains incomplete.
 
 **Gate:** The native UI covers the existing supported camera workflows selected for v0.8 without changing driver semantics.
 

@@ -149,8 +149,9 @@ final class NativeCameraModel: ObservableObject {
             ?? "Connected camera"
     }
 
-    /// Current specimen-plane scale inputs. The exact source-frame dimensions
-    /// are supplied by the preview pane so known sensor binning can be applied.
+    /// Current generic optical calibration inputs. The app computes specimen
+    /// scale from configured camera sensor, output-pixel, objective and relay
+    /// specifications; the calculation does not identify a camera model.
     var measurementCalibration: NativeMicroscopeMeasurementCalibration? {
         let configuration = microscopeConfiguration
         guard let objective = configuration.objectives.first(where: {
@@ -159,15 +160,11 @@ final class NativeCameraModel: ObservableObject {
             return nil
         }
 
-        let sensorPixelPitch = configuration.cameraSensorPreset.nominalPixelPitchMicrometers
-            ?? configuration.cameraPixelPitchMicrometers
-
         return NativeMicroscopeMeasurementCalibration(
-            sensorPixelPitchMicrometers: sensorPixelPitch,
+            sensorPixelPitchMicrometers: configuration.cameraPixelPitchMicrometers,
+            outputPixelFactor: configuration.cameraOutputPixelFactor,
             objectiveMagnification: objective.magnification,
-            reductionLensMagnification: configuration.cameraRelayMagnification,
-            sensorPreset: configuration.cameraSensorPreset,
-            customBinningFactor: configuration.cameraCustomBinningFactor
+            reductionLensMagnification: configuration.cameraRelayMagnification
         )
     }
 

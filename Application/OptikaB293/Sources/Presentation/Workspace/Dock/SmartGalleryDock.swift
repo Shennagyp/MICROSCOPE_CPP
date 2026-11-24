@@ -148,7 +148,7 @@ struct NativeSmartGalleryDock: View {
             .padding(7)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(OptikaPalette.windowSurface.opacity(0.20))
+                    .fill(OptikaPalette.windowSurface.opacity(OptikaPalette.floatingPanelAlpha))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)

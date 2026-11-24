@@ -1,9 +1,9 @@
+import Combine
 import Foundation
-import SwiftUI
 
 @MainActor
 final class NativeCameraModel: ObservableObject {
-    let bridge = AmscopeNativeCameraBridge()
+    let bridge: AmscopeNativeCameraBridge
     @Published private(set) var cameras: [AmscopeCameraDevice] = []
     @Published var selectedDeviceID = ""
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
@@ -43,7 +43,8 @@ final class NativeCameraModel: ObservableObject {
     private static let automaticResolutionDefaultsKey =
         "AmscopeNative.AutomaticResolutionEnabled.v1"
 
-    init() {
+    init(bridge: AmscopeNativeCameraBridge) {
+        self.bridge = bridge
         if let data = UserDefaults.standard.data(
             forKey: Self.microscopeConfigurationDefaultsKey
         ),

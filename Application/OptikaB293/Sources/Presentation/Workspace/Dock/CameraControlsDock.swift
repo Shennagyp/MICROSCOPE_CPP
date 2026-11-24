@@ -362,7 +362,7 @@ private struct CameraDockConnectionSection: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 7)
-                .fill(OptikaPalette.windowSurface.opacity(0.20))
+                .fill(OptikaPalette.windowSurface.opacity(OptikaPalette.floatingPanelAlpha))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 7)

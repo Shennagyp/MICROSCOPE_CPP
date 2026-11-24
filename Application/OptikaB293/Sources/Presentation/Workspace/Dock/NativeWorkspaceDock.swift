@@ -49,7 +49,7 @@ struct NativeWorkspaceDock: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(OptikaPalette.controlSurface.opacity(0.20))
+        .background(OptikaPalette.controlSurface.opacity(OptikaPalette.floatingPanelAlpha))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)

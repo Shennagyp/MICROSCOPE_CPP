@@ -17,6 +17,7 @@ set(OPTIKA_APP_SOURCES
     Sources/Features/Camera/NativeCameraModel.swift
     Sources/Features/Capture/NativeCaptureGallery.swift
     Sources/Features/Optics/MicroscopeOpticalConfiguration.swift
+    Sources/Features/Optics/MicroscopeConfigurationDraftStore.swift
     Sources/Features/Optics/NativeMicroscopeCalibration.swift
     Sources/Features/Optics/NativeAutomaticResolutionPolicy.swift
     Sources/Features/Workspace/NativeSlideID.swift
@@ -26,9 +27,11 @@ set(OPTIKA_APP_SOURCES
     Sources/Presentation/Theme/OptikaPalette.swift
     Sources/Presentation/Theme/OptikaLayout.swift
     Sources/Presentation/Camera/CameraControlsWindow.swift
+    Sources/Presentation/Camera/DockCameraFeatureControl.swift
     Sources/Presentation/Camera/NativeFeatureEditor.swift
     Sources/Presentation/Optics/MicroscopeConfigurationWindow.swift
     Sources/Presentation/Workspace/MainWindowView.swift
+    Sources/Presentation/Workspace/NativeWorkspaceDockResizeDivider.swift
     Sources/Presentation/Workspace/Dock/NativeWorkspaceDock.swift
     Sources/Presentation/Workspace/Dock/CameraControlsDock.swift
     Sources/Presentation/Workspace/Dock/SmartGalleryDock.swift

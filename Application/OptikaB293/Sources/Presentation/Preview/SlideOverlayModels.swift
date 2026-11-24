@@ -7,7 +7,7 @@ enum NativeSlideToolMode: Equatable {
     case annotation
 }
 
-private struct NativeDistanceMeasurement {
+struct NativeDistanceMeasurement {
     let start: CGPoint
     let end: CGPoint
     /// Optical calibration snapshot captured when this measurement starts.
@@ -27,10 +27,7 @@ private struct NativeDistanceMeasurement {
     }
 }
 
-private struct NativeSlideTextAnnotation {
+struct NativeSlideTextAnnotation {
     let location: CGPoint
     let text: String
 }
-
-
-/// Compact acquisition controls hosted independently inside each slide pane.

@@ -22,6 +22,28 @@ enum NativeWorkspaceDockTab: String, CaseIterable, Identifiable {
     }
 }
 
+private struct NativeWorkspaceToolTabShape: Shape {
+    private let radius: CGFloat = 4
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + radius),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 struct NativeWorkspaceDock: View {
     @ObservedObject var model: NativeCameraModel
     let isFloating: Bool
@@ -40,12 +62,12 @@ struct NativeWorkspaceDock: View {
         .padding(.top, 46)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
-            HStack(spacing: 6) {
+            HStack(spacing: 0) {
                 dockTabButton(.cameraControls)
                 dockTabButton(.smartGallery)
             }
-            .padding(.top, 8)
-            .padding(.leading, 10)
+            .padding(.top, 7)
+            .padding(.leading, 9)
             .zIndex(2)
         }
         .overlay(alignment: .topTrailing) {
@@ -100,45 +122,55 @@ struct NativeWorkspaceDock: View {
         .accessibilityLabel(description)
     }
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
-        Button {
+        let isSelected = model.selectedWorkspaceDockTab == tab
+        let accent = Color(nsColor: NSColor.controlAccentColor)
+
+        return Button {
             model.selectedWorkspaceDockTab = tab
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: tab.symbolName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Text(tab.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
             }
-            .padding(.horizontal, 11)
-            .frame(minHeight: 32)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 33)
+            .background {
+                NativeWorkspaceToolTabShape()
                     .fill(
-                        model.selectedWorkspaceDockTab == tab
-                            ? Color.accentColor
-                            : Color(nsColor: NSColor.windowBackgroundColor).opacity(0.96)
+                        isSelected
+                            ? accent
+                            : Color(nsColor: NSColor.windowBackgroundColor).opacity(0.88)
                     )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
+            }
+            .overlay {
+                NativeWorkspaceToolTabShape()
                     .stroke(
-                        model.selectedWorkspaceDockTab == tab
-                            ? Color.white.opacity(0.32)
-                            : Color(nsColor: NSColor.separatorColor).opacity(0.85),
-                        lineWidth: model.selectedWorkspaceDockTab == tab ? 1 : 0.8
+                        isSelected
+                            ? accent
+                            : Color(nsColor: NSColor.separatorColor).opacity(0.9),
+                        lineWidth: isSelected ? 1.2 : 0.8
                     )
-            )
+            }
+            .overlay(alignment: .top) {
+                if isSelected {
+                    Capsule()
+                        .fill(Color.white.opacity(0.62))
+                        .frame(height: 1.5)
+                        .padding(.horizontal, 7)
+                        .padding(.top, 1)
+                }
+            }
             .shadow(
-                color: model.selectedWorkspaceDockTab == tab
-                    ? Color.accentColor.opacity(0.34)
-                    : Color.black.opacity(0.12),
-                radius: model.selectedWorkspaceDockTab == tab ? 5 : 3,
+                color: isSelected ? accent.opacity(0.32) : Color.black.opacity(0.10),
+                radius: isSelected ? 4 : 2,
                 x: 0,
                 y: 1
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .foregroundColor(model.selectedWorkspaceDockTab == tab ? .white : .primary)
+        .foregroundColor(isSelected ? .white : Color(nsColor: NSColor.labelColor))
         .help(tab.title)
         .accessibilityLabel(tab.title)
     }

@@ -117,8 +117,7 @@ struct NativeWorkspaceDockTabRail: View {
         let accent = Color(nsColor: NSColor.controlAccentColor)
 
         return Button {
-            model.selectedWorkspaceDockTab = tab
-            model.isWorkspaceDockVisible = true
+            model.showWorkspaceDock(tab)
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: tab.symbolName)
@@ -134,6 +133,7 @@ struct NativeWorkspaceDockTabRail: View {
                     .frame(width: 12, height: 82)
             }
             .frame(width: Self.width, height: tabHeight)
+            .contentShape(Rectangle())
             .background(
                 Rectangle().fill(
                     isSelected
@@ -157,8 +157,10 @@ struct NativeWorkspaceDockTabRail: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
+        .frame(width: Self.width, height: tabHeight)
+        .contentShape(Rectangle())
         .foregroundColor(isSelected ? .white : Color(nsColor: NSColor.labelColor))
-        .help(tab.title)
+        .help("Open \(tab.title)")
         .accessibilityLabel(tab.title)
         .accessibilityHint("Shows the \(tab.title) dock")
     }
@@ -248,8 +250,7 @@ final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
                     isFloating: true,
                     onClose: { [weak self] in
                         guard let self = self else { return }
-                        self.model.isWorkspaceDockVisible = false
-                        self.model.isWorkspaceDockFloating = false
+                        self.model.closeWorkspaceDock()
                     },
                     onToggleFloating: { [weak self] in
                         self?.model.isWorkspaceDockFloating = false
@@ -309,8 +310,7 @@ final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        model.isWorkspaceDockFloating = false
-        model.isWorkspaceDockVisible = false
+        model.closeWorkspaceDock()
     }
 }
 

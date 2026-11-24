@@ -29,10 +29,7 @@ typedef NS_ENUM(NSInteger, AmscopeNativeCameraState) {
 /// Retains the immutable C++ frame lease for as long as Core Graphics may
 /// access its pixel bytes. createCGImage returns a retained CGImage whose data
 /// provider owns an additional reference to this lease object.
-@interface AmscopeFrameLease : NSObject {
-@private
-    void *_frameStorage;
-}
+@interface AmscopeFrameLease : NSObject
 @property(nonatomic, readonly) uint32_t width;
 @property(nonatomic, readonly) uint32_t height;
 @property(nonatomic, readonly) uint32_t strideBytes;

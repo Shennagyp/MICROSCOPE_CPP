@@ -132,13 +132,6 @@ camera::CameraFeatureValue cameraValueFromObjectiveC(
     return camera::CameraFeatureValue(std::string{});
 }
 
-const camera::Frame *frameFromStorage(void *storage) {
-    if (!storage)
-        return nullptr;
-    const auto *lease = static_cast<const camera::FramePtr *>(storage);
-    return *lease ? lease->get() : nullptr;
-}
-
 } // namespace
 
 @interface AmscopeCameraDevice ()
@@ -173,52 +166,49 @@ const camera::Frame *frameFromStorage(void *storage) {
 - (instancetype)initWithFrame:(camera::FramePtr)frame;
 @end
 
-@implementation AmscopeFrameLease
+@implementation AmscopeFrameLease {
+    // The Objective-C++ object owns the frame lease directly. ARC invokes the
+    // shared_ptr destructor with the object, avoiding a separate heap holder.
+    camera::FramePtr _frame;
+}
 
 - (instancetype)initWithFrame:(camera::FramePtr)frame {
     self = [super init];
     if (!self)
         return nil;
 
-    _frameStorage = new (std::nothrow) camera::FramePtr(std::move(frame));
-    if (!_frameStorage)
-        return nil;
+    _frame = std::move(frame);
     return self;
 }
 
-- (void)dealloc {
-    delete static_cast<camera::FramePtr *>(_frameStorage);
-    _frameStorage = nullptr;
-}
-
 - (uint32_t)width {
-    const camera::Frame *frame = frameFromStorage(_frameStorage);
+    const camera::Frame *frame = _frame.get();
     return frame ? frame->width : 0;
 }
 
 - (uint32_t)height {
-    const camera::Frame *frame = frameFromStorage(_frameStorage);
+    const camera::Frame *frame = _frame.get();
     return frame ? frame->height : 0;
 }
 
 - (uint32_t)strideBytes {
-    const camera::Frame *frame = frameFromStorage(_frameStorage);
+    const camera::Frame *frame = _frame.get();
     return frame ? frame->strideBytes : 0;
 }
 
 - (NSUInteger)byteCount {
-    const camera::Frame *frame = frameFromStorage(_frameStorage);
+    const camera::Frame *frame = _frame.get();
     return frame ? static_cast<NSUInteger>(frame->byteSize()) : 0;
 }
 
 - (NSInteger)pixelFormat {
-    const camera::Frame *frame = frameFromStorage(_frameStorage);
+    const camera::Frame *frame = _frame.get();
     return frame ? static_cast<NSInteger>(frame->pixelFormat)
                  : static_cast<NSInteger>(camera::PixelFormat::Unknown);
 }
 
 - (CGImageRef)createCGImage {
-    const camera::Frame *frame = frameFromStorage(_frameStorage);
+    const camera::Frame *frame = _frame.get();
     if (!frame || !frame->data() || frame->width == 0 || frame->height == 0)
         return nullptr;
 

@@ -361,10 +361,48 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
 14. Immutable frame leases cross the mailbox and Core Graphics boundary without
     copying pixel bytes. Frame-specific providers retain the source lease for the
     lifetime of the image; only small immutable color-space objects are shared.
+15. The Objective-C++ lease wrapper stores its FramePtr inline; do not reintroduce
+    a separately allocated holder for each displayed frame.
 
 A UI simplification is invalid if it weakens any of these invariants.
 
-### 7.3 Presentation decomposition
+### 7.3 Acquisition buffer and lease lifecycle
+
+The AmScope live-preview path uses a bounded pool created when acquisition starts,
+after the SDK reports the final preview dimensions and selected pixel layout.
+The current pool contains four preallocated AmcamFrame slots plus one private
+discard buffer. Each slot's pixel storage is allocated before the acquisition
+worker begins pulling images.
+
+For every image event, the acquisition worker takes a slot only when the pool is
+its sole shared_ptr owner. Amcam_PullImageV4 writes directly into that slot's
+pixel storage; the resulting immutable FramePtr is transferred to the frame
+callback and then to the latest-frame mailbox. The Core Graphics provider keeps
+the frame lease alive while it reads those same bytes. The preview path therefore
+does not allocate a new pixel buffer or copy the pixel payload for each frame.
+
+When all four slots are still leased, the worker still drains the SDK by pulling
+the image into the private discard buffer and increments the dropped-frame
+counter. It must not wait for the UI, mutate a retained frame, or add an
+unbounded queue. This is deliberate latest-frame behavior: bounded memory and
+continued acquisition take precedence over preserving every preview frame.
+
+The Objective-C++ AmscopeFrameLease stores its FramePtr directly as a private
+C++ instance variable. Its lifetime is extended by the Core Graphics data
+provider, and ARC/Clang destroys the C++ member with the Objective-C object.
+There is no separate heap allocation for a FramePtr holder per displayed
+frame. This changes only lease bookkeeping; it does not change pixel storage,
+provider ownership, or frame delivery.
+
+Still capture is a separate, explicit one-shot path. It submits Amcam_SnapN
+or Amcam_SnapR, waits for the still-image event, queries the still dimensions,
+allocates one dedicated AmcamFrame, and pulls the still payload into that
+allocation. It does not borrow or resize a live-preview pool slot. The live
+acquisition worker remains active during the wait; vendor API calls are
+serialized by the camera API mutex. The one-shot allocation is expected capture
+work and must not be moved into the per-frame preview path.
+
+### 7.4 Presentation decomposition
 
 The two-slide viewer should be composed from focused units with explicit boundaries:
 

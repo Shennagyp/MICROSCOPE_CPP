@@ -475,6 +475,7 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         case opticalTubeSystem
         case condenserNumericalAperture
         case cameraPixelPitchMicrometers
+        case matchPreviewDisplayResolution
         case cameraRelayPreset
         case cameraRelayCustomName
         case cameraRelayMagnification
@@ -490,6 +491,7 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
     var opticalTubeSystem: String
     var condenserNumericalAperture: Double
     var cameraPixelPitchMicrometers: Double
+    var matchPreviewDisplayResolution: Bool
     var cameraRelayPreset: CameraRelayPreset
     var cameraRelayCustomName: String
     var cameraRelayMagnification: Double
@@ -505,6 +507,7 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         opticalTubeSystem: "Finite, 160 mm",
         condenserNumericalAperture: 1.25,
         cameraPixelPitchMicrometers: 2.2,
+        matchPreviewDisplayResolution: true,
         cameraRelayPreset: .touptekFMA050,
         cameraRelayCustomName: "",
         cameraRelayMagnification: 0.5,
@@ -559,6 +562,10 @@ extension MicroscopeOpticalConfiguration {
             Double.self,
             forKey: .cameraPixelPitchMicrometers
         )
+        matchPreviewDisplayResolution = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .matchPreviewDisplayResolution
+        ) ?? true
         cameraRelayMagnification = try container.decode(
             Double.self,
             forKey: .cameraRelayMagnification

@@ -161,72 +161,85 @@ private struct NativeCameraControlsDock: View {
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 14) {
-                CameraDockConnectionSection(model: model)
+        VStack(spacing: 0) {
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 14) {
+                    CameraDockConnectionSection(model: model)
 
-                Divider()
+                    Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("CAMERA FEATURES")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("CAMERA FEATURES")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.secondary)
 
-                        Spacer()
+                            Spacer()
 
-                        Button {
-                            model.refreshFeatures()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 13, weight: .medium))
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Refresh camera feature values")
-                        .disabled(!model.canAccessFeatures ||
-                                  model.isFeatureSnapshotLoading ||
-                                  model.isFeatureWritePending ||
-                                  model.isCameraOperationPending)
-                    }
-
-                    if !model.canAccessFeatures {
-                        Text("Open a camera to load its controls.")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    } else if additionalFeatureDescriptors.isEmpty {
-                        Text(model.previewResolutionDescriptor == nil
-                             ? "The camera reported no feature controls."
-                             : "No additional camera feature controls.")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(
-                            Array(additionalFeatureDescriptors.enumerated()),
-                            id: \.element.name
-                        ) { index, descriptor in
-                            if index == 0 ||
-                               additionalFeatureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
-                                Text(featureGroupTitle(descriptor.group.rawValue).uppercased())
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(.secondary)
-                                    .padding(.top, index == 0 ? 0 : 5)
+                            Button {
+                                model.refreshFeatures()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 13, weight: .medium))
                             }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Refresh camera feature values")
+                            .disabled(!model.canAccessFeatures ||
+                                      model.isFeatureSnapshotLoading ||
+                                      model.isFeatureWritePending ||
+                                      model.isCameraOperationPending)
+                        }
 
-                            DockCameraFeatureControl(
-                                model: model,
-                                descriptor: descriptor
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if !model.canAccessFeatures {
+                            Text("Open a camera to load its controls.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        } else if additionalFeatureDescriptors.isEmpty {
+                            Text(model.previewResolutionDescriptor == nil
+                                 ? "The camera reported no feature controls."
+                                 : "No additional camera feature controls.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(
+                                Array(additionalFeatureDescriptors.enumerated()),
+                                id: \.element.name
+                            ) { index, descriptor in
+                                if index == 0 ||
+                                   additionalFeatureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
+                                    Text(featureGroupTitle(descriptor.group.rawValue).uppercased())
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                        .padding(.top, index == 0 ? 0 : 5)
+                                }
+
+                                DockCameraFeatureControl(
+                                    model: model,
+                                    descriptor: descriptor
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                Divider()
+            Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("MICROSCOPE")
-                        .font(.system(size: 13, weight: .bold))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("MICROSCOPE")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 8) {
+                    Text("Objective")
+                        .font(.system(size: 12))
                         .foregroundColor(.secondary)
+
+                    Spacer(minLength: 6)
 
                     Picker(
                         "Objective",
@@ -240,10 +253,14 @@ private struct NativeCameraControlsDock: View {
                                 .tag(objective.id)
                         }
                     }
+                    .labelsHidden()
                     .pickerStyle(PopUpButtonPickerStyle())
+                    .frame(maxWidth: 180)
                     .disabled(model.isCameraOperationPending)
                     .help("Current objective. Configure objectives in File → Microscope Configuration.")
+                }
 
+                HStack(spacing: 8) {
                     Toggle(
                         "Automatic resolution",
                         isOn: Binding(
@@ -258,37 +275,44 @@ private struct NativeCameraControlsDock: View {
                               model.isFeatureSnapshotLoading)
                     .help(model.automaticResolutionHelp)
 
+                    Spacer(minLength: 4)
+
                     if model.isAutomaticResolutionEnabled {
                         Text(model.automaticResolutionSummary)
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    HStack {
-                        Text("Live frame destination")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        Spacer(minLength: 6)
-                        Picker(
-                            "Live frame destination",
-                            selection: Binding(
-                                get: { model.activeSlide },
-                                set: { model.selectActiveSlide($0) }
-                            )
-                        ) {
-                            Text("Slide 1").tag(NativeSlideID.slide1)
-                            Text("Slide 2").tag(NativeSlideID.slide2)
-                        }
-                        .labelsHidden()
-                        .pickerStyle(SegmentedPickerStyle())
-                        .frame(width: 132)
-                        .disabled(model.isCameraOperationPending)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
                     }
                 }
+
+                HStack(spacing: 8) {
+                    Text("Live frame destination")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+
+                    Spacer(minLength: 6)
+
+                    Picker(
+                        "Live frame destination",
+                        selection: Binding(
+                            get: { model.activeSlide },
+                            set: { model.selectActiveSlide($0) }
+                        )
+                    ) {
+                        Text("Slide 1").tag(NativeSlideID.slide1)
+                        Text("Slide 2").tag(NativeSlideID.slide2)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 132)
+                    .disabled(model.isCameraOperationPending)
+                }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color(nsColor: NSColor.controlBackgroundColor))
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

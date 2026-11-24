@@ -10,11 +10,14 @@
 #include <QApplication>
 #include <QDialog>
 #include <QDockWidget>
+#include <QCloseEvent>
+#include <QDockWidget>
 #include <QDialogButtonBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFont>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QImage>
@@ -28,6 +31,8 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QSettings>
+#include <QStyleFactory>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -190,10 +195,16 @@ class PreviewWindow final : public QMainWindow {
 public:
     PreviewWindow() {
         setWindowTitle("AmScope Native Camera Preview");
-        resize(1280, 820);
+        resize(1440, 900);
+        setDockNestingEnabled(true);
+        setDockOptions(QMainWindow::AnimatedDocks |
+                       QMainWindow::AllowTabbedDocks |
+                       QMainWindow::AllowNestedDocks |
+                       QMainWindow::GroupedDragging);
+        setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
-        // The main window is an image-first workspace. All camera operations
-        // live in the modeless Camera Controls window, opened only from File.
+        // The central workspace is dedicated to live image presentation.
+        // Camera tools and imaging information are independently dockable.
         auto* central = new QWidget(this);
         auto* root = new QVBoxLayout(central);
         preview_ = new camera::qtwidgets::FrameView(central);
@@ -220,20 +231,27 @@ public:
         auto* viewMenu = menuBar()->addMenu("&View");
         viewMenu->addAction(infoDock->toggleViewAction());
 
-        cameraControlsWindow_ = new QDialog(this, Qt::Window);
-        cameraControlsWindow_->setWindowTitle("Camera Controls");
-        cameraControlsWindow_->setModal(false);
-        cameraControlsWindow_->resize(980, 820);
-        auto* controlsRoot = new QVBoxLayout(cameraControlsWindow_);
-        auto* toolbar = new QHBoxLayout();
+        cameraControlsDock_ = new QDockWidget("Camera Controls", this);
+        cameraControlsDock_->setObjectName(QStringLiteral("cameraControlsDock"));
+        cameraControlsDock_->setAllowedAreas(
+            Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        cameraControlsDock_->setFeatures(
+            QDockWidget::DockWidgetClosable |
+            QDockWidget::DockWidgetMovable |
+            QDockWidget::DockWidgetFloatable);
+        auto* controlsContent = new QWidget(cameraControlsDock_);
+        auto* controlsRoot = new QVBoxLayout(controlsContent);
+        controlsRoot->setContentsMargins(8, 8, 8, 8);
+        controlsRoot->setSpacing(6);
+        auto* toolbar = new QVBoxLayout();
 
         cameraControls_ =
-            new camera::qtwidgets::CameraControlPanel(cameraControlsWindow_);
-        stillCaptureModeSelector_ = new QComboBox(cameraControlsWindow_);
-        stillResolutionSelector_ = new QComboBox(cameraControlsWindow_);
+            new camera::qtwidgets::CameraControlPanel(controlsContent);
+        stillCaptureModeSelector_ = new QComboBox(controlsContent);
+        stillResolutionSelector_ = new QComboBox(controlsContent);
         stillResolutionSelector_->setToolTip(
             "Still-image resolution reported by the camera SDK.");
-        stillPrecisionLabel_ = new QLabel("Last still: —", cameraControlsWindow_);
+        stillPrecisionLabel_ = new QLabel("Last still: —", controlsContent);
         stillPrecisionLabel_->setToolTip(
             "Significant and storage bit depths reported by the most recently captured still frame. This is measured output metadata, not a requested setting.");
         stillCaptureModeSelector_->addItem(
@@ -241,17 +259,21 @@ public:
         stillCaptureModeSelector_->addItem(
             "RAW still", static_cast<int>(amscope::StillCaptureMode::Raw));
         captureStillButton_ =
-            new QPushButton("Capture still", cameraControlsWindow_);
+            new QPushButton("Capture still", controlsContent);
 
-        toolbar->addWidget(cameraControls_, 1);
-        toolbar->addWidget(stillResolutionSelector_);
-        toolbar->addWidget(stillCaptureModeSelector_);
-        toolbar->addWidget(captureStillButton_);
+        auto* stillCaptureToolbar = new QHBoxLayout();
+        stillCaptureToolbar->setContentsMargins(0, 0, 0, 0);
+        stillCaptureToolbar->setSpacing(5);
+        stillCaptureToolbar->addWidget(stillResolutionSelector_, 1);
+        stillCaptureToolbar->addWidget(stillCaptureModeSelector_);
+        stillCaptureToolbar->addWidget(captureStillButton_);
+        toolbar->addWidget(cameraControls_);
+        toolbar->addLayout(stillCaptureToolbar);
 
         auto* fileMenu = menuBar()->addMenu("&File");
         auto* controlsAction = fileMenu->addAction("Camera Controls...");
         connect(controlsAction, &QAction::triggered, this, [this]() {
-            showCameraControlsWindow();
+            showCameraControlsDock();
         });
         fileMenu->addSeparator();
         auto* exitAction = fileMenu->addAction("Exit");
@@ -259,19 +281,20 @@ public:
             close();
         });
 
-        featureStatus_ = new QLabel("Open a camera to inspect its available features.", cameraControlsWindow_);
+        featureStatus_ = new QLabel("Open a camera to inspect its available features.", controlsContent);
         featureStatus_->setWordWrap(true);
 
-        refreshFeaturesButton_ = new QPushButton("Refresh features", cameraControlsWindow_);
-        featureTabs_ = new QTabWidget(cameraControlsWindow_);
-        featureTabs_->setMinimumWidth(460);
-        featureTabs_->setMaximumWidth(620);
+        refreshFeaturesButton_ = new QPushButton("Refresh features", controlsContent);
+        featureTabs_ = new QTabWidget(controlsContent);
+        featureTabs_->setMinimumWidth(0);
+        featureTabs_->setMaximumWidth(QWIDGETSIZE_MAX);
+        featureTabs_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         featureTabs_->setDocumentMode(true);
         featureTabs_->setMovable(false);
         featureTabs_->setToolTip(
             "Camera features are grouped by function. Stop acquisition before editing settings.");
 
-        accessoryGroup_ = new QGroupBox("Camera accessories", cameraControlsWindow_);
+        accessoryGroup_ = new QGroupBox("Camera accessories", controlsContent);
         accessoryForm_ = new QFormLayout(accessoryGroup_);
 
         embeddedLightSourceRow_ = new QWidget(accessoryGroup_);
@@ -307,7 +330,7 @@ public:
         filterWheelLayout->addWidget(filterWheelRefreshButton_);
         accessoryForm_->addRow("Filter wheel", filterWheelRow_);
 
-        astroAutoFocuserGroup_ = new QGroupBox("Astronomy auto-focuser", cameraControlsWindow_);
+        astroAutoFocuserGroup_ = new QGroupBox("Astronomy auto-focuser", controlsContent);
         auto* astroFocuserForm = new QFormLayout(astroAutoFocuserGroup_);
         astroAutoFocuserRow_ = new QWidget(astroAutoFocuserGroup_);
         auto* astroFocuserLayout = new QHBoxLayout(astroAutoFocuserRow_);
@@ -326,7 +349,7 @@ public:
         astroAutoFocuserStatusLabel_->setWordWrap(true);
         astroFocuserForm->addRow("Status", astroAutoFocuserStatusLabel_);
 
-        lensFocusGroup_ = new QGroupBox("Lens focus motor", cameraControlsWindow_);
+        lensFocusGroup_ = new QGroupBox("Lens focus motor", controlsContent);
         auto* lensFocusForm = new QFormLayout(lensFocusGroup_);
         lensFocusRow_ = new QWidget(lensFocusGroup_);
         auto* lensFocusLayout = new QHBoxLayout(lensFocusRow_);
@@ -351,7 +374,7 @@ public:
         lensFocusStatusLabel_->setWordWrap(true);
         lensFocusForm->addRow("Lens / AF state", lensFocusStatusLabel_);
 
-        triggerGroup_ = new QGroupBox("Trigger configuration", cameraControlsWindow_);
+        triggerGroup_ = new QGroupBox("Trigger configuration", controlsContent);
         auto* triggerForm = new QFormLayout(triggerGroup_);
         triggerModeSelector_ = new QComboBox(triggerGroup_);
         triggerForm->addRow("Acquisition mode", triggerModeSelector_);
@@ -406,7 +429,7 @@ public:
 
         accessoryGroup_->hide();
 
-        auto* settingsContent = new QWidget(cameraControlsWindow_);
+        auto* settingsContent = new QWidget(controlsContent);
         auto* settingsColumn = new QVBoxLayout(settingsContent);
         settingsColumn->setContentsMargins(0, 0, 0, 0);
         settingsColumn->addWidget(featureStatus_);
@@ -417,13 +440,18 @@ public:
         settingsColumn->addWidget(lensFocusGroup_);
         settingsColumn->addWidget(featureTabs_, 1);
 
-        auto* settingsScroll = new QScrollArea(cameraControlsWindow_);
+        auto* settingsScroll = new QScrollArea(controlsContent);
         settingsScroll->setWidgetResizable(true);
         settingsScroll->setWidget(settingsContent);
 
         controlsRoot->addLayout(toolbar);
         controlsRoot->addWidget(stillPrecisionLabel_, 0, Qt::AlignRight);
         controlsRoot->addWidget(settingsScroll, 1);
+        cameraControlsDock_->setWidget(controlsContent);
+        addDockWidget(Qt::RightDockWidgetArea, cameraControlsDock_);
+        viewMenu->addAction(cameraControlsDock_->toggleViewAction());
+        resizeDocks({cameraControlsDock_}, {410}, Qt::Horizontal);
+        resizeDocks({infoDock}, {54}, Qt::Vertical);
 
         preview_->setFramePresentedCallback([this]() {
             const double monotonicSeconds = std::chrono::duration<double>(
@@ -542,8 +570,29 @@ public:
             showStatusMessage(message);
         });
 
+        QSettings settings;
+        const QByteArray savedGeometry =
+            settings.value(QStringLiteral("window/geometry")).toByteArray();
+        if (!savedGeometry.isEmpty()) {
+            restoreGeometry(savedGeometry);
+        }
+        const QByteArray savedDockLayout =
+            settings.value(QStringLiteral("window/dock-layout")).toByteArray();
+        if (!savedDockLayout.isEmpty()) {
+            restoreState(savedDockLayout, 1);
+        } else {
+            resizeDocks({cameraControlsDock_}, {410}, Qt::Horizontal);
+            resizeDocks({infoDock}, {54}, Qt::Vertical);
+        }
+
         updateControls(camera_.state());
         updateFrameInfoLabel();
+        QTimer::singleShot(0, this, [this]() {
+            if (!cameraControlsDock_->isHidden() &&
+                camera_.state() == amscope::CameraState::Closed) {
+                refreshCameras();
+            }
+        });
     }
 
     ~PreviewWindow() override {
@@ -554,11 +603,19 @@ public:
         // the native session. Do not race a synchronous Close from this UI.
     }
 
+protected:
+    void closeEvent(QCloseEvent* event) override {
+        QSettings settings;
+        settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
+        settings.setValue(QStringLiteral("window/dock-layout"), saveState(1));
+        QMainWindow::closeEvent(event);
+    }
+
 private:
-    void showCameraControlsWindow() {
-        cameraControlsWindow_->show();
-        cameraControlsWindow_->raise();
-        cameraControlsWindow_->activateWindow();
+    void showCameraControlsDock() {
+        cameraControlsDock_->show();
+        cameraControlsDock_->raise();
+        cameraControlsDock_->setFocus(Qt::OtherFocusReason);
         if (camera_.state() == amscope::CameraState::Closed) {
             refreshCameras();
         }
@@ -3275,7 +3332,7 @@ private:
     std::unordered_map<std::string, FeatureControl> featureControls_;
     std::vector<std::string> featureOrder_;
 
-    QDialog* cameraControlsWindow_ = nullptr;
+    QDockWidget* cameraControlsDock_ = nullptr;
     camera::qtwidgets::CameraControlPanel* cameraControls_ = nullptr;
     QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
@@ -3328,6 +3385,123 @@ private:
     std::map<camera::CameraFeatureGroup, QFormLayout*> featureForms_;
 };
 
+void applyProfessionalStyle(QApplication& application) {
+    if (QStyle* style = QStyleFactory::create(QStringLiteral("Fusion"))) {
+        application.setStyle(style);
+    }
+
+    QFont font = application.font();
+    font.setPointSizeF(9.0);
+    application.setFont(font);
+
+    application.setStyleSheet(QStringLiteral(R"(
+        QMainWindow { background: #eef1f5; }
+        QDockWidget { font-size: 9pt; color: #263241; }
+        QDockWidget::title {
+            background: #e5e9ef;
+            color: #263241;
+            padding: 5px 8px;
+            border: 1px solid #d2d8e0;
+            font-weight: 600;
+        }
+        QDockWidget::close-button,
+        QDockWidget::float-button {
+            padding: 2px;
+            background: transparent;
+        }
+        QTabWidget::pane {
+            border: 1px solid #d1d8e2;
+            background: #fbfcfd;
+            top: -1px;
+        }
+        QTabBar::tab {
+            background: #edf0f4;
+            color: #485465;
+            padding: 5px 9px;
+            margin-right: 2px;
+            border: 1px solid #d1d8e2;
+            border-bottom: none;
+            min-height: 21px;
+        }
+        QTabBar::tab:selected {
+            background: #fbfcfd;
+            color: #174f86;
+            font-weight: 600;
+        }
+        QGroupBox {
+            color: #344054;
+            font-weight: 600;
+            border: 1px solid #d4dae3;
+            border-radius: 4px;
+            margin-top: 9px;
+            padding: 8px 7px 6px 7px;
+            background: #fbfcfd;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 8px;
+            padding: 0 4px;
+        }
+        QPushButton {
+            min-height: 23px;
+            padding: 2px 8px;
+            color: #263241;
+            background: #f8fafc;
+            border: 1px solid #c9d1dc;
+            border-radius: 3px;
+        }
+        QPushButton:hover {
+            background: #edf4fb;
+            border-color: #8aaed0;
+        }
+        QPushButton:pressed { background: #dce9f6; }
+        QPushButton:disabled {
+            color: #98a2b3;
+            background: #f1f3f6;
+            border-color: #e0e4ea;
+        }
+        QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox {
+            min-height: 23px;
+            padding: 1px 5px;
+            color: #263241;
+            background: #ffffff;
+            border: 1px solid #c9d1dc;
+            border-radius: 3px;
+            selection-background-color: #cfe2f5;
+        }
+        QComboBox:focus, QLineEdit:focus,
+        QSpinBox:focus, QDoubleSpinBox:focus {
+            border: 1px solid #4f8fc9;
+        }
+        QScrollArea { border: none; background: #f7f8fa; }
+        QScrollBar:vertical {
+            width: 10px;
+            margin: 1px;
+            background: #f0f2f5;
+        }
+        QScrollBar::handle:vertical {
+            min-height: 24px;
+            background: #c4ccd6;
+            border-radius: 4px;
+        }
+        QMenuBar {
+            background: #f7f8fa;
+            border-bottom: 1px solid #d8dee7;
+        }
+        QMenuBar::item {
+            padding: 4px 9px;
+            background: transparent;
+        }
+        QMenuBar::item:selected { background: #e7edf4; }
+        QToolTip {
+            color: #ffffff;
+            background: #293442;
+            border: 1px solid #293442;
+            padding: 4px 6px;
+        }
+    )"));
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -3336,6 +3510,9 @@ int main(int argc, char* argv[]) {
     }
 
     QApplication application(argc, argv);
+    QCoreApplication::setOrganizationName(QStringLiteral("AmScopeNative"));
+    QCoreApplication::setApplicationName(QStringLiteral("AmScope Camera"));
+    applyProfessionalStyle(application);
     PreviewWindow window;
     window.show();
     return application.exec();

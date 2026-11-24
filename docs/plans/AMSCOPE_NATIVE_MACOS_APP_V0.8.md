@@ -104,47 +104,40 @@
 ## Independent slide-image presentation (2026-11-24)
 
 The existing two-pane design remains unchanged: Slide 1 and Slide 2 stay
-side-by-side, each in its existing half of the preview split. This change is
-limited to the image renderer inside each pane.
+side-by-side, each in its existing half of the preview split. Each pane's
+image view remains pinned to the pane's fixed viewport. No scroll/document
+container is created and no image-view frame is expanded.
 
-Each slide image has independent presentation state. Its pane remains a
-fixed viewport; the image's document/container view is what resizes:
+Each slide image has independent presentation state:
 
-- In Fit, the document container is no larger than the pane viewport and the
-  full camera frame is downsampled inside it while preserving aspect ratio.
-- During zoom, the document container grows with the displayed image dimensions.
-  At Actual Pixels, its size represents the complete source frame at one
-  physical display pixel per camera pixel (converted to AppKit points using
-  the backing scale factor).
-- The fixed pane viewport clips the oversized image container. Dragging pans
-  the document inside that viewport; the application window and split-pane
-  bounds do not change.
-- A frame larger than the screen is therefore retained at full resolution,
-  even though only the viewport-sized portion is visible at one time.
-
-- **Fit Image to Pane:** show the complete image in that pane, preserve aspect
-  ratio, and downsample only for rendering when the source exceeds the pane.
-  Fit never enlarges beyond one source pixel per physical display pixel.
-- **Actual Pixels (1:1):** map each source camera pixel to one physical display
-  pixel using the current window backing scale. If the frame exceeds the pane,
-  show the visible portion and allow panning.
-- Scroll-wheel zoom and trackpad pinch move continuously from Fit to 1:1,
-  anchored around the pointer. Drag pans while zoomed. Double-click toggles
-  Fit / Actual Pixels; the image-view context menu exposes both exact modes.
-- Each pane retains its own zoom and pan state while new live frames replace
-  its previous image. The inactive pane retains both its last image and view.
+- The initial automatic zoom value is computed with the larger of the
+  horizontal and vertical pane-to-image ratios. For a high-resolution frame
+  larger than its pane, this fills the pane with no letterboxing/black bars.
+  The excess dimension is cropped by the fixed viewport rather than distorted.
+- The initial fill scale is capped at one camera pixel per physical display
+  pixel, so low-resolution frames are not upscaled merely to fill the pane.
+- Scroll-wheel and trackpad-pinch zoom increase the scale progressively from
+  the automatic fill value to exact Actual Pixels (1:1). Zoom is anchored
+  around the pointer.
+- Dragging pans the image within its fixed viewport. The image origin is
+  clamped at every edge so panning cannot expose empty black margins.
+- Double-click toggles automatic fill and Actual Pixels. The image-view context
+  menu exposes both modes.
+- Each pane retains its own zoom and pan state as new live frames replace its
+  previous image. A changed frame size resets that pane to automatic fill.
 - Downsampling uses high-quality interpolation; native 1:1 presentation
-  disables interpolation. The full-resolution `CGImage` remains the source;
-  overview scaling does not modify the acquired image or frame lease.
+  disables interpolation. The provider-backed full-resolution `CGImage`
+  remains the rendering source; no pixel-buffer copy or frame history is added.
 
-No split-view, pane sizing, window sizing, header, dock, slide routing, or
-maximize/restore design changes are part of this update. Camera resolution
-selection and optical Auto Res remain independent of presentation scale.
+No pane frame, split-view geometry, application-window size, header, dock,
+slide routing, or maximize/restore design changes are part of this update.
+Camera resolution selection and optical Auto Res remain independent of
+presentation scale.
 
-**Verification pending:** rebuild and verify Fit, continuous zoom, exact 1:1,
-panning, independent Slide 1 / Slide 2 state, changing camera resolution while
-zoomed, and Retina backing-scale behavior. No local build or hardware test is
-claimed by this source change.
+**Verification pending:** rebuild and verify automatic no-bars fill, aspect-ratio
+preservation with edge cropping, pan clamping, continuous zoom, exact 1:1,
+independent Slide 1 / Slide 2 state, changed camera modes, and Retina backing
+scale. No local build or hardware test is claimed by this source change.
 
 ## Two-slide workspace and compact camera dock (2026-11-24)
 

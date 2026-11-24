@@ -259,8 +259,10 @@ const camera::Frame *frameFromStorage(void *storage) {
                 return;
             dispatch_async(dispatch_get_main_queue(), ^{
                 AmscopeNativeCameraBridge *target = strongSelf;
-                if (target.onAcquisitionError)
+                if (target.onAcquisitionError &&
+                    target.state == AmscopeNativeCameraStateFaulted) {
                     target.onAcquisitionError(nativeError);
+                }
             });
         });
 

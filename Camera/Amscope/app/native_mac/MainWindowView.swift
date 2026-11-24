@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct MainWindowView: View {
@@ -43,12 +44,12 @@ struct MainWindowView: View {
                 Spacer(minLength: 8)
 
                 Text("Not streaming")
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.secondary)
             }
             .font(.system(size: 12))
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
-            .background(.bar)
+            .background(Color(nsColor: NSColor.windowBackgroundColor))
         }
         .frame(minWidth: 960, minHeight: 640)
     }
@@ -66,11 +67,11 @@ private struct InformationBarField: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundColor(.secondary)
 
             Text(value)
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(isEditable ? Color.primary : Color.secondary)
+                .foregroundColor(isEditable ? Color.primary : Color.secondary)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
                     guard isEditable else { return }
@@ -83,7 +84,7 @@ private struct InformationBarField: View {
                             .font(.headline)
 
                         TextField(title, text: $draft)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
 
                         HStack {
                             Spacer()
@@ -94,13 +95,11 @@ private struct InformationBarField: View {
                                 value = draft
                                 isEditing = false
                             }
-                            .keyboardShortcut(.defaultAction)
                         }
                     }
                     .padding(14)
                     .frame(width: 260)
                 }
-                .help(isEditable ? "Double-click to edit" : title)
         }
         .fixedSize(horizontal: true, vertical: false)
     }

@@ -24,7 +24,7 @@ Q_DECLARE_METATYPE(amscope::FramePtr)
 namespace amscope {
 
 // AmScope-specific Qt operation facade. AmcamCamera remains the sole native
-// session owner; frame mailbox mechanics are shared through Camera::Qt.
+// session owner; frame mailbox mechanics are shared through Camera::Common.
 //
 // The synchronous ICameraFeatureAccess and lifecycle methods are available
 // for direct non-GUI consumers. The first accepted operation commits this

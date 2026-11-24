@@ -2,6 +2,7 @@
 
 #include <exception>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace amscope::native_mac {

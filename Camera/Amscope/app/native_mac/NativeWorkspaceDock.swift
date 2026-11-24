@@ -54,7 +54,7 @@ struct NativeWorkspaceDock: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 36)
-            .background(Color(nsColor: NSColor.controlBackgroundColor))
+            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.50))
 
             Divider()
 
@@ -68,7 +68,7 @@ struct NativeWorkspaceDock: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.50))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -320,7 +320,7 @@ private struct NativeCameraControlsDock: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color(nsColor: NSColor.controlBackgroundColor))
+            .background(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.50))
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -522,7 +522,7 @@ private struct CameraDockConnectionSection: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 7)
-                .fill(Color(nsColor: NSColor.windowBackgroundColor))
+                .fill(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.50))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 7)
@@ -678,7 +678,7 @@ private struct NativeSmartGalleryDock: View {
             .padding(7)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color(nsColor: NSColor.windowBackgroundColor))
+                    .fill(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.50))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)

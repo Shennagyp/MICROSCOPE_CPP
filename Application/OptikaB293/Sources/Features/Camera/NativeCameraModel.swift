@@ -279,7 +279,9 @@ final class NativeCameraModel: ObservableObject {
 
                 // The native controller serially stops acquisition, applies the
                 // mode, and resumes acquisition when it was previously streaming.
-                self.features.refreshFeatures()
+                // A failed restart may leave the camera faulted, so reconcile access
+                // before attempting another feature snapshot.
+                self.reconcileFeatureSnapshotForCurrentCameraState()
             }
         }
     }

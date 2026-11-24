@@ -8,11 +8,7 @@ struct MainWindowView: View {
     private let dockDividerWidth: CGFloat = 6
 
     var body: some View {
-        VStack(spacing: 0) {
-            workspaceToolbar
-            Divider()
-
-            GeometryReader { geometry in
+        GeometryReader { geometry in
                 let maximumDockWidth = max(
                     280,
                     geometry.size.width - minimumPreviewWidth - dockDividerWidth
@@ -51,7 +47,6 @@ struct MainWindowView: View {
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
-            }
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)
@@ -74,58 +69,6 @@ struct MainWindowView: View {
         }
     }
 
-    private var workspaceToolbar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "microscope")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.secondary)
-
-            Text("MICROSCOPE WORKSPACE")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.7)
-
-            Spacer()
-
-            Button {
-                model.selectedWorkspaceDockTab = .cameraControls
-                model.isWorkspaceDockVisible = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "slider.horizontal.3")
-                    Text("Camera Controls")
-                }
-            }
-            .buttonStyle(.borderless)
-            .font(.system(size: 10, weight: .medium))
-            .help("Show Camera Controls dock")
-
-            Button {
-                model.selectedWorkspaceDockTab = .smartGallery
-                model.isWorkspaceDockVisible = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "rectangle.stack")
-                    Text("Smart Gallery")
-                }
-            }
-            .buttonStyle(.borderless)
-            .font(.system(size: 10, weight: .medium))
-            .help("Show Smart Gallery dock")
-
-            Button {
-                model.isWorkspaceDockVisible.toggle()
-            } label: {
-                Image(systemName: model.isWorkspaceDockVisible ? "sidebar.right" : "sidebar.left")
-                    .frame(width: 24, height: 24)
-            }
-            .buttonStyle(.borderless)
-            .help(model.isWorkspaceDockVisible ? "Hide dock panel" : "Show dock panel")
-            .accessibilityLabel(model.isWorkspaceDockVisible ? "Hide dock panel" : "Show dock panel")
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 36)
-        .background(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.55))
-    }
 }
 
 

@@ -357,3 +357,81 @@ The new architecture is established when:
 - **Application adapter:** code that translates an application use case into a capability contract.
 - **Functional core:** deterministic calculations and state transitions without external side effects.
 - **Imperative shell:** lifecycle-owning objects that perform I/O and coordinate external resources.
+
+## 13. Slide image coordinate contract
+
+### 13.1 Coordinate spaces
+
+The viewer has three distinct coordinate spaces:
+
+1. **Source-image space:** coordinates in the retained camera image, measured in source pixels. Measurements and annotations are attached to this space.
+2. **Document space:** AppKit points inside the scaled image-container view. The image and its overlays are drawn in this space.
+3. **Viewport space:** AppKit points local to the fixed slide viewer. Pointer events arrive in this space; the image document is positioned and clipped inside it.
+
+The source image dimensions define canonical geometry. Display scale, pan origin,
+window dimensions and backing scale are presentation transforms; none changes
+source coordinates or optical calibration.
+
+### 13.2 Transform definitions
+
+For a uniform document scale (s), source point (p_s), and document origin (o):
+
+[
+p_v = o + s p_s
+]
+
+[
+p_s = (p_v - o) / s
+]
+
+The renderer derives independent horizontal and vertical source-to-document factors
+from actual image and document sizes. This keeps overlay registration correct if a
+future presentation path rounds or resamples one dimension differently.
+
+The geometry module owns deterministic operations for:
+- physical display-pixel scale from the AppKit backing-scale factor;
+- aspect-preserving fit, capped at physical 1:1;
+- document dimensions at a requested scale;
+- centering and pan-bound clamping;
+- viewport-to-source pointer conversion;
+- source-to-document overlay scaling;
+- pointer-anchored zoom transforms.
+
+AppKit remains responsible for receiving events, applying the returned transform,
+retaining the image, drawing and managing view lifecycle.
+
+### 13.3 Invariants
+
+- A measurement endpoint and annotation anchor remain in source-image coordinates.
+- Zooming or panning does not rewrite measurement or annotation coordinates.
+- A zoom keeps the source point beneath the pointer fixed unless pan-bound clamping
+  requires a correction. The document must not expose blank space beyond its edges.
+- Fit preserves aspect ratio, displays the complete source frame and does not
+  upscale beyond physical 1:1.
+- Lock preserves the selected scale when the viewport resizes.
+- Full Resolution maps one source pixel to one physical display pixel. On Retina
+  screens this is fewer than one AppKit point per source pixel; the complete image
+  document may be larger than the viewport and is clipped, not resized.
+- Physical measurement uses micrometers-per-source-pixel from optical calibration.
+  It is independent of document scale, viewport size, zoom, pan and display backing
+  scale.
+- When source dimensions change, overlays tied to the previous source grid are
+  cleared. A frozen pane continues to retain its previous image/document.
+- Invalid dimensions or non-positive/non-finite scales do not produce source
+  coordinates or a geometry transform.
+
+Pointer hit testing preserves the existing inclusive maximum boundary
+((x leq width), (y leq height)). Changing this to pixel-center or half-open
+bounds is a separate behavioral decision, not an incidental consequence of
+extracting the geometry.
+
+### 13.4 Functional-core boundary
+
+`SlideImageGeometry` is a deterministic CoreGraphics value module. It has no
+AppKit, SwiftUI, camera, image-buffer, persistence or global-state dependency.
+The image view owns `NativeSlideImageSizingMode`, locked-scale state and native
+event lifecycles; it delegates mathematical transforms to this module.
+
+The image container uses the same source-to-document scale for overlay rendering.
+This removes the duplicated mapping rule between pointer input and
+measurement/annotation drawing.

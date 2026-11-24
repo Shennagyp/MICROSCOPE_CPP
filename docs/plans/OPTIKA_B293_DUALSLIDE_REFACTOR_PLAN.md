@@ -2,8 +2,42 @@
 
 **Branch:** `OPTIKA-B293-DUALSLIDE-APP`  
 **Starting commit:** `f25e5d8e6fdefea7f742fb71fa5f4ead69291626`  
-**Plan status:** Architecture-first; implementation has not started  
+**Plan status:** Implementation in progress; source/build migration and initial UI decomposition committed; compile/runtime acceptance pending  
 **Related architecture:** [OPTIKA B293 Dual-Slide Application Architecture](../architecture/OPTIKA_B293_DUALSLIDE_APPLICATION_ARCHITECTURE.md)
+
+
+## Implementation status — 2026-11-25
+
+This plan has moved from architecture-only planning into implementation on
+`OPTIKA-B293-DUALSLIDE-APP`. The original v0.8 source remains the migration
+reference on its original branch.
+
+| Phase | Current status | Evidence / remaining boundary |
+|---|---|---|
+| 0 — Baseline and ownership map | Source inventory recorded | Camera/application split, dual-slide routing, frame ownership and coordinate behavior were inspected before extraction. Continue updating the inventory as responsibilities change. |
+| 1 — Product/application build boundary | Source migration committed; build unverified | `Application/OptikaB293` owns the app target, UI, camera adapter and application tests. Root CMake composes the app with `Camera/Amscope`. Every path listed by the app CMake source list exists in the branch tree. |
+| 2 — Functional core extraction | In progress | Microscope calibration, automatic-resolution policy and slide-image geometry are separate deterministic modules. Automatic-resolution readout semantics remain provisional and are not hardware-verified. |
+| 3 — Application composition and state ownership | In progress | The composition root constructs and injects the camera bridge. Workspace state and gallery are separate from camera feature state. Camera session and feature mutations still share the camera feature model and may need a later, evidence-driven split. |
+| 4 — UI and preview refactoring | In progress | Workspace, dock, preview router, pane, image view, image container and feature controls have separate source responsibilities. Preserve the single frame consumer and verify every construction/update path statically. |
+| 5 — Capability expansion seams | Not started | Motion and ImageProcessing remain separate future capabilities. Do not create placeholder implementations or speculative universal interfaces. |
+| 6 — Migration acceptance and retirement | Not accepted | No build, test, application, camera or hardware verification has been run here. Do not claim acceptance or retire migration references based on source movement alone. |
+
+### Current implementation constraints
+
+- The camera driver, acquisition worker, bounded queue, frame pool, immutable
+  frame leases, mailbox, generation gate and single preview consumer are not
+  refactoring targets.
+- Camera, Motion and ImageProcessing remain sibling capabilities coordinated
+  by the application.
+- Geometry and scientific calculations belong in deterministic modules;
+  AppKit views own native input, rendering and resource lifecycles.
+- The previous dock-width preference is migrated under the new OPTIKA key.
+- The floating dock remains an overlay; its panel alpha remains 0.20 (80%
+  transparency).
+- No build, test, debugging session or hardware run has been performed during
+  this refactoring. The user performs those checks in the development
+  environment when explicitly requested.
+
 
 ## Objective
 

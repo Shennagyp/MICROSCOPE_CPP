@@ -133,24 +133,21 @@ final class NativeSlideImageView: NSView {
 
     /// AppKit points per camera pixel for one physical display pixel.
     private var actualPixelScale: CGFloat {
-        1 / max(window?.backingScaleFactor ?? 1, 1)
+        SlideImageGeometry.physicalPixelScale(
+            backingScaleFactor: window?.backingScaleFactor ?? 1
+        )
     }
 
     /// Largest aspect-preserving scale that keeps the complete source image
     /// inside the viewer viewport. Diagnostic content is never cropped just
     /// to eliminate margins. Upscaling beyond native 1:1 is not permitted.
     private var automaticFitScale: CGFloat {
-        guard let image = currentImage,
-              image.width > 0,
-              image.height > 0,
-              bounds.width > 0,
-              bounds.height > 0 else {
-            return actualPixelScale
-        }
-
-        let widthScale = bounds.width / CGFloat(image.width)
-        let heightScale = bounds.height / CGFloat(image.height)
-        return min(min(widthScale, heightScale), actualPixelScale)
+        guard let image = currentImage else { return actualPixelScale }
+        return SlideImageGeometry.automaticFitScale(
+            imageSize: CGSize(width: image.width, height: image.height),
+            viewportSize: bounds.size,
+            physicalPixelScale: actualPixelScale
+        )
     }
 
     private var currentScale: CGFloat {
@@ -164,63 +161,28 @@ final class NativeSlideImageView: NSView {
         }
     }
 
-    /// Exact document dimensions for 1:1 viewing. This represents the
-    /// complete source frame, not merely the visible viewport. On Retina
-    /// displays each source pixel occupies 1 / backingScaleFactor points.
-    private func fullResolutionContainerSize(for image: CGImage) -> CGSize {
-        let pointsPerSourcePixel = actualPixelScale
-        return CGSize(
-            width: CGFloat(image.width) * pointsPerSourcePixel,
-            height: CGFloat(image.height) * pointsPerSourcePixel
-        )
-    }
-
-    /// Document dimensions at the requested scale. At 1:1, return the
-    /// complete original image dimensions without fitting or cropping them
-    /// to the viewport. The viewport clips; it does not resize the document.
+    /// Document dimensions at the requested display scale.
     private func imageContainerSize(at scale: CGFloat) -> CGSize {
         guard let image = currentImage else { return .zero }
-        let boundedScale = min(max(scale, 0), actualPixelScale)
-
-        if boundedScale == actualPixelScale {
-            return fullResolutionContainerSize(for: image)
-        }
-
-        return CGSize(
-            width: CGFloat(image.width) * boundedScale,
-            height: CGFloat(image.height) * boundedScale
+        return SlideImageGeometry.documentSize(
+            imageSize: CGSize(width: image.width, height: image.height),
+            requestedScale: scale,
+            physicalPixelScale: actualPixelScale
         )
-    }
-
-    private func centeredOrigin(for size: CGSize) -> CGPoint {
-        CGPoint(
-            x: (bounds.width - size.width) / 2,
-            y: (bounds.height - size.height) / 2
-        )
-    }
-
-    private func clampedOrigin(_ proposed: CGPoint, for size: CGSize) -> CGPoint {
-        let x: CGFloat
-        if size.width <= bounds.width {
-            x = (bounds.width - size.width) / 2
-        } else {
-            x = min(0, max(bounds.width - size.width, proposed.x))
-        }
-
-        let y: CGFloat
-        if size.height <= bounds.height {
-            y = (bounds.height - size.height) / 2
-        } else {
-            y = min(0, max(bounds.height - size.height, proposed.y))
-        }
-        return CGPoint(x: x, y: y)
     }
 
     private func updateImageContainer(scale: CGFloat, origin: CGPoint?) {
         guard currentImage != nil else { return }
         let size = imageContainerSize(at: scale)
-        let proposedOrigin = origin ?? centeredOrigin(for: size)
-        let boundedOrigin = clampedOrigin(proposedOrigin, for: size)
+        let proposedOrigin = origin ?? SlideImageGeometry.centeredOrigin(
+            viewportSize: bounds.size,
+            documentSize: size
+        )
+        let boundedOrigin = SlideImageGeometry.clampedOrigin(
+            proposedOrigin,
+            viewportSize: bounds.size,
+            documentSize: size
+        )
 
         imageContainer.frame = CGRect(
             origin: boundedOrigin,
@@ -284,19 +246,13 @@ final class NativeSlideImageView: NSView {
     }
 
     private func sourcePixel(at viewportPoint: CGPoint) -> CGPoint? {
-        guard let image = currentImage, currentScale > 0 else { return nil }
-        let origin = imageContainer.frame.origin
-        let pixel = CGPoint(
-            x: (viewportPoint.x - origin.x) / currentScale,
-            y: (viewportPoint.y - origin.y) / currentScale
+        guard let image = currentImage else { return nil }
+        return SlideImageGeometry.sourcePoint(
+            at: viewportPoint,
+            imageOrigin: imageContainer.frame.origin,
+            imageScale: currentScale,
+            imageSize: CGSize(width: image.width, height: image.height)
         )
-        guard pixel.x >= 0,
-              pixel.y >= 0,
-              pixel.x <= CGFloat(image.width),
-              pixel.y <= CGFloat(image.height) else {
-            return nil
-        }
-        return pixel
     }
 
     private func addTextAnnotation(at sourcePoint: CGPoint) {
@@ -354,47 +310,41 @@ final class NativeSlideImageView: NSView {
     // MARK: - Manual zoom
 
     private func zoom(by delta: CGFloat, anchoredAt anchor: CGPoint) {
-        guard currentImage != nil,
-              delta.isFinite,
-              delta != 0 else {
+        guard let image = currentImage else { return }
+
+        let maximumScale = actualPixelScale
+        let minimumScale = min(automaticFitScale, maximumScale)
+        let oldScale = currentScale
+        let oldOrigin = imageOrigin ?? SlideImageGeometry.centeredOrigin(
+            viewportSize: bounds.size,
+            documentSize: imageContainerSize(at: oldScale)
+        )
+
+        guard let transform = SlideImageGeometry.zoomTransform(
+            imageSize: CGSize(width: image.width, height: image.height),
+            viewportSize: bounds.size,
+            currentScale: oldScale,
+            currentOrigin: oldOrigin,
+            anchor: anchor,
+            delta: delta,
+            minimumScale: minimumScale,
+            maximumScale: maximumScale
+        ) else {
             return
         }
 
-        let oldScale = currentScale
-        let maximumScale = actualPixelScale
-        let minimumScale = min(automaticFitScale, maximumScale)
-        let oldOrigin = imageOrigin ?? centeredOrigin(
-            for: imageContainerSize(at: oldScale)
-        )
-        let imagePoint = CGPoint(
-            x: (anchor.x - oldOrigin.x) / oldScale,
-            y: (anchor.y - oldOrigin.y) / oldScale
-        )
-
-        let factor = pow(2, delta)
-        let nextScale = min(
-            maximumScale,
-            max(minimumScale, oldScale * factor)
-        )
-        guard abs(nextScale - oldScale) > 0.000001 else { return }
-
-        // Manual zoom locks this pane only when the scale actually changes.
-        // Exactly 1:1 is represented separately so backing-scale changes can
-        // preserve native-pixel mapping without changing ordinary locked zoom.
+        // AppKit owns the sizing-mode state machine; deterministic geometry
+        // is delegated to the functional core.
         let nextMode: NativeSlideImageSizingMode =
-            abs(nextScale - maximumScale) < 0.000001
+            abs(transform.scale - maximumScale) < SlideImageGeometry.scaleTolerance
                 ? .fullResolution
                 : .lockedScale
         if sizingMode != nextMode {
             sizingMode = nextMode
             onSizingModeChanged?()
         }
-        lockedScale = nextMode == .lockedScale ? nextScale : nil
-        let proposedOrigin = CGPoint(
-            x: anchor.x - imagePoint.x * nextScale,
-            y: anchor.y - imagePoint.y * nextScale
-        )
-        updateImageContainer(scale: nextScale, origin: proposedOrigin)
+        lockedScale = nextMode == .lockedScale ? transform.scale : nil
+        updateImageContainer(scale: transform.scale, origin: transform.origin)
     }
 
     // MARK: - Pointer interaction and panning

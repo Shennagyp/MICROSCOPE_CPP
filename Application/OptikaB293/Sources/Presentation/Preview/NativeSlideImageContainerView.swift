@@ -38,7 +38,9 @@ final class NativeSlideImageContainerView: NSView {
             return
         }
 
-        let physicalScale = 1 / max(window?.backingScaleFactor ?? 1, 1)
+        let physicalScale = SlideImageGeometry.physicalPixelScale(
+            backingScaleFactor: window?.backingScaleFactor ?? 1
+        )
         let displayedScale = bounds.width / max(CGFloat(image.width), 1)
         context.interpolationQuality =
             displayedScale < physicalScale * 0.999 ? .high : .none
@@ -47,46 +49,41 @@ final class NativeSlideImageContainerView: NSView {
             in: CGRect(origin: .zero, size: bounds.size)
         )
 
-        let scaleX = bounds.width / CGFloat(image.width)
-        let scaleY = bounds.height / CGFloat(image.height)
+        guard let coordinateScale = SlideImageGeometry.coordinateScale(
+            imageSize: CGSize(width: image.width, height: image.height),
+            documentSize: bounds.size
+        ) else {
+            return
+        }
 
         NSGraphicsContext.saveGraphicsState()
         for measurement in measurements {
             drawMeasurement(
                 measurement,
-                scaleX: scaleX,
-                scaleY: scaleY,
+                coordinateScale: coordinateScale,
                 color: OptikaPalette.nsMeasurement
             )
         }
         if let preview = previewMeasurement {
             drawMeasurement(
                 preview,
-                scaleX: scaleX,
-                scaleY: scaleY,
+                coordinateScale: coordinateScale,
                 color: OptikaPalette.nsWarning
             )
         }
         for annotation in annotations {
-            drawAnnotation(annotation, scaleX: scaleX, scaleY: scaleY)
+            drawAnnotation(annotation, coordinateScale: coordinateScale)
         }
         NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawMeasurement(
         _ measurement: NativeDistanceMeasurement,
-        scaleX: CGFloat,
-        scaleY: CGFloat,
+        coordinateScale: SlideImageCoordinateScale,
         color: NSColor
     ) {
-        let start = CGPoint(
-            x: measurement.start.x * scaleX,
-            y: measurement.start.y * scaleY
-        )
-        let end = CGPoint(
-            x: measurement.end.x * scaleX,
-            y: measurement.end.y * scaleY
-        )
+        let start = coordinateScale.documentPoint(fromSourcePoint: measurement.start)
+        let end = coordinateScale.documentPoint(fromSourcePoint: measurement.end)
 
         let path = NSBezierPath()
         path.lineWidth = 2
@@ -141,13 +138,9 @@ final class NativeSlideImageContainerView: NSView {
 
     private func drawAnnotation(
         _ annotation: NativeSlideTextAnnotation,
-        scaleX: CGFloat,
-        scaleY: CGFloat
+        coordinateScale: SlideImageCoordinateScale
     ) {
-        let point = CGPoint(
-            x: annotation.location.x * scaleX,
-            y: annotation.location.y * scaleY
-        )
+        let point = coordinateScale.documentPoint(fromSourcePoint: annotation.location)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             .foregroundColor: OptikaPalette.nsOverlayText

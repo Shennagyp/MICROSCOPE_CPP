@@ -15,6 +15,7 @@ set(OPTIKA_APP_SOURCES
     Sources/App/OptikaB293App.swift
     Sources/Composition/OptikaB293Composition.swift
     Sources/Features/Camera/NativeCameraModel.swift
+    Sources/Features/Slides/SlideImageGeometry.swift
     Sources/Features/Capture/NativeCaptureGallery.swift
     Sources/Features/Optics/MicroscopeOpticalConfiguration.swift
     Sources/Features/Optics/MicroscopeConfigurationDraftStore.swift
@@ -94,4 +95,15 @@ if(BUILD_TESTING)
         "$<$<COMPILE_LANGUAGE:Swift>:5>")
     target_link_libraries(optika_microscope_calibration_tests PRIVATE "${OPTIKA_FOUNDATION_FRAMEWORK}")
     add_test(NAME optika_microscope_calibration_tests COMMAND optika_microscope_calibration_tests)
+
+    add_executable(optika_slide_image_geometry_tests
+        Sources/Features/Slides/SlideImageGeometry.swift
+        Tests/SlideImageGeometryTests.swift)
+    target_compile_options(optika_slide_image_geometry_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
+        "$<$<COMPILE_LANGUAGE:Swift>:5>")
+    target_link_libraries(optika_slide_image_geometry_tests PRIVATE
+        "${OPTIKA_FOUNDATION_FRAMEWORK}"
+        "${OPTIKA_COREGRAPHICS_FRAMEWORK}")
+    add_test(NAME optika_slide_image_geometry_tests COMMAND optika_slide_image_geometry_tests)
 endif()

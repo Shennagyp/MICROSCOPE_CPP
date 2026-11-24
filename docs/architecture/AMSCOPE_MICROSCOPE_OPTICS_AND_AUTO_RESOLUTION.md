@@ -63,9 +63,17 @@ reused with a different camera.
 
 ## Rayleigh sampling calculation
 
-The initial model uses the lateral Rayleigh distance
+The initial target is H&E chromatin in the hematoxylin-sensitive band. Published
+spectral measurements report a useful nuclear hematoxylin signature around
+540–600 nm, but the precise spectrum depends on staining chemistry, mordant,
+pH, tissue and measurement system. Eosin also contributes in the approximately
+500–550 nm region, so H&E is not two perfectly non-overlapping spectral bands.
 
-`d_R = 0.61 \lambda / NA_{objective}`
+The profile therefore stores a configurable chromatin band, initially
+540–600 nm, rather than one fixed 550 nm wavelength. For a candidate mode the
+application calculates the Rayleigh distance across the band:
+
+`d_R(\lambda) = 0.61 \lambda / NA_{objective}`
 
 and the object-space pitch for a candidate sensor mode
 
@@ -78,14 +86,22 @@ where `lambda` is the configured reference wavelength in micrometres,
 `M_objective` is objective magnification, and `M_relay` is the product of
 camera-port relay magnifications.
 
-The displayed Rayleigh sampling factor is
+The sampling factor is evaluated over the configured chromatin band:
 
-`RF = d_R / p_{object}`
+`RF(\lambda) = d_R(\lambda) / p_{object}`
 
-The initial target is `RF >= 2.3`. The value 2.3 is a practical sampling
-target; it is not the Rayleigh criterion itself. The default reference wavelength
-is 550 nm (green reference), not a measured spectral peak of the B-293's 6300 K
-white LED. Wavelength and target factor are configurable.
+The value increases with wavelength. To preserve the finest detail across the
+whole band, the initial automatic policy uses the **minimum RF at the shortest
+configured wavelength** as its pass/fail condition. It also reports the factor
+range across the band. The initial band is 540–600 nm and the target is
+`RF >= 2.3`; both are configurable. This is a conservative band-edge model,
+not a claim that every wavelength contributes equally.
+
+A calibrated spectral model can later replace this conservative rule using
+measured illumination spectral power, hematoxylin-versus-background contrast,
+eosin contribution, optical transmission and camera spectral quantum efficiency.
+Those curves must be measured for the installed microscope/camera and staining
+protocol. Do not manufacture weights or infer them from RGB color labels.
 
 For the current camera mode list, the initial implementation infers relative
 sampling scale from the ratio between the largest reported dimensions and the
@@ -113,19 +129,20 @@ worker or frame queue is introduced.
 
 ## Initial predicted choices
 
-For 550 nm, 2.2 µm sensor pixels, 0.5× total relay, and target RF 2.3:
+For the 540–600 nm chromatin band, 2.2 µm sensor pixels, 0.5× total relay,
+and target RF 2.3:
 
-| Objective | Rayleigh distance | Full-mode RF | Predicted minimum mode* |
+| Objective | Rayleigh distance band | Full-mode RF band | Predicted minimum mode* |
 |---:|---:|---:|---|
-| 4× / 0.10 | 3.355 µm | 3.05 | 2560×1922 |
-| 10× / 0.25 | 1.342 µm | 3.05 | 2560×1922 |
-| 40× / 0.65 | 0.516 µm | 4.69 | 1280×960 |
-| 100× / 1.25 | 0.268 µm | 6.10 | 1280×960 |
+| 4× / 0.10 | 3.294–3.660 µm | 2.99–3.33 | 2560×1922 |
+| 10× / 0.25 | 1.318–1.464 µm | 2.99–3.33 | 2560×1922 |
+| 40× / 0.65 | 0.507–0.563 µm | 4.61–5.12 | 1280×960 |
+| 100× / 1.25 | 0.264–0.293 µm | 5.99–6.65 | 1280×960 |
 
 *Predictions assume the camera modes are full-field 1×1, 2×2, and 4×4
-sampling respectively. For 40×, the predicted RF at 2×2 is about 2.35,
-just above the 2.3 target. This is a narrow margin and must be checked with
-optical calibration and the camera's actual mode behavior.
+sampling respectively. At 40× the predicted lower-edge factor in a 2×2 mode
+is only about 2.30, almost exactly the 2.3 threshold. It should be considered
+marginal until the optical path and effective sensor sampling are measured.
 
 With a 0.35× total relay instead, the full-mode factors are approximately 2.13,
 2.13, 3.28, and 4.27. Under a 2.3 target, the full-resolution mode is selected

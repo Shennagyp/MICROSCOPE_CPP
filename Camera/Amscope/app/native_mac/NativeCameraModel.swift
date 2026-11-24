@@ -31,7 +31,8 @@ private struct NativeAutomaticResolutionChoice {
     let width: Int
     let height: Int
     let pixelCount: Int
-    let samplingFactor: Double
+    let minimumBandSamplingFactor: Double
+    let maximumBandSamplingFactor: Double
     let meetsTarget: Bool
 }
 
@@ -172,7 +173,7 @@ final class NativeCameraModel: ObservableObject {
     }
 
     var automaticResolutionHelp: String {
-        "Automatically chooses the lowest supported camera mode that meets the configured Rayleigh sampling factor for the selected objective. The calculation uses sensor pixel pitch, total camera-relay magnification, and the reported mode dimensions."
+        "H&E chromatin mode. Chooses the lowest supported camera mode that meets the Rayleigh sampling target across the configured hematoxylin-sensitive wavelength band. Until the microscope's spectral response is measured, the shortest band wavelength is used conservatively."
     }
 
     var automaticResolutionSummary: String {
@@ -184,8 +185,14 @@ final class NativeCameraModel: ObservableObject {
         guard let choice = automaticResolutionChoice(for: descriptor) else {
             return "Check microscope calibration"
         }
-        let result = String(format: "%.2f", choice.samplingFactor)
-        return "\(choice.width) × \(choice.height) · RF \(result)" +
+        let lower = String(format: "%.2f", choice.minimumBandSamplingFactor)
+        let upper = String(format: "%.2f", choice.maximumBandSamplingFactor)
+        let band = String(
+            format: "%.0f–%.0f nm",
+            microscopeConfiguration.chromatinBandLowerNanometers,
+            microscopeConfiguration.chromatinBandUpperNanometers
+        )
+        return "\(choice.width) × \(choice.height) · RF \(lower)–\(upper) · \(band)" +
             (choice.meetsTarget ? "" : " · target not met")
     }
 
@@ -231,8 +238,11 @@ final class NativeCameraModel: ObservableObject {
               configuration.cameraPixelPitchMicrometers > 0,
               configuration.cameraRelayMagnification.isFinite,
               configuration.cameraRelayMagnification > 0,
-              configuration.referenceWavelengthNanometers.isFinite,
-              configuration.referenceWavelengthNanometers > 0,
+              configuration.chromatinBandLowerNanometers.isFinite,
+              configuration.chromatinBandLowerNanometers > 0,
+              configuration.chromatinBandUpperNanometers.isFinite,
+              configuration.chromatinBandUpperNanometers >=
+                configuration.chromatinBandLowerNanometers,
               configuration.targetRayleighSamplingFactor.isFinite,
               configuration.targetRayleighSamplingFactor > 0 else {
             return nil
@@ -248,8 +258,13 @@ final class NativeCameraModel: ObservableObject {
             return nil
         }
 
-        let rayleighDistanceMicrometers =
-            0.61 * (configuration.referenceWavelengthNanometers / 1000.0) /
+        // The shortest wavelength has the smallest Rayleigh distance and
+        // therefore defines the conservative camera-sampling requirement.
+        let lowerBandRayleighMicrometers =
+            0.61 * (configuration.chromatinBandLowerNanometers / 1000.0) /
+            objective.numericalAperture
+        let upperBandRayleighMicrometers =
+            0.61 * (configuration.chromatinBandUpperNanometers / 1000.0) /
             objective.numericalAperture
         let candidates = modes.map { mode -> NativeAutomaticResolutionChoice in
             // The MU503's advertised modes are initially modeled as full-field
@@ -260,15 +275,18 @@ final class NativeCameraModel: ObservableObject {
             let objectPixelPitchMicrometers =
                 configuration.cameraPixelPitchMicrometers * samplingScale /
                 (objective.magnification * configuration.cameraRelayMagnification)
-            let factor = rayleighDistanceMicrometers /
+            let minimumBandFactor = lowerBandRayleighMicrometers /
+                objectPixelPitchMicrometers
+            let maximumBandFactor = upperBandRayleighMicrometers /
                 objectPixelPitchMicrometers
             return NativeAutomaticResolutionChoice(
                 symbol: mode.symbol,
                 width: mode.width,
                 height: mode.height,
                 pixelCount: mode.pixelCount,
-                samplingFactor: factor,
-                meetsTarget: factor >= configuration.targetRayleighSamplingFactor
+                minimumBandSamplingFactor: minimumBandFactor,
+                maximumBandSamplingFactor: maximumBandFactor,
+                meetsTarget: minimumBandFactor >= configuration.targetRayleighSamplingFactor
             )
         }
 

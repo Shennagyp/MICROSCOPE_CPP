@@ -150,12 +150,24 @@ struct MicroscopeConfigurationWindow: View {
                 GroupBox(label: Text("Rayleigh sampling target")) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Reference wavelength (nm)")
+                            Text("Chromatin band minimum (nm)")
                             Spacer()
                             TextField(
-                                "Wavelength",
+                                "Minimum nm",
                                 text: configurationNumberBinding(
-                                    \.referenceWavelengthNanometers,
+                                    \.chromatinBandLowerNanometers,
+                                    precision: 0
+                                )
+                            )
+                            .frame(width: 90)
+                        }
+                        HStack {
+                            Text("Chromatin band maximum (nm)")
+                            Spacer()
+                            TextField(
+                                "Maximum nm",
+                                text: configurationNumberBinding(
+                                    \.chromatinBandUpperNanometers,
                                     precision: 0
                                 )
                             )
@@ -173,7 +185,7 @@ struct MicroscopeConfigurationWindow: View {
                             )
                             .frame(width: 90)
                         }
-                        Text("The default 550 nm is a green-light reference, not a measured spectral peak of the B-293 white LED. A target factor of 2.3 is used as the initial sampling criterion.")
+                        Text("H&E chromatin profile: 540–600 nm starting band. The selector checks the whole band and uses its shortest wavelength for the conservative sampling requirement. This is not a measured spectrum of your stained slides or microscope; refine the band after spectral calibration.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Toggle(
@@ -230,8 +242,10 @@ struct MicroscopeConfigurationWindow: View {
         draft.cameraPixelPitchMicrometers > 0 &&
         draft.cameraRelayMagnification.isFinite &&
         draft.cameraRelayMagnification > 0 &&
-        draft.referenceWavelengthNanometers.isFinite &&
-        draft.referenceWavelengthNanometers > 0 &&
+        draft.chromatinBandLowerNanometers.isFinite &&
+        draft.chromatinBandLowerNanometers > 0 &&
+        draft.chromatinBandUpperNanometers.isFinite &&
+        draft.chromatinBandUpperNanometers >= draft.chromatinBandLowerNanometers &&
         draft.targetRayleighSamplingFactor.isFinite &&
         draft.targetRayleighSamplingFactor > 0 &&
         draft.condenserNumericalAperture.isFinite &&
@@ -330,7 +344,8 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
     var condenserNumericalAperture: Double
     var cameraPixelPitchMicrometers: Double
     var cameraRelayMagnification: Double
-    var referenceWavelengthNanometers: Double
+    var chromatinBandLowerNanometers: Double
+    var chromatinBandUpperNanometers: Double
     var targetRayleighSamplingFactor: Double
     var objectives: [MicroscopeObjective]
     var activeObjectiveID: String
@@ -342,7 +357,8 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         condenserNumericalAperture: 1.25,
         cameraPixelPitchMicrometers: 2.2,
         cameraRelayMagnification: 0.5,
-        referenceWavelengthNanometers: 550,
+        chromatinBandLowerNanometers: 540,
+        chromatinBandUpperNanometers: 600,
         targetRayleighSamplingFactor: 2.3,
         objectives: [
             MicroscopeObjective(

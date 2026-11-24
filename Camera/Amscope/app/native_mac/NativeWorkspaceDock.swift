@@ -29,48 +29,41 @@ struct NativeWorkspaceDock: View {
     let onToggleFloating: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 4) {
+        Group {
+            switch model.selectedWorkspaceDockTab {
+            case .cameraControls:
+                NativeCameraControlsDock(model: model)
+            case .smartGallery:
+                NativeSmartGalleryDock(gallery: model.captureGallery)
+            }
+        }
+        .padding(.top, 46)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            HStack(spacing: 6) {
                 dockTabButton(.cameraControls)
-                    .frame(maxWidth: .infinity)
                 dockTabButton(.smartGallery)
-                    .frame(maxWidth: .infinity)
-
-                Spacer(minLength: 2)
-
-                Button(action: onToggleFloating) {
-                    Image(systemName: isFloating ? "sidebar.right" : "arrow.up.right.square")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help(isFloating ? "Dock in the main window" : "Float this dock")
-                .accessibilityLabel(isFloating ? "Dock in the main window" : "Float this dock")
-
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Hide dock")
-                .accessibilityLabel("Hide dock")
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.72))
-
-            Divider()
-
-            Group {
-                switch model.selectedWorkspaceDockTab {
-                case .cameraControls:
-                    NativeCameraControlsDock(model: model)
-                case .smartGallery:
-                    NativeSmartGalleryDock(gallery: model.captureGallery)
-                }
+            .padding(.top, 8)
+            .padding(.leading, 10)
+            .zIndex(2)
+        }
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 5) {
+                dockChromeButton(
+                    symbol: isFloating ? "sidebar.right" : "arrow.up.right.square",
+                    description: isFloating ? "Dock in the main window" : "Float this dock",
+                    action: onToggleFloating
+                )
+                dockChromeButton(
+                    symbol: "xmark",
+                    description: "Hide dock",
+                    action: onClose
+                )
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, 8)
+            .padding(.trailing, 9)
+            .zIndex(2)
         }
         .background(Color(nsColor: NSColor.controlBackgroundColor))
         .overlay(
@@ -81,18 +74,43 @@ struct NativeWorkspaceDock: View {
         )
     }
 
+
+    private func dockChromeButton(
+        symbol: String,
+        description: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.94))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.75), lineWidth: 0.7)
+                )
+                .shadow(color: .black.opacity(0.12), radius: 3, x: 0, y: 1)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .foregroundColor(.primary)
+        .help(description)
+        .accessibilityLabel(description)
+    }
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
         Button {
             model.selectedWorkspaceDockTab = tab
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 Image(systemName: tab.symbolName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 14, weight: .semibold))
                 Text(tab.title)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
             }
-            .padding(.horizontal, 5)
-            .frame(maxWidth: .infinity, minHeight: 30)
+            .padding(.horizontal, 11)
+            .frame(minHeight: 32)
             .background(
                 RoundedRectangle(cornerRadius: 5)
                     .fill(
@@ -107,9 +125,10 @@ struct NativeWorkspaceDock: View {
                         model.selectedWorkspaceDockTab == tab
                             ? Color.accentColor.opacity(0.38)
                             : Color.clear,
-                        lineWidth: 0.8
+                        lineWidth: 0.9
                     )
             )
+            .shadow(color: .black.opacity(model.selectedWorkspaceDockTab == tab ? 0.14 : 0.08), radius: 3, x: 0, y: 1)
         }
         .buttonStyle(PlainButtonStyle())
         .foregroundColor(model.selectedWorkspaceDockTab == tab ? .primary : .secondary)
@@ -280,7 +299,7 @@ private struct NativeCameraControlsDock: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("MICROSCOPE")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.secondary)
 
                     Picker(
@@ -337,7 +356,7 @@ private struct NativeCameraControlsDock: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("CAMERA FEATURES")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundColor(.secondary)
 
                         Spacer()
@@ -346,7 +365,7 @@ private struct NativeCameraControlsDock: View {
                             model.refreshFeatures()
                         } label: {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.system(size: 14, weight: .medium))
                         }
                         .buttonStyle(BorderlessButtonStyle())
                         .help("Refresh camera feature values")
@@ -374,7 +393,7 @@ private struct NativeCameraControlsDock: View {
                             if index == 0 ||
                                model.featureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
                                 Text(featureGroupTitle(descriptor.group.rawValue).uppercased())
-                                    .font(.system(size: 8, weight: .bold))
+                                    .font(.system(size: 14, weight: .bold))
                                     .foregroundColor(.secondary)
                                     .padding(.top, index == 0 ? 0 : 5)
                             }
@@ -415,7 +434,7 @@ private struct CameraDockConnectionSection: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text("CAMERA")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.secondary)
 
                 Spacer()
@@ -425,12 +444,12 @@ private struct CameraDockConnectionSection: View {
                     .frame(width: 7, height: 7)
 
                 Text(model.cameraStateText.uppercased())
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.secondary)
             }
 
             Text(isConnected ? model.activeCameraName : "No camera connected")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .lineLimit(1)
                 .help("Right-click the camera name for Stop and Close actions.")
                 .contextMenu {
@@ -489,7 +508,7 @@ private struct CameraDockConnectionSection: View {
                             Image(systemName: "play.fill")
                             Text("Open + Start")
                         }
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
                         .background(
@@ -553,19 +572,19 @@ private struct NativeSmartGalleryDock: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("CAPTURES")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.secondary)
                     Text(gallery.captures.count == 80
                          ? "Latest 80 captures"
                          : "\(gallery.captures.count) captures")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                 }
 
                 Spacer()
 
                 if gallery.isCapturing {
                     Text("● Saving…")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
                 }
             }
@@ -600,7 +619,7 @@ private struct NativeSmartGalleryDock: View {
                         .font(.system(size: 28, weight: .light))
                         .foregroundColor(.secondary)
                     Text("No captures yet")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                     Text("Use the camera button on a slide's floating toolbar to save its current image.")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
@@ -671,9 +690,9 @@ private struct NativeSmartGalleryDock: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.slide.title)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                     Text(item.dimensionsText)
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(.system(size: 13, design: .monospaced))
                         .foregroundColor(.secondary)
                     Text(item.capturedAt, style: .date)
                         .font(.system(size: 8))

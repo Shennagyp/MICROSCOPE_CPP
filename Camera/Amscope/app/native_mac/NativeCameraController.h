@@ -78,6 +78,10 @@ public:
     [[nodiscard]] RequestId requestWriteFeature(
         std::string name, camera::CameraFeatureValue value,
         FeatureWriteCallback callback);
+    // Select a preview resolution on the serialized worker. If acquisition is
+    // active, it is stopped, the setting is applied, and acquisition is restarted.
+    [[nodiscard]] RequestId requestChangePreviewResolution(
+        std::string resolutionSymbol, FeatureWriteCallback callback);
 
     [[nodiscard]] bool isSessionCurrent(
         std::uint64_t sessionGeneration) const noexcept;
@@ -99,7 +103,8 @@ private:
         SessionBound,
         FeatureSnapshot,
         FeatureMutation,
-        LifecycleMutation
+        LifecycleMutation,
+        ResolutionMutation
     };
 
     struct PendingRequest {
@@ -120,6 +125,8 @@ private:
         std::function<void(RequestId, std::uint64_t, std::uint64_t)> execute);
     [[nodiscard]] std::uint64_t nextSessionGenerationLocked() noexcept;
     void runCommandWorker();
+    [[nodiscard]] bool startAcquisitionForGeneration(
+        std::uint64_t generation, CameraError* error) noexcept;
     void notifyFrameAvailable() noexcept;
     void handleAcquisitionFailure(
         const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate,

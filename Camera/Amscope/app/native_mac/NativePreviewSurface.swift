@@ -342,6 +342,10 @@ private final class NativeSlidePreviewPane: NSView {
         maximizeButton.target = self
         maximizeButton.action = #selector(toggleMaximizeAction(_:))
 
+        // The upper slide-control strip has no backing fill. Its buttons,
+        // symbols, and labels remain normal opaque controls.
+        headerStack.wantsLayer = true
+        headerStack.layer?.backgroundColor = NSColor.clear.cgColor
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.distribution = .fill

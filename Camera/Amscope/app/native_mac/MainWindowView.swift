@@ -27,6 +27,7 @@ struct MainWindowView: View {
             }
         }
         .frame(minWidth: 960, minHeight: 560)
+        .background(Color.clear)
         .background(
             BottomDockPanelAnchor(model: model)
                 .frame(width: 1, height: 1)
@@ -117,6 +118,7 @@ private struct BottomControlDock: View {
             .background(Color.clear)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .background(Color.clear)
     }
 
     private var dockFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {

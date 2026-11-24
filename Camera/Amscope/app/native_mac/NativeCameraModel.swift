@@ -351,7 +351,7 @@ final class NativeCameraModel: ObservableObject {
             let values = text.split(separator: ",").compactMap {
                 Int64($0.trimmingCharacters(in: .whitespaces))
             }
-            guard values.count == descriptor.elementCount else {
+            guard values.count == Int(descriptor.elementCount) else {
                 restoreDraft(for: descriptor)
                 return
             }

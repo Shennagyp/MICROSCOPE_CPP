@@ -394,7 +394,7 @@ private final class NativeSlideImageView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        if zoomProgress > 0, let imageOrigin {
+        if let imageOrigin {
             self.imageOrigin = clampedOrigin(imageOrigin, at: currentScale)
         }
         needsDisplay = true

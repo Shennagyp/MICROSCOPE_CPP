@@ -93,6 +93,22 @@ private struct BottomControlDock: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    private var dockFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
+        let primaryNames = [
+            "ExposureAuto",
+            "ExposureTime",
+            "AmcamAnalogGainPercent",
+            "AmcamResolutionIndex"
+        ]
+        let primarySet = Set(primaryNames)
+        let primary = primaryNames.compactMap { name in
+            model.featureDescriptors.first(where: { $0.name == name })
+        }
+        return primary + model.featureDescriptors.filter {
+            !primarySet.contains($0.name)
+        }
+    }
+
     private var featureControls: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 7) {
@@ -114,11 +130,11 @@ private struct BottomControlDock: View {
                             .foregroundColor(.secondary)
                     } else {
                         ForEach(
-                            Array(model.featureDescriptors.enumerated()),
+                            Array(dockFeatureDescriptors.enumerated()),
                             id: \.element.name
                         ) { index, descriptor in
                             if index > 0 &&
-                               model.featureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
+                               dockFeatureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
                                 Rectangle()
                                     .fill(Color(nsColor: NSColor.separatorColor))
                                     .frame(width: 1, height: 30)

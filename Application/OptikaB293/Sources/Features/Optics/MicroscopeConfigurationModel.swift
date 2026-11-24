@@ -9,12 +9,16 @@ final class MicroscopeConfigurationModel: ObservableObject {
         didSet {
             guard configuration != oldValue else { return }
             persistConfiguration()
+            onConfigurationChanged?()
         }
     }
 
     let draftStore = MicroscopeConfigurationDraftStore(
         configuration: .optikaB293
     )
+
+    /// Notifies application-level orchestration after a persisted optical change.
+    var onConfigurationChanged: (() -> Void)?
 
 
     private static let defaultsKey = "AmscopeNative.MicroscopeConfiguration.v1"

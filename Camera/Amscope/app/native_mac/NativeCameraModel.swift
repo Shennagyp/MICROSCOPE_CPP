@@ -179,17 +179,11 @@ final class NativeCameraModel: ObservableObject {
         activeSlide = slide
     }
 
-    /// Toggle the dock from its permanent edge rail.
-    /// Clicking the open tab closes the overlay; selecting another tab
-    /// switches tools while keeping the dock visible.
+    /// Every dock-title click toggles visibility. The clicked title also
+    /// selects which tool will be shown when the dock is opened.
     func toggleWorkspaceDock(_ tab: NativeWorkspaceDockTab) {
-        if isWorkspaceDockVisible && selectedWorkspaceDockTab == tab {
-            isWorkspaceDockVisible = false
-            return
-        }
-
         selectedWorkspaceDockTab = tab
-        isWorkspaceDockVisible = true
+        isWorkspaceDockVisible.toggle()
     }
 
     /// Hide the workspace tool dock without affecting camera or gallery state.

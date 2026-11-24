@@ -1,6 +1,26 @@
 import AppKit
 import SwiftUI
 
+private enum NativeSlideToolMode {
+    case pan
+    case distance
+    case annotation
+}
+
+private struct NativeDistanceMeasurement {
+    let start: CGPoint
+    let end: CGPoint
+
+    var distanceInPixels: CGFloat {
+        hypot(end.x - start.x, end.y - start.y)
+    }
+}
+
+private struct NativeSlideTextAnnotation {
+    let location: CGPoint
+    let text: String
+}
+
 /// One AppKit consumer owns the bridge's single latest-frame mailbox and
 /// routes frames to the selected slide pane. Each pane retains only its own
 /// most recently presented CGImage; SwiftUI never observes individual frames.
@@ -8,13 +28,15 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
     let activeSlide: NativeSlideID
     let onActiveSlideChanged: (NativeSlideID) -> Void
+    let onCapture: (NativeSlideID, CGImage) -> Void
 
     func makeNSView(context: Context) -> NativeDualPreviewNSView {
         let view = NativeDualPreviewNSView(frame: .zero)
         view.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged
+            onActiveSlideChanged: onActiveSlideChanged,
+            onCapture: onCapture
         )
         return view
     }
@@ -23,7 +45,8 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
         nsView.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged
+            onActiveSlideChanged: onActiveSlideChanged,
+            onCapture: onCapture
         )
     }
 }
@@ -39,6 +62,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var previousDividerFraction: CGFloat = 0.5
     private var didSetInitialSplitPosition = false
     private var onActiveSlideChanged: ((NativeSlideID) -> Void)?
+    private var onCapture: ((NativeSlideID, CGImage) -> Void)?
     private let minimumPaneWidth: CGFloat = 240
     private var didConfigureSubviews = false
 
@@ -85,6 +109,12 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         slideTwoPane.onToggleMaximize = { [weak self] in
             self?.toggleMaximizedSlide(.slide2)
         }
+        slideOnePane.onCaptureImage = { [weak self] image in
+            self?.onCapture?(.slide1, image)
+        }
+        slideTwoPane.onCaptureImage = { [weak self] image in
+            self?.onCapture?(.slide2, image)
+        }
         updatePaneStates()
     }
 
@@ -102,7 +132,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     func attach(
         to bridge: AmscopeNativeCameraBridge,
         activeSlide: NativeSlideID,
-        onActiveSlideChanged: @escaping (NativeSlideID) -> Void
+        onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
+        onCapture: @escaping (NativeSlideID, CGImage) -> Void
     ) {
         if self.bridge !== bridge {
             self.bridge = bridge
@@ -114,6 +145,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         }
 
         self.onActiveSlideChanged = onActiveSlideChanged
+        self.onCapture = onCapture
         setActiveSlide(activeSlide)
 
         // Recover a frame if the view was recreated while a notification
@@ -260,13 +292,21 @@ private final class NativeSlidePreviewPane: NSView {
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "", target: nil, action: nil)
+    private let captureButton = NSButton(title: "", target: nil, action: nil)
+    private let panToolButton = NSButton(title: "", target: nil, action: nil)
+    private let distanceToolButton = NSButton(title: "", target: nil, action: nil)
+    private let annotationToolButton = NSButton(title: "", target: nil, action: nil)
+    private let clearOverlayButton = NSButton(title: "", target: nil, action: nil)
     private let annotationStack = NSStackView()
     private let actionStack = NSStackView()
+    private let toolStack = NSStackView()
     private let annotationPlate = NSView()
     private let actionPlate = NSView()
+    private let toolPlate = NSView()
 
     var onSelectLiveTarget: (() -> Void)?
     var onToggleMaximize: (() -> Void)?
+    var onCaptureImage: ((CGImage) -> Void)?
 
     private var pulledFrameCount: UInt64 = 0
     private var droppedFrameCount: UInt64 = 0
@@ -355,11 +395,46 @@ private final class NativeSlidePreviewPane: NSView {
             maximizeButton.heightAnchor.constraint(equalToConstant: 22)
         ])
 
+        configureIconButton(
+            captureButton,
+            symbol: "camera",
+            description: "Capture current slide image",
+            action: #selector(captureCurrentImageAction(_:))
+        )
+        configureIconButton(
+            panToolButton,
+            symbol: "cursorarrow",
+            description: "Pointer and pan tool",
+            action: #selector(selectPanToolAction(_:)),
+            isToggle: true
+        )
+        configureIconButton(
+            distanceToolButton,
+            symbol: "ruler",
+            description: "Measure straight-line distance in source pixels",
+            action: #selector(selectDistanceToolAction(_:)),
+            isToggle: true
+        )
+        configureIconButton(
+            annotationToolButton,
+            symbol: "text.badge.plus",
+            description: "Add a text annotation to this slide",
+            action: #selector(selectAnnotationToolAction(_:)),
+            isToggle: true
+        )
+        configureIconButton(
+            clearOverlayButton,
+            symbol: "trash",
+            description: "Clear measurements and annotations",
+            action: #selector(clearSlideOverlaysAction(_:))
+        )
+
         // The former full-width header is removed. Specimen metadata is
         // presented as compact corner annotations over the image viewport;
         // actions remain available in a separate floating control cluster.
         configureAnnotationPlate(annotationPlate)
         configureAnnotationPlate(actionPlate)
+        configureAnnotationPlate(toolPlate)
 
         annotationStack.orientation = .horizontal
         annotationStack.alignment = .centerY
@@ -378,12 +453,25 @@ private final class NativeSlidePreviewPane: NSView {
         actionStack.addArrangedSubview(selectButton)
         actionStack.addArrangedSubview(imageSizingButton)
         actionStack.addArrangedSubview(fullResolutionButton)
+        actionStack.addArrangedSubview(captureButton)
         actionStack.addArrangedSubview(maximizeButton)
+
+        toolStack.orientation = .horizontal
+        toolStack.alignment = .centerY
+        toolStack.distribution = .fill
+        toolStack.spacing = 5
+        toolStack.translatesAutoresizingMaskIntoConstraints = false
+        toolStack.addArrangedSubview(panToolButton)
+        toolStack.addArrangedSubview(distanceToolButton)
+        toolStack.addArrangedSubview(annotationToolButton)
+        toolStack.addArrangedSubview(clearOverlayButton)
 
         annotationPlate.translatesAutoresizingMaskIntoConstraints = false
         actionPlate.translatesAutoresizingMaskIntoConstraints = false
+        toolPlate.translatesAutoresizingMaskIntoConstraints = false
         annotationPlate.addSubview(annotationStack)
         actionPlate.addSubview(actionStack)
+        toolPlate.addSubview(toolStack)
 
         // The image viewport now occupies the complete pane. The annotation
         // plates float above it and do not reserve a header band.
@@ -391,6 +479,7 @@ private final class NativeSlidePreviewPane: NSView {
         addSubview(imageView)
         addSubview(annotationPlate)
         addSubview(actionPlate)
+        addSubview(toolPlate)
         NSLayoutConstraint.activate([
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -409,9 +498,59 @@ private final class NativeSlidePreviewPane: NSView {
             actionStack.topAnchor.constraint(equalTo: actionPlate.topAnchor, constant: 4),
             actionStack.bottomAnchor.constraint(equalTo: actionPlate.bottomAnchor, constant: -4),
             actionPlate.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            actionPlate.topAnchor.constraint(equalTo: topAnchor, constant: 10)
+            actionPlate.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+
+            toolStack.leadingAnchor.constraint(equalTo: toolPlate.leadingAnchor, constant: 5),
+            toolStack.trailingAnchor.constraint(equalTo: toolPlate.trailingAnchor, constant: -5),
+            toolStack.topAnchor.constraint(equalTo: toolPlate.topAnchor, constant: 4),
+            toolStack.bottomAnchor.constraint(equalTo: toolPlate.bottomAnchor, constant: -4),
+            toolPlate.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            toolPlate.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
         ])
         updateImageSizingButton()
+        updateToolButtonStates()
+    }
+
+    private func configureIconButton(
+        _ button: NSButton,
+        symbol: String,
+        description: String,
+        action: Selector,
+        isToggle: Bool = false
+    ) {
+        button.bezelStyle = .texturedRounded
+        button.controlSize = .small
+        button.imagePosition = .imageOnly
+        button.target = self
+        button.action = action
+        button.toolTip = description
+        button.setAccessibilityLabel(description)
+        if isToggle {
+            button.setButtonType(.toggle)
+        }
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 26),
+            button.heightAnchor.constraint(equalToConstant: 24)
+        ])
+
+        if #available(macOS 11.0, *) {
+            button.image = NSImage(
+                systemSymbolName: symbol,
+                accessibilityDescription: description
+            )
+        } else {
+            button.image = nil
+            button.title = symbol == "ruler" ? "R" : (symbol == "camera" ? "C" : "T")
+        }
+    }
+
+    private func updateToolButtonStates() {
+        panToolButton.state = imageView.toolMode == .pan ? .on : .off
+        distanceToolButton.state = imageView.toolMode == .distance ? .on : .off
+        annotationToolButton.state = imageView.toolMode == .annotation ? .on : .off
+        captureButton.isEnabled = imageView.hasImage
+        clearOverlayButton.isEnabled = imageView.hasOverlays
     }
 
     private func configureAnnotationPlate(_ plate: NSView) {
@@ -450,6 +589,8 @@ private final class NativeSlidePreviewPane: NSView {
         imageSizingButton.setAccessibilityLabel(description)
         imageSizingButton.isEnabled = imageView.hasImage
         fullResolutionButton.isEnabled = imageView.hasImage
+        captureButton.isEnabled = imageView.hasImage
+        clearOverlayButton.isEnabled = imageView.hasOverlays
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
@@ -524,6 +665,31 @@ private final class NativeSlidePreviewPane: NSView {
 
     @objc private func toggleMaximizeAction(_ sender: NSButton) {
         onToggleMaximize?()
+    }
+
+    @objc private func captureCurrentImageAction(_ sender: NSButton) {
+        guard let image = imageView.currentImageForCapture() else { return }
+        onCaptureImage?(image)
+    }
+
+    @objc private func selectPanToolAction(_ sender: NSButton) {
+        imageView.setToolMode(.pan)
+        updateToolButtonStates()
+    }
+
+    @objc private func selectDistanceToolAction(_ sender: NSButton) {
+        imageView.setToolMode(.distance)
+        updateToolButtonStates()
+    }
+
+    @objc private func selectAnnotationToolAction(_ sender: NSButton) {
+        imageView.setToolMode(.annotation)
+        updateToolButtonStates()
+    }
+
+    @objc private func clearSlideOverlaysAction(_ sender: NSButton) {
+        imageView.clearOverlays()
+        updateToolButtonStates()
     }
 }
 

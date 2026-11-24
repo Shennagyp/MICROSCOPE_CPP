@@ -10,12 +10,7 @@ struct MainWindowView: View {
                 bridge: model.bridge,
                 activeSlide: model.activeSlide,
                 onActiveSlideChanged: model.selectActiveSlide
-            ) { resolution, pixelFormat in
-                model.updateFrameMetadata(
-                    resolution: resolution,
-                    pixelFormat: pixelFormat
-                )
-            }
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if !model.isBottomDockDetached {

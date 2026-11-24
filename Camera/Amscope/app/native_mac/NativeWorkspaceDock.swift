@@ -60,7 +60,7 @@ struct NativeWorkspaceDock: View {
             Divider()
 
             Group {
-                switch selectedTab {
+                switch model.selectedWorkspaceDockTab {
                 case .cameraControls:
                     NativeCameraControlsDock(model: model)
                 case .smartGallery:
@@ -100,7 +100,7 @@ struct NativeWorkspaceDock: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
                     .stroke(
-                        selectedTab == tab
+                        model.selectedWorkspaceDockTab == tab
                             ? Color.accentColor.opacity(0.38)
                             : Color.clear,
                         lineWidth: 0.8
@@ -108,7 +108,7 @@ struct NativeWorkspaceDock: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .foregroundColor(selectedTab == tab ? .primary : .secondary)
+        .foregroundColor(model.selectedWorkspaceDockTab == tab ? .primary : .secondary)
         .help(tab.title)
         .accessibilityLabel(tab.title)
     }

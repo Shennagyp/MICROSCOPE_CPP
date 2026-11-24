@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 
 /// Read-only frame-consumption surface exposed to presentation.
@@ -6,7 +7,7 @@ protocol NativeCameraFrameFeed: AnyObject {
     var droppedFrames: UInt64 { get }
     var framesPulled: UInt64 { get }
 
-    func setFrameAvailableHandler(_ handler: @escaping () -> Void)
+    func setFrameAvailableHandler(_ handler: dispatch_block_t?)
     func takeLatestFrame() -> AmscopeFrameLease?
 }
 

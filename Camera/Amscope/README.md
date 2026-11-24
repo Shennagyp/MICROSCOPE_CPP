@@ -10,6 +10,26 @@ integration and does not modify vendor sample code.
 The current AmScope-native release scope, revised implementation phases, and release acceptance criteria are maintained in [AMSCOPE_NATIVE_RELEASE_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md). The previous [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is retained as a historical technical reference; its original phase sequence is superseded. Common/backend-specific public type ownership and Phase 2 semantic decisions are recorded in [CAMERA_COMMON_TYPE_OWNERSHIP.md](../../docs/architecture/CAMERA_COMMON_TYPE_OWNERSHIP.md).
 The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/architecture/DEVELOPMENT_HANDOFF.md), the source/test mapping is in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md), the GenTL/GenApi dependency assessment is in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md), and the per-phase hardware record template is in [PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md](../../docs/testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
 
+## UI component-system experiment
+
+The production preview remains on its current Qt Widgets implementation. The
+FluentQt migration decision and boundaries are recorded in
+[AMSCOPE_UI_COMPONENT_MIGRATION.md](../../docs/architecture/AMSCOPE_UI_COMPONENT_MIGRATION.md).
+
+An isolated, opt-in native component gallery is available for macOS visual and
+build evaluation. It does not connect to a camera or alter the production
+preview:
+
+```bash
+AMSCOPE_BUILD_FLUENT_UI_GALLERY=ON ./scripts/run-amscope.sh --fluent-ui-gallery
+```
+
+The option is OFF by default. The gallery fetches the pinned upstream
+FluentQt `v1.12.2` release and builds only its core QWidget component target.
+It is not yet linked into `amscope_preview`. Do not treat the upstream build
+or the existence of this sample as evidence that the application migration is
+accepted; the target Mac build and visual review are still required.
+
 ## Implemented
 
 - One AmcamCamera owns one HAmcam handle for the complete open session.

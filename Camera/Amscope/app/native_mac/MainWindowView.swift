@@ -90,7 +90,10 @@ private struct EditableFeatureInformationField: View {
                 .foregroundColor(descriptor.isWritable ? .primary : .secondary)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
-                    guard descriptor.isWritable && !model.isFeatureWritePending else {
+                    guard model.canAccessFeatures &&
+                          descriptor.isWritable &&
+                          !model.isFeatureWritePending &&
+                          !model.isFeatureSnapshotLoading else {
                         return
                     }
                     isEditing = true

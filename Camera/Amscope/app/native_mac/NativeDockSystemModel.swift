@@ -38,7 +38,7 @@ enum NativeDockEdge: String, Codable, CaseIterable, Hashable {
 }
 
 /// Orientation of a split between two dock regions.
-enum NativeDockAxis: String, Codable {
+enum NativeDockAxis: String, Codable, Equatable {
     case horizontal
     case vertical
 }

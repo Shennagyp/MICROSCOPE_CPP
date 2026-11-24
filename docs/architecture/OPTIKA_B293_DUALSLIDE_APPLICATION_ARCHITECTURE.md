@@ -202,9 +202,28 @@ Avoid:
 
 The product workspace, a slide document and a camera session are different things.
 
-### 6.1 Camera session
+### 6.1 Camera session and generic camera features
 
-The camera capability owns connection and acquisition state. Application UI observes a projection of that state. It does not own the native camera handle or acquisition lifecycle.
+The camera session owns the native camera handle, connection state and acquisition
+lifecycle. Application UI observes a projection of that state. It does not own the
+native camera handle or issue lifecycle operations directly.
+
+`NativeCameraModel` owns session state: device selection, camera state,
+session identity, operation-pending state and Open/Start/Stop/Close commands.
+
+`NativeCameraFeatureModel` owns the generic feature snapshot and editor state:
+descriptors, readbacks, drafts, feature errors, snapshot/write pending flags and
+typed feature writes. It borrows the same bridge and receives only a read-only
+`NativeCameraFeatureAccessSnapshot` from the session model. It cannot open,
+start, stop or close a camera.
+
+The session model owns the feature model and supplies its session-access snapshot
+through a weak provider. Session lifecycle callbacks notify the feature model when
+operations complete and clear its feature snapshot after a successful Close.
+The special preview-resolution mutation remains in the session model because the
+native controller may stop, reconfigure and restart acquisition to apply it.
+Generic feature state is not duplicated in the session model.
+
 
 ### 6.2 Slide documents
 
@@ -246,8 +265,10 @@ Its ownership is split deliberately:
 - `MicroscopeResolutionCoordinator` owns the automatic-selection preference,
   presents the policy summary and reconciles changes when microscope configuration
   changes or the camera reports a new resolution readback.
-- `NativeCameraModel` reports camera feature/readback state and performs the
-  generic preview-resolution mutation. It does not know about objectives,
+- `NativeCameraFeatureModel` publishes generic camera feature readbacks; the
+  session owner forwards the selected resolution readback event to the coordinator.
+- `NativeCameraModel` performs the generic preview-resolution mutation. It does
+  not know about objectives,
   numerical aperture, stain wavelength bands or Rayleigh sampling.
 
 The coordinator is constructed at the application composition root and receives

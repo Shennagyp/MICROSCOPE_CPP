@@ -23,8 +23,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
         nsView.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged,
-            onMetadataChanged: onMetadataChanged
+            onActiveSlideChanged: onActiveSlideChanged
         )
     }
 }
@@ -123,6 +122,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         activeSlide = slide
         updatePaneStates()
     }
+
     private func updatePaneStates() {
         slideOnePane.updatePresentationState(
             isActiveTarget: activeSlide == .slide1,

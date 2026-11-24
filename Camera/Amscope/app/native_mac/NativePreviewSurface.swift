@@ -349,7 +349,7 @@ private final class NativeSlidePreviewPane: NSView {
             selectButton.isEnabled = true
         }
         selectButton.isHidden = false
-        layer?.borderWidth = isActiveTarget ? 3 : 1
+        layer?.borderWidth = 1
         layer?.borderColor = isActiveTarget
             ? NSColor.systemRed.cgColor
             : NSColor.separatorColor.cgColor

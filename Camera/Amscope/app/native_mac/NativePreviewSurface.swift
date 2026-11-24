@@ -10,9 +10,20 @@ private enum NativeSlideToolMode: Equatable {
 private struct NativeDistanceMeasurement {
     let start: CGPoint
     let end: CGPoint
+    /// Optical calibration snapshot captured when this measurement starts.
+    let micrometersPerSourcePixel: CGFloat?
 
     var distanceInPixels: CGFloat {
         hypot(end.x - start.x, end.y - start.y)
+    }
+
+    var distanceInMicrometers: CGFloat? {
+        guard let micrometersPerSourcePixel,
+              micrometersPerSourcePixel.isFinite,
+              micrometersPerSourcePixel > 0 else {
+            return nil
+        }
+        return distanceInPixels * micrometersPerSourcePixel
     }
 }
 
@@ -27,6 +38,7 @@ private struct NativeSlideTextAnnotation {
 struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
     let activeSlide: NativeSlideID
+    let measurementCalibration: NativeMicroscopeMeasurementCalibration?
     let onActiveSlideChanged: (NativeSlideID) -> Void
     let onCapture: (NativeSlideID, CGImage) -> Void
 
@@ -35,6 +47,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
         view.attach(
             to: bridge,
             activeSlide: activeSlide,
+            measurementCalibration: measurementCalibration,
             onActiveSlideChanged: onActiveSlideChanged,
             onCapture: onCapture
         )
@@ -45,6 +58,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
         nsView.attach(
             to: bridge,
             activeSlide: activeSlide,
+            measurementCalibration: measurementCalibration,
             onActiveSlideChanged: onActiveSlideChanged,
             onCapture: onCapture
         )
@@ -56,6 +70,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private let slideOnePane = NativeSlidePreviewPane(slide: .slide1)
     private let slideTwoPane = NativeSlidePreviewPane(slide: .slide2)
     private weak var bridge: AmscopeNativeCameraBridge?
+    private var measurementCalibration: NativeMicroscopeMeasurementCalibration?
 
     private var activeSlide: NativeSlideID = .slide1
     private var maximizedSlide: NativeSlideID?
@@ -132,6 +147,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     func attach(
         to bridge: AmscopeNativeCameraBridge,
         activeSlide: NativeSlideID,
+        measurementCalibration: NativeMicroscopeMeasurementCalibration?,
         onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
         onCapture: @escaping (NativeSlideID, CGImage) -> Void
     ) {
@@ -144,6 +160,9 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             }
         }
 
+        self.measurementCalibration = measurementCalibration
+        slideOnePane.updateMeasurementCalibration(measurementCalibration)
+        slideTwoPane.updateMeasurementCalibration(measurementCalibration)
         self.onActiveSlideChanged = onActiveSlideChanged
         self.onCapture = onCapture
         setActiveSlide(activeSlide)
@@ -441,7 +460,7 @@ private final class NativeSlidePreviewPane: NSView {
         configureIconButton(
             distanceToolButton,
             symbol: "ruler",
-            description: "Measure straight-line distance in source pixels",
+            description: "Measure straight-line distance in source pixels and calibrated micrometers",
             action: #selector(selectDistanceToolAction(_:)),
             isToggle: true
         )
@@ -659,6 +678,12 @@ private final class NativeSlidePreviewPane: NSView {
         updateFrameStatisticsLabel()
     }
 
+    func updateMeasurementCalibration(
+        _ calibration: NativeMicroscopeMeasurementCalibration?
+    ) {
+        imageView.updateMeasurementCalibration(calibration)
+    }
+
     func display(_ image: CGImage) {
         let hadImage = imageView.hasImage
         let hadOverlays = imageView.hasOverlays
@@ -789,6 +814,8 @@ private final class NativeSlideImageView: NSView {
     private var previewMeasurement: NativeDistanceMeasurement?
     private var textAnnotations: [NativeSlideTextAnnotation] = []
     private var measurementStart: CGPoint?
+    private var measurementMicrometersPerPixelAtStart: CGFloat?
+    private var measurementCalibration: NativeMicroscopeMeasurementCalibration?
 
     private(set) var sizingMode: NativeSlideImageSizingMode = .resizable
     var onSizingModeChanged: (() -> Void)?
@@ -803,6 +830,20 @@ private final class NativeSlideImageView: NSView {
     private var dragLocation: CGPoint?
 
     var hasImage: Bool { currentImage != nil }
+
+    private var currentMicrometersPerSourcePixel: CGFloat? {
+        guard let image = currentImage,
+              let micrometersPerPixel = measurementCalibration?.micrometersPerSourcePixel(
+                imageWidth: image.width,
+                imageHeight: image.height
+              ),
+              micrometersPerPixel.isFinite,
+              micrometersPerPixel > 0 else {
+            return nil
+        }
+        return CGFloat(micrometersPerPixel)
+    }
+
     var hasOverlays: Bool {
         !measurements.isEmpty || !textAnnotations.isEmpty || previewMeasurement != nil
     }
@@ -854,6 +895,13 @@ private final class NativeSlideImageView: NSView {
             scale: currentScale,
             origin: sizingMode == .resizable ? nil : imageOrigin
         )
+    }
+
+    func updateMeasurementCalibration(
+        _ calibration: NativeMicroscopeMeasurementCalibration?
+    ) {
+        measurementCalibration = calibration
+        updateOverlayRendering()
     }
 
     func display(_ image: CGImage) {
@@ -993,6 +1041,7 @@ private final class NativeSlideImageView: NSView {
             // next source frame before drawing a new measurement.
             toolMode = .pan
             measurementStart = nil
+            measurementMicrometersPerPixelAtStart = nil
             previewMeasurement = nil
             updateOverlayRendering()
             window?.invalidateCursorRects(for: self)
@@ -1005,6 +1054,7 @@ private final class NativeSlideImageView: NSView {
         guard toolMode != mode else { return }
         toolMode = mode
         measurementStart = nil
+        measurementMicrometersPerPixelAtStart = nil
         previewMeasurement = nil
         if mode != .pan && currentImage != nil && !isImageFrozen {
             isImageFrozen = true
@@ -1018,6 +1068,7 @@ private final class NativeSlideImageView: NSView {
         measurements.removeAll(keepingCapacity: false)
         textAnnotations.removeAll(keepingCapacity: false)
         measurementStart = nil
+        measurementMicrometersPerPixelAtStart = nil
         previewMeasurement = nil
         updateOverlayRendering()
     }
@@ -1195,9 +1246,11 @@ private final class NativeSlideImageView: NSView {
         case .distance:
             guard let sourcePoint = sourcePixel(at: point) else { return }
             measurementStart = sourcePoint
+            measurementMicrometersPerPixelAtStart = currentMicrometersPerSourcePixel
             previewMeasurement = NativeDistanceMeasurement(
                 start: sourcePoint,
-                end: sourcePoint
+                end: sourcePoint,
+                micrometersPerSourcePixel: measurementMicrometersPerPixelAtStart
             )
             updateOverlayRendering()
 
@@ -1228,7 +1281,11 @@ private final class NativeSlideImageView: NSView {
         case .distance:
             guard let start = measurementStart,
                   let end = sourcePixel(at: point) else { return }
-            previewMeasurement = NativeDistanceMeasurement(start: start, end: end)
+            previewMeasurement = NativeDistanceMeasurement(
+                start: start,
+                end: end,
+                micrometersPerSourcePixel: measurementMicrometersPerPixelAtStart
+            )
             updateOverlayRendering()
 
         case .annotation:
@@ -1253,12 +1310,17 @@ private final class NativeSlideImageView: NSView {
         if toolMode == .distance,
            let start = measurementStart,
            let end = sourcePixel(at: convert(event.locationInWindow, from: nil)) {
-            let measurement = NativeDistanceMeasurement(start: start, end: end)
+            let measurement = NativeDistanceMeasurement(
+                start: start,
+                end: end,
+                micrometersPerSourcePixel: measurementMicrometersPerPixelAtStart
+            )
             if measurement.distanceInPixels >= 1 {
                 measurements.append(measurement)
             }
         }
         measurementStart = nil
+        measurementMicrometersPerPixelAtStart = nil
         previewMeasurement = nil
         dragLocation = nil
         updateOverlayRendering()
@@ -1430,7 +1492,19 @@ private final class NativeSlideImageContainerView: NSView {
             marker.fill()
         }
 
-        let label = String(format: "%.1f px", measurement.distanceInPixels)
+        let label: String
+        if let micrometers = measurement.distanceInMicrometers {
+            label = String(
+                format: "%.3f µm  ·  %.1f px",
+                Double(micrometers),
+                Double(measurement.distanceInPixels)
+            )
+        } else {
+            label = String(
+                format: "%.1f px  ·  scale unavailable",
+                Double(measurement.distanceInPixels)
+            )
+        }
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
             .foregroundColor: NSColor.white

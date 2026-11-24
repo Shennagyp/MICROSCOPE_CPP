@@ -209,7 +209,12 @@ lifecycle. Application UI observes a projection of that state. It does not own t
 native camera handle or issue lifecycle operations directly. The concrete
 Objective-C++ bridge is private to `NativeCameraModel`; presentation receives only
 a `NativeCameraFrameFeed` contract for frame notifications, latest-frame leases
-and acquisition counters. This does not create another frame queue or consumer.
+and acquisition counters. The frame feed performs no pixel conversion or storage:
+the latest-frame operation still atomically transfers the existing frame lease,
+and the Core Graphics provider retains that lease while referencing the original
+frame bytes. There is no intermediate `NSData` or pixel-buffer copy, second
+frame queue, per-frame Task or extra dispatch. Acquisition counters are sampled
+once per notification and shared by both panes.
 
 `NativeCameraModel` owns session state: device selection, camera state,
 session identity, operation-pending state and Open/Start/Stop/Close commands.

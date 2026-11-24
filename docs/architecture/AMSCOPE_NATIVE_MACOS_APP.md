@@ -187,7 +187,7 @@ operation must perform the physical switch and acknowledge the resulting slide
 position. The controller's acknowledged position, not an optimistic view-local
 selection, must become authoritative when hardware switching is integrated.
 
-**Control scope:** the native bridge currently exposes generic feature descriptors and lifecycle commands. Separate command/telemetry interfaces (trigger configuration, I/O lines, auto white balance, frame-rate statistics, still capture, embedded light source, filter wheel, ST4, focusers, and lens aperture) are defined by the existing camera facade but are not yet exposed by the native bridge. They must not be represented as working dock controls until their asynchronous bridge/controller operations are ported.
+**Control scope:** the native bridge exposes generic feature descriptors, lifecycle commands, and the dedicated preview-resolution mutation described above. Separate command/telemetry interfaces (trigger configuration, I/O lines, auto white balance, frame-rate statistics, still capture, embedded light source, filter wheel, ST4, focusers, and lens aperture) are defined by the existing camera facade but are not yet exposed by the native bridge. They must not be represented as working dock controls until their asynchronous bridge/controller operations are ported.
 
 **Frame-pool budget:** the current driver pool has four slots. The two slide panes
 may retain at most two displayed frame leases; the latest-frame mailbox may retain

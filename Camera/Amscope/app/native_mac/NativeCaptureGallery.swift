@@ -23,7 +23,7 @@ final class NativeCaptureGalleryStore: ObservableObject {
     @Published private(set) var captureErrorMessage: String?
 
     private let maximumCaptureCount = 80
-    private let maximumConcurrentCaptures = 2
+    private let maximumConcurrentCaptures = 1
     private var pendingCaptureCount = 0
 
     private let directoryURL: URL = {
@@ -142,7 +142,10 @@ final class NativeCaptureGalleryStore: ObservableObject {
             }
 
             DispatchQueue.main.async {
-                self?.captures = loadedItems
+                guard let self = self else { return }
+                let currentIDs = Set(self.captures.map(\.id))
+                let merged = self.captures + loadedItems.filter { !currentIDs.contains($0.id) }
+                self.captures = merged.sorted { $0.capturedAt > $1.capturedAt }
             }
         }
     }
@@ -172,7 +175,13 @@ private enum NativeCaptureFileCodec {
             return .failure(makeError("Could not create the capture image file."))
         }
 
-        CGImageDestinationAddImage(destination, image, nil)
+        // Detach the still from the live frame provider before encoding.
+        // This limits how long a captured frame lease can occupy the four-slot
+        // acquisition pool if the active pane advances while PNG encoding runs.
+        guard let independentImage = copyPixels(of: image) else {
+            return .failure(makeError("Could not detach the image from the live camera frame."))
+        }
+        CGImageDestinationAddImage(destination, independentImage, nil)
         guard CGImageDestinationFinalize(destination) else {
             try? FileManager.default.removeItem(at: url)
             return .failure(makeError("The camera image could not be encoded as PNG."))
@@ -237,6 +246,28 @@ private enum NativeCaptureFileCodec {
             pixelWidth: width,
             pixelHeight: height,
             thumbnailData: thumbnailData as Data
+        )
+    }
+
+    private static func copyPixels(of image: CGImage) -> CGImage? {
+        guard let sourceProvider = image.dataProvider,
+              let copiedData = CGDataProviderCopyData(sourceProvider),
+              let independentProvider = CGDataProvider(data: copiedData) else {
+            return nil
+        }
+
+        return CGImage(
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: image.bitsPerComponent,
+            bitsPerPixel: image.bitsPerPixel,
+            bytesPerRow: image.bytesPerRow,
+            space: image.colorSpace,
+            bitmapInfo: image.bitmapInfo,
+            provider: independentProvider,
+            decode: image.decode,
+            shouldInterpolate: image.shouldInterpolate,
+            intent: image.renderingIntent
         )
     }
 

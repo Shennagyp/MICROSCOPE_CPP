@@ -313,6 +313,19 @@ private struct DockCameraFeatureControl: View {
     private var featureHelpText: String {
         var parts = [descriptor.displayName, featureGroupTitle(descriptor.group.rawValue)]
         if let unit = descriptor.unit, !unit.isEmpty { parts.append("Unit: \(unit)") }
+        if descriptor.hasNumericRange {
+            if descriptor.integerRange {
+                parts.append("Range: \(descriptor.minimumInteger)–\(descriptor.maximumInteger)")
+                if descriptor.hasIntegerIncrement {
+                    parts.append("Step: \(descriptor.integerIncrement)")
+                }
+            } else {
+                parts.append("Range: \(descriptor.minimumFloatingPoint)–\(descriptor.maximumFloatingPoint)")
+                if descriptor.hasFloatingPointIncrement {
+                    parts.append("Step: \(descriptor.floatingPointIncrement)")
+                }
+            }
+        }
         if let reason = descriptor.disabledReason, !reason.isEmpty { parts.append(reason) }
         if let error = model.featureError(for: descriptor) { parts.append(error) }
         return parts.joined(separator: " · ")

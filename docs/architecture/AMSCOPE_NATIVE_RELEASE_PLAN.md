@@ -163,7 +163,7 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; FrameView build/tests and MU503 smoke passed; File-menu controls window and ImageInfoBar are implemented, but their Release build/CTest and post-change hardware smoke remain pending**
+**Status: IN PROGRESS; FrameView accepted; initial File-menu/ImageInfoBar source built and 15/15 CTest passed at 4d61eca; the subsequent dockable-info/live-edit follow-up (b295df9, 11c443d) is not yet built/tested; MU503 UI smoke remains pending**
 
 Implemented in this Phase 4 slice:
 
@@ -171,30 +171,33 @@ Implemented in this Phase 4 slice:
 - Extracted `camera::qtwidgets::FrameView`. Its public contract uses only `camera::FramePtr` and Qt Widgets. It wraps retained external frame memory for RGB24, RAW8 and RAW16; it does not make an owned per-frame pixel copy, demosaic RAW data, or add a GPU renderer.
 - Extracted `camera::qtwidgets::CameraControlPanel`. It accepts common `CameraDeviceInfo` values, preserves opaque device IDs, and reports Refresh/Open/Start/Stop/Close intent through host callbacks. It owns no enumeration, camera session, request scheduler, or backend lifecycle behavior.
 - Added `camera::qtwidgets::ImageInfoBar`. It displays host-supplied imaging facts and values, reports double-click/keyboard edit intent, and has no camera access or feature-write behavior of its own.
-- The main preview is now image-first: the main window contains the live `FrameView` and the bottom `ImageInfoBar`. Camera discovery, Open/Start/Stop/Close, still capture, feature controls, trigger configuration and accessories are hosted in a separate modeless **File → Camera Controls…** window. Discovery is initiated when that window is opened; there is no camera-control toolbar in the main preview.
-- The bottom information bar combines acquired-frame metadata (dimensions, pixel layout/depth, payload size, sequence, frame exposure, event/pull/paint rates, and dropped-frame count) with existing readable image-related camera-feature values. It displays only features actually present and available in the current descriptor inventory.
-- Double-clicking an editable feature item opens a typed value editor. Editing is offered only when the descriptor is available, readable and writable and a complete feature readback is present. The host validates with the existing common feature validator, submits through the existing queued `requestWriteFeature` path, and refreshes descriptors/current values after the backend write. The bar displays the newly confirmed readback, not an optimistic requested value.
-- This increment does **not** add a camera backend, SDK operation, feature descriptor, or saturation support. Saturation was an illustrative example only; the UI does not synthesize unsupported settings. No `AmcamCamera` or vendor SDK source was changed for this UI request.
+- The main preview is image-first: its central workspace contains only the live `FrameView`. The single `ImageInfoBar` is hosted in a movable/floatable/closable `QDockWidget`, initially at the bottom and restored/shown through **View → Imaging Information**. It can be moved to another dock area or floated. The native `QStatusBar` is not created; transient application messages are items in this same dock, so the app has one information surface rather than two bottom bars.
+- Camera discovery, Open/Start/Stop/Close, still capture, feature controls, trigger configuration and accessories remain in the separate modeless **File → Camera Controls…** window. Discovery is initiated when that window is opened; no camera-control toolbar is added to the main preview.
+- The information dock combines acquired-frame metadata (dimensions, pixel layout/depth, payload size, sequence, frame exposure, event/pull/paint rates, and dropped-frame count), transient application status, and existing readable image-related camera-feature values.
+- Existing AmScope feature descriptors now classify `ExposureAuto`, `ExposureTime`, and analog gain in the `Exposure` group, and color-matrix/white-balance controls in the `Color` group. These are classification corrections for existing features; they do not add SDK calls or capabilities.
+- Double-clicking an editable feature item opens a typed value editor. When stopped, the existing descriptor rules apply. During Streaming, the bar enables only available/readable/writable features in the live-writable Exposure and Color groups; stopped-only image-processing/format controls remain disabled. The backend rebuilds and validates the live descriptor before every write, and the display changes only after the queued write and readback. Exposure time remains non-writable while automatic exposure is enabled; switch Automatic Exposure to Off first when manual exposure time is required.
+- No new camera backend, feature, SDK operation or saturation support was added. The source updates only reuse the existing feature write/readback path and correct the group classification of existing descriptor records.
 - Added the offscreen `camera_qt_widgets_image_info_bar_tests` target for item lifecycle, editable double-click routing, and read-only behavior. Together with `camera_qt_widgets_camera_control_panel_tests` and `camera_qt_widgets_frame_view_tests`, the expected CTest suite is now **15 tests**.
-- Source implementation commits: ImageInfoBar component `aca62b2`; CMake/test registration `1a7749c`; File-menu controls window and info-bar composition `f60029d`; readback/edit gating `922c841`; lazy discovery on opening the controls window `8ff51be`; vector/string editing `a7cc6d5`; info-bar interaction/readback hardening `614213b`; image-property display filtering `775f2b3`; modal-editor descriptor/value snapshot safety fix `a5ce4c6`; initial bottom information-bar population `e06cb6a`; require advertised choices before enabling enum edits `be70b5c`. The latest source commit is `be70b5c1408ffee7427ccd09b192a57982b0287f`.
-- This new UI increment has **not** yet been built or tested locally. The prior 13/13 build and prior MU503 smoke record apply to the earlier FrameView increment only. Do not extrapolate that result to this UI reorganization.
+- The owner built the prior composed UI revision at `4d61eca9d0f3c70bc1468628a05640e5339c2693`: `amscope_preview` linked and **15/15** CTest tests passed. Later source commits: callback signature correction `4d61eca`; dockable single information surface and live edit policy `b295df9`; existing Exposure/Color descriptor-group classification `11c443d`. Current branch head: `11c443d85bf19916e817121e6c65ddd142174e7e`.
+- The dockable-information/live-edit follow-up after `4d61eca` has **not** yet been built or tested locally. The 15/15 result applies to the prior UI source only; do not extrapolate it to current branch head `11c443d`.
 
 Previously accepted FrameView physical check: the owner confirmed the MU503 preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. That evidence verifies the FrameView integration before the current File-menu/info-bar change. The new UI still requires a separate smoke check.
 
 Next acceptance gate:
 
-1. Release build of the full `amscope_preview` target and all **15/15** CTest tests.
-2. Launch the app and verify the main window contains only the image preview and bottom information bar; open **File → Camera Controls…** and verify all camera operations/settings are in that window.
-3. With the MU503, discover/select, Open, Start, verify changing frames and bottom metadata, Stop, and Close.
-4. Double-click one image-related feature that the current device descriptors report as available/readable/writable; verify the edit goes through the existing write/readback flow and the bar changes only after readback. Do not use saturation as an acceptance target unless the camera already advertises it in its descriptors.
-5. No FPS benchmark or new feature-capability qualification is implied by this UI work.
+1. Rebuild the current branch, require the full `amscope_preview` target to link, and rerun all **15/15** CTest tests.
+2. Verify the central workspace contains only the preview and exactly one Imaging Information dock. Move it to another dock area, float it, close it, and restore it through **View → Imaging Information**. Confirm no separate native status bar appears and transient status messages are visible inside the same dock.
+3. Open **File → Camera Controls…**, discover/select the MU503, Open and Start; verify changing frames and the information items.
+4. While Streaming, double-click Automatic Exposure, Analog Gain, or White Balance values when their descriptors are available/readable/writable. Set Automatic Exposure to Off before expecting Exposure Time to be editable. Confirm the backend write/readback succeeds and the displayed value changes only after readback.
+5. Confirm stopped-only image-processing/format settings remain non-editable while Streaming and become available only after Stop when their descriptors permit it. Stop and Close the camera cleanly.
+6. No FPS benchmark or new feature-capability qualification is implied by this UI work.
 
 Phase 4 remains open after these checks until the remaining reusable feature-editor, command, telemetry, and capability presentation slices are completed and the phase-wide exit criteria are met.
 
 Extract only the components needed to turn the preview into a reusable library:
 
 1. Camera discovery and lifecycle controls — `CameraControlPanel`, hosted from the File menu.
-2. Bottom image information bar — `ImageInfoBar`, displaying host-supplied frame metadata and confirmed feature values.
+2. Dockable imaging-information surface — `ImageInfoBar`, displaying host-supplied frame metadata, confirmed feature values and application status; the AmScope host docks it in one `QDockWidget`.
 3. Descriptor-driven feature editors, including current-value loading and disabled/unavailable states — existing application editor remains in place; generic extraction is a later slice.
 4. Command controls kept separate from setting writes.
 5. Telemetry presentation with explicit units.
@@ -315,7 +318,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
 | 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView is accepted; File-menu controls window and ImageInfoBar source are implemented at `775f2b3`; Release build, 15/15 CTest and new MU503 UI/edit smoke pending; generic feature-editor extraction remains |
+| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView accepted; prior composed UI built and passed 15/15 CTest at `4d61eca`; later dockable-info/live-edit source at `b295df9`/`11c443d` unverified; MU503 dock/live-edit smoke pending; generic feature-editor extraction remains |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |
 | 7 | Integrated AmScope release qualification | OPEN |

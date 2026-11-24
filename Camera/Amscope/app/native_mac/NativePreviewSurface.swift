@@ -260,7 +260,10 @@ private final class NativeSlidePreviewPane: NSView {
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "Maximize", target: nil, action: nil)
-    private let headerStack = NSStackView()
+    private let annotationStack = NSStackView()
+    private let actionStack = NSStackView()
+    private let annotationPlate = NSView()
+    private let actionPlate = NSView()
 
     var onSelectLiveTarget: (() -> Void)?
     var onToggleMaximize: (() -> Void)?
@@ -282,16 +285,18 @@ private final class NativeSlidePreviewPane: NSView {
 
     private func configureSubviews() {
         titleLabel.stringValue = slide.title.uppercased()
-        titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        titleLabel.textColor = NSColor.labelColor
         wantsLayer = true
         layer?.cornerRadius = 4
         layer?.masksToBounds = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.isOpaque = false
 
-        statusLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        statusLabel.font = NSFont.systemFont(ofSize: 9, weight: .bold)
         statusLabel.textColor = NSColor.secondaryLabelColor
-        frameStatisticsLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular)
+        statusLabel.textColor = NSColor.secondaryLabelColor
+        frameStatisticsLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
         frameStatisticsLabel.textColor = NSColor.secondaryLabelColor
         frameStatisticsLabel.lineBreakMode = .byTruncatingTail
         frameStatisticsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -344,43 +349,76 @@ private final class NativeSlidePreviewPane: NSView {
         maximizeButton.target = self
         maximizeButton.action = #selector(toggleMaximizeAction(_:))
 
-        // The upper slide-control strip has no backing fill. Its buttons,
-        // symbols, and labels remain normal opaque controls.
-        headerStack.wantsLayer = true
-        headerStack.layer?.backgroundColor = NSColor.clear.cgColor
-        headerStack.layer?.isOpaque = false
-        headerStack.orientation = .horizontal
-        headerStack.alignment = .centerY
-        headerStack.distribution = .fill
-        headerStack.spacing = 8
-        headerStack.translatesAutoresizingMaskIntoConstraints = false
-        headerStack.addArrangedSubview(titleLabel)
-        headerStack.addArrangedSubview(statusLabel)
-        headerStack.addArrangedSubview(frameStatisticsLabel)
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        headerStack.addArrangedSubview(spacer)
-        headerStack.addArrangedSubview(selectButton)
-        headerStack.addArrangedSubview(imageSizingButton)
-        headerStack.addArrangedSubview(fullResolutionButton)
-        headerStack.addArrangedSubview(maximizeButton)
+        // The former full-width header is removed. Specimen metadata is
+        // presented as compact corner annotations over the image viewport;
+        // actions remain available in a separate floating control cluster.
+        configureAnnotationPlate(annotationPlate)
+        configureAnnotationPlate(actionPlate)
 
-        // The viewer remains the same fixed-size pane. Only the image
-        // container inside it is allowed to change dimensions.
+        annotationStack.orientation = .horizontal
+        annotationStack.alignment = .centerY
+        annotationStack.distribution = .fill
+        annotationStack.spacing = 9
+        annotationStack.translatesAutoresizingMaskIntoConstraints = false
+        annotationStack.addArrangedSubview(titleLabel)
+        annotationStack.addArrangedSubview(statusLabel)
+        annotationStack.addArrangedSubview(frameStatisticsLabel)
+
+        actionStack.orientation = .horizontal
+        actionStack.alignment = .centerY
+        actionStack.distribution = .fill
+        actionStack.spacing = 5
+        actionStack.translatesAutoresizingMaskIntoConstraints = false
+        actionStack.addArrangedSubview(selectButton)
+        actionStack.addArrangedSubview(imageSizingButton)
+        actionStack.addArrangedSubview(fullResolutionButton)
+        actionStack.addArrangedSubview(maximizeButton)
+
+        annotationPlate.translatesAutoresizingMaskIntoConstraints = false
+        actionPlate.translatesAutoresizingMaskIntoConstraints = false
+        annotationPlate.addSubview(annotationStack)
+        actionPlate.addSubview(actionStack)
+
+        // The image viewport now occupies the complete pane. The annotation
+        // plates float above it and do not reserve a header band.
         imageView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(headerStack)
         addSubview(imageView)
+        addSubview(annotationPlate)
+        addSubview(actionPlate)
         NSLayoutConstraint.activate([
-            headerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            headerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            headerStack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            headerStack.heightAnchor.constraint(equalToConstant: 28),
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            imageView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 6),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            annotationStack.leadingAnchor.constraint(equalTo: annotationPlate.leadingAnchor, constant: 9),
+            annotationStack.trailingAnchor.constraint(equalTo: annotationPlate.trailingAnchor, constant: -9),
+            annotationStack.topAnchor.constraint(equalTo: annotationPlate.topAnchor, constant: 6),
+            annotationStack.bottomAnchor.constraint(equalTo: annotationPlate.bottomAnchor, constant: -6),
+            annotationPlate.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            annotationPlate.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+
+            actionStack.leadingAnchor.constraint(equalTo: actionPlate.leadingAnchor, constant: 5),
+            actionStack.trailingAnchor.constraint(equalTo: actionPlate.trailingAnchor, constant: -5),
+            actionStack.topAnchor.constraint(equalTo: actionPlate.topAnchor, constant: 4),
+            actionStack.bottomAnchor.constraint(equalTo: actionPlate.bottomAnchor, constant: -4),
+            actionPlate.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            actionPlate.topAnchor.constraint(equalTo: topAnchor, constant: 10)
         ])
         updateImageSizingButton()
+    }
+
+    private func configureAnnotationPlate(_ plate: NSView) {
+        plate.wantsLayer = true
+        plate.layer?.backgroundColor = NSColor.windowBackgroundColor
+            .withAlphaComponent(0.78).cgColor
+        plate.layer?.cornerRadius = 7
+        plate.layer?.borderWidth = 1
+        plate.layer?.borderColor = NSColor.separatorColor
+            .withAlphaComponent(0.45).cgColor
+        plate.layer?.masksToBounds = true
+        plate.layer?.isOpaque = false
+        plate.translatesAutoresizingMaskIntoConstraints = false
     }
 
     private func updateImageSizingButton() {

@@ -43,6 +43,95 @@ typedef NS_ENUM(NSInteger, AmscopeNativeCameraState) {
 + (instancetype)new NS_UNAVAILABLE;
 @end
 
+
+typedef NS_ENUM(NSInteger, AmscopeCameraFeatureKind) {
+    AmscopeCameraFeatureKindBoolean = 0,
+    AmscopeCameraFeatureKindInteger,
+    AmscopeCameraFeatureKindIntegerVector,
+    AmscopeCameraFeatureKindFloatingPoint,
+    AmscopeCameraFeatureKindString,
+    AmscopeCameraFeatureKindEnumeration
+};
+
+typedef NS_ENUM(NSInteger, AmscopeCameraFeatureGroup) {
+    AmscopeCameraFeatureGroupGeneral = 0,
+    AmscopeCameraFeatureGroupExposure,
+    AmscopeCameraFeatureGroupImageFormat,
+    AmscopeCameraFeatureGroupImageProcessing,
+    AmscopeCameraFeatureGroupColor,
+    AmscopeCameraFeatureGroupTrigger,
+    AmscopeCameraFeatureGroupSensor,
+    AmscopeCameraFeatureGroupTransport,
+    AmscopeCameraFeatureGroupHardware
+};
+
+@interface AmscopeCameraFeatureDescriptor : NSObject
+@property(nonatomic, copy, readonly) NSString *name;
+@property(nonatomic, copy, readonly) NSString *displayName;
+@property(nonatomic, readonly) AmscopeCameraFeatureKind kind;
+@property(nonatomic, readonly) AmscopeCameraFeatureGroup group;
+@property(nonatomic, copy, readonly, nullable) NSString *unit;
+@property(nonatomic, readonly) BOOL isAvailable;
+@property(nonatomic, readonly) BOOL isReadable;
+@property(nonatomic, readonly) BOOL isWritable;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *enumerationValues;
+@property(nonatomic, copy, readonly) NSArray<NSNumber *> *discreteIntegerValues;
+@property(nonatomic, readonly) BOOL hasElementCount;
+@property(nonatomic, readonly) NSUInteger elementCount;
+@property(nonatomic, copy, readonly, nullable) NSString *disabledReason;
+@property(nonatomic, readonly) BOOL hasNumericRange;
+@property(nonatomic, readonly) BOOL integerRange;
+@property(nonatomic, readonly) int64_t minimumInteger;
+@property(nonatomic, readonly) int64_t maximumInteger;
+@property(nonatomic, readonly) int64_t integerIncrement;
+@property(nonatomic, readonly) BOOL hasIntegerIncrement;
+@property(nonatomic, readonly) double minimumFloatingPoint;
+@property(nonatomic, readonly) double maximumFloatingPoint;
+@property(nonatomic, readonly) double floatingPointIncrement;
+@property(nonatomic, readonly) BOOL hasFloatingPointIncrement;
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
+@end
+
+/// A typed representation of the backend-neutral CameraFeatureValue variant.
+@interface AmscopeCameraFeatureValue : NSObject
+@property(nonatomic, readonly) AmscopeCameraFeatureKind kind;
+@property(nonatomic, readonly) BOOL booleanValue;
+@property(nonatomic, readonly) int64_t integerValue;
+@property(nonatomic, readonly) double floatingPointValue;
+@property(nonatomic, copy, readonly) NSArray<NSNumber *> *integerVectorValue;
+@property(nonatomic, copy, readonly) NSString *stringValue;
+@property(nonatomic, copy, readonly) NSString *enumerationSymbol;
+
++ (instancetype)booleanFeatureValue:(BOOL)value;
++ (instancetype)integerFeatureValue:(int64_t)value;
++ (instancetype)integerVectorFeatureValue:(NSArray<NSNumber *> *)values;
++ (instancetype)floatingPointFeatureValue:(double)value;
++ (instancetype)stringFeatureValue:(NSString *)value;
++ (instancetype)enumerationFeatureValue:(NSString *)symbol;
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
+@end
+
+typedef void (^AmscopeFeatureDescriptorsCompletion)(
+    NSArray<AmscopeCameraFeatureDescriptor *> *descriptors,
+    NSError * _Nullable error,
+    uint64_t requestID,
+    uint64_t sessionGeneration,
+    uint64_t featureStateGeneration);
+
+typedef void (^AmscopeFeatureReadCompletion)(
+    AmscopeCameraFeatureValue * _Nullable value,
+    NSError * _Nullable error,
+    uint64_t requestID,
+    uint64_t sessionGeneration,
+    uint64_t featureStateGeneration);
+
+typedef void (^AmscopeFeatureWriteCompletion)(
+    NSError * _Nullable error,
+    uint64_t requestID,
+    uint64_t sessionGeneration);
+
 typedef void (^AmscopeCameraListCompletion)(
     NSArray<AmscopeCameraDevice *> *devices,
     NSError * _Nullable error,
@@ -75,6 +164,15 @@ typedef void (^AmscopeCameraLifecycleCompletion)(
 - (void)closeWithCompletion:(AmscopeCameraLifecycleCompletion)completion;
 - (void)startWithCompletion:(AmscopeCameraLifecycleCompletion)completion;
 - (void)stopWithCompletion:(AmscopeCameraLifecycleCompletion)completion;
+
+- (void)requestFeatureDescriptorsWithCompletion:
+    (AmscopeFeatureDescriptorsCompletion)completion;
+- (void)readFeatureNamed:(NSString *)name
+              completion:(AmscopeFeatureReadCompletion)completion;
+- (void)writeFeatureNamed:(NSString *)name
+                    value:(AmscopeCameraFeatureValue *)value
+               completion:(AmscopeFeatureWriteCompletion)completion;
+
 
 /// Transfers the newest available frame lease. Returns nil when no frame is
 /// pending. The pixel bytes are not copied.

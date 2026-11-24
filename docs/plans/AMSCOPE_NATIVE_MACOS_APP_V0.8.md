@@ -160,6 +160,22 @@ match the complete source frame at physical-pixel scale; pan to all four image
 edges without gaps or unreachable regions; verify independent per-pane scale
 states, divider resizing, camera mode changes, and Retina backing-scale changes.
 No local build or hardware test is claimed.
+## Transparent upper and lower bar surfaces (2026-11-24)
+
+The main window's native title-bar background, each slide's upper control
+header background, and the bottom camera-dock background are transparent.
+Only those bar surfaces are cleared. Their child content is not faded:
+native window controls, labels, status text, symbols, buttons, and feature
+controls retain their normal foreground opacity and control styling.
+Individual feature-control cards keep their own control-background surfaces.
+The bottom dock remains a separate reserved layout region below the slide
+workspace; transparency does not turn it into an overlay or allow it to cover
+the specimen viewport.
+
+**Verification pending:** inspect the main window on macOS in light and dark
+appearance; confirm bar backgrounds reveal the underlying window surface while
+all labels, symbols, and controls remain fully legible and interactive.
+
 ## Two-slide workspace and compact camera dock (2026-11-24)
 
 The main window now has two side-by-side slide panes and one thin bottom dock; the

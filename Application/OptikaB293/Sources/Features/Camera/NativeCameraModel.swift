@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class NativeCameraModel: ObservableObject {
     let bridge: AmscopeNativeCameraBridge
+    private let microscope: MicroscopeConfigurationModel
     @Published private(set) var cameras: [AmscopeCameraDevice] = []
     @Published var selectedDeviceID = ""
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
@@ -19,16 +20,6 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var selectedPreviewResolutionSymbol: String?
     @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
-    let microscopeConfigurationDraftStore = MicroscopeConfigurationDraftStore(
-        configuration: .optikaB293
-    )
-    @Published var microscopeConfiguration: MicroscopeOpticalConfiguration = .optikaB293 {
-        didSet {
-            guard microscopeConfiguration != oldValue else { return }
-            persistMicroscopeConfiguration()
-            reconcileAutomaticResolution()
-        }
-    }
     @Published private(set) var isAutomaticResolutionEnabled = false {
         didSet {
             UserDefaults.standard.set(
@@ -38,26 +29,12 @@ final class NativeCameraModel: ObservableObject {
         }
     }
 
-    private static let microscopeConfigurationDefaultsKey =
-        "AmscopeNative.MicroscopeConfiguration.v1"
     private static let automaticResolutionDefaultsKey =
         "AmscopeNative.AutomaticResolutionEnabled.v1"
 
-    init(bridge: AmscopeNativeCameraBridge) {
+    init(bridge: AmscopeNativeCameraBridge, microscope: MicroscopeConfigurationModel) {
         self.bridge = bridge
-        if let data = UserDefaults.standard.data(
-            forKey: Self.microscopeConfigurationDefaultsKey
-        ),
-        let saved = try? JSONDecoder().decode(
-            MicroscopeOpticalConfiguration.self,
-            from: data
-        ) {
-            microscopeConfiguration = saved
-            microscopeConfigurationDraftStore.configuration = saved
-        } else {
-            microscopeConfiguration = .optikaB293
-            microscopeConfigurationDraftStore.configuration = .optikaB293
-        }
+        self.microscope = microscope
         isAutomaticResolutionEnabled = UserDefaults.standard.bool(
             forKey: Self.automaticResolutionDefaultsKey
         )
@@ -86,45 +63,10 @@ final class NativeCameraModel: ObservableObject {
             ?? "Connected camera"
     }
 
-    /// Current generic optical calibration inputs. The app computes specimen
-    /// scale from configured camera sensor, output-pixel, objective and relay
-    /// specifications; the calculation does not identify a camera model.
-    var measurementCalibration: NativeMicroscopeMeasurementCalibration? {
-        let configuration = microscopeConfiguration
-        guard let objective = configuration.objectives.first(where: {
-            $0.id == configuration.activeObjectiveID
-        }) else {
-            return nil
-        }
-
-        return NativeMicroscopeMeasurementCalibration(
-            sensorPixelPitchMicrometers: configuration.cameraPixelPitchMicrometers,
-            outputPixelFactor: configuration.cameraOutputPixelFactor,
-            objectiveMagnification: objective.magnification,
-            reductionLensMagnification: configuration.cameraRelayMagnification
-        )
-    }
-
     var canConnectDetectedCamera: Bool {
         cameraState == .closed &&
             !isCameraOperationPending &&
             !isEnumeratingCameras
-    }
-
-    func selectMicroscopeObjective(_ objectiveID: String) {
-        guard microscopeConfiguration.objectives.contains(where: {
-            $0.id == objectiveID
-        }) else { return }
-
-        var updated = microscopeConfiguration
-        updated.activeObjectiveID = objectiveID
-        microscopeConfiguration = updated
-    }
-
-    func updateMicroscopeConfiguration(
-        _ configuration: MicroscopeOpticalConfiguration
-    ) {
-        microscopeConfiguration = configuration
     }
 
     func setAutomaticResolutionEnabled(_ enabled: Bool) {
@@ -158,21 +100,15 @@ final class NativeCameraModel: ObservableObject {
         let upper = String(format: "%.2f", choice.maximumBandSamplingFactor)
         let band = String(
             format: "%.0f–%.0f nm",
-            microscopeConfiguration.chromatinBandLowerNanometers,
-            microscopeConfiguration.chromatinBandUpperNanometers
+            microscope.configuration.chromatinBandLowerNanometers,
+            microscope.configuration.chromatinBandUpperNanometers
         )
         return "\(choice.width) × \(choice.height) · RF \(lower)–\(upper) · \(band)" +
             (choice.meetsTarget ? "" : " · target not met")
     }
 
-    private func persistMicroscopeConfiguration() {
-        guard let data = try? JSONEncoder().encode(microscopeConfiguration) else {
-            return
-        }
-        UserDefaults.standard.set(
-            data,
-            forKey: Self.microscopeConfigurationDefaultsKey
-        )
+    func microscopeConfigurationDidChange() {
+        reconcileAutomaticResolution()
     }
 
     private func reconcileAutomaticResolution() {
@@ -197,7 +133,7 @@ final class NativeCameraModel: ObservableObject {
     ) -> NativeAutomaticResolutionChoice? {
         NativeAutomaticResolutionPolicy.choose(
             modeSymbols: descriptor.enumerationValues,
-            configuration: microscopeConfiguration
+            configuration: microscope.configuration
         )
     }
 

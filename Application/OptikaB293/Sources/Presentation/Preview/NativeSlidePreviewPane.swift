@@ -384,9 +384,9 @@ final class NativeSlidePreviewPane: NSView {
         imageView.updateMeasurementCalibration(calibration)
     }
 
-    func updateMicroscopeControls(_ model: NativeCameraModel, workspace: NativeWorkspaceModel) {
+    func updateMicroscopeControls(_ model: NativeCameraModel, workspace: NativeWorkspaceModel, microscope: MicroscopeConfigurationModel) {
         if let host = microscopeControlsHost {
-            host.rootView = NativeMicroscopePaneControls(model: model, workspace: workspace, slide: slide)
+            host.rootView = NativeMicroscopePaneControls(model: model, workspace: workspace, microscope: microscope, slide: slide)
             return
         }
 

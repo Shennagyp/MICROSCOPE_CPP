@@ -3,6 +3,7 @@ import SwiftUI
 struct NativeMicroscopePaneControls: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var workspace: NativeWorkspaceModel
+    @ObservedObject var microscope: MicroscopeConfigurationModel
     let slide: NativeSlideID
 
     private var resolutionDescriptor: AmscopeCameraFeatureDescriptor? {
@@ -18,11 +19,11 @@ struct NativeMicroscopePaneControls: View {
             Picker(
                 "Objective",
                 selection: Binding(
-                    get: { model.microscopeConfiguration.activeObjectiveID },
-                    set: { model.selectMicroscopeObjective($0) }
+                    get: { microscope.configuration.activeObjectiveID },
+                    set: { microscope.selectObjective($0) }
                 )
             ) {
-                ForEach(model.microscopeConfiguration.objectives) { objective in
+                ForEach(microscope.configuration.objectives) { objective in
                     Text(String(format: "%.0f×", objective.magnification))
                         .tag(objective.id)
                 }

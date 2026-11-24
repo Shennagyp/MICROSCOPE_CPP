@@ -4,6 +4,7 @@ import SwiftUI
 struct NativeWorkspaceDock: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var workspace: NativeWorkspaceModel
+    @ObservedObject var microscope: MicroscopeConfigurationModel
     @ObservedObject var gallery: NativeCaptureGalleryStore
     let onClose: () -> Void
 
@@ -42,7 +43,7 @@ struct NativeWorkspaceDock: View {
             Group {
                 switch workspace.selectedWorkspaceDockTab {
                 case .cameraControls:
-                    NativeCameraControlsDock(model: model, workspace: workspace)
+                    NativeCameraControlsDock(model: model, workspace: workspace, microscope: microscope)
                 case .smartGallery:
                     NativeSmartGalleryDock(gallery: gallery)
                 }

@@ -4,6 +4,7 @@ import SwiftUI
 struct NativeCameraControlsDock: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var workspace: NativeWorkspaceModel
+    @ObservedObject var microscope: MicroscopeConfigurationModel
 
     private var additionalFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
         model.featureDescriptors.filter { $0.name != "AmcamResolutionIndex" }
@@ -93,11 +94,11 @@ struct NativeCameraControlsDock: View {
                     Picker(
                         "Objective",
                         selection: Binding(
-                            get: { model.microscopeConfiguration.activeObjectiveID },
-                            set: { model.selectMicroscopeObjective($0) }
+                            get: { microscope.configuration.activeObjectiveID },
+                            set: { microscope.selectObjective($0) }
                         )
                     ) {
-                        ForEach(model.microscopeConfiguration.objectives) { objective in
+                        ForEach(microscope.configuration.objectives) { objective in
                             Text(String(format: "%.0f×", objective.magnification))
                                 .tag(objective.id)
                         }

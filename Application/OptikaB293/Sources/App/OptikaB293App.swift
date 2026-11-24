@@ -105,7 +105,7 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hostingController = NSHostingController(
-            rootView: MicroscopeConfigurationWindow(model: cameraModel)
+            rootView: MicroscopeConfigurationWindow(model: cameraModel, microscope: composition.microscope)
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Microscope Configuration"
@@ -124,6 +124,7 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
         let hostingController = NSHostingController(
             rootView: MainWindowView(
                 model: cameraModel,
+                microscope: composition.microscope,
                 workspace: composition.workspace,
                 gallery: composition.gallery
             )

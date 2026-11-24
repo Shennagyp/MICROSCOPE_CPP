@@ -18,6 +18,7 @@ set(OPTIKA_APP_SOURCES
     Sources/Features/Slides/SlideImageGeometry.swift
     Sources/Features/Capture/NativeCaptureGallery.swift
     Sources/Features/Optics/MicroscopeOpticalConfiguration.swift
+    Sources/Features/Optics/MicroscopeConfigurationModel.swift
     Sources/Features/Optics/MicroscopeConfigurationDraftStore.swift
     Sources/Features/Optics/NativeMicroscopeCalibration.swift
     Sources/Features/Optics/NativeAutomaticResolutionPolicy.swift

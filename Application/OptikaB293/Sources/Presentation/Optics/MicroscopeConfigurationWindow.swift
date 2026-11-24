@@ -2,11 +2,13 @@ import SwiftUI
 
 struct MicroscopeConfigurationWindow: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var microscope: MicroscopeConfigurationModel
     @ObservedObject var draftStore: MicroscopeConfigurationDraftStore
 
-    init(model: NativeCameraModel) {
+    init(model: NativeCameraModel, microscope: MicroscopeConfigurationModel) {
         self.model = model
-        self.draftStore = model.microscopeConfigurationDraftStore
+        self.microscope = microscope
+        self.draftStore = microscope.draftStore
     }
 
     var body: some View {
@@ -47,8 +49,8 @@ struct MicroscopeConfigurationWindow: View {
                         HStack {
                             Text("Active objective")
                             Spacer()
-                            Text(model.microscopeConfiguration.objectives.first(where: {
-                                $0.id == model.microscopeConfiguration.activeObjectiveID
+                            Text(microscope.configuration.objectives.first(where: {
+                                $0.id == microscope.configuration.activeObjectiveID
                             })?.displayName ?? "Not selected")
                                 .foregroundColor(OptikaPalette.secondaryText)
                         }
@@ -282,8 +284,8 @@ struct MicroscopeConfigurationWindow: View {
                     Button("Apply changes") {
                         var applied = draftStore.configuration
                         applied.activeObjectiveID =
-                            model.microscopeConfiguration.activeObjectiveID
-                        model.updateMicroscopeConfiguration(applied)
+                            microscope.configuration.activeObjectiveID
+                        microscope.updateConfiguration(applied)
                         draftStore.markApplied(applied)
                     }
                     .keyboardShortcut(.defaultAction)
@@ -305,7 +307,7 @@ struct MicroscopeConfigurationWindow: View {
 
     private var currentDraftScale: Double? {
         guard let objective = draftStore.configuration.objectives.first(where: {
-            $0.id == model.microscopeConfiguration.activeObjectiveID
+            $0.id == microscope.configuration.activeObjectiveID
         }) else { return nil }
 
         return NativeMicroscopeMeasurementCalibration(
@@ -333,7 +335,7 @@ struct MicroscopeConfigurationWindow: View {
             candidate.condenserNumericalAperture.isFinite &&
             candidate.condenserNumericalAperture > 0 &&
             candidate.objectives.contains(where: {
-                $0.id == model.microscopeConfiguration.activeObjectiveID
+                $0.id == microscope.configuration.activeObjectiveID
             }) &&
             candidate.objectives.allSatisfy({
                 $0.magnification.isFinite &&

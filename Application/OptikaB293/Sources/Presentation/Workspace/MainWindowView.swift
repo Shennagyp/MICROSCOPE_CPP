@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var microscope: MicroscopeConfigurationModel
     @ObservedObject var workspace: NativeWorkspaceModel
     @ObservedObject var gallery: NativeCaptureGalleryStore
 
@@ -16,9 +17,10 @@ struct MainWindowView: View {
             NativeDualPreviewSurface(
                 bridge: model.bridge,
                 model: model,
+                microscope: microscope,
                 workspace: workspace,
                 activeSlide: workspace.activeSlide,
-                measurementCalibration: model.measurementCalibration,
+                measurementCalibration: microscope.measurementCalibration,
                 onCapture: { slide, image in
                     gallery.capture(image, for: slide)
                 }
@@ -41,6 +43,7 @@ struct MainWindowView: View {
                         NativeWorkspaceDock(
                             model: model,
                             workspace: workspace,
+                            microscope: microscope,
                             gallery: gallery,
                             onClose: { workspace.closeWorkspaceDock() }
                         )

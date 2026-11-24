@@ -82,6 +82,15 @@ set_target_properties(optika_b293_dualslide_app PROPERTIES
     OBJCXX_STANDARD_REQUIRED YES
 )
 
+# Resolve the bundle path through CMake and build the app before opening it.
+add_custom_target(run_optika_b293_dualslide_app
+    COMMAND /usr/bin/open "$<TARGET_BUNDLE_DIR:optika_b293_dualslide_app>"
+    COMMENT "Launching OPTIKA B293"
+    USES_TERMINAL
+    VERBATIM
+)
+add_dependencies(run_optika_b293_dualslide_app optika_b293_dualslide_app)
+
 if(BUILD_TESTING)
     add_executable(optika_dock_model_tests
         Sources/Features/Workspace/NativeDockSystemModel.swift

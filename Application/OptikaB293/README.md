@@ -36,17 +36,15 @@ cmake --build build/optika-b293-ninja --parallel
 ctest --test-dir build/optika-b293-ninja --output-on-failure
 ```
 
-After a successful build, locate and launch the app bundle:
+Launch the app with the dedicated CMake target:
 
 ```bash
-APP_PATH="$(find build/optika-b293-ninja -type d -name 'optika_b293_dualslide_app.app' -print -quit)"
-if [ -n "$APP_PATH" ]; then
-  open "$APP_PATH"
-else
-  echo "Could not find optika_b293_dualslide_app.app under build/optika-b293-ninja" >&2
-  exit 1
-fi
+cmake --build build/optika-b293-ninja --target run_optika_b293_dualslide_app
 ```
+
+This target builds the application if needed and opens the generated app bundle.
+CMake resolves the bundle path directly; no shell path search or conditional
+is required.
 
 Use a fresh build directory when changing CMake generators. CMake does not
 allow an existing build tree configured with one generator to be reused with

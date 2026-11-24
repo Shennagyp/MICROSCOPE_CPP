@@ -34,9 +34,10 @@ reference on its original branch.
 - The previous dock-width preference is migrated under the new OPTIKA key.
 - The floating dock remains an overlay; its panel alpha remains 0.20 (80%
   transparency).
-- No build, test, debugging session or hardware run has been performed during
-  this refactoring. The user performs those checks in the development
-  environment when explicitly requested.
+- Configure/build and deterministic CTest have been performed successfully by
+  the user. Interactive UI behavior and camera-connected hardware acceptance
+  remain pending; the reviewer does not run builds, tests, debugging sessions
+  or hardware checks in this environment.
 
 
 ## Objective
@@ -82,7 +83,7 @@ Exit criteria:
 
 **Purpose:** make the application structurally independent of the camera directory.
 
-**Implementation status:** source/build ownership migration committed; CMake configuration and compilation remain unverified.
+**Implementation status:** source/build ownership migration committed and verified by the user's successful Ninja configure/build on 2026-11-25.
 
 Deliverables:
 - Create `Application/OptikaB293` as the application-owned source/build boundary.
@@ -102,7 +103,7 @@ Exit criteria:
 
 **Purpose:** move policy and deterministic calculations out of UI state holders.
 
-**Implementation status:** calibration, automatic-resolution policy, image geometry and overlay value models are extracted. Source tests are registered but have not been executed.
+**Implementation status:** calibration, automatic-resolution policy, image geometry and overlay value models are extracted, compiled and covered by the user's successful 15-test CTest run on 2026-11-25.
 
 Extract focused pure functions/value models for:
 - Optical calibration and conversion to specimen-plane distance.
@@ -255,15 +256,19 @@ cmake -S . -B build/optika-b293-ninja -G Ninja \
 
 cmake --build build/optika-b293-ninja --parallel
 ctest --test-dir build/optika-b293-ninja --output-on-failure
+
+# Build if needed, then launch the native application
+cmake --build build/optika-b293-ninja --target run_optika_b293_dualslide_app
 ```
 
 Use a new build directory when switching generators. CMake caches the selected
 generator in each build tree and cannot convert an existing build directory
 from Unix Makefiles or Xcode to Ninja.
 
-The build and deterministic tests now pass. The next checkpoint is to launch
-the native app and inspect the workspace, dock, camera controls and microscope
-configuration windows. Camera-connected acquisition, resolution changes,
+The build and deterministic tests now pass. Launch the native app using the
+CMake target below; it builds the app if needed and opens the generated bundle
+without a separate `find`/`if` shell script. Then inspect the workspace, dock,
+camera controls and microscope configuration windows. Camera-connected acquisition, resolution changes,
 freeze behavior, capture-file inspection and shutdown remain a separate
 hardware acceptance checkpoint; they are not replaced by deterministic tests.
 

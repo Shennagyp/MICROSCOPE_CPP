@@ -50,30 +50,34 @@ private struct BottomControlDock: View {
     var body: some View {
         VStack(spacing: 0) {
             Divider()
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
+                CameraConnectionControl(model: model)
+
+                Rectangle()
+                    .fill(Color(nsColor: NSColor.separatorColor))
+                    .frame(width: 1, height: 28)
+
+                SlideNavigationControl(model: model)
+
                 if model.isBottomDockCollapsed {
-                    HStack(spacing: 6) {
-                        Image(systemName: "slider.horizontal.3")
-                            .foregroundColor(.secondary)
-                        Text("Camera Controls")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .padding(.leading, 10)
                     Spacer(minLength: 0)
+                    Text("CONTROLS")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.secondary)
                 } else {
-                    HSplitView {
-                        editableControls
-                            .frame(minWidth: 300, maxWidth: .infinity)
-                        readOnlyInformation
-                            .frame(minWidth: 270, maxWidth: .infinity)
-                    }
+                    Rectangle()
+                        .fill(Color(nsColor: NSColor.separatorColor))
+                        .frame(width: 1, height: 28)
+
+                    featureControls
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
                 Button {
                     model.setBottomDockCollapsed(!model.isBottomDockCollapsed)
                 } label: {
                     Image(systemName: model.isBottomDockCollapsed ? "chevron.up" : "chevron.down")
-                        .frame(width: 22, height: 24)
+                        .frame(width: 20, height: 24)
                 }
                 .buttonStyle(.borderless)
                 .help(model.isBottomDockCollapsed ? "Expand camera controls" : "Collapse camera controls")
@@ -82,11 +86,11 @@ private struct BottomControlDock: View {
                     model.setBottomDockDetached(!isDetached)
                 } label: {
                     Image(systemName: isDetached ? "pin.fill" : "arrow.up.right.and.arrow.down.left")
-                        .frame(width: 22, height: 24)
+                        .frame(width: 20, height: 24)
                 }
                 .buttonStyle(.borderless)
                 .help(isDetached ? "Dock controls below the camera views" : "Detach controls into a floating panel")
-                .padding(.trailing, 8)
+                .padding(.trailing, 7)
             }
             .frame(height: model.isBottomDockCollapsed ? 28 : 50)
             .background(Color(nsColor: NSColor.windowBackgroundColor))
@@ -94,36 +98,92 @@ private struct BottomControlDock: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var editableControls: some View {
+    private var featureControls: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                if model.cameras.isEmpty {
-                    Text(model.isEnumeratingCameras ? "Detecting cameras…" : "No camera detected")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Button { model.refreshCameras() } label: {
+            HStack(spacing: 7) {
+                if model.canAccessFeatures {
+                    Button {
+                        model.refreshFeatures()
+                    } label: {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(model.isEnumeratingCameras || model.isCameraOperationPending)
-                } else {
-                    ForEach(model.cameras, id: \.deviceID) { camera in
-                        Button {
-                            model.openAndStartCamera(deviceID: camera.deviceID)
-                        } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "video.fill")
-                                Text(camera.displayName)
-                                    .lineLimit(1)
-                                Text("Open + Start")
-                                    .font(.system(size: 10, weight: .semibold))
+                    .help("Refresh camera feature values")
+                    .disabled(model.isFeatureSnapshotLoading ||
+                              model.isFeatureWritePending ||
+                              model.isCameraOperationPending)
+
+                    if model.featureDescriptors.isEmpty {
+                        Text(model.isFeatureSnapshotLoading ? "Loading controls…" : "No feature controls reported")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(
+                            Array(model.featureDescriptors.enumerated()),
+                            id: \.element.name
+                        ) { index, descriptor in
+                            if index > 0 &&
+                               model.featureDescriptors[index - 1].group.rawValue != descriptor.group.rawValue {
+                                Rectangle()
+                                    .fill(Color(nsColor: NSColor.separatorColor))
+                                    .frame(width: 1, height: 30)
                             }
+                            DockCameraFeatureControl(
+                                model: model,
+                                descriptor: descriptor
+                            )
                         }
-                        .controlSize(.small)
-                        .disabled(!model.canConnectDetectedCamera)
-                        .help("Open this camera and start acquisition")
                     }
+                } else {
+                    Text("Connect a camera to load its controls")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
                 }
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 46)
+        }
+    }
+}
+
+private struct CameraConnectionControl: View {
+    @ObservedObject var model: NativeCameraModel
+
+    private var isConnected: Bool {
+        model.openedCameraDeviceID != nil && model.cameraState != .closed
+    }
+
+    private var indicatorColor: Color {
+        switch model.cameraState {
+        case .open, .streaming:
+            return .green
+        case .starting, .stopping:
+            return .orange
+        case .faulted:
+            return .red
+        case .closed:
+            return .secondary
+        @unknown default:
+            return .secondary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(indicatorColor)
+                .frame(width: 7, height: 7)
+
+            if isConnected {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(model.activeCameraName)
+                        .font(.system(size: 10, weight: .medium))
+                        .lineLimit(1)
+                    Text(model.cameraStateText.uppercased())
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: 112, alignment: .leading)
 
                 if model.cameraState == .open {
                     Button("Start") { model.startAcquisition() }
@@ -140,38 +200,62 @@ private struct BottomControlDock: View {
                         .controlSize(.small)
                         .disabled(!model.canClose)
                 }
-
-                if !model.informationBarFeatures.isEmpty {
-                    Rectangle()
-                        .fill(Color(nsColor: NSColor.separatorColor))
-                        .frame(width: 1, height: 26)
-
-                    ForEach(model.informationBarFeatures, id: \.name) { descriptor in
-                        QuickFeatureControl(model: model, descriptor: descriptor)
+            } else {
+                Menu {
+                    ForEach(model.cameras, id: \.deviceID) { camera in
+                        Button(camera.displayName) {
+                            model.openAndStartCamera(deviceID: camera.deviceID)
+                        }
                     }
+                } label: {
+                    Text(model.cameras.isEmpty ? "No camera" : "Connect camera")
+                        .font(.system(size: 10, weight: .medium))
                 }
+                .menuStyle(BorderlessButtonMenuStyle())
+                .disabled(model.cameras.isEmpty || !model.canConnectDetectedCamera)
             }
-            .padding(.horizontal, 10)
-            .frame(height: 46)
-        }
-    }
 
-    private var readOnlyInformation: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 14) {
-                InformationValue(title: "Camera", value: model.activeCameraName)
-                InformationValue(title: "Resolution", value: model.resolutionText)
-                InformationValue(title: "Format", value: model.pixelFormatText)
-                InformationValue(title: "State", value: model.cameraStateText)
-                InformationValue(title: "Live", value: model.activeSlide.title)
+            Button {
+                model.refreshCameras()
+            } label: {
+                Image(systemName: "arrow.clockwise")
             }
-            .padding(.horizontal, 10)
-            .frame(height: 46)
+            .buttonStyle(.borderless)
+            .help("Refresh detected cameras")
+            .disabled(model.isEnumeratingCameras || model.isCameraOperationPending)
+        }
+        .padding(.leading, 10)
+    }
+}
+
+private struct SlideNavigationControl: View {
+    @ObservedObject var model: NativeCameraModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("LIVE")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundColor(.secondary)
+
+            Picker(
+                "Live slide",
+                selection: Binding(
+                    get: { model.activeSlide },
+                    set: { model.selectActiveSlide($0) }
+                )
+            ) {
+                Text("1").tag(NativeSlideID.slide1)
+                Text("2").tag(NativeSlideID.slide2)
+            }
+            .labelsHidden()
+            .pickerStyle(SegmentedPickerStyle())
+            .frame(width: 76)
+            .help("Select which slide receives the live camera frames")
         }
     }
 }
 
-private struct QuickFeatureControl: View {
+private struct DockCameraFeatureControl: View {
     @ObservedObject var model: NativeCameraModel
     let descriptor: AmscopeCameraFeatureDescriptor
 
@@ -185,11 +269,122 @@ private struct QuickFeatureControl: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            Text(descriptor.displayName)
-                .font(.system(size: 10, weight: .medium))
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 3) {
+                Text(featureGroupTitle(descriptor.group.rawValue))
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundColor(.secondary)
+                if model.featureError(for: descriptor) != nil {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 5, height: 5)
+                }
+            }
 
+            HStack(spacing: 4) {
+                Text(descriptor.displayName)
+                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(1)
+                    .frame(width: 76, alignment: .leading)
+                editor
+                    .frame(width: 94)
+            }
+        }
+        .frame(width: 178, height: 40, alignment: .leading)
+        .padding(.horizontal, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(nsColor: NSColor.controlBackgroundColor))
+        )
+        .help(featureHelpText)
+    }
+
+    private var featureHelpText: String {
+        var parts = [descriptor.displayName, featureGroupTitle(descriptor.group.rawValue)]
+        if let unit = descriptor.unit, !unit.isEmpty { parts.append("Unit: \(unit)") }
+        if let reason = descriptor.disabledReason, !reason.isEmpty { parts.append(reason) }
+        if let error = model.featureError(for: descriptor) { parts.append(error) }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var editor: some View {
+        if !descriptor.isWritable {
+            Text(model.displayValue(for: descriptor))
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        } else {
+            switch descriptor.kind {
+            case .boolean:
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { model.booleanValue(for: descriptor) },
+                        set: { model.writeBoolean($0, for: descriptor) }
+                    )
+                )
+                .labelsHidden()
+                .controlSize(.small)
+                .disabled(editingDisabled)
+
+            case .integer:
+                if !descriptor.discreteIntegerValues.isEmpty {
+                    Picker(
+                        "",
+                        selection: Binding(
+                            get: { model.integerValue(for: descriptor) },
+                            set: { model.writeInteger($0, for: descriptor) }
+                        )
+                    ) {
+                        ForEach(descriptor.discreteIntegerValues.map(\.int64Value), id: \.self) { value in
+                            Text(String(value)).tag(value)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(MenuPickerStyle())
+                    .controlSize(.small)
+                    .disabled(editingDisabled)
+                } else {
+                    textEditor
+                }
+
+            case .enumeration:
+                if descriptor.enumerationValues.isEmpty {
+                    Text("No options")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                } else {
+                    Picker(
+                        "",
+                        selection: Binding(
+                            get: { model.enumerationValue(for: descriptor) },
+                            set: { model.writeEnumeration($0, for: descriptor) }
+                        )
+                    ) {
+                        ForEach(descriptor.enumerationValues, id: \.self) { symbol in
+                            Text(symbol).tag(symbol)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(MenuPickerStyle())
+                    .controlSize(.small)
+                    .disabled(editingDisabled)
+                }
+
+            case .floatingPoint, .string, .integerVector:
+                textEditor
+
+            @unknown default:
+                Text(model.displayValue(for: descriptor))
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var textEditor: some View {
+        HStack(spacing: 3) {
             TextField(
                 "Value",
                 text: Binding(
@@ -198,46 +393,31 @@ private struct QuickFeatureControl: View {
                 )
             )
             .textFieldStyle(RoundedBorderTextFieldStyle())
-            .frame(width: 62)
+            .font(.system(size: 9, design: .monospaced))
+            .frame(width: 64)
             .disabled(editingDisabled)
-
-            if let unit = descriptor.unit, !unit.isEmpty {
-                Text(unit)
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
 
             Button("Set") {
                 model.commitDraft(for: descriptor)
             }
-            .controlSize(.small)
+            .controlSize(.mini)
             .disabled(editingDisabled)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 5)
-                .fill(Color(nsColor: NSColor.controlBackgroundColor))
-        )
-        .help(model.featureError(for: descriptor) ?? descriptor.displayName)
     }
 }
 
-private struct InformationValue: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(title)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(.secondary)
-            Text(value)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .lineLimit(1)
-        }
-        .fixedSize(horizontal: true, vertical: false)
+private func featureGroupTitle(_ rawValue: Int) -> String {
+    switch rawValue {
+    case 0: return "General"
+    case 1: return "Exposure"
+    case 2: return "Image Format"
+    case 3: return "Image Processing"
+    case 4: return "Color"
+    case 5: return "Trigger"
+    case 6: return "Sensor"
+    case 7: return "Transport"
+    case 8: return "Hardware"
+    default: return "Other"
     }
 }
 

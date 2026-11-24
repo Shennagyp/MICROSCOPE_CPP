@@ -163,7 +163,7 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; FrameView accepted; prior dock/live-edit/compact workspace and lifecycle-state mapping built and passed 15/15 CTest twice at 89ccf0c; new document-centric IDE workspace source at b99ca65 has not yet been built/tested; physical MU503 workspace/live-edit smoke remains pending**
+**Status: IN PROGRESS; FrameView accepted; document-centric workspace source built at owner-reported branch head 040e381; `amscope_preview` linked and 15/15 CTest passed; application visual and physical MU503 workspace/live-edit smoke remains pending**
 
 Implemented in this Phase 4 slice:
 
@@ -180,17 +180,16 @@ Implemented in this Phase 4 slice:
 - No new camera backend, feature, SDK operation or saturation support was added. The source updates only reuse the existing feature write/readback path and correct the group classification of existing descriptor records.
 - Added the offscreen `camera_qt_widgets_image_info_bar_tests` target for item lifecycle, editable double-click routing, and read-only behavior. Together with `camera_qt_widgets_camera_control_panel_tests` and `camera_qt_widgets_frame_view_tests`, the expected CTest suite is now **15 tests**.
 - The owner initially built the earlier composed UI revision at `4d61eca9d0f3c70bc1468628a05640e5339c2693`, linking `amscope_preview` with **15/15** CTest passing. The later compact dock/live-edit workspace and six-state lifecycle mapping were then validated at `89ccf0c`: full Release build including `amscope_preview`, 15/15 CTest twice, and no `-Wswitch` warning. Tests cover all six lifecycle states and the transitional-state lockout.
-- The current document-centric shell is a new source increment: `e2450a2` restructures the central document tab and the Explorer/Properties/Output panes; `5f56a5e` aligns the QMainWindow save/restore state version; `ae2440d` adds distinct lifecycle-state colors and the Imaging Workbench title; `49cb8a7` adds the explicit QToolBar include; `4e9130f` orders File before View; `b99ca65` restores 9 pt base typography and polishes toolbar states. This current shell source has **not** been built or tested. The 89ccf0c 15/15 result is predecessor evidence only.
+- The current document-centric shell source includes: `e2450a2` restructures the central document tab and Explorer/Properties/Output panes; `5f56a5e` aligns the QMainWindow save/restore state version; `ae2440d` adds lifecycle-state colors and the Imaging Workbench title; `49cb8a7` adds the explicit QToolBar include; `4e9130f` orders File before View; `b99ca65` restores 9 pt base typography and polishes toolbar states. The owner fast-forwarded to branch head `040e381`, built `build/amscope-v07` in Release, linked `amscope_preview`, and passed all **15/15 CTest** tests. The source build/test gate is PASS; actual application launch/visual inspection and physical-camera UI testing are not shown in the submitted log.
 - No backend, SDK, acquisition, feature-write, or worker behavior was changed by the workspace shell.
 
 Previously accepted FrameView physical check: the owner confirmed the MU503 preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. That evidence validates FrameView integration only. It does not validate the current document-centric window composition, dock persistence, Output history, or status-bar presentation.
 
 Next acceptance gate:
 
-1. **Predecessor software evidence:** Release build and 15/15 CTest passed twice at `89ccf0c`. This does not validate the new workspace shell.
-2. **Current software gate:** Build current branch head `b99ca65` in Release, require `amscope_preview` to link, and run all 15 CTest tests. Do not report a CTest pass if the build step fails or reuses a stale test binary.
-3. **Workspace visual smoke:** verify the central Live Preview document tab, stacked Camera Explorer/Camera Properties panes, bottom Output pane, and status-bar Imaging Information. Verify File → Camera Workspace and View toggles. Move, tabify, float, close, restore and reset tool windows; restart and verify QSettings restores the user's layout.
-4. **Physical MU503 smoke:** discover/select, Open and Start; verify changing frames and metadata updates. Test live Automatic Exposure, Analog Gain and White Balance when their descriptors permit; set Automatic Exposure Off before Exposure Time. Confirm values update only after backend readback, then Stop and Close.
+1. **Software build and automated tests: PASS** at owner-reported branch head `040e381`: Release build compiled and linked `amscope_preview`; all **15/15 CTest** tests passed.
+2. **Application visual smoke remains pending:** launch the newly built app; inspect document-tab appearance, default pane proportions, dock title bars, toolbar/menu styling, status-bar metadata, and Output pane. Exercise move, tabify, float, close/restore and Reset Window Layout. Restart and verify persisted layout.
+3. **Physical MU503 smoke remains pending:** discover/select, Open and Start; verify changing frames and metadata updates. Test live Automatic Exposure, Analog Gain and White Balance when their descriptors permit; set Automatic Exposure Off before Exposure Time. Confirm values update only after backend readback, then Stop and Close.
 5. While Streaming, double-click Automatic Exposure, Analog Gain, or White Balance values when their descriptors are available/readable/writable. Set Automatic Exposure to Off before expecting Exposure Time to be editable. Confirm the backend write/readback succeeds and the displayed value changes only after readback.
 6. Confirm stopped-only image-processing/format settings remain non-editable while Streaming and become available only after Stop when their descriptors permit it. Stop and Close the camera cleanly.
 7. No FPS benchmark or new feature-capability qualification is implied by this UI work.
@@ -322,7 +321,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
 | 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView accepted; predecessor shell build/15-of-15 CTest passed at `89ccf0c`; current document-centric workspace source `b99ca65` awaits build/CTest; physical MU503 workspace/live-edit smoke pending; generic feature-editor extraction remains |
+| 4 | Reusable Qt camera UI | IN PROGRESS; document-centric workspace built at owner-reported `040e381`, `amscope_preview` linked and 15/15 CTest passed; application visual smoke and physical MU503 workspace/live-edit smoke pending; generic feature-editor extraction remains |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |
 | 7 | Integrated AmScope release qualification | OPEN |

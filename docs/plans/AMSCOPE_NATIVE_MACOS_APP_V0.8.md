@@ -40,11 +40,11 @@
 
 ## Phase 3 — Shared latest-frame mailbox
 
-- Move the existing `FrameStreamMailbox` implementation from the Qt include path to `Camera/Common`.
-- Keep the existing Qt header as a compatibility alias so the Qt adapter continues using the same implementation.
-- Use the same single-slot mailbox in the native controller.
-- Preserve atomic publication, generation validation, notification coalescing, race-safe consume/re-arm, and prompt release of replaced frame leases.
-- Add concurrency and lease-lifetime tests; do not add another frame queue.
+- [x] Move the existing `FrameStreamMailbox` implementation into `Camera/Common` as `camera::FrameStreamMailbox`.
+- [x] Keep the former Qt header as a source-compatibility alias and switch `QtAmcamCamera` to the common type directly.
+- [ ] Use this same single-slot mailbox in the native controller.
+- [x] Preserve atomic publication, generation validation, notification coalescing, race-safe consume/re-arm, and prompt release of replaced frame leases.
+- [x] Add framework-neutral tests for latest-frame selection, coalescing, stale-generation rejection, re-arm, and lease release; retain the existing Qt concurrency/affinity test.
 
 **Gate:** Both frontends use the same mailbox implementation. Existing Qt behavior remains unchanged.
 

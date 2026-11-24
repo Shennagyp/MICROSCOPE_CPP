@@ -64,6 +64,7 @@ final class NativeCameraModel: ObservableObject {
     @Published var selectedWorkspaceDockTab: NativeWorkspaceDockTab = .cameraControls
     @Published var isWorkspaceDockVisible = true
     @Published var isWorkspaceDockFloating = false
+    @Published private(set) var workspaceDockWidth: CGFloat = 350
     @Published var errorMessage = ""
     @Published var isShowingError = false
     @Published private(set) var isCameraOperationPending = false
@@ -97,8 +98,17 @@ final class NativeCameraModel: ObservableObject {
         "AmscopeNative.MicroscopeConfiguration.v1"
     private static let automaticResolutionDefaultsKey =
         "AmscopeNative.AutomaticResolutionEnabled.v1"
+    private static let workspaceDockWidthDefaultsKey =
+        "AmscopeNative.WorkspaceDockWidth.v1"
 
     private init() {
+        let savedDockWidth = UserDefaults.standard.double(
+            forKey: Self.workspaceDockWidthDefaultsKey
+        )
+        if savedDockWidth.isFinite && savedDockWidth > 0 {
+            workspaceDockWidth = min(max(CGFloat(savedDockWidth), 280), 520)
+        }
+
         if let data = UserDefaults.standard.data(
             forKey: Self.microscopeConfigurationDefaultsKey
         ),
@@ -148,6 +158,19 @@ final class NativeCameraModel: ObservableObject {
 
     func selectActiveSlide(_ slide: NativeSlideID) {
         activeSlide = slide
+    }
+
+    func setWorkspaceDockWidth(_ width: CGFloat, maximum: CGFloat = 520) {
+        guard width.isFinite, maximum.isFinite else { return }
+        let upperBound = max(280, min(520, maximum))
+        let boundedWidth = min(max(width, 280), upperBound)
+        guard abs(boundedWidth - workspaceDockWidth) >= 0.5 else { return }
+
+        workspaceDockWidth = boundedWidth
+        UserDefaults.standard.set(
+            Double(boundedWidth),
+            forKey: Self.workspaceDockWidthDefaultsKey
+        )
     }
 
     func selectMicroscopeObjective(_ objectiveID: String) {

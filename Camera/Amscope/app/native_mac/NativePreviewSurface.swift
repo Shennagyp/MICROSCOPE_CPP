@@ -259,7 +259,7 @@ private final class NativeSlidePreviewPane: NSView {
     private let selectButton = NSButton(title: "Set Live Target", target: nil, action: nil)
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
-    private let maximizeButton = NSButton(title: "Maximize", target: nil, action: nil)
+    private let maximizeButton = NSButton(title: "", target: nil, action: nil)
     private let annotationStack = NSStackView()
     private let actionStack = NSStackView()
     private let annotationPlate = NSView()
@@ -344,10 +344,16 @@ private final class NativeSlidePreviewPane: NSView {
             self?.updateImageSizingButton()
         }
 
-        maximizeButton.bezelStyle = .rounded
+        maximizeButton.bezelStyle = .texturedRounded
         maximizeButton.controlSize = .small
+        maximizeButton.imagePosition = .imageOnly
         maximizeButton.target = self
         maximizeButton.action = #selector(toggleMaximizeAction(_:))
+        maximizeButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            maximizeButton.widthAnchor.constraint(equalToConstant: 24),
+            maximizeButton.heightAnchor.constraint(equalToConstant: 22)
+        ])
 
         // The former full-width header is removed. Specimen metadata is
         // presented as compact corner annotations over the image viewport;
@@ -482,7 +488,23 @@ private final class NativeSlidePreviewPane: NSView {
         layer?.borderColor = isActiveTarget
             ? NSColor.systemRed.cgColor
             : NSColor.separatorColor.cgColor
-        maximizeButton.title = isMaximized ? "Restore" : "Maximize"
+        let maximizeDescription = isMaximized ? "Restore split view" : "Maximize slide"
+        let maximizeSymbol = isMaximized
+            ? "arrow.down.right.and.arrow.up.left"
+            : "arrow.up.left.and.arrow.down.right"
+        if #available(macOS 11.0, *) {
+            maximizeButton.image = NSImage(
+                systemSymbolName: maximizeSymbol,
+                accessibilityDescription: maximizeDescription
+            )
+            maximizeButton.imagePosition = .imageOnly
+        } else {
+            maximizeButton.image = nil
+            maximizeButton.imagePosition = .noImage
+            maximizeButton.title = isMaximized ? "Restore" : "Max"
+        }
+        maximizeButton.toolTip = maximizeDescription
+        maximizeButton.setAccessibilityLabel(maximizeDescription)
         updateImageSizingButton()
     }
 

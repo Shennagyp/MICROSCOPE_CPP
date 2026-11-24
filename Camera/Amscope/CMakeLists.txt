@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-# Use the same deployment target for Ninja builds; XCODE_ATTRIBUTE_* only
-# affects Xcode-generated projects and is ignored by the selected generator.
+# Set the deployment target before enabling C++/Swift/Objective-C++ compilers.
 if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING
         "Minimum macOS version for Amscope targets")

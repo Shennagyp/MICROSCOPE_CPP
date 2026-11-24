@@ -368,3 +368,31 @@ At the end of each meaningful development increment, update:
 - Next concrete implementation task and blockers.
 
 Never write that a phase is complete from source inspection or CI alone. Never invent camera model identity, hardware results, test duration, or SDK behavior.
+
+
+## UI component-system handoff — 2026-11-24
+
+The separate branch `amscope-fluent-ui-components` records the move from the
+hand-authored Fusion/QSS controls toward a reusable QWidget component system.
+See [AMSCOPE_UI_COMPONENT_MIGRATION.md](AMSCOPE_UI_COMPONENT_MIGRATION.md).
+
+The production `amscope_preview` is unchanged. An opt-in component gallery is
+available with:
+
+```bash
+AMSCOPE_BUILD_FLUENT_UI_GALLERY=ON ./scripts/run-amscope.sh --fluent-ui-gallery
+```
+
+It fetches the pinned FluentQt v1.12.2 release and builds an isolated UI-only
+gallery. The option is OFF by default. No camera code, acquisition path, or
+preview widget is connected to the gallery.
+
+**Current evidence:** source/CMake reviewed only. Build, CTest, launch, and
+visual review have not been performed for this branch. The next action is an
+owner build and launch on the target Mac, followed by a screenshot. Check the
+upstream CMake macOS deployment-target default (14.0) in the produced binary
+before deciding whether this dependency fits the project's supported Mac
+range.
+
+This UI experiment is separate from the validated `amscope-native-driver-0.7`
+baseline. Do not treat its branch state as hardware-qualified.

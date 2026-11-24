@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import ImageIO
 
@@ -116,7 +117,8 @@ final class NativeCaptureGalleryStore: ObservableObject {
             do {
                 try FileManager.default.createDirectory(
                     at: directory,
-                    withIntermediateDirectories: true
+                    withIntermediateDirectories: true,
+                    attributes: nil
                 )
                 let urls = try FileManager.default.contentsOfDirectory(
                     at: directory,
@@ -132,9 +134,14 @@ final class NativeCaptureGalleryStore: ObservableObject {
                         let rightDate = right?.creationDate ?? right?.contentModificationDate ?? .distantPast
                         return leftDate > rightDate
                     }
-                    .prefix(maximumCount)
 
-                loadedItems = pngURLs.compactMap {
+                // The gallery retention limit is a disk policy as well as a
+                // presentation limit. Remove old files during startup recovery.
+                for expiredURL in pngURLs.dropFirst(maximumCount) {
+                    try? FileManager.default.removeItem(at: expiredURL)
+                }
+
+                loadedItems = pngURLs.prefix(maximumCount).compactMap {
                     NativeCaptureFileCodec.loadCapture(at: $0)
                 }
             } catch {
@@ -153,6 +160,22 @@ final class NativeCaptureGalleryStore: ObservableObject {
 
 private enum NativeCaptureFileCodec {
     static func writeCapture(
+        _ sourceImage: CGImage,
+        to url: URL,
+        slide: NativeSlideID
+    ) -> Result<NativeCaptureItem, NSError> {
+        guard let independentImage = copyPixels(of: sourceImage) else {
+            return .failure(makeError("Could not detach the image from the live camera frame."))
+        }
+
+        return writeIndependentCapture(
+            independentImage,
+            to: url,
+            slide: slide
+        )
+    }
+
+    private static func writeIndependentCapture(
         _ image: CGImage,
         to url: URL,
         slide: NativeSlideID
@@ -160,7 +183,8 @@ private enum NativeCaptureFileCodec {
         do {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
+                withIntermediateDirectories: true,
+                attributes: nil
             )
         } catch {
             return .failure(error as NSError)
@@ -175,13 +199,7 @@ private enum NativeCaptureFileCodec {
             return .failure(makeError("Could not create the capture image file."))
         }
 
-        // Detach the still from the live frame provider before encoding.
-        // This limits how long a captured frame lease can occupy the four-slot
-        // acquisition pool if the active pane advances while PNG encoding runs.
-        guard let independentImage = copyPixels(of: image) else {
-            return .failure(makeError("Could not detach the image from the live camera frame."))
-        }
-        CGImageDestinationAddImage(destination, independentImage, nil)
+        CGImageDestinationAddImage(destination, image, nil)
         guard CGImageDestinationFinalize(destination) else {
             try? FileManager.default.removeItem(at: url)
             return .failure(makeError("The camera image could not be encoded as PNG."))

@@ -147,6 +147,73 @@ NativeCameraController::RequestId NativeCameraController::requestClose(
         });
 }
 
+bool NativeCameraController::startAcquisitionForGeneration(
+    std::uint64_t generation,
+    CameraError* error) noexcept {
+    if (error)
+        *error = {};
+
+    std::shared_ptr<detail::AcquisitionFrameGate> frameGate;
+    try {
+        frameGate =
+            std::make_shared<detail::AcquisitionFrameGate>(generation);
+        const bool started = camera_.start(
+            [this, frameGate](camera::FramePtr frame) {
+                frameMailbox_.publishFrame(
+                    std::move(frame),
+                    [this, &frameGate]() noexcept {
+                        return frameGate &&
+                            frameGate->accepts(
+                                activeSessionGeneration_.load(
+                                    std::memory_order_acquire));
+                    },
+                    [this]() noexcept { notifyFrameAvailable(); });
+            },
+            [this, frameGate](const CameraError& acquisitionError) {
+                handleAcquisitionFailure(frameGate, acquisitionError);
+            },
+            error);
+
+        if (started) {
+            acquisitionFrameGate_ = std::move(frameGate);
+            return true;
+        }
+
+        if (camera_.state() == CameraState::Streaming) {
+            if (acquisitionFrameGate_) {
+                acquisitionFrameGate_->activateFor(generation);
+            } else if (frameGate) {
+                frameGate->activateFor(generation);
+                acquisitionFrameGate_ = std::move(frameGate);
+            }
+        } else {
+            acquisitionFrameGate_.reset();
+        }
+        return false;
+    } catch (const std::exception& exception) {
+        if (error)
+            *error = CameraError{0, "camera start", exception.what()};
+    } catch (...) {
+        if (error) {
+            *error = CameraError{
+                0, "camera start",
+                "Unknown exception while preparing acquisition."};
+        }
+    }
+
+    if (camera_.state() == CameraState::Streaming) {
+        if (acquisitionFrameGate_) {
+            acquisitionFrameGate_->activateFor(generation);
+        } else if (frameGate) {
+            frameGate->activateFor(generation);
+            acquisitionFrameGate_ = std::move(frameGate);
+        }
+    } else {
+        acquisitionFrameGate_.reset();
+    }
+    return false;
+}
+
 NativeCameraController::RequestId NativeCameraController::requestStart(
     LifecycleCallback callback) {
     if (!callback)
@@ -158,52 +225,8 @@ NativeCameraController::RequestId NativeCameraController::requestStart(
                                                std::uint64_t generation) mutable {
             LifecycleResult result{std::monostate{}};
             CameraError error;
-            try {
-                auto frameGate =
-                    std::make_shared<detail::AcquisitionFrameGate>(generation);
-                const bool started = camera_.start(
-                    [this, frameGate](camera::FramePtr frame) {
-                        frameMailbox_.publishFrame(
-                            std::move(frame),
-                            [this, &frameGate]() noexcept {
-                                return frameGate &&
-                                    frameGate->accepts(
-                                        activeSessionGeneration_.load(
-                                            std::memory_order_acquire));
-                            },
-                            [this]() noexcept { notifyFrameAvailable(); });
-                    },
-                    [this, frameGate](const CameraError& acquisitionError) {
-                        handleAcquisitionFailure(frameGate, acquisitionError);
-                    },
-                    &error);
-
-                if (started) {
-                    acquisitionFrameGate_ = std::move(frameGate);
-                } else {
-                    result = std::move(error);
-                    if (camera_.state() == CameraState::Streaming &&
-                        acquisitionFrameGate_) {
-                        acquisitionFrameGate_->activateFor(generation);
-                    } else {
-                        acquisitionFrameGate_.reset();
-                    }
-                }
-            } catch (const std::exception& exception) {
-                result = CameraError{0, "camera start", exception.what()};
-                if (camera_.state() != CameraState::Streaming)
-                    acquisitionFrameGate_.reset();
-                else if (acquisitionFrameGate_)
-                    acquisitionFrameGate_->activateFor(generation);
-            } catch (...) {
-                result = CameraError{
-                    0, "camera start",
-                    "Unknown exception while preparing acquisition."};
-                if (camera_.state() != CameraState::Streaming)
-                    acquisitionFrameGate_.reset();
-                else if (acquisitionFrameGate_)
-                    acquisitionFrameGate_->activateFor(generation);
-            }
+            if (!startAcquisitionForGeneration(generation, &error))
+                result = std::move(error);
             invokeSafely(callback, requestId, generation, std::move(result));
         });
 }
@@ -378,6 +401,127 @@ NativeCameraController::RequestId NativeCameraController::requestWriteFeature(
         });
 }
 
+NativeCameraController::RequestId
+NativeCameraController::requestChangePreviewResolution(
+    std::string resolutionSymbol,
+    FeatureWriteCallback callback) {
+    if (!callback || resolutionSymbol.empty())
+        return 0;
+
+    return enqueueFeatureRequest(
+        RequestSemantics::ResolutionMutation,
+        [this, resolutionSymbol = std::move(resolutionSymbol),
+         callback = std::move(callback)](
+            RequestId requestId,
+            std::uint64_t sessionGeneration,
+            std::uint64_t) mutable {
+            FeatureWriteResult result{std::monostate{}};
+            const CameraState initialState = camera_.state();
+            if (initialState != CameraState::Open &&
+                initialState != CameraState::Streaming) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    "AmcamResolutionIndex",
+                    "Open the camera before changing preview resolution.",
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+                invokeSafely(callback, requestId, sessionGeneration, std::move(result));
+                return;
+            }
+
+            const bool resumeAcquisition =
+                initialState == CameraState::Streaming;
+            if (resumeAcquisition) {
+                CameraError stopError;
+                if (!camera_.stop(&stopError)) {
+                    if (camera_.state() == CameraState::Streaming &&
+                        acquisitionFrameGate_) {
+                        acquisitionFrameGate_->activateFor(sessionGeneration);
+                    } else {
+                        acquisitionFrameGate_.reset();
+                        frameMailbox_.clear();
+                    }
+                    result = camera::CameraFeatureAccessError{
+                        camera::CameraFeatureAccessError::Code::BackendFailure,
+                        "AmcamResolutionIndex",
+                        stopError.message.empty()
+                            ? "Acquisition could not stop for the resolution change."
+                            : "Acquisition could not stop for the resolution change: " +
+                                  stopError.message,
+                        stopError.vendorCode,
+                        std::nullopt,
+                        std::nullopt
+                    };
+                    invokeSafely(
+                        callback, requestId, sessionGeneration, std::move(result));
+                    return;
+                }
+
+                acquisitionFrameGate_.reset();
+                frameMailbox_.clear();
+            }
+
+            try {
+                result = camera_.writeFeature(
+                    "AmcamResolutionIndex",
+                    camera::CameraFeatureValue{
+                        camera::FeatureEnumeration{resolutionSymbol}});
+            } catch (const std::exception& exception) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    "AmcamResolutionIndex",
+                    exception.what(),
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            } catch (...) {
+                result = camera::CameraFeatureAccessError{
+                    camera::CameraFeatureAccessError::Code::BackendFailure,
+                    "AmcamResolutionIndex",
+                    "Unknown exception while applying the preview resolution.",
+                    0,
+                    std::nullopt,
+                    std::nullopt
+                };
+            }
+
+            if (resumeAcquisition) {
+                CameraError restartError;
+                if (!startAcquisitionForGeneration(
+                        sessionGeneration, &restartError)) {
+                    const std::string restartMessage =
+                        restartError.message.empty()
+                            ? "Acquisition could not restart."
+                            : restartError.message;
+                    if (auto* writeError =
+                            std::get_if<camera::CameraFeatureAccessError>(&result)) {
+                        writeError->message +=
+                            " The previous acquisition could not be restarted: " +
+                            restartMessage;
+                    } else {
+                        result = camera::CameraFeatureAccessError{
+                            camera::CameraFeatureAccessError::Code::BackendFailure,
+                            "AmcamResolutionIndex",
+                            "The resolution was applied, but acquisition could not "
+                            "restart: " + restartMessage,
+                            restartError.vendorCode,
+                            std::nullopt,
+                            std::nullopt
+                        };
+                    }
+                }
+            }
+
+            if (isSessionCurrent(sessionGeneration)) {
+                invokeSafely(
+                    callback, requestId, sessionGeneration, std::move(result));
+            }
+        });
+}
+
 bool NativeCameraController::isSessionCurrent(
     std::uint64_t sessionGeneration) const noexcept {
     return activeSessionGeneration_.load(std::memory_order_acquire) ==
@@ -449,9 +593,11 @@ NativeCameraController::RequestId NativeCameraController::enqueueFeatureRequest(
         requestId = nextRequestId_++;
 
         const bool lifecycleMutation =
-            semantics == RequestSemantics::LifecycleMutation;
+            semantics == RequestSemantics::LifecycleMutation ||
+            semantics == RequestSemantics::ResolutionMutation;
         const bool featureMutation =
-            semantics == RequestSemantics::FeatureMutation;
+            semantics == RequestSemantics::FeatureMutation ||
+            semantics == RequestSemantics::ResolutionMutation;
 
         const std::uint64_t sessionGeneration = lifecycleMutation
             ? nextSessionGenerationLocked()
@@ -512,7 +658,8 @@ void NativeCameraController::runCommandWorker() {
             pendingRequests_.pop_front();
         }
 
-        if (request.semantics == RequestSemantics::LifecycleMutation) {
+        if (request.semantics == RequestSemantics::LifecycleMutation ||
+            request.semantics == RequestSemantics::ResolutionMutation) {
             activeSessionGeneration_.store(
                 request.sessionGeneration, std::memory_order_release);
         } else if (!isSessionCurrent(request.sessionGeneration)) {

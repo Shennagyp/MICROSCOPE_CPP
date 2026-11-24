@@ -45,6 +45,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var activeSlide: NativeSlideID = .slide1
     private var maximizedSlide: NativeSlideID?
     private var previousDividerFraction: CGFloat = 0.5
+    private var didSetInitialSplitPosition = false
     private var onActiveSlideChanged: ((NativeSlideID) -> Void)?
     private var onMetadataChanged: ((String, String) -> Void)?
     private var slideMetadata: [NativeSlideID: NativeSlideFrameMetadata] = [:]
@@ -92,7 +93,10 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     override func layout() {
         super.layout()
         splitView.frame = bounds
-        if maximizedSlide != nil {
+        if !didSetInitialSplitPosition && splitView.bounds.width > splitView.dividerThickness {
+            splitView.setPosition(splitView.bounds.width / 2, ofDividerAt: 0)
+            didSetInitialSplitPosition = true
+        } else if maximizedSlide != nil {
             applyMaximizedPosition()
         }
     }

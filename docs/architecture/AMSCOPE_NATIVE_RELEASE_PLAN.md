@@ -163,7 +163,7 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; FrameView accepted; initial File-menu/ImageInfoBar source built and 15/15 CTest passed at 4d61eca; later dock/live-edit and compact IDE-style workspace revisions (b295df9 through 9b3ae44) are not yet built/tested; MU503 UI smoke remains pending**
+**Status: IN PROGRESS; FrameView accepted; current dock/live-edit/compact workspace and lifecycle-state mapping built successfully at owner-reported branch head 89ccf0c; 15/15 CTest passed twice with no compiler warning; physical MU503 dock/layout/live-edit smoke remains pending**
 
 Implemented in this Phase 4 slice:
 
@@ -178,15 +178,16 @@ Implemented in this Phase 4 slice:
 - Double-clicking an editable feature item opens a typed value editor. When stopped, the existing descriptor rules apply. During Streaming, the bar enables only available/readable/writable features in the live-writable Exposure and Color groups; stopped-only image-processing/format controls remain disabled. The backend rebuilds and validates the live descriptor before every write, and the display changes only after the queued write and readback. Exposure time remains non-writable while automatic exposure is enabled; switch Automatic Exposure to Off first when manual exposure time is required.
 - No new camera backend, feature, SDK operation or saturation support was added. The source updates only reuse the existing feature write/readback path and correct the group classification of existing descriptor records.
 - Added the offscreen `camera_qt_widgets_image_info_bar_tests` target for item lifecycle, editable double-click routing, and read-only behavior. Together with `camera_qt_widgets_camera_control_panel_tests` and `camera_qt_widgets_frame_view_tests`, the expected CTest suite is now **15 tests**.
-- The owner built the prior composed UI revision at `4d61eca9d0f3c70bc1468628a05640e5339c2693`: `amscope_preview` linked and **15/15** CTest tests passed. This result predates the latest dock/live-edit and styling changes. Subsequent UI source commits: dockable information surface/live edit policy `b295df9`; existing Exposure/Color descriptor-group classification `11c443d`; compact info bar `7f8ec5d`; compact two-row camera selector `2a0e6bc`; main camera dock and Visual Studio-style dock workspace `cc8ff64`; explicit includes and dock startup sizing `549564b` / `f486363`; compact info height `21fea58`; workspace layout cleanup `1057a1b`; rediscovery on dock visibility `9b3ae44`. Current UI source head: `9b3ae44d7d8331a0de5ed1d960909174c045cf8d` (later documentation commits are separate).
-- The dockable-info/live-edit and compact IDE-style dock workspace follow-ups after `4d61eca` have **not** yet been built or tested locally. The 15/15 result applies to the earlier UI source only; do not extrapolate it to current UI source head `9b3ae44`.
+- The owner initially built the earlier composed UI revision at `4d61eca9d0f3c70bc1468628a05640e5339c2693`, linking `amscope_preview` with **15/15** CTest passing. The later dock/live-edit and styling changes have now also been validated locally. The owner fast-forwarded to branch head `89ccf0c53f6a410097af5effaa2ec421f23eee6b`, built the complete Release target set including `amscope_preview`, and passed all **15/15** CTest tests twice. The prior `-Wswitch` warning for `Starting`/`Stopping` is absent. The lifecycle panel's generic state model now represents all six backend states (`Closed`, `Open`, `Starting`, `Streaming`, `Stopping`, `Faulted`); its new tests confirm that both transitional states disable all controls.
+- The integrated source history includes: dockable information surface/live edit policy `b295df9`; Exposure/Color descriptor-group classification `11c443d`; compact information bar `7f8ec5d`; compact two-row camera selector `2a0e6bc`; main camera dock and IDE-style workspace `cc8ff64`; explicit includes and dock sizing `549564b` / `f486363`; information-bar height `21fea58`; workspace cleanup `1057a1b`; rediscovery on dock visibility `9b3ae44`; and complete lifecycle-state handling/tests in commits `7d9d253`, `6d798d2`, `d57bff4`, and `89ccf0c`.
+- The Release build and automated test gate is **PASS** at `89ccf0c`. Physical MU503 smoke of dock arrangement/persistence and live feature edit/readback remains pending.
 
 Previously accepted FrameView physical check: the owner confirmed the MU503 preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. That evidence verifies the FrameView integration before the current File-menu/info-bar change. The new UI still requires a separate smoke check.
 
 Next acceptance gate:
 
-1. Rebuild the current branch, require the full `amscope_preview` target to link, and rerun all **15/15** CTest tests.
-2. Verify the central workspace contains only the preview. Confirm Camera Controls is a right-side dock and Imaging Information is a compact bottom dock. Move, float, close and restore both through the View menu; restart the app and verify the dock arrangement persists. Confirm transient status messages remain in Imaging Information and there is no second status bar.
+1. **Software build and automated tests: PASS** at `89ccf0c`: the Release build linked the complete `amscope_preview` application without the previous switch warning, and all **15/15** CTest tests passed twice. The camera-control panel tests now include both `Starting` and `Stopping` states.
+2. **Physical MU503 workspace smoke remains pending.** Verify the central workspace contains only the preview. Confirm Camera Controls is a right-side dock and Imaging Information is a compact bottom dock. Move, float, close and restore both through the View menu; restart the app and verify the dock arrangement persists. Confirm transient status messages remain in Imaging Information and there is no second status bar.
 3. Use **File → Camera Controls…** to raise the Camera Controls dock, discover/select the MU503, Open and Start; verify changing frames and information items.
 4. Verify compact 9 pt application typography, compact two-row camera actions, and the reduced information-dock height without clipping the feature labels or metadata.
 5. While Streaming, double-click Automatic Exposure, Analog Gain, or White Balance values when their descriptors are available/readable/writable. Set Automatic Exposure to Off before expecting Exposure Time to be editable. Confirm the backend write/readback succeeds and the displayed value changes only after readback.
@@ -212,8 +213,8 @@ Do not redesign this as a visual graph editor or add a node editor.
 **Exit criteria**
 
 - The essential camera UI is built from reusable components.
-- The main preview contains the live image and bottom information bar, not camera-control toolbars or feature panels.
-- All camera controls are reachable through **File → Camera Controls…** and are hosted in that separate window.
+- The main preview contains the live image in the central workspace; imaging information is presented in its compact bottom dock, not as a second status bar or camera-control toolbar.
+- Camera controls are reachable through **File → Camera Controls…** and are hosted in the separate right-side Camera Controls dock; the dock can also be shown/hidden through View.
 - The information bar shows only actual frame metadata and feature values confirmed by readback; editable items require current available/readable/writable descriptors.
 - Generic widgets have no AmScope SDK dependency.
 - Unsupported controls are not presented as usable.
@@ -319,7 +320,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
 | 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView accepted; prior composed UI built and passed 15/15 CTest at `4d61eca`; later dockable-info/live-edit source at `b295df9`/`11c443d` unverified; MU503 dock/live-edit smoke pending; generic feature-editor extraction remains |
+| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView accepted; compact dock/live-edit workspace and lifecycle-state handling built at `89ccf0c`, all 15/15 CTest passed twice; physical MU503 dock/layout/live-edit smoke pending; generic feature-editor extraction remains |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |
 | 7 | Integrated AmScope release qualification | OPEN |

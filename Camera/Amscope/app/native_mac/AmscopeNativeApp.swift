@@ -83,9 +83,10 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Camera Controls"
-        window.setContentSize(NSSize(width: 520, height: 560))
+        window.setContentSize(NSSize(width: 680, height: 700))
         window.minSize = NSSize(width: 480, height: 420)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.center()
 
         let windowController = NSWindowController(window: window)
         cameraControlsWindowController = windowController

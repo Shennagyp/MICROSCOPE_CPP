@@ -49,11 +49,23 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
 
         terminationInProgress = true
         cameraModel.bridge.close { [weak self] error, _, _ in
-            if let error = error {
-                NSLog("AmScope camera close during termination failed: %@", error)
+            MainActor.assumeIsolated {
+                guard let self = self else {
+                    NSApp.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+
+                self.terminationInProgress = false
+                if let error = error {
+                    // Do not silently quit while the camera session may remain
+                    // active. Keep the app alive so the user can recover.
+                    self.cameraModel.handleTerminationCloseFailure(error)
+                    NSApp.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+
+                NSApp.reply(toApplicationShouldTerminate: true)
             }
-            self?.terminationInProgress = false
-            NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
     }

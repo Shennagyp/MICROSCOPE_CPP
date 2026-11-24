@@ -228,6 +228,7 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
     add_executable(amscope_native_mac_app MACOSX_BUNDLE
         app/native_mac/AmscopeNativeApp.swift
         app/native_mac/NativeCameraModel.swift
+        app/native_mac/NativeDockSystemModel.swift
         app/native_mac/NativeCaptureGallery.swift
         app/native_mac/NativeWorkspaceDock.swift
         app/native_mac/NativeFeatureEditor.swift

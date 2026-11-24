@@ -2,9 +2,9 @@ import AppKit
 
 final class NativeSlideImageContainerView: NSView {
     private var currentImage: CGImage?
-    private var measurements: [NativeDistanceMeasurement] = []
-    private var previewMeasurement: NativeDistanceMeasurement?
-    private var annotations: [NativeSlideTextAnnotation] = []
+    private var measurements: [SlideDistanceMeasurement] = []
+    private var previewMeasurement: SlideDistanceMeasurement?
+    private var annotations: [SlideTextAnnotation] = []
 
     override var isFlipped: Bool { true }
 
@@ -20,9 +20,9 @@ final class NativeSlideImageContainerView: NSView {
     }
 
     func updateOverlays(
-        measurements: [NativeDistanceMeasurement],
-        previewMeasurement: NativeDistanceMeasurement?,
-        annotations: [NativeSlideTextAnnotation]
+        measurements: [SlideDistanceMeasurement],
+        previewMeasurement: SlideDistanceMeasurement?,
+        annotations: [SlideTextAnnotation]
     ) {
         self.measurements = measurements
         self.previewMeasurement = previewMeasurement
@@ -78,7 +78,7 @@ final class NativeSlideImageContainerView: NSView {
     }
 
     private func drawMeasurement(
-        _ measurement: NativeDistanceMeasurement,
+        _ measurement: SlideDistanceMeasurement,
         coordinateScale: SlideImageCoordinateScale,
         color: NSColor
     ) {
@@ -137,7 +137,7 @@ final class NativeSlideImageContainerView: NSView {
     }
 
     private func drawAnnotation(
-        _ annotation: NativeSlideTextAnnotation,
+        _ annotation: SlideTextAnnotation,
         coordinateScale: SlideImageCoordinateScale
     ) {
         let point = coordinateScale.documentPoint(fromSourcePoint: annotation.location)

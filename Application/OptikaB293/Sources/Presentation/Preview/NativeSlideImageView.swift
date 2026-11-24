@@ -16,9 +16,9 @@ final class NativeSlideImageView: NSView {
     private var currentImage: CGImage?
     private(set) var toolMode: NativeSlideToolMode = .pan
     private(set) var isImageFrozen = false
-    private var measurements: [NativeDistanceMeasurement] = []
-    private var previewMeasurement: NativeDistanceMeasurement?
-    private var textAnnotations: [NativeSlideTextAnnotation] = []
+    private var measurements: [SlideDistanceMeasurement] = []
+    private var previewMeasurement: SlideDistanceMeasurement?
+    private var textAnnotations: [SlideTextAnnotation] = []
     private var measurementStart: CGPoint?
     private var measurementMicrometersPerPixelAtStart: CGFloat?
     private var measurementCalibration: NativeMicroscopeMeasurementCalibration?
@@ -271,7 +271,7 @@ final class NativeSlideImageView: NSView {
         guard !text.isEmpty else { return }
 
         textAnnotations.append(
-            NativeSlideTextAnnotation(location: sourcePoint, text: String(text.prefix(160)))
+            SlideTextAnnotation(location: sourcePoint, text: String(text.prefix(160)))
         )
         updateOverlayRendering()
         onOverlayStateChanged?()
@@ -399,7 +399,7 @@ final class NativeSlideImageView: NSView {
             guard let sourcePoint = sourcePixel(at: point) else { return }
             measurementStart = sourcePoint
             measurementMicrometersPerPixelAtStart = currentMicrometersPerSourcePixel
-            previewMeasurement = NativeDistanceMeasurement(
+            previewMeasurement = SlideDistanceMeasurement(
                 start: sourcePoint,
                 end: sourcePoint,
                 micrometersPerSourcePixel: measurementMicrometersPerPixelAtStart
@@ -433,7 +433,7 @@ final class NativeSlideImageView: NSView {
         case .distance:
             guard let start = measurementStart,
                   let end = sourcePixel(at: point) else { return }
-            previewMeasurement = NativeDistanceMeasurement(
+            previewMeasurement = SlideDistanceMeasurement(
                 start: start,
                 end: end,
                 micrometersPerSourcePixel: measurementMicrometersPerPixelAtStart
@@ -462,7 +462,7 @@ final class NativeSlideImageView: NSView {
         if toolMode == .distance,
            let start = measurementStart,
            let end = sourcePixel(at: convert(event.locationInWindow, from: nil)) {
-            let measurement = NativeDistanceMeasurement(
+            let measurement = SlideDistanceMeasurement(
                 start: start,
                 end: end,
                 micrometersPerSourcePixel: measurementMicrometersPerPixelAtStart

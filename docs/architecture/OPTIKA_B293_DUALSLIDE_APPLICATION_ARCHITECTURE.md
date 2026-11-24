@@ -435,3 +435,11 @@ event lifecycles; it delegates mathematical transforms to this module.
 The image container uses the same source-to-document scale for overlay rendering.
 This removes the duplicated mapping rule between pointer input and
 measurement/annotation drawing.
+
+Measurement and annotation values are slide-feature data under
+`Features/Slides`, not AppKit view declarations. A measurement captures the
+micrometers-per-source-pixel value when its first endpoint is created; later
+changes to objective or optical configuration do not retroactively rewrite an
+existing measurement. Pixel distance remains available when calibration is
+unknown, while physical distance remains unavailable. Pointer-tool selection
+is presentation state and remains beside the native preview controls.

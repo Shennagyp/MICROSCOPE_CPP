@@ -36,7 +36,8 @@ set(OPTIKA_APP_SOURCES
     Sources/Presentation/Workspace/Dock/NativeWorkspaceDock.swift
     Sources/Presentation/Workspace/Dock/CameraControlsDock.swift
     Sources/Presentation/Workspace/Dock/SmartGalleryDock.swift
-    Sources/Presentation/Preview/SlideOverlayModels.swift
+    Sources/Features/Slides/SlideOverlayModels.swift
+    Sources/Presentation/Preview/NativeSlideToolMode.swift
     Sources/Presentation/Preview/NativeMicroscopePaneControls.swift
     Sources/Presentation/Preview/NativeDualPreviewSurface.swift
     Sources/Presentation/Preview/NativeSlidePreviewPane.swift
@@ -98,6 +99,7 @@ if(BUILD_TESTING)
 
     add_executable(optika_slide_image_geometry_tests
         Sources/Features/Slides/SlideImageGeometry.swift
+        Sources/Features/Slides/SlideOverlayModels.swift
         Tests/SlideImageGeometryTests.swift)
     target_compile_options(optika_slide_image_geometry_tests PRIVATE
         "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"

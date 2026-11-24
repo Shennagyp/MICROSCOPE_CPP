@@ -1,15 +1,10 @@
 import CoreGraphics
 import Foundation
 
-enum NativeSlideToolMode: Equatable {
-    case pan
-    case distance
-    case annotation
-}
-
-struct NativeDistanceMeasurement {
+struct SlideDistanceMeasurement: Equatable {
     let start: CGPoint
     let end: CGPoint
+
     /// Optical calibration snapshot captured when this measurement starts.
     let micrometersPerSourcePixel: CGFloat?
 
@@ -27,7 +22,7 @@ struct NativeDistanceMeasurement {
     }
 }
 
-struct NativeSlideTextAnnotation {
+struct SlideTextAnnotation: Equatable {
     let location: CGPoint
     let text: String
 }

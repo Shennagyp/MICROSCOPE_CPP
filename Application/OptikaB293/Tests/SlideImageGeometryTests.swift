@@ -13,6 +13,7 @@ struct SlideImageGeometryTests {
         testAnchorPreservingZoom()
         testZoomCannotExceedPhysicalOneToOne()
         testInvalidInputsAreRejected()
+        testSlideDistanceMeasurement()
         print("Slide image geometry tests passed.")
     }
 
@@ -177,6 +178,38 @@ struct SlideImageGeometryTests {
             minimumScale: 0,
             maximumScale: 1
         ) == nil)
+    }
+
+    private static func testSlideDistanceMeasurement() {
+        let calibrated = SlideDistanceMeasurement(
+            start: CGPoint(x: 10, y: 10),
+            end: CGPoint(x: 13, y: 14),
+            micrometersPerSourcePixel: 0.5
+        )
+        precondition(close(calibrated.distanceInPixels, 5))
+        precondition(close(calibrated.distanceInMicrometers ?? -1, 2.5))
+
+        let uncalibrated = SlideDistanceMeasurement(
+            start: .zero,
+            end: CGPoint(x: 3, y: 4),
+            micrometersPerSourcePixel: nil
+        )
+        precondition(close(uncalibrated.distanceInPixels, 5))
+        precondition(uncalibrated.distanceInMicrometers == nil)
+
+        let invalidCalibration = SlideDistanceMeasurement(
+            start: .zero,
+            end: CGPoint(x: 3, y: 4),
+            micrometersPerSourcePixel: .nan
+        )
+        precondition(invalidCalibration.distanceInMicrometers == nil)
+
+        let annotation = SlideTextAnnotation(
+            location: CGPoint(x: 150, y: 80),
+            text: "Cell nucleus"
+        )
+        precondition(annotation.location == CGPoint(x: 150, y: 80))
+        precondition(annotation.text == "Cell nucleus")
     }
 
     private static func close(

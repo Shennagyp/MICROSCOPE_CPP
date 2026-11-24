@@ -437,17 +437,17 @@ buildAmcamFeatureDescriptors(
     const HRESULT exposureRangeHr = Amcam_get_ExpTimeRange(
         handle, &minExposure, &maxExposure, &defaultExposure);
     const bool exposureReadable = SUCCEEDED(exposureHr);
+    const bool exposureRangeValid = SUCCEEDED(exposureRangeHr) &&
+        minExposure > 0 && maxExposure >= minExposure;
     const bool exposureProbe = autoValid && exposureReadable &&
-        SUCCEEDED(exposureRangeHr) && minExposure > 0 &&
-        maxExposure >= minExposure && exposure >= minExposure && exposure <= maxExposure;
+        exposureRangeValid && exposure >= minExposure && exposure <= maxExposure;
 
     unsigned short gain = 0, minGain = 0, maxGain = 0, defaultGain = 0;
     const HRESULT gainHr = Amcam_get_ExpoAGain(handle, &gain);
     const HRESULT gainRangeHr = Amcam_get_ExpoAGainRange(
         handle, &minGain, &maxGain, &defaultGain);
     const bool gainReadable = SUCCEEDED(gainHr);
-    const bool gainProbe = gainReadable && SUCCEEDED(gainRangeHr) &&
-        maxGain >= minGain && gain >= minGain && gain <= maxGain;
+    const bool gainProbe = SUCCEEDED(gainRangeHr) && maxGain >= minGain;
 
     int temperature = 0, tint = 0;
     const HRESULT tempTintHr = Amcam_get_TempTint(handle, &temperature, &tint);
@@ -884,10 +884,11 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         "ExposureTime", "Exposure Time", CameraFeatureKind::Integer,
-        std::string("us"), exposureProbe && exposureManualAllowed, exposureProbe,
-        exposureProbe && exposureManualAllowed &&
+        std::string("us"), autoValid && exposureRangeValid && exposureManualAllowed,
+        exposureReadable,
+        autoValid && exposureRangeValid && exposureManualAllowed &&
             autoMode == static_cast<int>(amscope::AmcamAutoExposureMode::Off),
-        exposureProbe
+        exposureRangeValid
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
                   CameraIntegerRange{
                       static_cast<std::int64_t>(minExposure),
@@ -899,7 +900,7 @@ buildAmcamFeatureDescriptors(
     });
     descriptors.push_back({
         "AmcamAnalogGainPercent", "Analog Gain", CameraFeatureKind::Integer,
-        std::string("%"), gainProbe && gainAllowed, gainProbe, gainProbe && gainAllowed,
+        std::string("%"), gainProbe && gainAllowed, gainReadable, gainProbe && gainAllowed,
         gainProbe
             ? std::optional<CameraFeatureNumericRange>(CameraFeatureNumericRange{
                   CameraIntegerRange{

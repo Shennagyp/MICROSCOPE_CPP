@@ -26,12 +26,15 @@ public:
         if (!isCurrent())
             return;
 
-        const FramePtr published = std::move(frame);
+        FramePtr published = std::move(frame);
+        // Retain one comparison token for the stale-generation cleanup, then
+        // move the publisher's ownership into the atomic slot without another
+        // shared_ptr reference-count increment.
+        FramePtr expected = published;
         std::atomic_store_explicit(
-            &latestFrame_, published, std::memory_order_release);
+            &latestFrame_, std::move(published), std::memory_order_release);
 
         if (!isCurrent()) {
-            FramePtr expected = published;
             (void)std::atomic_compare_exchange_strong_explicit(
                 &latestFrame_,
                 &expected,

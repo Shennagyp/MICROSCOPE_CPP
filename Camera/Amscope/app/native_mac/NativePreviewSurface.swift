@@ -579,7 +579,7 @@ private final class NativeSlideImageView: NSView {
         imageContainer.setFrame(
             CGRect(origin: boundedOrigin, size: size)
         )
-        imageContainer.setNeedsDisplay(bounds)
+        imageContainer.needsDisplay = true
         imageOrigin = boundedOrigin
         needsDisplay = true
     }
@@ -771,6 +771,12 @@ private final class NativeSlideImageContainerView: NSView {
     private var currentImage: CGImage?
 
     override var isFlipped: Bool { true }
+
+    /// Route gestures to the fixed viewer, which owns zoom, pan, and context
+    /// menu handling. This child exists only to draw the scaled image.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        superview
+    }
 
     func display(_ image: CGImage) {
         currentImage = image

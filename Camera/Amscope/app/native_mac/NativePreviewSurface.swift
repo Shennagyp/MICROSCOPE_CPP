@@ -15,6 +15,9 @@ struct NativePreviewSurface: NSViewRepresentable {
 
     func updateNSView(_ nsView: NativePreviewNSView, context: Context) {
         nsView.attach(to: bridge, onMetadataChanged: onMetadataChanged)
+        if bridge.state != .streaming {
+            nsView.clearFrame()
+        }
     }
 }
 
@@ -36,6 +39,14 @@ final class NativePreviewNSView: NSView {
         bridge.onFrameAvailable = { [weak self] in
             self?.consumeLatestFrame()
         }
+        // A view may be recreated while the stream is already active and the
+        // mailbox's coalesced notification may belong to a previous view.
+        consumeLatestFrame()
+    }
+
+    func clearFrame() {
+        currentImage = nil
+        needsDisplay = true
     }
 
     private func consumeLatestFrame() {

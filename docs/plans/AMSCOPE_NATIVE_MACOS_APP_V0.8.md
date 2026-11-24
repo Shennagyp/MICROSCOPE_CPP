@@ -59,7 +59,7 @@
 - [x] Invalidate the view through a coalesced main-thread notification from the native bridge; no per-frame SwiftUI observable state is created.
 - [x] Consume the newest lease from the mailbox and release a pane's prior displayed image when a newer frame replaces it; retain the last image across slide switches and Stop/Close.
 - [x] Build each Core Graphics image through a direct-access `CGDataProvider` whose release callback owns the opaque frame lease.
-- [x] Keep no history of frames/images and perform no application-side pixel-buffer copy.
+- [x] Keep no history of live preview frames and perform no application-side pixel-buffer copy in the continuous acquisition/render path. The separate user-triggered capture path may make one bounded pixel copy before encoding a persisted still.
 - [ ] Validate RGB24, RAW8, RAW16, row stride, byte order, dimensions, invalid buffers, view teardown, and provider lifetime on the user's Mac.
 - [ ] Measure frame-pool availability under sustained preview and confirm no starvation.
 
@@ -71,7 +71,7 @@
 - [x] Add side-by-side Slide 1 / Slide 2 AppKit preview panes with a draggable divider and independent maximize/restore controls.
 - [x] Route each incoming frame to the selected slide pane while retaining one last image per slide.
 - [x] Add detected-camera actions that open the selected device and start acquisition through the existing serialized controller.
-- [ ] Verify the dual-pane layout, active-slide routing, image persistence, and compact dock on macOS.
+- [ ] Verify the dual-pane layout, active-slide routing, image persistence, and resizable workspace dock on macOS.
 - [x] Keep camera discovery and lifecycle controls accessible through the File menu.
 - [x] Replace the single-row bottom strip with a resizable, tabbed right-side workspace dock for Camera Controls and Smart Gallery; support hide/show and float/re-dock as a utility panel.
 - [x] Add per-slide floating toolbars for still capture, pointer/pan, distance measurement, text annotation, and clearing slide overlays.
@@ -79,7 +79,7 @@
 - [x] Remove the duplicate Camera, Resolution, Format, State, and Live read-only property fields and their unused observable frame-metadata properties; show camera identity/state only beside lifecycle controls on the left.
 - [x] Prevent overlapping lifecycle requests and selection changes while a camera session is active.
 - [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
-- [x] Render all available generic feature descriptors in the bottom dock: writable boolean, integer, floating-point, string, integer-vector, and enumeration controls; read-only descriptor values remain visible.
+- [x] Render all available generic feature descriptors in the Camera Controls dock: writable boolean, integer, floating-point, string, integer-vector, and enumeration controls; read-only descriptor values remain visible.
 - [x] Separate exposure range/capability from the current exposure readback so manual Exposure Time remains available when Auto Exposure is switched to Off; validate each requested value against the current SDK range.
 - [x] Expose the camera-reported preview resolution choices in the dock and route selection through the native bridge and serialized controller.
 - [x] When resolution changes during streaming, clear the pending old-size frame, stop acquisition, apply the resolution through the existing `AmcamCamera` feature API, and restart under a new session generation.
@@ -97,7 +97,7 @@
 ## Phase 6 — Functional parity and application lifecycle
 
 - [x] Port discovery, open/close, start/stop, and generic feature descriptor/read/write workflows.
-- [ ] Port trigger, I/O, filter-wheel, ST4, focuser, still-capture, and other supported device workflows.
+- [ ] Port trigger, I/O, filter-wheel, ST4, focuser, the vendor SDK's dedicated hardware still-capture operation, and other supported device workflows. Smart Gallery currently saves the displayed preview image; it does not yet call the SDK still-capture API.
 - [ ] Verify close/stop sequencing, application termination, view teardown, device disconnect, reconnect, and stale callback behavior.
 - [x] Keep the Qt application as a separate fallback while parity remains incomplete.
 
@@ -152,21 +152,21 @@ scale actually changes. The original full-resolution CGImage remains the
 source in all modes.
 
 Each slide owns its own mode, scale, and pan position. The context menu exposes
-Resizable, Lock Current Scale, and View Full Resolution (1:1). No additional
-toolbar, pane, splitter, or application-window resizing is introduced.
+Resizable, Lock Current Scale, and View Full Resolution (1:1). A separate
+floating per-slide tool strip provides capture, pointer/pan, distance, text-note,
+and clear-overlay actions; it does not add another frame consumer.
 
 Downsampling uses high-quality interpolation; native 1:1 mapping disables
 interpolation. The provider-backed full-resolution CGImage remains the source;
 no pixel-buffer copy or frame history is added. Camera resolution selection
 and optical Auto Res remain independent of image presentation.
 
-**Verification pending:** rebuild and verify that the bottom dock reserves its
-own area without covering either slide; verify that the 1:1 document dimensions
+**Verification pending:** rebuild and verify that the right-side dock remains a separate split-view sibling, floats and re-docks correctly, and does not cover either slide; verify that the 1:1 document dimensions
 match the complete source frame at physical-pixel scale; pan to all four image
 edges without gaps or unreachable regions; verify independent per-pane scale
 states, divider resizing, camera mode changes, and Retina backing-scale changes.
 No local build or hardware test is claimed.
-## Transparent upper and lower bar surfaces (2026-11-24)
+## Transparent window and specimen annotation surfaces (2026-11-24)
 
 Transparency is implemented at the actual window and content-surface level,
 not only by assigning a clear fill to an inner control stack.
@@ -177,7 +177,7 @@ not only by assigning a clear fill to an inner control stack.
 - The `NSHostingView` and native window content view use clear, non-opaque
   backing layers.
 - Each slide pane and its specimen annotation/action plates use clear, non-opaque parent surfaces; localized annotation plates provide contrast behind their contents.
-- The bottom dock's outer stack and control row use clear SwiftUI backgrounds.
+- The main-window tool dock uses its own panel surface; native controls remain opaque and legible.
 
 The former full-width upper slide header is removed. Slide identity, live/held
 status, and frame statistics are now compact specimen-view annotations at the
@@ -418,7 +418,7 @@ remain reachable by vertical scrolling at the minimum size and when maximized.
 - Do not add a second camera backend or a second acquisition thread.
 - Do not connect the acquisition callback directly to Swift or `MainActor`.
 - Do not publish every frame through SwiftUI observation.
-- Do not create a second pixel buffer using `Data`, `NSBitmapImageRep`, or equivalent.
+- Do not create a second pixel buffer in the continuous preview path using `Data`, `NSBitmapImageRep`, or equivalent. A user-triggered still capture is the explicit exception: it may detach one image from its frame lease, bounded to one concurrent capture.
 - Do not introduce Metal/IOSurface until the AppKit direct-access route is correct and its actual bottleneck has been measured.
 - Do not mark a performance gate complete without user-run hardware evidence.
 

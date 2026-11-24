@@ -22,6 +22,9 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var featureValues: [String: AmscopeCameraFeatureValue] = [:]
     @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
+    // Shared popover identity avoids SwiftUI @State macro plug-in requirements
+    // when building with the standalone Command Line Tools Swift compiler.
+    @Published var informationBarEditingFeatureName: String? = nil
 
     private init() {
         bridge.onAcquisitionError = { [weak self] error in
@@ -162,6 +165,7 @@ final class NativeCameraModel: ObservableObject {
                 self.featureValues = [:]
                 self.featureErrors = [:]
                 self.featureDrafts = [:]
+                self.informationBarEditingFeatureName = nil
                 self.isFeatureSnapshotLoading = false
             }
         }
@@ -241,17 +245,22 @@ final class NativeCameraModel: ObservableObject {
     }
 
     private func readFeature(_ name: String) {
+        // The Objective-C++ bridge guarantees that completions are delivered
+        // on the main queue. Assert that executor contract rather than creating
+        // an extra Task/dispatch for each (low-frequency) feature response.
         bridge.readFeatureNamed(name) { [weak self] value, error, _, _, _ in
-            guard let self = self else { return }
-            guard let value = value, error == nil else {
-                if let error = error {
-                    self.featureErrors[name] = error.localizedDescription
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                guard let value = value, error == nil else {
+                    if let error = error {
+                        self.featureErrors[name] = error.localizedDescription
+                    }
+                    return
                 }
-                return
+                self.featureValues[name] = value
+                self.featureDrafts[name] = self.stringValue(for: value)
+                self.featureErrors[name] = nil
             }
-            self.featureValues[name] = value
-            self.featureDrafts[name] = self.stringValue(for: value)
-            self.featureErrors[name] = nil
         }
     }
 
@@ -441,7 +450,7 @@ final class NativeCameraModel: ObservableObject {
         cameraState = bridge.state
     }
 
-    private func present(_ error: NSError) {
+    private func present(_ error: Error) {
         errorMessage = error.localizedDescription
         isShowingError = true
     }

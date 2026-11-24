@@ -8,15 +8,13 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     let bridge: AmscopeNativeCameraBridge
     let activeSlide: NativeSlideID
     let onActiveSlideChanged: (NativeSlideID) -> Void
-    let onDisplayPixelTargetChanged: (Int, Int) -> Void
 
     func makeNSView(context: Context) -> NativeDualPreviewNSView {
         let view = NativeDualPreviewNSView(frame: .zero)
         view.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged,
-            onDisplayPixelTargetChanged: onDisplayPixelTargetChanged
+            onActiveSlideChanged: onActiveSlideChanged
         )
         return view
     }
@@ -25,8 +23,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
         nsView.attach(
             to: bridge,
             activeSlide: activeSlide,
-            onActiveSlideChanged: onActiveSlideChanged,
-            onDisplayPixelTargetChanged: onDisplayPixelTargetChanged
+            onActiveSlideChanged: onActiveSlideChanged
         )
     }
 }
@@ -42,8 +39,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private var previousDividerFraction: CGFloat = 0.5
     private var didSetInitialSplitPosition = false
     private var onActiveSlideChanged: ((NativeSlideID) -> Void)?
-    private var onDisplayPixelTargetChanged: ((Int, Int) -> Void)?
-    private var displayTargetWorkItem: DispatchWorkItem?
     private let minimumPaneWidth: CGFloat = 240
     private var didConfigureSubviews = false
 
@@ -94,28 +89,12 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         } else if maximizedSlide != nil {
             applyMaximizedPosition()
         }
-        scheduleDisplayPixelTargetUpdate()
-    }
-
-    override func viewDidChangeBackingProperties() {
-        super.viewDidChangeBackingProperties()
-        scheduleDisplayPixelTargetUpdate()
-    }
-
-    override func viewDidEndLiveResize() {
-        super.viewDidEndLiveResize()
-        scheduleDisplayPixelTargetUpdate(delay: 0)
-    }
-
-    func splitViewDidResizeSubviews(_ notification: Notification) {
-        scheduleDisplayPixelTargetUpdate()
     }
 
     func attach(
         to bridge: AmscopeNativeCameraBridge,
         activeSlide: NativeSlideID,
-        onActiveSlideChanged: @escaping (NativeSlideID) -> Void,
-        onDisplayPixelTargetChanged: @escaping (Int, Int) -> Void
+        onActiveSlideChanged: @escaping (NativeSlideID) -> Void
     ) {
         if self.bridge !== bridge {
             self.bridge = bridge
@@ -127,9 +106,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         }
 
         self.onActiveSlideChanged = onActiveSlideChanged
-        self.onDisplayPixelTargetChanged = onDisplayPixelTargetChanged
         setActiveSlide(activeSlide)
-        scheduleDisplayPixelTargetUpdate()
 
         // Recover a frame if the view was recreated while a notification
         // was already pending. This remains the single mailbox consumer.
@@ -145,7 +122,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         guard activeSlide != slide else { return }
         activeSlide = slide
         updatePaneStates()
-        scheduleDisplayPixelTargetUpdate()
     }
 
     private func updatePaneStates() {
@@ -182,7 +158,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             applyMaximizedPosition()
         }
         updatePaneStates()
-        scheduleDisplayPixelTargetUpdate()
     }
 
     private func applyMaximizedPosition() {
@@ -230,25 +205,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
                 splitView.bounds.width - splitView.dividerThickness - minimumPaneWidth
             )
         }
-    }
-
-    private func scheduleDisplayPixelTargetUpdate(delay: TimeInterval = 0.25) {
-        displayTargetWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.publishDisplayPixelTarget()
-        }
-        displayTargetWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + delay,
-            execute: workItem
-        )
-    }
-
-    private func publishDisplayPixelTarget() {
-        let pane = activeSlide == .slide1 ? slideOnePane : slideTwoPane
-        let pixelSize = pane.displayPixelSize
-        guard pixelSize.width > 0, pixelSize.height > 0 else { return }
-        onDisplayPixelTargetChanged?(pixelSize.width, pixelSize.height)
     }
 
     private func consumeLatestFrame() {

@@ -197,30 +197,19 @@ No compile, hardware, or optical calibration result is claimed by this design
 note.
 
 
-## Active preview display matching
 
-The optical sampling target and display target describe different limits.
-Optical sampling estimates the sensor sampling required to preserve specimen
-detail. Display matching estimates the image dimensions needed to render the
-active preview at the physical pixel size of its visible image rectangle.
+## Display-resolution matching — deferred
 
-The AppKit preview reports the active pane's backing-pixel dimensions, not its
-logical point dimensions. This includes Retina scaling and changes when the
-window moves between displays with different backing scales. The viewport is
-reduced to the largest rectangle having the camera image aspect ratio. If
-**Match active preview to display pixels** is enabled, Auto Res chooses the
-lowest supported camera mode whose dimensions cover that fitted rectangle and
-also satisfy the optical sampling target.
+Do not combine the active preview's physical pixel dimensions with the optical
+sampling pass/fail test. The previous attempt caused the display requirement
+to dominate camera-mode selection on some Retina layouts. The native Auto Res
+policy currently remains optical-only: it selects the lowest camera-reported
+mode meeting the Rayleigh sampling target, or the maximum reported mode when
+none meets it.
 
-Only camera-reported modes are candidates. When no mode satisfies both
-constraints, the selector chooses the maximum reported mode and reports optical
-and display shortfalls independently. Viewport updates are debounced during
-window and split-divider resizing. This display policy is independent of the
-camera's physical sampling-mode calibration; the assumed MU503 binning/full-field
-mapping remains a separate hardware-verification item.
-
-The preview header distinguishes cumulative frames pulled by the driver, images
-assigned to each slide pane, and driver-reported dropped frames. The counters
-are read from the existing bridge when the coalesced mailbox notification is
-consumed. They do not create a second consumer or a per-frame SwiftUI update
-path.
+A future display-aware policy must be an explicit independent preference and
+must report its result separately from optical qualification. It must not
+silently force the maximum acquisition mode or prevent optical Auto Res from
+reconciling. Until that policy is independently calibrated and verified on
+Retina and external displays, do not gate acquisition resolution on preview
+pane geometry.

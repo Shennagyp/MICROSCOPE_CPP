@@ -9,10 +9,7 @@ struct MainWindowView: View {
             NativeDualPreviewSurface(
                 bridge: model.bridge,
                 activeSlide: model.activeSlide,
-                onActiveSlideChanged: model.selectActiveSlide,
-                onDisplayPixelTargetChanged: { width, height in
-                    model.updatePreviewDisplayTarget(width: width, height: height)
-                }
+                onActiveSlideChanged: model.selectActiveSlide
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 

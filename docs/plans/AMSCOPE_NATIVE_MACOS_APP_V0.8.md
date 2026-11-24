@@ -372,37 +372,29 @@ No camera driver, SDK callback, acquisition, frame mailbox, or image lifetime
 code is changed by this correction.
 
 
-## Frame telemetry and display-pixel matching (2026-11-24)
+
+## Frame telemetry and automatic-resolution regression correction (2026-11-24)
 
 The AppKit preview header reports cumulative camera frames pulled, images
-assigned to each slide pane, and camera-reported dropped frames. The counters
-are read from the existing bridge when the single coalesced mailbox
-notification is handled. Both headers receive the same acquisition totals;
-each pane maintains its own image-assignment count. No second mailbox consumer,
-per-frame SwiftUI observation, or additional queue is introduced.
+assigned to each slide pane, and driver-reported dropped frames. The counters
+are read from the existing bridge during the single coalesced mailbox
+notification. Both panes show the shared acquisition totals; each pane keeps
+its own image-assignment count. No additional consumer or frame queue is added.
 
-Automatic camera resolution now has two independent constraints:
+A first attempt to add preview backing-pixel matching made display size a hard
+second eligibility condition in the optical Auto Res selector and enabled it
+by default. That coupled two independent policies and could force the maximum
+camera mode solely because the active Retina preview rectangle exceeded a
+lower camera mode. It made the optical selector appear stuck and obscured
+whether the optical decision itself was being applied.
 
-1. The optical sampling requirement from the active objective, sensor pixel
-   pitch, relay, and configured wavelength band.
-2. The active preview pane's displayed pixel requirement, derived from its
-   backing-pixel viewport (including Retina backing scale) and the camera
-   aspect ratio.
-
-When **Match active preview to display pixels** is enabled, Auto Res selects the
-lowest camera-reported mode satisfying both constraints. If no mode satisfies
-both, the maximum supported mode is selected and each shortfall is identified
-separately. Display matching is configurable independently of the optical
-profile and defaults on for newly created and older migrated profiles.
-
-Window size, backing-scale, active-pane, maximize/restore, and split-divider
-changes update the display target. Updates are debounced so resolution changes
-happen after interactive geometry changes settle rather than on each
-intermediate resize. Manual camera resolution selection still disables Auto Res.
+The coupling has been removed. Auto Res again selects only from the configured
+optical Rayleigh criterion and the camera-reported modes. Display matching is
+deferred until it can be implemented as a separate, explicitly tested policy
+that does not silently override the optical choice.
 
 **Verification pending:** confirm pulled, per-pane assigned, and dropped
-counters advance correctly during sustained preview; compare selected camera
-modes in half-width and maximized panes on the built-in Retina and external
-displays; verify screen moves and backing-scale changes; ensure resizing causes
-no repeated camera Stop/Start cycles; and verify shortfall reporting when the
-screen requires more pixels than the camera can supply.
+counters during sustained streaming; verify objective changes select the
+expected optical mode; verify camera mode changes complete Stop/Apply/Start and
+the refreshed feature value equals the selected symbol. No build or hardware
+verification is claimed by this source change.

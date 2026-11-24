@@ -265,20 +265,6 @@ struct MicroscopeConfigurationWindow: View {
                                 set: { model.setAutomaticResolutionEnabled($0) }
                             )
                         )
-                        Toggle(
-                            "Match active preview to display pixels",
-                            isOn: Binding(
-                                get: { draftStore.configuration.matchPreviewDisplayResolution },
-                                set: { value in
-                                    draftStore.update { updated in
-                                        updated.matchPreviewDisplayResolution = value
-                                    }
-                                }
-                            )
-                        )
-                        Text("Uses the active preview pane's physical backing-pixel size, including Retina scaling. Auto Res selects the smallest camera mode satisfying both the optical sampling target and the displayed image size. The mode is applied after pane resizing settles.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                         Text("Current automatic choice: \(model.automaticResolutionSummary)")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -475,7 +461,6 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         case opticalTubeSystem
         case condenserNumericalAperture
         case cameraPixelPitchMicrometers
-        case matchPreviewDisplayResolution
         case cameraRelayPreset
         case cameraRelayCustomName
         case cameraRelayMagnification
@@ -491,7 +476,6 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
     var opticalTubeSystem: String
     var condenserNumericalAperture: Double
     var cameraPixelPitchMicrometers: Double
-    var matchPreviewDisplayResolution: Bool
     var cameraRelayPreset: CameraRelayPreset
     var cameraRelayCustomName: String
     var cameraRelayMagnification: Double
@@ -507,7 +491,6 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         opticalTubeSystem: "Finite, 160 mm",
         condenserNumericalAperture: 1.25,
         cameraPixelPitchMicrometers: 2.2,
-        matchPreviewDisplayResolution: true,
         cameraRelayPreset: .touptekFMA050,
         cameraRelayCustomName: "",
         cameraRelayMagnification: 0.5,
@@ -562,10 +545,6 @@ extension MicroscopeOpticalConfiguration {
             Double.self,
             forKey: .cameraPixelPitchMicrometers
         )
-        matchPreviewDisplayResolution = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .matchPreviewDisplayResolution
-        ) ?? true
         cameraRelayMagnification = try container.decode(
             Double.self,
             forKey: .cameraRelayMagnification

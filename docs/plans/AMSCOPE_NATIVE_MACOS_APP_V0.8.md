@@ -71,13 +71,13 @@
 - [x] Add side-by-side Slide 1 / Slide 2 AppKit preview panes with a draggable divider and independent maximize/restore controls.
 - [x] Route each incoming frame to the selected slide pane while retaining one last image per slide.
 - [x] Add detected-camera actions that open the selected device and start acquisition through the existing serialized controller.
-- [ ] Verify the new dual-pane layout, active-slide routing, image persistence, and bottom-pane resizing on macOS.
+- [ ] Verify the dual-pane layout, active-slide routing, image persistence, and compact dock on macOS.
 - [x] Keep camera discovery and lifecycle controls accessible through the File menu.
-- [x] Add the resizable bottom split: editable quick feature controls on the left; read-only camera, resolution, pixel-format, acquisition-state, and active-slide information on the right.
-- [x] Update SwiftUI metadata only when dimensions or pixel format change, not on every frame.
+- [x] Add one compact bottom dock with camera connection indicator and lifecycle actions, slide target selection, and horizontally scrollable generic camera feature controls.
+- [x] Remove the duplicate Camera, Resolution, Format, State, and Live read-only property fields; show connection state and selected camera beside the lifecycle controls on the left.
 - [x] Prevent overlapping lifecycle requests and selection changes while a camera session is active.
 - [x] Populate imaging controls from the camera's actual feature descriptor model, preserving boolean/integer/vector/double/string/enum types, ranges, units, and writability.
-- [x] Expose up to three supported writable numeric imaging values (selected from camera descriptors, such as exposure or gain) as direct text-entry controls in the left bottom pane; commit through the backend feature-validation path.
+- [x] Render all available generic feature descriptors in the bottom dock: writable boolean, integer, floating-point, string, integer-vector, and enumeration controls; read-only descriptor values remain visible.
 - [ ] Port dedicated accessory workflows and telemetry from the existing Qt/native contract.
 - [x] Queue camera Close and wait for completion before application termination.
 - [ ] Verify window detach/close, disconnect/reconnect, and still-running camera behavior on hardware.
@@ -256,41 +256,31 @@ remain reachable by vertical scrolling at the minimum size and when maximized.
 - Do not mark a performance gate complete without user-run hardware evidence.
 
 
-## Compact single-dock and active-slide indication correction (2026-11-24)
+## Compact camera dock and all-feature mapping (2026-11-24)
 
-The previous iteration added a separate camera action row above the preview and a
-116-point-high bottom information region. That did not preserve the camera-first
-layout intent. The revised main window removes the upper row and consolidates all
-camera open/start, quick editable controls, and read-only information into one thin
-bottom dock. The left and right regions remain user-resizable with a split divider.
-The dock collapses, detaches into a floating utility panel, and re-docks below the
-preview. The dock is 50 points expanded and 28 points collapsed.
+The bottom dock is a single 50-point expanded row (28 points collapsed) below the
+two slide previews. It is not split into an editable pane and a read-only property
+pane. Camera identity and connection state are shown beside the camera selector
+and lifecycle actions at the left. Camera, Resolution, Format, State, and Live
+property fields were removed from the dock.
 
-Each slide pane now always shows a live-switch control: the active pane is marked
-LIVE and outlined in red; the inactive pane exposes Switch Live. The selection
-changes UI frame routing only; physical microscope slide/stage movement remains a
-future controller operation. Updated compile, window interaction, and hardware
-validation are pending.
+Every available generic `featureDescriptors` entry is mapped in the dock's
+horizontally scrollable strip. Writable descriptors use type-appropriate controls:
+boolean Toggle, discrete integer Picker, enumeration Picker, or text entry for
+continuous integer, floating-point, string, and integer-vector values. Read-only
+descriptors display their current values. A segmented Slide 1 / Slide 2 selector
+and per-pane Switch Live actions control the UI live destination. The active pane
+uses a 1-point red outline.
 
-
-## All exposed camera features in compact bottom dock (2026-11-24)
-
-The dock now presents the entire available `featureDescriptors` collection rather
-than a curated maximum of three writable numeric features. Each descriptor remains
-in the model-provided group ordering. Writable descriptors use type-appropriate
-controls: boolean Toggle, discrete integer Picker, enumeration Picker, or text
-entry for continuous integer, floating-point, string, and integer-vector values.
-Read-only descriptors display their current value. The strip scrolls horizontally
-to preserve the camera-first, single-row layout. Camera connection status/name is
-shown at the left beside connect/start/stop/close/refresh actions. The duplicate
-Camera, Resolution, Format, State, and Live property labels have been removed.
-A segmented Slide 1/Slide 2 selector is also in the dock; the panes retain their
-Switch Live buttons. The active outline is 1 point thick.
+The dock can collapse, detach into a floating utility panel, and re-dock. The
+current selection changes frame routing only; physical microscope slide/stage
+movement remains a future controller operation. Updated compile, visual, and
+hardware validation are pending.
 
 **Scope limit:** this maps every generic feature descriptor currently exposed by
 the native bridge. Separate camera commands already defined in the Qt/native driver
 facade (auto white balance, trigger/I/O configuration, frame-rate telemetry, still
 capture, embedded light source, filter wheel, ST4, focuser, lens focus/aperture)
 are not yet connected to the native bridge/controller and are not claimed as
-available dock controls. Updated macOS build and hardware UI validation remain
-pending.
+available dock controls.
+

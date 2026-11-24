@@ -48,7 +48,7 @@ struct MainWindowView: View {
                     NativeWorkspaceDock(
                         model: model,
                         isFloating: false,
-                        onClose: { model.isWorkspaceDockVisible = false },
+                        onClose: { model.closeWorkspaceDock() },
                         onToggleFloating: { model.isWorkspaceDockFloating = true }
                     )
                     .frame(width: dockWidth)
@@ -62,7 +62,9 @@ struct MainWindowView: View {
                 NativeWorkspaceDockTabRail(model: model)
                     .frame(width: NativeWorkspaceDockTabRail.width)
                     .frame(maxHeight: .infinity)
-                    .zIndex(10)
+                    .contentShape(Rectangle())
+                    .allowsHitTesting(true)
+                    .zIndex(100)
             }
         }
         .frame(minWidth: 960, minHeight: 640)

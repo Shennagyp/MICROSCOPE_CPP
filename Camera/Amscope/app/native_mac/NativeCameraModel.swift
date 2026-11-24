@@ -13,6 +13,8 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var pixelFormatText = "—"
     @Published var errorMessage = ""
     @Published var isShowingError = false
+    @Published private(set) var isCameraOperationPending = false
+    @Published private(set) var isEnumeratingCameras = false
 
     private init() {
         bridge.onAcquisitionError = { [weak self] error in
@@ -39,24 +41,29 @@ final class NativeCameraModel: ObservableObject {
     }
 
     var canOpen: Bool {
-        cameraState == .closed && !selectedDeviceID.isEmpty
+        cameraState == .closed &&
+            !selectedDeviceID.isEmpty &&
+            !isCameraOperationPending
     }
 
     var canClose: Bool {
-        cameraState != .closed
+        cameraState != .closed && !isCameraOperationPending
     }
 
     var canStart: Bool {
-        cameraState == .open
+        cameraState == .open && !isCameraOperationPending
     }
 
     var canStop: Bool {
-        cameraState == .streaming
+        cameraState == .streaming && !isCameraOperationPending
     }
 
     func refreshCameras() {
+        guard !isEnumeratingCameras && !isCameraOperationPending else { return }
+        isEnumeratingCameras = true
         bridge.enumerateCameras { [weak self] devices, error, _, _ in
             guard let self = self else { return }
+            self.isEnumeratingCameras = false
             if let error = error {
                 self.present(error)
                 return
@@ -72,8 +79,10 @@ final class NativeCameraModel: ObservableObject {
 
     func openSelectedCamera() {
         guard canOpen else { return }
+        isCameraOperationPending = true
         bridge.openDeviceID(selectedDeviceID) { [weak self] error, _, _ in
             guard let self = self else { return }
+            self.isCameraOperationPending = false
             self.refreshState()
             if let error = error {
                 self.present(error)
@@ -83,8 +92,10 @@ final class NativeCameraModel: ObservableObject {
 
     func closeCamera() {
         guard canClose else { return }
+        isCameraOperationPending = true
         bridge.close { [weak self] error, _, _ in
             guard let self = self else { return }
+            self.isCameraOperationPending = false
             self.refreshState()
             if let error = error {
                 self.present(error)
@@ -94,8 +105,10 @@ final class NativeCameraModel: ObservableObject {
 
     func startAcquisition() {
         guard canStart else { return }
+        isCameraOperationPending = true
         bridge.start { [weak self] error, _, _ in
             guard let self = self else { return }
+            self.isCameraOperationPending = false
             self.refreshState()
             if let error = error {
                 self.present(error)
@@ -105,8 +118,10 @@ final class NativeCameraModel: ObservableObject {
 
     func stopAcquisition() {
         guard canStop else { return }
+        isCameraOperationPending = true
         bridge.stop { [weak self] error, _, _ in
             guard let self = self else { return }
+            self.isCameraOperationPending = false
             self.refreshState()
             if let error = error {
                 self.present(error)

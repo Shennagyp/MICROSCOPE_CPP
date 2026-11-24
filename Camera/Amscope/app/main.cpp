@@ -198,7 +198,7 @@ int listCameras() {
 class PreviewWindow final : public QMainWindow {
 public:
     PreviewWindow() {
-        setWindowTitle("AmScope Native Camera Preview");
+        setWindowTitle("AmScope Imaging Workbench");
         resize(1440, 900);
         setDockNestingEnabled(true);
         setDockOptions(QMainWindow::AnimatedDocks |
@@ -3267,25 +3267,40 @@ private:
             break;
         }
         if (cameraStateIndicator_) {
+            const char* label = "CLOSED";
+            const char* stateName = "closed";
             switch (state) {
             case amscope::CameraState::Closed:
-                cameraStateIndicator_->setText(QStringLiteral("CLOSED"));
                 break;
             case amscope::CameraState::Open:
-                cameraStateIndicator_->setText(QStringLiteral("OPEN"));
+                label = "OPEN";
+                stateName = "open";
                 break;
             case amscope::CameraState::Starting:
-                cameraStateIndicator_->setText(QStringLiteral("STARTING"));
+                label = "STARTING";
+                stateName = "transition";
                 break;
             case amscope::CameraState::Streaming:
-                cameraStateIndicator_->setText(QStringLiteral("STREAMING"));
+                label = "STREAMING";
+                stateName = "streaming";
                 break;
             case amscope::CameraState::Stopping:
-                cameraStateIndicator_->setText(QStringLiteral("STOPPING"));
+                label = "STOPPING";
+                stateName = "transition";
                 break;
             case amscope::CameraState::Faulted:
-                cameraStateIndicator_->setText(QStringLiteral("FAULTED"));
+                label = "FAULTED";
+                stateName = "faulted";
                 break;
+            }
+
+            cameraStateIndicator_->setText(QString::fromLatin1(label));
+            const QByteArray stateValue(stateName);
+            if (cameraStateIndicator_->property("cameraState").toByteArray() !=
+                stateValue) {
+                cameraStateIndicator_->setProperty("cameraState", stateValue);
+                cameraStateIndicator_->style()->unpolish(cameraStateIndicator_);
+                cameraStateIndicator_->style()->polish(cameraStateIndicator_);
             }
         }
 
@@ -3534,13 +3549,33 @@ void applyProfessionalStyle(QApplication& application) {
         QLabel#cameraStateIndicator {
             padding: 3px 10px;
             margin: 1px 5px 1px 3px;
-            color: #174f86;
-            background: #dce9f7;
-            border: 1px solid #b4cce4;
+            color: #596579;
+            background: #edf0f4;
+            border: 1px solid #cbd3de;
             border-radius: 3px;
             font-size: 8.5pt;
             font-weight: 700;
             letter-spacing: 0.3px;
+        }
+        QLabel#cameraStateIndicator[cameraState="open"] {
+            color: #174f86;
+            background: #dce9f7;
+            border-color: #b4cce4;
+        }
+        QLabel#cameraStateIndicator[cameraState="streaming"] {
+            color: #17633c;
+            background: #e0f1e7;
+            border-color: #b5d9c2;
+        }
+        QLabel#cameraStateIndicator[cameraState="transition"] {
+            color: #85540d;
+            background: #fff2d8;
+            border-color: #ecd39c;
+        }
+        QLabel#cameraStateIndicator[cameraState="faulted"] {
+            color: #9c2e2e;
+            background: #fbe7e7;
+            border-color: #e9bcbc;
         }
         QPlainTextEdit#cameraOutputLog {
             background: #ffffff;

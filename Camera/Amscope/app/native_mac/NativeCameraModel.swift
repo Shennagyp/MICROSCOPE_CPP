@@ -72,6 +72,9 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var featureValues: [String: AmscopeCameraFeatureValue] = [:]
     @Published private(set) var featureErrors: [String: String] = [:]
     @Published var featureDrafts: [String: String] = [:]
+    let microscopeConfigurationDraftStore = MicroscopeConfigurationDraftStore(
+        configuration: .optikaB293
+    )
     @Published var microscopeConfiguration: MicroscopeOpticalConfiguration = .optikaB293 {
         didSet {
             guard microscopeConfiguration != oldValue else { return }
@@ -102,8 +105,10 @@ final class NativeCameraModel: ObservableObject {
             from: data
         ) {
             microscopeConfiguration = saved
+            microscopeConfigurationDraftStore.configuration = saved
         } else {
             microscopeConfiguration = .optikaB293
+            microscopeConfigurationDraftStore.configuration = .optikaB293
         }
         isAutomaticResolutionEnabled = UserDefaults.standard.bool(
             forKey: Self.automaticResolutionDefaultsKey

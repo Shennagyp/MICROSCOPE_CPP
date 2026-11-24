@@ -1,13 +1,41 @@
 import SwiftUI
 
+@MainActor
+final class MicroscopeConfigurationDraftStore: ObservableObject {
+    @Published var configuration: MicroscopeOpticalConfiguration
+    @Published private(set) var hasAppliedChanges = false
+
+    init(configuration: MicroscopeOpticalConfiguration) {
+        self.configuration = configuration
+    }
+
+    func update(
+        _ mutation: (inout MicroscopeOpticalConfiguration) -> Void
+    ) {
+        var updated = configuration
+        mutation(&updated)
+        configuration = updated
+        hasAppliedChanges = false
+    }
+
+    func restoreDefaults() {
+        configuration = .optikaB293
+        hasAppliedChanges = false
+    }
+
+    func markApplied(_ configuration: MicroscopeOpticalConfiguration) {
+        self.configuration = configuration
+        hasAppliedChanges = true
+    }
+}
+
 struct MicroscopeConfigurationWindow: View {
     @ObservedObject var model: NativeCameraModel
-    @State private var draft: MicroscopeOpticalConfiguration
-    @State private var hasAppliedChanges = false
+    @ObservedObject var draftStore: MicroscopeConfigurationDraftStore
 
     init(model: NativeCameraModel) {
         self.model = model
-        _draft = State(initialValue: model.microscopeConfiguration)
+        self.draftStore = model.microscopeConfigurationDraftStore
     }
 
     var body: some View {
@@ -18,19 +46,19 @@ struct MicroscopeConfigurationWindow: View {
                         HStack {
                             Text("Model")
                             Spacer()
-                            TextField("Model", text: $draft.microscopeName)
+                            TextField("Model", text: configurationStringBinding(\.microscopeName))
                                 .frame(width: 250)
                         }
                         HStack {
                             Text("Objective series")
                             Spacer()
-                            TextField("Series", text: $draft.objectiveSeries)
+                            TextField("Series", text: configurationStringBinding(\.objectiveSeries))
                                 .frame(width: 250)
                         }
                         HStack {
                             Text("Optical tube system")
                             Spacer()
-                            Text(draft.opticalTubeSystem)
+                            Text(draftStore.configuration.opticalTubeSystem)
                                 .foregroundColor(.secondary)
                         }
                         HStack {
@@ -75,7 +103,7 @@ struct MicroscopeConfigurationWindow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                        ForEach(draft.objectives) { objective in
+                        ForEach(draftStore.configuration.objectives) { objective in
                             HStack(spacing: 8) {
                                 Text(objective.name)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,15 +163,14 @@ struct MicroscopeConfigurationWindow: View {
                             Picker(
                                 "Camera adapter",
                                 selection: Binding(
-                                    get: { draft.cameraRelayPreset },
+                                    get: { draftStore.configuration.cameraRelayPreset },
                                     set: { preset in
-                                        var updated = draft
-                                        updated.cameraRelayPreset = preset
-                                        if let magnification = preset.nominalMagnification {
-                                            updated.cameraRelayMagnification = magnification
+                                        draftStore.update { updated in
+                                            updated.cameraRelayPreset = preset
+                                            if let magnification = preset.nominalMagnification {
+                                                updated.cameraRelayMagnification = magnification
+                                            }
                                         }
-                                        draft = updated
-                                        hasAppliedChanges = false
                                     }
                                 )
                             ) {
@@ -154,13 +181,13 @@ struct MicroscopeConfigurationWindow: View {
                             .labelsHidden()
                             .frame(width: 260)
                         }
-                        if draft.cameraRelayPreset == .custom {
+                        if draftStore.configuration.cameraRelayPreset == .custom {
                             HStack {
                                 Text("Custom path name")
                                 Spacer()
                                 TextField(
                                     "Adapter or combined path",
-                                    text: $draft.cameraRelayCustomName
+                                    text: configurationStringBinding(\.cameraRelayCustomName)
                                 )
                                 .frame(width: 260)
                             }
@@ -180,7 +207,7 @@ struct MicroscopeConfigurationWindow: View {
                             HStack {
                                 Text("Nominal relay magnification")
                                 Spacer()
-                                Text(String(format: "%.3f×", draft.cameraRelayMagnification))
+                                Text(String(format: "%.3f×", draftStore.configuration.cameraRelayMagnification))
                                     .monospacedDigit()
                             }
                         }
@@ -246,22 +273,20 @@ struct MicroscopeConfigurationWindow: View {
 
                 HStack {
                     Button("Restore B-293 defaults") {
-                        draft = .optikaB293
-                        hasAppliedChanges = false
+                        draftStore.restoreDefaults()
                     }
                     Spacer()
-                    if hasAppliedChanges {
+                    if draftStore.hasAppliedChanges {
                         Text("Applied")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     Button("Apply changes") {
-                        var applied = draft
+                        var applied = draftStore.configuration
                         applied.activeObjectiveID =
                             model.microscopeConfiguration.activeObjectiveID
                         model.updateMicroscopeConfiguration(applied)
-                        draft = applied
-                        hasAppliedChanges = true
+                        draftStore.markApplied(applied)
                     }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isDraftValid)
@@ -281,25 +306,41 @@ struct MicroscopeConfigurationWindow: View {
     }
 
     private var isDraftValid: Bool {
-        draft.cameraPixelPitchMicrometers.isFinite &&
-        draft.cameraPixelPitchMicrometers > 0 &&
-        draft.cameraRelayMagnification.isFinite &&
-        draft.cameraRelayMagnification > 0 &&
-        draft.chromatinBandLowerNanometers.isFinite &&
-        draft.chromatinBandLowerNanometers > 0 &&
-        draft.chromatinBandUpperNanometers.isFinite &&
-        draft.chromatinBandUpperNanometers >= draft.chromatinBandLowerNanometers &&
-        draft.targetRayleighSamplingFactor.isFinite &&
-        draft.targetRayleighSamplingFactor > 0 &&
-        draft.condenserNumericalAperture.isFinite &&
-        draft.condenserNumericalAperture > 0 &&
-        draft.objectives.contains(where: { $0.id == model.microscopeConfiguration.activeObjectiveID }) &&
-        draft.objectives.allSatisfy({
-            $0.magnification.isFinite &&
-            $0.magnification > 0 &&
-            $0.numericalAperture.isFinite &&
-            $0.numericalAperture > 0
-        })
+        let candidate = draftStore.configuration
+        return candidate.cameraPixelPitchMicrometers.isFinite &&
+            candidate.cameraPixelPitchMicrometers > 0 &&
+            candidate.cameraRelayMagnification.isFinite &&
+            candidate.cameraRelayMagnification > 0 &&
+            candidate.chromatinBandLowerNanometers.isFinite &&
+            candidate.chromatinBandLowerNanometers > 0 &&
+            candidate.chromatinBandUpperNanometers.isFinite &&
+            candidate.chromatinBandUpperNanometers >= candidate.chromatinBandLowerNanometers &&
+            candidate.targetRayleighSamplingFactor.isFinite &&
+            candidate.targetRayleighSamplingFactor > 0 &&
+            candidate.condenserNumericalAperture.isFinite &&
+            candidate.condenserNumericalAperture > 0 &&
+            candidate.objectives.contains(where: {
+                $0.id == model.microscopeConfiguration.activeObjectiveID
+            }) &&
+            candidate.objectives.allSatisfy({
+                $0.magnification.isFinite &&
+                $0.magnification > 0 &&
+                $0.numericalAperture.isFinite &&
+                $0.numericalAperture > 0
+            })
+    }
+
+    private func configurationStringBinding(
+        _ keyPath: WritableKeyPath<MicroscopeOpticalConfiguration, String>
+    ) -> Binding<String> {
+        Binding(
+            get: { draftStore.configuration[keyPath: keyPath] },
+            set: { value in
+                draftStore.update { updated in
+                    updated[keyPath: keyPath] = value
+                }
+            }
+        )
     }
 
     private func configurationNumberBinding(
@@ -308,14 +349,17 @@ struct MicroscopeConfigurationWindow: View {
     ) -> Binding<String> {
         Binding(
             get: {
-                String(format: "%.*f", precision, draft[keyPath: keyPath])
+                String(
+                    format: "%.*f",
+                    precision,
+                    draftStore.configuration[keyPath: keyPath]
+                )
             },
             set: { text in
                 guard let value = Double(text), value.isFinite else { return }
-                var updated = draft
-                updated[keyPath: keyPath] = value
-                draft = updated
-                hasAppliedChanges = false
+                draftStore.update { updated in
+                    updated[keyPath: keyPath] = value
+                }
             }
         )
     }
@@ -327,20 +371,22 @@ struct MicroscopeConfigurationWindow: View {
     ) -> Binding<String> {
         Binding(
             get: {
-                guard let objective = draft.objectives.first(where: {
+                guard let objective = draftStore.configuration.objectives.first(where: {
                     $0.id == objectiveID
                 }) else { return "" }
                 return String(format: "%.*f", precision, objective[keyPath: keyPath])
             },
             set: { text in
                 guard let value = Double(text), value.isFinite,
-                      let index = draft.objectives.firstIndex(where: {
+                      draftStore.configuration.objectives.contains(where: {
                           $0.id == objectiveID
                       }) else { return }
-                var updated = draft
-                updated.objectives[index][keyPath: keyPath] = value
-                draft = updated
-                hasAppliedChanges = false
+                draftStore.update { updated in
+                    guard let index = updated.objectives.firstIndex(where: {
+                        $0.id == objectiveID
+                    }) else { return }
+                    updated.objectives[index][keyPath: keyPath] = value
+                }
             }
         )
     }
@@ -351,18 +397,20 @@ struct MicroscopeConfigurationWindow: View {
     ) -> Binding<String> {
         Binding(
             get: {
-                draft.objectives.first(where: {
+                draftStore.configuration.objectives.first(where: {
                     $0.id == objectiveID
                 })?[keyPath: keyPath] ?? ""
             },
             set: { value in
-                guard let index = draft.objectives.firstIndex(where: {
+                guard draftStore.configuration.objectives.contains(where: {
                     $0.id == objectiveID
                 }) else { return }
-                var updated = draft
-                updated.objectives[index][keyPath: keyPath] = value
-                draft = updated
-                hasAppliedChanges = false
+                draftStore.update { updated in
+                    guard let index = updated.objectives.firstIndex(where: {
+                        $0.id == objectiveID
+                    }) else { return }
+                    updated.objectives[index][keyPath: keyPath] = value
+                }
             }
         )
     }

@@ -345,3 +345,28 @@ default camera-path preset is ToupTek FMA050 at 0.50×, based on the user's
 identified adapter. Adapter selection remains editable and is not electronically
 detected; the user must keep it aligned with the physically installed optical
 path.
+
+
+## Third standalone Swift build finding — configuration-window draft state (2026-11-24)
+
+After the camera-adapter selector was added, the native target reached the Swift
+link invocation but failed because the installed standalone Command Line Tools
+toolchain could not load the SwiftUI `StateMacro` implementation from
+`SwiftUIMacros`. The two new `@State` properties in
+`MicroscopeConfigurationWindow` triggered the primary error. The later
+missing `_draft` / `$draft` symbols and immutable-`self` diagnostics were
+cascading errors from those unavailable property wrappers.
+
+The correction removes `@State` from this window and moves the editable
+configuration draft into a model-owned `MicroscopeConfigurationDraftStore`,
+an `ObservableObject` using `@Published`, observed by the window through
+`@ObservedObject`. This matches the state-management workaround already used
+elsewhere in the native application for the same standalone toolchain limitation.
+The store retains the draft while the configuration window remains owned by its
+window controller; applying updates the persisted microscope profile, while
+editing and reset operations remain draft-only until Apply.
+
+**Verification pending:** rebuild the native target on the user's Mac. The
+reported failure is addressed in source, but no successful rebuild is claimed.
+No camera driver, SDK callback, acquisition, frame mailbox, or image lifetime
+code is changed by this correction.

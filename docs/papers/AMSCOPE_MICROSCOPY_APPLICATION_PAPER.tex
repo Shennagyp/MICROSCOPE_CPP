@@ -1,0 +1,905 @@
+\documentclass[11pt,a4paper,oneside]{article}
+
+% AmScope Native Microscopy Application — technical paper and requirements baseline
+% Compile with: latexmk -pdf -interaction=nonstopmode AMSCOPE_MICROSCOPY_APPLICATION_PAPER.tex
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{caption}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!45!black,
+  urlcolor=blue!55!black,
+  citecolor=blue!45!black,
+  pdftitle={AmScope Native Microscopy Application: Aims, Philosophy, Architecture, and Requirements},
+  pdfauthor={MICROSCOPE_CPP Project},
+  pdfsubject={Technical architecture and product requirements}
+}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\setstretch{1.08}
+\setlist{nosep,leftmargin=1.6em}
+\renewcommand{\arraystretch}{1.16}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small AmScope Native Microscopy Application}
+\rhead{\small Technical paper / requirements baseline}
+\cfoot{\thepage}
+\setlength{\headheight}{14pt}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\must}{\textbf{MUST}}
+\newcommand{\should}{\textbf{SHOULD}}
+\newcommand{\may}{\textbf{MAY}}
+\newcommand{\implemented}{\textsf{Implemented}}
+\newcommand{\partialstatus}{\textsf{Partial}}
+\newcommand{\planned}{\textsf{Planned}}
+\newcommand{\verify}{\textsf{Needs verification}}
+\newcommand{\deferred}{\textsf{Deferred}}
+\newcommand{\notclaim}{\textsf{Not claimed}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+
+\title{\Huge AmScope Native Microscopy Application\\[0.5em]
+\Large Aims, Design Philosophy, System Architecture, Scientific Model, and Requirements}
+\author{MICROSCOPE\_CPP Project\\
+\small Repository: \url{https://github.com/Shennagyp/MICROSCOPE_CPP}}
+\date{24 November 2026\\[0.5em]
+\small Architecture baseline: \code{amscope-native-app-mac.v.0.8-docksystem}\\
+\small Source revision reviewed: \code{5c20a13017ab75a99a919154e0e85b789811bacf}}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+This paper records the product intent, scientific workflow, engineering philosophy, architecture, interaction semantics, requirements, constraints, and verification boundaries of the AmScope native macOS microscopy application in the \code{MICROSCOPE\_CPP} repository. The application is not merely a camera demonstration window. It is the instrument-facing acquisition and observation environment from which a larger microscopy and image-analysis workflow can be developed. Its immediate responsibility is to provide reliable camera operation, a responsive image viewer, controlled optical configuration, reproducible scale estimation, and efficient interaction with microscope images. Its longer-term scientific direction includes image-processing workflows for individual cells in blood films and bone-marrow aspirates, with segmentation and spatial recording as central tasks.
+
+The paper distinguishes implemented behavior from design intent, proposed requirements, hardware assumptions, and unverified claims. It treats camera acquisition, image presentation, optical sampling, physical measurement, slide selection, annotations, capture storage, and future image analysis as related but separately owned systems. The principal architectural rule is that user-interface behavior must not compromise the camera's acquisition path or falsify the scientific meaning of an image. A second rule is that physical quantities must be derived from explicit optical and sensor configuration or empirical calibration, never guessed from display geometry or camera model names. A third is that the viewer remains the primary workspace: auxiliary controls overlay it and must not silently consume image area.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Document purpose and authority}
+
+\subsection{Purpose}
+This document consolidates the project's product aims and the decisions made during development and design discussions. It is intended to serve as:
+\begin{enumerate}
+  \item a product definition explaining what the application is for and what it is not;
+  \item an engineering philosophy governing future implementation choices;
+  \item an architecture reference describing ownership, data flow, lifecycle, and subsystem boundaries;
+  \item a requirements baseline against which implementation and regressions can be reviewed;
+  \item a record of scientific assumptions, especially those affecting optical sampling and measurement;
+  \item a handoff document for future contributors who must understand not only what exists, but why it exists.
+\end{enumerate}
+
+It supplements, rather than replaces, source-level documentation, the release plan, the optics design note, the native application architecture note, the v0.8 plan, and hardware test records listed in Section~\ref{sec:references}.
+
+\subsection{Evidence and status vocabulary}
+Statements in this paper use the following distinctions:
+\begin{description}[style=nextline]
+  \item[Implemented] The behavior or code structure is present in the reviewed source revision. This does not by itself imply physical-hardware qualification.
+  \item[Owner-verified] The project owner reported the stated build, automated test, or hardware result for the cited revision and procedure.
+  \item[Designed] The architecture or policy has been specified, but implementation or acceptance may remain incomplete.
+  \item[Needs verification] The source contains the mechanism or configuration, but behavior on the actual instrument has not been demonstrated sufficiently.
+  \item[Deferred] Explicitly excluded from the current implementation increment.
+  \item[Not claimed] The paper deliberately does not represent the feature as available or validated.
+\end{description}
+
+A requirement may be implemented in code and still require optical, hardware, performance, or usability verification. Conversely, a product objective may be important without being part of the current executable.
+
+\subsection{Baseline and scope}
+The source baseline reviewed for the current native macOS application is branch \code{amscope-native-app-mac.v.0.8-docksystem}, revision \code{5c20a13017ab75a99a919154e0e85b789811bacf}. The active native executable is a SwiftUI/AppKit application integrated with the C++ AmScope driver through an Objective-C++ bridge. The Qt preview and Qt adapter remain separate application targets and are not instantiated by the native application.
+
+This paper focuses on the native application and the common camera contracts on which it depends. Historical plans and earlier Qt milestones are used only as evidence for reusable behavior, driver invariants, and test results. Historical UI descriptions must not be mistaken for the exact current native UI.
+
+\section{Product definition and aims}
+
+\subsection{What the application is}
+The application is a native macOS microscope camera and image-observation environment. It coordinates:
+\begin{itemize}
+  \item discovery and connection to a supported AmScope camera;
+  \item continuous live acquisition and preview;
+  \item a two-slide image workspace in which one pane receives the live stream and the other can retain an image;
+  \item microscope objective and optical-path configuration;
+  \item camera-reported acquisition-resolution selection, including an optical Auto Resolution policy;
+  \item per-slide zoom, pan, freeze, ruler, annotation, and image capture;
+  \item generic camera feature controls based on typed descriptors rather than camera-specific UI assumptions;
+  \item a local capture gallery for saved PNG images;
+  \item specimen-plane scale estimation from explicit sensor and optical specifications.
+\end{itemize}
+
+The application is designed as a scientific instrument interface. The camera is a source of measurements and image evidence, not simply a video device. Consequently, the semantics of pixels, acquisition modes, objective magnification, relay optics, frame identity, and calibration must remain explicit.
+
+\subsection{Immediate aims}
+The near-term product aims are:
+\begin{enumerate}
+  \item \textbf{Reliable acquisition:} open, start, stop, close, and recover the camera through a serialized command path without blocking the UI or destabilizing acquisition.
+  \item \textbf{Responsive observation:} display current frames with minimal application-side copying and bounded memory, while distinguishing camera throughput from display throughput.
+  \item \textbf{Persistent visual workspace:} retain two independent slide images and let the operator choose which pane receives new live frames.
+  \item \textbf{Optically informed acquisition:} choose among camera-supported modes based on the configured objective, relay path, sensor pitch, wavelength band, and sampling target.
+  \item \textbf{Meaningful measurement:} retain source-pixel coordinates and calculate physical scale only when sufficient optical configuration exists.
+  \item \textbf{Low-friction operation:} keep frequent microscope controls near the viewer, move detailed settings into a dock, and preserve the viewer's full available dimensions.
+  \item \textbf{Honest evidence:} report unavailable metadata, unsupported features, optical shortfalls, and unverified hardware assumptions rather than fabricate certainty.
+\end{enumerate}
+
+\subsection{Longer-term scientific direction}
+The user-defined blood-cell workflow is a distinct and important target scenario:
+\begin{itemize}
+  \item examine blood films and bone-marrow aspiration preparations;
+  \item detect individual cells at low or moderate magnification;
+  \item segment each individual cell accurately;
+  \item record each cell's position and coordinates in the source image or specimen coordinate system;
+  \item enable subsequent inspection, classification, counting, and analysis from those spatially grounded observations.
+\end{itemize}
+
+The objective is not to reconstruct a complete three-dimensional cell model as a prerequisite for useful analysis. Two-dimensional cell segmentation and reliable position recording are the primary stated requirements for this scenario. Additional shape descriptors or multi-plane information may be introduced only when a defined analysis requires them.
+
+\textbf{Explicit scope exclusion:} this blood-cell scenario is not a whole-slide imaging (WSI) workflow. It does not require high-magnification scanning of an entire slide, automated whole-slide stitching, or a tiled gigapixel WSI pipeline. Those are different acquisition and compute problems and must not silently become architectural prerequisites for the stated cell-level task.
+
+The current native application provides acquisition, viewing, basic overlays, and capture. It does \emph{not} yet claim to implement the complete automated blood-cell detection or segmentation pipeline. That is a future image-processing capability built on top of reliable image acquisition and coordinate semantics.
+
+\subsection{What the application is not}
+The application is not:
+\begin{itemize}
+  \item a replacement for the vendor SDK or a second camera driver;
+  \item a camera simulator presented as hardware support;
+  \item a generic video player whose display rate is confused with sensor acquisition rate;
+  \item an automatic microscope-stage or slide-changer controller;
+  \item a substitute for certified metrology or a stage-micrometer calibration;
+  \item a WSI scanner, stitching system, or high-magnification whole-slide acquisition platform in the current blood-cell scope;
+  \item a validated clinical diagnostic system. No diagnostic accuracy, regulatory clearance, or clinical decision support claim is made.
+\end{itemize}
+
+\section{Design philosophy}
+
+\subsection{Scientific semantics before visual convenience}
+A displayed image is not just a rectangle of pixels. It has a source coordinate system, dimensions, pixel layout, significant source precision, storage width, acquisition context, optical scale, and potentially a time-dependent relationship to the instrument. The application must preserve those meanings across zooming, panning, freezing, capturing, and measuring.
+
+A convenient UI shortcut is unacceptable if it changes scientific interpretation. For example, changing the viewer's display scale must not change the specimen-plane calibration; cropping must not be mistaken for binning; a manual objective selection must not be represented as electronically sensed hardware state; and a live-destination selection must not be represented as physical slide motion.
+
+\subsection{Explicit ownership and narrow boundaries}
+Every mutable resource must have one clear owner:
+\begin{itemize}
+  \item the driver owns the vendor camera handle and acquisition lifecycle;
+  \item the acquisition worker owns frame pulling;
+  \item immutable frame leases own the lifetime of frame-pool memory while consumers use it;
+  \item the latest-frame mailbox owns at most one pending current frame;
+  \item the AppKit preview surface owns presentation and retained pane images;
+  \item the camera model owns low-frequency UI state and command coordination;
+  \item the microscope configuration owns optical specifications and user-confirmed objective state;
+  \item the dock owns panel presentation state, not camera lifecycle;
+  \item the gallery owns persisted captures and thumbnails, not the live acquisition stream.
+\end{itemize}
+
+This is a deliberate alternative to broad objects that combine unrelated responsibilities. UI containers must not become camera owners, and camera models must not become general-purpose docking-layout stores.
+
+\subsection{Keep the acquisition path independent of the UI}
+The camera callback must do the minimum work required to enqueue an event. It must not:
+\begin{itemize}
+  \item call Swift or enter \code{MainActor};
+  \item allocate or convert display images;
+  \item call blocking UI operations;
+  \item wait for the display or acquire a UI lock;
+  \item append frames to an unbounded history or render queue.
+\end{itemize}
+
+The acquisition path must continue if the UI is resized, a dock is hidden, a slide pane is frozen, or a view temporarily detaches. Presentation may skip obsolete frames; acquisition must not be throttled merely because the display is slower.
+
+\subsection{Latest-frame-wins presentation}
+A live preview is a real-time observation surface, not a lossless archive. The preview should present the newest available frame and replace stale pending frames. It must not build an ever-growing FIFO when the display cannot paint as quickly as the camera produces images.
+
+The application therefore distinguishes:
+\begin{description}[style=nextline]
+  \item[Event rate] Number of camera image notifications per second.
+  \item[Pull rate] Number of successfully retrieved camera frames per second.
+  \item[Presentation rate] Number of unique frames actually assigned or painted by the viewer per second.
+  \item[Frame age] Time between frame availability and its presentation, where timestamps and a valid clock mapping are available.
+  \item[Drop accounting] Explicit driver or application counts, with their ownership and meaning identified.
+\end{description}
+A lower presentation rate does not automatically mean the camera acquisition rate is low. Nor does a high callback rate prove that images are being painted.
+
+\subsection{Smallest model that preserves meaning}
+The system should not introduce a general-purpose graph editor, node-editor interface, or workflow visual programming canvas for this application. Image processing should be expressible through functional APIs, composable operations, qualifications, and explicit routing. A visual node graph is not a prerequisite for composition or extensibility.
+
+Likewise, microscope optics, display geometry, camera feature descriptors, and image-processing operations are separate models. Their interactions should be explicit rather than hidden inside one large settings object.
+
+\subsection{Honest uncertainty}
+Unknown is not false, and unavailable is not zero. If a vendor validity flag says exposure metadata is absent, the application must show it as unavailable. If a camera mode's field-of-view or binning semantics have not been verified, the optical selector must mark its result as provisional. If no resolution meets the sampling target, the UI must report the shortfall rather than label the selected maximum mode as a successful optical match.
+
+\section{User and instrument context}
+
+\subsection{Primary operator}
+The primary operator is an individual working directly with a microscope and camera, requiring rapid changes among objectives, camera modes, and slide images while preserving visual context. The UI is therefore optimized for direct manipulation of the live image, not for a dense administrative dashboard.
+
+\subsection{Initial instrument profile}
+The initial optical configuration models an OPTIKA B-293 microscope:
+\begin{itemize}
+  \item finite 160\,mm tube system;
+  \item manually rotated quadruple nosepiece;
+  \item N-PLAN plan-achromat objective series;
+  \item Abbe condenser, NA 1.25;
+  \item X-LED3 white LED illumination, nominally 6300\,K.
+\end{itemize}
+
+The configured objective set is:
+\begin{center}
+\begin{tabular}{rrrr}
+\toprule
+Magnification & Numerical aperture & Working distance & Immersion\\
+\midrule
+4$\times$ & 0.10 & 15.2\,mm & Dry\\
+10$\times$ & 0.25 & 5.5\,mm & Dry\\
+40$\times$ & 0.65 & 0.45\,mm & Dry\\
+100$\times$ & 1.25 & 0.13\,mm & Oil / water\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The application cannot electronically sense the B-293's manual nosepiece position. The active objective is a user-confirmed state. If the user physically changes the objective without updating the application, optical sampling and physical measurement may be wrong. The UI must not imply automatic objective detection.
+
+\subsection{Initial camera profile}
+The initial camera path is an AmScope MU503, identified in prior physical testing as a USB 2.0 camera. The configured sensor model is Aptina MT9P006 with nominal 2.2\,$\mu$m pixel pitch. Advertised modes include:
+\begin{itemize}
+  \item 2560$\times$1922;
+  \item 1280$\times$960;
+  \item 640$\times$480.
+\end{itemize}
+The profile records advertised 1$\times$1, 2$\times$2, and 4$\times$4 binning/readout modes. Their actual mapping to full-field binning, readout, or ROI behavior must be verified on the physical camera. Resolution dimensions alone are insufficient evidence of the underlying sensor sampling mechanism.
+
+\subsection{Camera relay configuration}
+The initial named camera adapter is ToupTek FMA050, nominal 0.50$\times$. Other presets are:
+\begin{itemize}
+  \item OPTIKA M-115, nominal 0.35$\times$;
+  \item OPTIKA M-114, nominal 0.50$\times$;
+  \item Custom / combined optical path, with user-entered effective magnification and optional label.
+\end{itemize}
+
+The number used in calculations is the total effective relay magnification between the microscope image plane and sensor. If multiple relay elements are physically stacked, their combined effect must be entered once as the total product. The application must not multiply a packaged camera reducer and an external adapter merely because both appear in product documentation. The user must configure the actual installed path. The selected preset is not detected electronically.
+
+\section{System architecture}
+
+\subsection{Layer overview}
+The native application is divided into five principal layers:
+\begin{enumerate}
+  \item \textbf{C++ camera driver:} vendor SDK integration, camera session ownership, acquisition, frame pool, feature access, and hardware-specific operations.
+  \item \textbf{Native C++ controller:} serialized asynchronous camera commands and state transitions for the native frontend.
+  \item \textbf{Objective-C++ bridge:} narrow typed boundary between C++ and Swift; opaque frame-lease handles and low-frequency callbacks.
+  \item \textbf{SwiftUI application shell:} window composition, menus, controls, camera state, optical configuration, gallery, and user interaction.
+  \item \textbf{AppKit preview renderer:} high-rate image consumption, Core Graphics image providers, slide-pane image retention, drawing, and overlay coordinate handling.
+\end{enumerate}
+
+The Qt adapter and Qt Widgets preview remain separate frontends over the same driver/common contracts. The native app must not instantiate \code{QtAmcamCamera} or link Qt merely to reuse the camera runtime.
+
+\subsection{Acquisition topology}
+The critical data path is:
+
+\begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
+Amcam SDK callback
+       |
+       | enqueue event code only
+       v
+bounded fixed-capacity event FIFO
+       |
+       v
+one C++ acquisition worker
+       |
+       | Amcam_PullImageV4
+       v
+four-buffer frame pool / immutable FramePtr lease
+       |
+       v
+generation validation
+       |
+       v
+one-slot atomic latest-frame mailbox
+       |
+       | one coalesced notification
+       v
+Objective-C++ bridge / main-queue invalidation
+       |
+       v
+one AppKit preview consumer
+       |
+       v
+Core Graphics provider -> slide pane -> draw()
+\end{lstlisting}
+
+The vendor callback is not the frame consumer. It only enqueues relevant event codes. One worker pulls images. The application uses a four-buffer pool and immutable frame leases. If all reusable buffers are retained, acquisition drains into a private discard buffer and increments the driver's drop count rather than blocking on the UI.
+
+The preview mailbox is a single-slot latest-frame mailbox. It replaces stale frames, carries at most one pending notification, and uses acquisition-generation validation to prevent an old session from publishing into a new session. A notification consumer must handle the race in which a newer frame arrives while the previous notification is being consumed.
+
+\subsection{Frame lifetime and image rendering}
+The AppKit preview owns one bridge callback and one mailbox-consumption path for both slide panes. The panes do not independently consume frames. The parent routes each consumed frame to the selected live destination and each pane retains at most one current image.
+
+A Core Graphics data provider references the existing frame bytes and retains an opaque frame lease for as long as Core Graphics may read those bytes. Replacing a pane's image releases the prior provider lease. The continuous preview path must not create a second application-owned pixel buffer, \code{Data} copy, \code{NSBitmapImageRep}, \code{NSImage} conversion, or per-frame SwiftUI-observed image state.
+
+The claim is specifically that the application-controlled handoff does not introduce an extra pixel-buffer copy. It is not a claim that Core Graphics, WindowServer, the compositor, or display hardware performs no internal copies or transfers.
+
+The current pool budget is:
+\begin{itemize}
+  \item at most one retained live image lease in Slide 1;
+  \item at most one retained live image lease in Slide 2;
+  \item at most one latest pending mailbox lease;
+  \item at least one remaining slot for acquisition progress in the four-slot pool.
+\end{itemize}
+There must be no additional image history, per-pane pending-frame array, or second preview consumer. Provider release timing and pool availability must be tested under sustained streaming.
+
+\subsection{Threading and command ownership}
+Camera lifecycle and feature operations run through a bounded serialized command executor. The UI submits requests and receives asynchronous completions. It must not perform blocking camera I/O on the main thread. Lifecycle FIFO order, request identity, session generation, feature-state generation, validation, and readback remain controller/driver responsibilities.
+
+The acquisition worker does not wait for the UI or for feature-editor work. The bridge marshals low-frequency state and completion callbacks to the main queue. The acquisition callback does not call Swift directly.
+
+\subsection{Camera lifecycle}
+The user-facing lifecycle includes enumeration, selection, Open, Start, Stop, and Close. The driver has explicit states including Closed, Open, Starting, Streaming, Stopping, and Faulted. Transitions are serialized. Controls must reflect pending operations and must not allow conflicting operations to interleave.
+
+A successful Stop/Close invalidates the prior session generation. A fatal acquisition event invalidates the frame gate and clears the mailbox before the fault is presented. A recoverable Stop failure while Streaming must preserve the previous stream and its valid frame state. Terminal Close remains a distinct operation and cannot be made contingent on Stop succeeding.
+
+The UI may report a failed Close and remain open rather than silently terminating while a camera session might still exist.
+
+\subsection{Camera feature model}
+The UI consumes typed feature descriptors rather than hard-coded camera-specific controls. A descriptor can express:
+\begin{itemize}
+  \item identity and display name;
+  \item feature category/group;
+  \item value type (Boolean, integer, floating point, vector, or enumeration);
+  \item readable/writable state;
+  \item numeric range, increment, unit, or discrete options;
+  \item model and runtime availability.
+\end{itemize}
+
+Model-advertised capability and runtime feature access are distinct. Unknown model metadata must not be treated as unsupported, and a visible editor must not be used as evidence that a device supports the feature. The UI must not show unsupported or unprobed features as active controls.
+
+The broader AmScope driver exposes or models feature groups including exposure, color/white balance, image processing, sensor settings, thermal settings, ROI/binning, trigger configuration, and selected accessories. However, not every driver operation is exposed in the native UI. A control must not be represented as available until the native bridge/controller supports its command and readback semantics.
+
+\section{Native user interface and interaction model}
+
+\subsection{Primary viewer}
+The viewer is the central workspace and receives priority over auxiliary controls. It contains two persistent side-by-side slide panes, Slide 1 and Slide 2, with independently retained images. Either pane can be maximized into the available viewer region and restored to the split arrangement.
+
+The main window should not reserve a permanent toolbar above the camera image. Frequent tools are placed as compact overlays over the image, while detailed camera controls remain in the workspace dock. The active live pane is visually distinguished; the inactive pane retains its last displayed image.
+
+\subsection{Live destination semantics}
+Exactly one pane is the current destination for incoming live frames. Selecting Slide 1 or Slide 2 changes only the destination to which the single preview consumer routes new frames. It does not:
+\begin{itemize}
+  \item open a second camera session;
+  \item start another acquisition worker;
+  \item move the microscope stage;
+  \item rotate the objective nosepiece;
+  \item actuate a slide changer;
+  \item physically switch a specimen.
+\end{itemize}
+
+The inactive pane retains its last image. The user-facing controls should make the distinction between the active \texttt{LIVE} pane and the other held image unambiguous. The current implementation includes compact per-pane microscope quick controls beside each pane's measurement tools; these controls share the same camera/optical model state. A pane-specific \texttt{SET LIVE} action changes the common live destination. The dock retains a destination selector as a fallback when the per-pane quick-control group cannot fit.
+
+\subsection{Per-slide overlays and image interaction}
+Each slide pane has independent tool selection and freeze state. The floating overlay groups include:
+\begin{itemize}
+  \item image actions such as capture and freeze/resume;
+  \item pointer/pan;
+  \item straight-line distance ruler;
+  \item text annotation;
+  \item clear-overlay action;
+  \item compact objective, manual resolution, and Auto Res quick controls.
+\end{itemize}
+
+Selecting ruler or annotation mode freezes that pane's currently displayed source image. This is a presentation freeze, not a camera Stop: acquisition continues and the single preview consumer continues draining and releasing new frame leases, but the frozen pane's displayed image is not replaced. Resuming live display returns the pane to Pan mode.
+
+Ruler endpoints and text-note anchors are stored in source-image pixel coordinates. Their display positions are transformed through the pane's zoom and pan. The ruler is a straight-line distance in source pixels unless a valid physical scale is available. Overlays are local to their slide pane and are not a separate image-processing graph.
+
+Current overlay limitations:
+\begin{itemize}
+  \item annotations and measurements are in-memory/session-only;
+  \item they clear when source image dimensions change because the prior pixel coordinate system cannot safely be assumed to match;
+  \item they are not yet persisted across application restart;
+  \item they are not burned into the saved PNG capture;
+  \item polygon, area, angle, editable-object, and rich annotation semantics are not claimed.
+\end{itemize}
+
+\subsection{Image sizing and coordinate invariants}
+The user requires the image to use the available viewer area without black margins where the selected display policy permits it. A viewer container must not be enlarged beyond the native image's own width and height merely to fill a larger screen. The application distinguishes:
+\begin{description}[style=nextline]
+  \item[Fit / fill presentation] A display transform chosen to use the available pane. Any crop behavior must be explicit and must not alter the source image or measurement coordinates.
+  \item[Lock size] Preserve the current displayed scale when the pane is resized. This is not the same as full-resolution viewing.
+  \item[1:1] One source camera pixel maps to one display pixel, centered and pannable. This is the explicit full-resolution view.
+  \item[Zoom and pan] Change only the presentation transform. They do not change camera resolution, source dimensions, or physical calibration.
+\end{description}
+
+The user explicitly rejected treating a generic lock-size control as a substitute for a distinct full-resolution button. Lock and 1:1 are separate per-slide controls. Manual zoom must preserve the full-resolution source image; the application must not downsample the stored source merely because the current pane is smaller.
+
+\subsection{Microscope quick controls}
+The compact controls beside each pane's measurement controls provide:
+\begin{itemize}
+  \item objective selection;
+  \item manual camera preview resolution selection;
+  \item Auto Res enable/disable;
+  \item a live-destination action for the pane.
+\end{itemize}
+The objective and resolution controls have no visible \texttt{OBJECTIVE} or \texttt{RESOLUTION} captions in the current compact presentation. Their size and spacing were reduced to preserve viewer area. The same model backs both panes so changing the objective, resolution, or automatic policy is reflected consistently.
+
+Manual resolution selection disables Auto Res before applying the selected mode. Changing the objective updates the optical model and asks Auto Res to reconcile the camera mode if automatic mode is enabled.
+
+\subsection{Dock semantics}
+The workspace dock contains detailed Camera Controls and Smart Gallery panels. It is an auxiliary tool surface, not the primary viewer. The current user-directed behavior is:
+\begin{itemize}
+  \item the dock is visible by default on launch;
+  \item it is presented as a floating/overlay surface over the viewer rather than reducing the viewer's layout dimensions;
+  \item opening or closing the dock must not shrink or expand the underlying preview panes;
+  \item the permanent vertical title rail remains at the far right and does not reserve preview width;
+  \item clicking a dock title while the dock is open closes it;
+  \item clicking a dock title while the dock is closed opens it;
+  \item every title click also selects the corresponding panel to be shown when open;
+  \item clicking another title while the dock is open follows the explicitly requested toggle behavior: the dock closes, rather than silently switching panels while remaining open;
+  \item dock width remains resizable within its configured bounds and is persisted.
+\end{itemize}
+
+This toggle rule is intentional and must not be replaced by a conventional tab-switch behavior without a new decision. The dock is a tool surface over the image, not a permanent split pane that takes away image area.
+
+The dock's floating-panel background treatment is currently 80\% transparent: the background alpha is 0.20. Text, icons, controls, and microscope imagery remain fully opaque. This distinction is important: the panel's background is translucent; the entire panel subtree must not be faded.
+
+The current compact dock includes the connection/lifecycle area, objective and Auto Res controls, live destination, and descriptor-driven camera features. Smart Gallery is a separate dock panel. The dock must remain usable without clipping long feature labels; content may scroll, and the panel width is adjustable.
+
+\subsection{Camera controls and configuration windows}
+The detailed camera controls surface exposes camera discovery/selection, connection state, lifecycle commands, and available feature descriptors. Feature controls retain their names beside editors. Read-only values are distinguished from editable settings. The camera feature list must remain reachable in a resizable/scrollable window and should not be forced into a fixed-width form that clips long names.
+
+The microscope configuration window is separate from the generic camera feature list. It edits:
+\begin{itemize}
+  \item microscope profile and objective specifications;
+  \item sensor pixel pitch;
+  \item camera adapter preset or custom total relay magnification;
+  \item H\&E chromatin wavelength band;
+  \item optical sampling target;
+  \item generic output-pixel factor used by physical scale calculation.
+\end{itemize}
+Editing is draft-based and applied as one configuration update. The application should not restart the camera repeatedly while the user is typing configuration values.
+
+\section{Optical sampling and automatic resolution}
+
+\subsection{Why the policy exists}
+A camera mode should be selected according to the optical information that must be sampled, not merely because it produces the largest image or fills a Retina display. The application models objective magnification, objective numerical aperture, sensor pixel pitch, total relay magnification, a wavelength band, and a configurable sampling target.
+
+\subsection{Rayleigh estimate}
+The initial lateral resolution estimate is:
+\begin{equation}
+d_R(\lambda) = \frac{0.61\lambda}{NA_{\mathrm{objective}}},
+\end{equation}
+where $\lambda$ is in micrometres and $d_R$ is the estimated Rayleigh distance in micrometres.
+
+For a camera mode:
+\begin{equation}
+p_{\mathrm{object}} =
+\frac{p_{\mathrm{sensor}}\,s_{\mathrm{mode}}}
+{M_{\mathrm{objective}}\,M_{\mathrm{relay}}},
+\end{equation}
+where:
+\begin{itemize}
+  \item $p_{\mathrm{sensor}}$ is physical sensor pixel pitch;
+  \item $s_{\mathrm{mode}}$ is the effective sampling scale of the camera mode;
+  \item $M_{\mathrm{objective}}$ is objective magnification;
+  \item $M_{\mathrm{relay}}$ is the total effective relay magnification.
+\end{itemize}
+
+The sampling factor is:
+\begin{equation}
+RF(\lambda) = \frac{d_R(\lambda)}{p_{\mathrm{object}}}.
+\end{equation}
+
+The initial target is $RF\geq 2.3$. The configured chromatin band initially spans 540--600\,nm. The policy uses the minimum factor at the shortest wavelength as the conservative pass/fail criterion and reports the factor range over the band. The wavelength band and target remain configurable.
+
+This is a sampling criterion derived from a simplified optical model. It is not a complete model of the microscope's modulation transfer function, illumination coherence, stain spectrum, sensor quantum efficiency, demosaicing, or image-processing chain.
+
+\subsection{Mode-selection algorithm}
+The policy is:
+\begin{enumerate}
+  \item query the camera for the actual supported preview modes;
+  \item calculate the sampling factor for each reported mode;
+  \item reject modes below the configured target;
+  \item select the passing mode with the smallest pixel count;
+  \item if no mode passes, select the maximum reported mode and visibly report the shortfall;
+  \item if the selected mode already matches the current mode, do not stop and restart acquisition.
+\end{enumerate}
+
+The selector must never invent a resolution. The camera mode table is authoritative for available choices. A mode change uses the existing serialized native controller. If streaming, the controller may need to Stop, apply the mode, clear incompatible pending frames, advance the session generation, and Start again. The UI must report failures honestly.
+
+\subsection{Predicted initial choices and assumptions}
+For 2.2\,$\mu$m pixels, 0.50$\times$ relay, a 540--600\,nm band, and target $RF=2.3$, the design note predicts:
+\begin{center}
+\begin{tabular}{rrrr}
+\toprule
+Objective & Rayleigh distance band & Full-mode RF band & Predicted minimum mode\\
+\midrule
+4$\times$ / 0.10 & 3.294--3.660\,$\mu$m & 2.99--3.33 & 2560$\times$1922\\
+10$\times$ / 0.25 & 1.318--1.464\,$\mu$m & 2.99--3.33 & 2560$\times$1922\\
+40$\times$ / 0.65 & 0.507--0.563\,$\mu$m & 4.61--5.12 & 1280$\times$960\\
+100$\times$ / 1.25 & 0.264--0.293\,$\mu$m & 5.99--6.65 & 1280$\times$960\\
+\bottomrule
+\end{tabular}
+\end{center}
+These predictions assume the lower camera modes represent full-field 2$\times$2 and 4$\times$4 sampling. In particular, the 40$\times$ prediction at 1280$\times$960 is close to the 2.3 threshold and is marginal until the mode mapping and optical path are measured.
+
+For a 0.35$\times$ total relay, the conservative band-edge RF for 4$\times$ and 10$\times$ is below 2.3 even at maximum mode. The application must report this shortfall rather than claim full sampling.
+
+\subsection{Independent display policy}
+Camera acquisition resolution and viewer presentation size are independent policies. A previous coupling between Retina preview dimensions and optical Auto Res made display geometry dominate the optical choice. That coupling was rejected.
+
+Auto Res is optical-only. A future display-aware preference may be considered separately, but it must report its own decision and must not silently override optical qualification or force the maximum acquisition mode.
+
+\section{Physical scale and measurement}
+
+\subsection{Generic calibration model}
+The application-level measurement scale is derived from configured component specifications:
+\begin{equation}
+\boxed{
+\frac{\mu\mathrm{m}}{\mathrm{output\ pixel}} =
+\frac{
+p_{\mathrm{sensor}}\, f_{\mathrm{output}}
+}{
+M_{\mathrm{objective}}\,M_{\mathrm{relay}}
+}}
+\end{equation}
+where $p_{\mathrm{sensor}}$ is sensor pixel pitch in micrometres, $f_{\mathrm{output}}$ is the linear output-pixel factor, and the magnifications are dimensionless.
+
+The computation is generic. It is not specific to the MU503, an AmScope camera, a vendor SDK, image dimensions, preview zoom, or display scale. The application must not embed a camera-model lookup as the source of the physical scale.
+
+\subsection{Output-pixel factor}
+The configured factor describes the effective linear sampling scale of an output pixel relative to a native sensor pixel:
+\begin{itemize}
+  \item 1.0 represents native readout;
+  \item 2.0 represents a twofold linear output-pixel factor, such as a 2$\times$ binning/resampling mode under the configured convention;
+  \item ROI cropping alone remains 1.0.
+\end{itemize}
+
+The factor is explicit because output dimensions do not uniquely determine sampling. The same dimensions can arise from cropping, binning, subsampling, or resampling. The application must not infer binning from width and height alone.
+
+\subsection{Measurement semantics}
+A ruler gesture records endpoints in the original image's pixel coordinate system. The measurement scale is captured at gesture start. A later objective or relay change must not retroactively change an already recorded measurement.
+
+When scale is valid, the UI may show both physical length and source-pixel length. If calibration inputs are missing or invalid, it shows pixel-only measurement and labels physical scale unavailable. It must not silently show a fabricated physical unit.
+
+The current specification-derived result is an estimate. For traceable measurements, the complete installed optical path must be calibrated against a certified stage micrometer. An empirical calibration should be associated with the relevant optical configuration and should supersede nominal component calculations only through an explicit, validated policy.
+
+\subsection{Configuration integrity}
+The configuration window should show the computed $\mu$m/output-pixel value before applying changes. It should preserve user-entered relay identity/value and migrate legacy numeric-only configuration into a Custom path without inventing a named adapter. A former MU503-named 0.50$\times$ preset must be treated as a generic 0.50$\times$ optical preset during migration.
+
+\section{Image capture and gallery}
+
+\subsection{Capture semantics}
+The capture action saves the currently displayed image in the selected pane. It is not the vendor SDK's separate hardware still-capture command. The capture path uses the pane's current Core Graphics image and copies pixel data into an independent image before PNG encoding so that the camera frame-pool lease is not retained as gallery history.
+
+Captures are stored under:
+\begin{center}
+\code{\textasciitilde/Pictures/AmScope Captures}
+\end{center}
+
+The gallery records slide identity, capture date/time, pixel dimensions, and file location. It provides thumbnail browsing, open-in-viewer, Show in Finder, and Delete actions. PNG files are persisted; the in-memory gallery loads at most 80 recent thumbnails, with thumbnails capped at 320 pixels. Older PNG captures remain on disk and are not automatically deleted. One capture is processed at a time, and encoding/thumbnail generation occur away from the UI thread.
+
+\subsection{What capture does not mean}
+A saved PNG is a capture of the displayed preview image, not necessarily a full sensor RAW still. It does not prove the camera's dedicated still-capture API was invoked. The capture currently does not burn in ruler or annotation overlays. A future evidence-export design must distinguish source image, derived image, annotations, calibration metadata, and acquisition metadata rather than conflating them.
+
+\section{Requirements baseline}
+
+The following tables combine explicit user requirements with the current architectural contract. Status refers to the reviewed source/documentation baseline, not a claim that every item has passed physical verification.
+
+\subsection{Product and workflow requirements}
+\begin{longtable}{p{0.10\linewidth}p{0.64\linewidth}p{0.16\linewidth}}
+\toprule
+ID & Requirement & Status\\
+\midrule
+P-01 & Provide a native macOS microscope camera application, not merely a command-line probe. & \implemented\\
+P-02 & Keep the viewer as the primary workspace and auxiliary controls subordinate. & \implemented\\
+P-03 & Support two persistent slide panes with one selected live destination. & \implemented\\
+P-04 & Retain the inactive pane's last image when live destination changes. & \implemented\\
+P-05 & Support independent pane maximize/restore, zoom, pan, freeze, and overlay state. & \partialstatus\\
+P-06 & Support low/moderate magnification individual-cell analysis as a future scientific workflow. & \planned\\
+P-07 & Support accurate individual-cell segmentation and coordinate recording as a future image-processing capability. & \planned\\
+P-08 & Do not make WSI scanning, high-magnification whole-slide scanning, or stitching a prerequisite for the blood-cell workflow. & \implemented\\
+P-09 & Do not claim clinical diagnostic validation or regulatory status. & \implemented\\
+\bottomrule
+\end{longtable}
+
+\subsection{Viewer and interaction requirements}
+\begin{longtable}{p{0.10\linewidth}p{0.64\linewidth}p{0.16\linewidth}}
+\toprule
+ID & Requirement & Status\\
+\midrule
+V-01 & Two panes share one preview consumer and one camera session. & \implemented\\
+V-02 & Live routing changes the destination only; it does not physically move a slide or stage. & \implemented\\
+V-03 & Each pane retains at most one current live image lease. & \implemented\\
+V-04 & Ruler/annotation mode freezes the displayed pane without stopping acquisition. & \partialstatus\\
+V-05 & Ruler endpoints and notes are anchored in source-image coordinates. & \implemented\\
+V-06 & Pan and zoom do not alter source pixels or physical scale. & \implemented\\
+V-07 & Provide separate lock-current-scale and 1:1 full-resolution controls. & \partialstatus\\
+V-08 & Avoid black margins where the selected display mode permits; do not enlarge the viewer container beyond native image dimensions. & \partialstatus\\
+V-09 & A full-resolution view maps one source pixel to one display pixel and remains pannable. & \partialstatus\\
+V-10 & Keep the compact microscope quick controls beside measurement tools; remove visible Objective and Resolution captions. & \implemented\\
+V-11 & The live destination is changeable from the slide pane, with the dock selector as fallback. & \implemented\\
+V-12 & The dock is visible by default and overlays the viewer without changing viewer dimensions. & \implemented\\
+V-13 & Every dock title click toggles visibility; the clicked title is the panel selected when opened. & \implemented\\
+V-14 & Floating panel backgrounds use 80\% transparency while foreground content remains opaque. & \implemented\\
+V-15 & The permanent vertical rail remains at the right edge and is layout-neutral. & \implemented\\
+\bottomrule
+\end{longtable}
+
+\subsection{Camera and acquisition requirements}
+\begin{longtable}{p{0.10\linewidth}p{0.64\linewidth}p{0.16\linewidth}}
+\toprule
+ID & Requirement & Status\\
+\midrule
+C-01 & The C++ driver is the sole owner of the vendor camera handle. & \implemented\\
+C-02 & Vendor callback only enqueues event codes; one worker performs frame pulls. & \implemented\\
+C-03 & Use a bounded event queue and a bounded frame pool. & \implemented\\
+C-04 & Publish through a single latest-frame mailbox with generation validation. & \implemented\\
+C-05 & Do not block the UI thread on camera operations. & \implemented\\
+C-06 & Preserve event, pull, paint/presentation, and drop metrics as distinct quantities. & \partialstatus\\
+C-07 & Do not add a second acquisition worker, frame consumer, or image queue for the second slide. & \implemented\\
+C-08 & Expose camera-supported resolutions only. & \implemented\\
+C-09 & Manual resolution selection disables Auto Res. & \implemented\\
+C-10 & Stop/Apply/Start resolution changes must report failure honestly. & \partialstatus\\
+C-11 & Keep unsupported features hidden and distinguish unknown from unsupported. & \implemented\\
+C-12 & Preserve RAW significant depth separately from storage width in the common frame model. & \implemented\\
+C-13 & Keep camera still capture separate from preview PNG capture. & \implemented\\
+\bottomrule
+\end{longtable}
+
+\subsection{Optics and measurement requirements}
+\begin{longtable}{p{0.10\linewidth}p{0.64\linewidth}p{0.16\linewidth}}
+\toprule
+ID & Requirement & Status\\
+\midrule
+O-01 & Model objective magnification and NA independently of camera features. & \implemented\\
+O-02 & Treat active objective as user-confirmed state for a manual nosepiece. & \implemented\\
+O-03 & Model total effective relay magnification, not an assumed stack of reducers. & \implemented\\
+O-04 & Use configurable H\&E chromatin wavelength band and sampling target. & \implemented\\
+O-05 & Choose the lowest-pixel-count camera-reported mode meeting the optical target. & \implemented\\
+O-06 & If no mode meets target, use maximum reported mode and show shortfall. & \implemented\\
+O-07 & Do not couple Auto Res to Retina/display pixel dimensions. & \implemented\\
+O-08 & Calculate physical scale from sensor pitch, output-pixel factor, objective, and relay. & \implemented\\
+O-09 & Do not infer binning from image dimensions or treat ROI cropping as binning. & \implemented\\
+O-10 & Capture calibration scale at measurement start; do not retroactively alter prior measurements. & \implemented\\
+O-11 & Show pixel-only measurement when physical scale is unavailable. & \implemented\\
+O-12 & Support empirical stage-micrometer calibration for traceable scale. & \planned\\
+O-13 & Verify actual MU503 mode-to-sampling and optical adapter path. & \verify\\
+\bottomrule
+\end{longtable}
+
+\subsection{Capture, storage, and persistence requirements}
+\begin{longtable}{p{0.10\linewidth}p{0.64\linewidth}p{0.16\linewidth}}
+\toprule
+ID & Requirement & Status\\
+\midrule
+G-01 & Save user-triggered preview captures as PNG. & \implemented\\
+G-02 & Process one capture at a time and encode asynchronously. & \implemented\\
+G-03 & Bound in-memory thumbnail loading to 80 items and 320-pixel thumbnails. & \implemented\\
+G-04 & Do not automatically delete older PNG files. & \implemented\\
+G-05 & Keep captures independent of frame-pool lease lifetime. & \implemented\\
+G-06 & Do not imply that preview capture invokes hardware still capture. & \implemented\\
+G-07 & Persist ruler/annotation overlays and include them in capture exports. & \planned\\
+G-08 & Persist dock width and optical configuration. & \implemented\\
+G-09 & Preserve image metadata and calibration provenance in an evidence-oriented export. & \planned\\
+\bottomrule
+\end{longtable}
+
+\subsection{Scientific image-processing requirements}
+\begin{longtable}{p{0.10\linewidth}p{0.64\linewidth}p{0.16\linewidth}}
+\toprule
+ID & Requirement & Status\\
+\midrule
+I-01 & Detect individual cells in blood films and bone-marrow aspirates at low/moderate magnification. & \planned\\
+I-02 & Segment individual cell boundaries accurately. & \planned\\
+I-03 & Record stable source-image coordinates for every detected/segmented cell. & \planned\\
+I-04 & Keep the primary workflow cell-centric rather than WSI-centric. & \planned\\
+I-05 & Do not require 3D reconstruction as a prerequisite for 2D cell segmentation. & \implemented\\
+I-06 & Expose image-processing operations through a composable functional API rather than requiring a node editor. & \planned\\
+I-07 & Keep analysis output, source image, annotation, and acquisition metadata distinguishable. & \planned\\
+\bottomrule
+\end{longtable}
+
+\section{Failure handling and operational integrity}
+
+\subsection{Unknown, unsupported, and inaccessible}
+The system must distinguish:
+\begin{itemize}
+  \item \textbf{Unknown:} the model or SDK did not provide enough information to decide.
+  \item \textbf{Unsupported:} a known model capability is absent.
+  \item \textbf{Unavailable now:} the feature exists but is inaccessible in the current lifecycle state.
+  \item \textbf{Read-only:} the value can be observed but not changed.
+  \item \textbf{Writable:} the descriptor and runtime probe permit a validated write.
+\end{itemize}
+An empty feature list must not be interpreted as a device with no capabilities if enumeration or descriptor probing failed.
+
+\subsection{Acquisition faults}
+Transient \code{E\_PENDING} during the callback/frame-readiness race is not a fatal fault. Disconnect, generic SDK error, no-frame timeout, no-packet timeout, and event-queue overflow are fatal acquisition conditions in the documented driver model. A watchdog must be based on successful frame pulls, not merely image notifications.
+
+Video and triggered acquisition have different health semantics. Triggered modes may legitimately have idle intervals with no image frames; they require the documented hardware heartbeat rather than a simple video-frame timeout. The application must not misclassify a waiting-for-trigger state as a dead camera.
+
+\subsection{Still capture}
+The driver's hardware still-capture path is distinct from preview PNG capture. It uses the SDK's still-resolution table and separate still-image event handling. RAW stills preserve significant sensor depth separately from the selected storage container. A failed or timed-out still capture may quarantine further still requests until a successful Stop/Start callback-drain boundary. These driver semantics must not be bypassed by the gallery.
+
+\subsection{Persistence and migration}
+Persisted optical configuration, dock width, and gallery files have different owners and lifecycles. Dock presentation changes must not mutate camera state. A manual objective change must be saved as user configuration, not inferred from the camera. Legacy numeric relay settings must migrate without inventing a named adapter. Any future dock-layout persistence must be validated and versioned; malformed persisted layout must fall back safely rather than preventing application launch.
+
+\section{Performance and resource budgets}
+
+\subsection{Acquisition and presentation}
+The performance target is not a single FPS number. Qualification must record:
+\begin{itemize}
+  \item image-event rate;
+  \item successful pull rate;
+  \item unique image assignment/paint rate;
+  \item frame age when meaningful;
+  \item driver-reported pool exhaustion drops;
+  \item CPU and memory;
+  \item frame-lease and provider release behavior.
+\end{itemize}
+
+An earlier physical MU503 diagnostic run reported approximately 91.18--91.25 image events/pulls per second at 640$\times$480 with zero reported drops over the recorded intervals. A separate observation showed substantially lower paint throughput than acquisition throughput. These are historical measurements from earlier revisions and are not proof of current v0.8 native-app performance. The v0.8 app must be compared against a validated baseline under the same camera, USB connection, resolution, pixel format, exposure, lighting, and runtime conditions.
+
+\subsection{Memory constraints}
+The four-frame pool and two retained slide images impose a strict lease budget. Gallery capture is allowed to detach one image from the lease into independent memory, but capture is serialized and bounded. The gallery's thumbnail cache is bounded to 80 recent thumbnails. No continuous image history is allowed in the preview path.
+
+\subsection{Performance acceptance}
+The native frontend should not reduce sustained camera pull rate beyond measured baseline noise, increase camera-side drops, add blocking work to the callback, or cause unbounded memory growth. The displayed frame rate is measured separately. A performance claim requires sustained physical-camera comparison, not merely a successful build or a synthetic rendering test.
+
+\section{Verification status and known gaps}
+
+\subsection{Historical evidence}
+The project has recorded successful owner-run builds and automated tests for earlier driver/Qt milestones, including:
+\begin{itemize}
+  \item v0.6 MU503 RGB24 common-frame hardware record dated 23 November 2026: 1280$\times$960 RGB24, 3840-byte stride, 3,686,400-byte payload, 16 frames over the recorded run, zero reported drops. Optional sequence, timestamp, exposure, and format identifier were unavailable in that record. It does not qualify RAW behavior or sustained performance.
+  \item v0.7 FrameView integration smoke record dated 24 November 2026: owner-reported MU503 discovery, Open, Start, live FrameView update, Stop, and Close. The record explicitly does not claim frame-rate, still capture, feature-readback, or complete phase acceptance.
+  \item Earlier driver test suites passed on the owner's machine, with the recorded test counts changing as targets were added. Those results belong to their exact source revisions and are not automatically evidence for the current v0.8 native UI.
+\end{itemize}
+
+\subsection{Current native-app verification boundary}
+The v0.8 native application has had successful native target link/build evidence in the project history, but the present paper's reviewed revision is not represented as having passed a fresh build, visual inspection, or hardware qualification as part of this documentation work. Recent UI changes—including per-pane quick controls, dock toggle behavior, and 80\% panel transparency—must be verified on the user's Mac.
+
+The following are open verification items:
+\begin{enumerate}
+  \item build and launch the exact reviewed branch head;
+  \item verify the dock overlays the viewer without changing its dimensions;
+  \item verify every dock-title click follows the open/close toggle rule;
+  \item verify 80\% background transparency without fading foreground controls;
+  \item verify compact objective/resolution controls and per-pane \texttt{SET LIVE} behavior;
+  \item verify live destination switching without losing the inactive image;
+  \item verify zoom, pan, Lock, 1:1, maximize/restore, and no-black-margin behavior at relevant window sizes;
+  \item verify overlay freeze while acquisition continues and frame leases are released;
+  \item verify camera mode changes, objective changes, Auto Res reconciliation, and failure reporting;
+  \item verify optical path and camera mode assumptions against the physical MU503 and installed adapter;
+  \item verify scale against a certified stage micrometer before describing physical measurements as traceable;
+  \item verify sustained acquisition, frame-pool availability, drops, frame presentation, and memory.
+\end{enumerate}
+
+\subsection{Optical and hardware uncertainties}
+The principal scientific uncertainties are:
+\begin{itemize}
+  \item whether each MU503 reported resolution mode corresponds to the assumed full-field binning/readout factor;
+  \item whether the installed adapter path is exactly the selected 0.50$\times$ FMA050 path or contains additional relay elements;
+  \item the actual effective magnification of the complete optical path;
+  \item whether the nominal 2.2\,$\mu$m pitch and the configured output-pixel factor accurately describe each acquisition mode;
+  \item the accuracy of the Rayleigh-band sampling estimate for the actual illumination, stain, sensor response, and image pipeline.
+\end{itemize}
+These uncertainties must be addressed with hardware inspection and stage-micrometer calibration. They must not be hidden by UI defaults.
+
+\section{Roadmap and architectural evolution}
+
+\subsection{Current application work}
+The immediate native-app work should prioritize:
+\begin{enumerate}
+  \item build correctness and visual verification of the current native workspace;
+  \item reliable live-destination switching and stable two-pane presentation;
+  \item camera feature editing and lifecycle correctness;
+  \item optical configuration, Auto Res, and measurement calibration verification;
+  \item capture/gallery correctness and bounded resource use;
+  \item sustained performance and physical-camera qualification.
+\end{enumerate}
+
+\subsection{Image-processing direction}
+The future processing system should expose reusable operations through a functional API. Operations should have explicit input/output semantics, qualification constraints, coordinate behavior, and backend implementations. Composition and routing should be programmatic and inspectable. A node editor is explicitly not part of the current design direction.
+
+For the blood-cell workflow, a later processing pipeline may include:
+\begin{itemize}
+  \item image normalization and quality assessment;
+  \item foreground/background separation;
+  \item candidate cell detection;
+  \item instance segmentation;
+  \item boundary and shape descriptors;
+  \item source-coordinate and specimen-coordinate mapping;
+  \item object-level metadata and review.
+\end{itemize}
+This list describes a plausible decomposition of the requested workflow, not a claim that these algorithms are already implemented or that any one algorithm has been selected. Accuracy must be measured against annotated data from the intended blood-film and bone-marrow preparations. Cell overlap, stain variation, debris, smear thickness, focus, illumination, and touching boundaries are expected challenge classes.
+
+\subsection{Do not prematurely expand scope}
+Do not introduce WSI tiling, high-magnification slide scanning, whole-slide stitching, 3D reconstruction, automatic stage control, or a visual node editor merely because they are familiar microscopy or image-processing patterns. Each would create new acquisition, storage, UI, and validation costs. Add them only when a separately stated scientific requirement justifies them.
+
+\section{Decision register}
+
+\begin{longtable}{p{0.23\linewidth}p{0.69\linewidth}}
+\toprule
+Decision & Rationale / consequence\\
+\midrule
+Native macOS frontend uses SwiftUI plus AppKit. & SwiftUI owns low-frequency application state and controls; AppKit owns the high-rate preview surface and frame lifetime.\\
+C++ remains the camera runtime. & Reuse the existing driver and keep vendor SDK ownership out of Swift.\\
+One camera session and one preview consumer. & Two slide panes are destinations for one stream, not two independent camera pipelines.\\
+Latest-frame-wins mailbox. & Bounds latency and memory when display throughput is below acquisition throughput.\\
+Two persistent slide panes. & Preserves an image for comparison without creating a second acquisition path.\\
+Manual objective state. & The B-293 nosepiece is mechanical and not electronically sensed.\\
+Total relay magnification is configured once. & Prevents double-counting packaged and external reducers.\\
+Auto Res is optical-only. & Display geometry must not silently override sampling qualification.\\
+Manual resolution disables Auto Res. & Explicit operator choice takes precedence over automatic policy.\\
+Physical scale is generic. & Sensor pitch, output factor, objective, and relay are independent specifications, not a MU503-specific formula.\\
+No inferred binning from dimensions. & Cropping, binning, and resampling can produce identical dimensions.\\
+Measurement scale is captured at gesture start. & Later optical changes must not rewrite historical measurements.\\
+Dock overlays the viewer. & Auxiliary controls must not consume the primary image workspace.\\
+Every dock-title click toggles visibility. & This is an explicit interaction requirement, not conventional tab selection.\\
+80\% background transparency. & Preserve image visibility while keeping text and controls opaque.\\
+No node editor. & Composition belongs in a functional API, not a visual graph frontend.\\
+Blood-cell task is cell-centric, not WSI-centric. & Individual cell segmentation and coordinates are the stated scientific objective.\\
+\bottomrule
+\end{longtable}
+
+\section{Acceptance principles}
+
+The application is acceptable only when each subsystem is judged against the semantics it owns:
+\begin{itemize}
+  \item \textbf{Camera correctness:} lifecycle transitions, callback safety, worker serialization, frame pulling, timeouts, and recovery.
+  \item \textbf{Frame correctness:} dimensions, stride, pixel format, significant depth, storage width, metadata validity, and lease lifetime.
+  \item \textbf{Viewer correctness:} one consumer, latest-frame presentation, correct live routing, stable held images, coordinate transforms, and bounded memory.
+  \item \textbf{Optical correctness:} correct installed objective/relay configuration, valid mode mapping, conservative sampling policy, and explicit shortfall.
+  \item \textbf{Measurement correctness:} correct scale inputs, source-coordinate preservation, calibration provenance, and no retroactive reinterpretation.
+  \item \textbf{Interaction correctness:} dock toggle semantics, overlay behavior, independent slide tools, readable controls, and persistent user settings.
+  \item \textbf{Scientific workflow correctness:} segmentation and cell coordinates must be validated against representative annotated specimens before being used for research conclusions.
+\end{itemize}
+
+A successful compile is necessary but not sufficient. A successful unit test does not prove a physical camera mode mapping. A physical preview smoke test does not prove optical calibration. A correct UI does not prove a segmentation algorithm. Acceptance evidence must match the claim.
+
+\section{Conclusion}
+The AmScope native microscopy application is being built around a simple hierarchy: preserve the scientific meaning of the image, preserve the integrity of acquisition, and make the viewer the operator's primary workspace. The native UI is not allowed to become part of the camera's timing-critical path. Optical sampling and physical measurement are derived from explicit instrument configuration rather than camera-specific shortcuts or display dimensions. Two slide panes provide retained visual context while sharing one acquisition stream. The dock and floating controls remain auxiliary overlays, with their visibility and transparency governed by explicit interaction rules.
+
+The immediate deliverable is a reliable native acquisition and observation environment. The longer-term scientific objective is a cell-centric image-analysis workflow for blood films and bone-marrow aspirates: detect, segment, and spatially record individual cells at low or moderate magnification. Whole-slide scanning, stitching, and high-magnification WSI acquisition are not prerequisites for that task. The architecture must remain extensible toward processing and analysis without introducing abstractions that distort the current instrument semantics.
+
+The paper is a living requirements and rationale baseline. Source behavior, hardware observations, and user decisions should update it when they change. No capability should be promoted from planned to implemented, or from implemented to verified, without evidence appropriate to that capability.
+
+\appendix
+\section{Glossary}
+\begin{description}[style=nextline]
+  \item[Auto Res] Automatic preview-resolution policy that selects among camera-reported modes according to the configured optical sampling target.
+  \item[Frame lease] Immutable ownership token keeping a frame-pool buffer alive while a consumer uses it.
+  \item[Latest-frame mailbox] Single-slot concurrent handoff that replaces stale frames and coalesces notifications.
+  \item[Live destination] The slide pane to which the single preview consumer routes newly acquired frames.
+  \item[Output-pixel factor] Configured linear scale describing output sampling relative to native sensor pixels.
+  \item[Relay magnification] Total effective optical magnification between the microscope image plane and the sensor.
+  \item[RF] Ratio of estimated Rayleigh distance to object-space sampling pitch.
+  \item[Source coordinates] Pixel coordinates in the original image, independent of zoom, pan, and display layout.
+  \item[WSI] Whole-slide imaging: scanning a large slide area, typically through tiled acquisition and image assembly.
+\end{description}
+
+\section{Repository references}
+\label{sec:references}
+The following repository documents were reviewed as technical inputs:
+\begin{enumerate}
+  \item \code{Camera/Amscope/README.md} --- driver behavior, typed feature model, acquisition invariants, and test boundaries.
+  \item \code{docs/architecture/AMSCOPE\_NATIVE\_MACOS\_APP.md} --- native application architecture and frame handoff.
+  \item \code{docs/architecture/AMSCOPE\_MICROSCOPE\_OPTICS\_AND\_AUTO\_RESOLUTION.md} --- optical model and automatic mode-selection policy.
+  \item \code{docs/architecture/AMSCOPE\_NATIVE\_RELEASE\_PLAN.md} --- release gates and driver progression.
+  \item \code{docs/plans/AMSCOPE\_NATIVE\_MACOS\_APP\_V0.8.md} --- v0.8 product/UI behavior and deferred comparison roadmap.
+  \item \code{docs/plans/AMSCOPE\_NATIVE\_MACOS\_DOCK\_SYSTEM.md} --- dock ownership, identity, and lifecycle principles.
+  \item \code{docs/architecture/AMSCOPE\_IMPLEMENTATION\_INVENTORY.md} --- implementation-to-test mapping.
+  \item \code{docs/architecture/DEVELOPMENT\_HANDOFF.md} --- historical development and verification state.
+  \item \code{docs/testing/hardware/phase-2-mu503-rgb24-2026-11-23.md} --- MU503 RGB24 hardware record.
+  \item \code{docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md} --- MU503 FrameView integration smoke record.
+\end{enumerate}
+
+\end{document}

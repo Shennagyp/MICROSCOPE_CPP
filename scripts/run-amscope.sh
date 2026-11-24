@@ -78,6 +78,7 @@ CMAKE_ARGS=(
     -DAMSCOPE_VENDOR_MAC_ARCH="${AMSCOPE_VENDOR_MAC_ARCH:-auto}"
     -DAMSCOPE_BUILD_QT_ADAPTER=ON
     -DAMSCOPE_BUILD_PREVIEW_APP=ON
+    -DAMSCOPE_BUILD_FLUENT_UI_GALLERY="${AMSCOPE_BUILD_FLUENT_UI_GALLERY:-OFF}"
     -DBUILD_TESTING="${AMSCOPE_BUILD_TESTING:-OFF}"
 )
 
@@ -96,6 +97,16 @@ fi
 
 "${CMAKE_COMMAND}" "${CMAKE_ARGS[@]}"
 "${CMAKE_COMMAND}" --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --parallel
+
+# The isolated component gallery is built only when explicitly enabled.
+if [[ "${1:-}" == "--fluent-ui-gallery" ]]; then
+    shift
+    if [[ "${AMSCOPE_BUILD_FLUENT_UI_GALLERY:-OFF}" != "ON" ]]; then
+        echo "Set AMSCOPE_BUILD_FLUENT_UI_GALLERY=ON to build the FluentQt gallery." >&2
+        exit 2
+    fi
+    exec "${BUILD_DIR}/amscope_fluent_ui_gallery" "$@"
+fi
 
 # The optional hardware-test mode uses the same configured build but opens
 # its own small preview window and reports physical-camera performance metrics.

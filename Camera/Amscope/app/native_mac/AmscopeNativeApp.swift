@@ -125,12 +125,30 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "AmScope"
-        // Keep the native title-bar controls and title fully visible while
-        // removing only the title-bar's opaque material surface.
-        window.titlebarAppearsTransparent = true
         window.setContentSize(NSSize(width: 1440, height: 900))
         window.minSize = NSSize(width: 960, height: 640)
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.styleMask = [
+            .titled,
+            .closable,
+            .miniaturizable,
+            .resizable,
+            .fullSizeContentView
+        ]
+
+        // Transparency belongs to the window/surface, not its controls.
+        // fullSizeContentView lets the clear title-bar reveal the content
+        // behind it while preserving native title text and traffic-light
+        // controls. A non-opaque clear window lets the clear dock reveal the
+        // desktop instead of being repainted with the default window color.
+        window.titlebarAppearsTransparent = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        hostingController.view.wantsLayer = true
+        hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingController.view.layer?.isOpaque = false
+        window.contentView?.wantsLayer = true
+        window.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+        window.contentView?.layer?.isOpaque = false
         window.center()
 
         let windowController = NSWindowController(window: window)

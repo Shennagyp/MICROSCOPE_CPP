@@ -213,9 +213,13 @@ a `NativeCameraFrameFeed` contract for frame notifications and one
 counters. The adapter call is made once per notification. It reads the counters
 and atomically transfers the existing frame lease; the value snapshot is stack
 data and does not copy pixel bytes or create storage. The Core Graphics provider
-retains that lease while referencing the original frame bytes. There is no
-intermediate `NSData` or pixel-buffer copy, second frame queue, per-frame Task
-or additional dispatch. Both panes receive the same counter snapshot.
+retains that lease while referencing the original frame bytes. RGB and gray
+device color spaces are cached for the process lifetime; the provider and
+`CGImage` remain frame-specific. There is no intermediate `NSData` or pixel-buffer
+copy, second frame queue, per-frame Task or additional dispatch. Both panes
+receive the same counter snapshot. The latest-frame mailbox moves the acquired
+`FramePtr` into its atomic slot and retains only the compare token needed to
+reject stale-generation cleanup, avoiding an unnecessary shared-pointer copy.
 
 `NativeCameraModel` owns session state: device selection, camera state,
 session identity, operation-pending state and Open/Start/Stop/Close commands.
@@ -354,6 +358,9 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
 13. Frame-statistics tooltips are configured once; pane labels update only when
     counters actually change, and the active pane combines its displayed-frame
     count with the incoming acquisition counters in one label update.
+14. Immutable frame leases cross the mailbox and Core Graphics boundary without
+    copying pixel bytes. Frame-specific providers retain the source lease for the
+    lifetime of the image; only small immutable color-space objects are shared.
 
 A UI simplification is invalid if it weakens any of these invariants.
 

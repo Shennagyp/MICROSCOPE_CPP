@@ -1,0 +1,185 @@
+# OPTIKA B293 Dual-Slide Application Refactoring Plan
+
+**Branch:** `OPTIKA-B293-DUALSLIDE-APP`  
+**Starting commit:** `f25e5d8e6fdefea7f742fb71fa5f4ead69291626`  
+**Plan status:** Architecture-first; implementation has not started  
+**Related architecture:** [OPTIKA B293 Dual-Slide Application Architecture](../architecture/OPTIKA_B293_DUALSLIDE_APPLICATION_ARCHITECTURE.md)
+
+## Objective
+
+Turn the current camera-centric native macOS application into an OPTIKA B293 microscope workstation application. Move application ownership outside `Camera/`, refactor the UI and state model, and preserve the existing camera backend as an independent capability.
+
+The goal is lower conceptual and maintenance complexity, not artificially low line count. Prefer fewer concepts, fewer duplicated rules, explicit state ownership and compact composition over compressed code or oversized generic frameworks.
+
+## Constraints
+
+- Existing `Camera/Amscope` driver behavior and ownership remain stable.
+- No motorization or image-processing implementation is invented before its contracts and requirements are concrete.
+- The new application is not nested under `Camera/`.
+- Camera, Motion and ImageProcessing are sibling capabilities.
+- UI does not call hardware APIs directly.
+- Pure calculations remain independent of SwiftUI, AppKit and vendor SDKs.
+- The existing single-stream, dual-slide behavior remains intact.
+- Preview frame leases, acquisition worker, bounded queue, mailbox, generation gate and single consumer are preserved.
+- The current v0.8 app remains a migration reference until replacement behavior is accepted.
+- No source file is split or moved merely to make folders look clean.
+- No builds, tests, debugging sessions or hardware runs are performed as part of static planning unless explicitly requested in a later task.
+
+## Phase 0 — Baseline and ownership map
+
+**Purpose:** establish exactly what exists before moving it.
+
+Deliverables:
+- Inventory all native application files currently under `Camera/Amscope/app/native_mac`.
+- Classify each file as camera driver, application adapter, domain policy, presentation, persistence or test.
+- Record public contracts and cross-file dependencies.
+- Map state ownership and mutation paths in `NativeCameraModel`.
+- Map the frame lifecycle from SDK callback through presentation and capture.
+- Record the current dual-slide semantics, overlay coordinate system, image scaling semantics and calibration assumptions.
+- Identify which dock-model types are used by the live UI and which are currently unused.
+
+Exit criteria:
+- Every file has a destination or an explicit retain-in-place decision.
+- Every shared state value has one named owner.
+- The frame pipeline invariants are captured before any UI change.
+- Unverified optical assumptions are labeled as such.
+
+## Phase 1 — Product/application build boundary
+
+**Purpose:** make the application structurally independent of the camera directory.
+
+Deliverables:
+- Create `Application/OptikaB293` as the application-owned source/build boundary.
+- Move or copy only application-owned entry point, UI and integration adapter files into the new boundary, preserving the old target while migration is in progress.
+- Move `NativeCameraController` and the Objective-C++ bridge to an application camera adapter location; they coordinate the application with Camera but are not the vendor driver.
+- Extract application-target configuration from `Camera/Amscope/CMakeLists.txt` into the application build definition.
+- Keep the AmScope driver and common camera types buildable without the app.
+- Add a top-level build entry point only when needed to compose the product targets.
+
+Exit criteria:
+- Camera library targets no longer own or compile the product application.
+- Application target links to camera libraries from outside `Camera/`.
+- The existing camera library's public contracts are unchanged.
+- The migration can still build both the old reference target and the new target until cutover.
+
+## Phase 2 — Functional core extraction
+
+**Purpose:** move policy and deterministic calculations out of UI state holders.
+
+Extract focused pure functions/value models for:
+- Optical calibration and conversion to specimen-plane distance.
+- Automatic resolution selection, including explicit readout-mode semantics and evidence/provenance.
+- Source-image, viewport and display coordinate transforms.
+- Fit, lock and 1:1 image scaling policy.
+- Measurement geometry and overlay coordinate calculations.
+- Future stage coordinate transforms and motion-limit evaluation when stage requirements are specified.
+
+Exit criteria:
+- Pure operations accept explicit inputs and return explicit values/results.
+- Invalid or unknown physical inputs produce an unknown/error result, not fabricated precision.
+- UI does not duplicate the same calculations.
+- Tests cover mathematical invariants and boundary cases as each pure module is introduced.
+
+## Phase 3 — Application composition and state ownership
+
+**Purpose:** remove the monolithic shared application model without introducing a global framework.
+
+Target state owners:
+- Camera session state: application camera adapter/session projection.
+- Camera feature state: feature snapshot and mutation coordinator.
+- Microscope/optical configuration: microscope configuration owner and persistence port.
+- Workspace state: active live destination, dock visibility/layout and pane selection.
+- Slide document state: per-pane retained image, freeze, view transform and overlays.
+- Capture gallery state: capture store and persistence lifecycle.
+
+Deliverables:
+- Application composition root constructs concrete capability adapters and feature coordinators.
+- Replace `NativeCameraModel.shared` as a hidden dependency with explicit composition/injection.
+- Separate state transitions from effects.
+- Make asynchronous completion/error paths update the correct state owner.
+- Prevent stale feature reads or stale session callbacks from overwriting newer state.
+
+Exit criteria:
+- No single observable object owns camera, microscope, slide, dock and gallery state.
+- UI dependencies are constructor/property injected.
+- Side effects have explicit owners and cancellation/lifecycle rules.
+- There is no duplicate source of truth for active live destination or optical configuration.
+
+## Phase 4 — UI and preview refactoring
+
+**Purpose:** reduce UI complexity without changing user-visible behavior.
+
+Deliverables:
+- Decompose the main workspace into small views with explicit inputs/actions.
+- Separate dual-preview frame routing from slide-pane presentation.
+- Separate image-document navigation/scaling from slide-pane controls.
+- Separate overlay state/geometry from overlay drawing.
+- Keep AppKit for high-rate preview rendering; use SwiftUI for composition and low-frequency controls.
+- Preserve floating overlay dock, permanent rail, resize behavior and the current 80% panel transparency requirement unless the user changes it.
+- Keep control visibility and minimum-pane-width behavior explicit.
+- Keep keyboard/accessibility and narrow-pane behavior in scope rather than treating it as decoration.
+
+Exit criteria:
+- Presentation files have cohesive responsibilities.
+- No view performs camera I/O, persistence or scientific policy.
+- One live frame consumer remains.
+- Every overlay coordinate maps to source-image coordinates and survives view transforms correctly.
+- Dual-slide behavior is unchanged.
+
+## Phase 5 — Capability expansion seams
+
+**Purpose:** add future capabilities without placing them in Camera.
+
+### Motion
+
+Define contracts only after stage hardware and operations are specified. Expected concepts include connection, axes, position, velocity, move, stop, home, limits, status and fault. Coordinate transforms and safety limits should be deterministic functions. Hardware-specific command execution belongs to the Motion implementation.
+
+### ImageProcessing
+
+Define an input contract based on vendor-neutral image/frame data and explicit pixel layout, stride, color space/format, coordinate system and calibration metadata. Algorithms should return typed results tied to the source image identity and parameter set. Processing must not control camera acquisition or the UI.
+
+### Workflow orchestration
+
+Application workflows may coordinate camera acquisition, stage positioning and image processing. Such orchestration belongs to the application/use-case layer. Do not create direct Camera-to-Motion or Camera-to-ImageProcessing dependencies.
+
+Exit criteria:
+- Each capability can be substituted independently.
+- Workflows coordinate them through declared contracts.
+- No empty abstraction is added without a concrete implementation/consumer.
+
+## Phase 6 — Migration acceptance and retirement of the transitional UI
+
+**Purpose:** cut over only after required behavior is preserved.
+
+Acceptance checklist:
+- Camera discovery/open/close/start/stop and generic feature control.
+- Single live stream routed to either slide.
+- Per-slide freeze/hold semantics.
+- Per-slide fit, manual scale lock, 1:1 and pan.
+- Capture/gallery behavior and durable image files.
+- Measurements and annotations in source-image coordinates.
+- Explicit optical calibration and honest unavailable-state behavior.
+- Floating dock/rail interactions and persisted preferences.
+- Correct teardown and application termination behavior.
+- No regression in frame ownership or backpressure.
+- Future capability interfaces do not leak into Camera.
+
+Only after acceptance:
+- Remove the transitional native application target from the camera CMake definition.
+- Remove obsolete UI files from `Camera/Amscope/app/native_mac`.
+- Retain the AmScope driver and camera-level diagnostic tools in Camera.
+- Update architecture and build documentation to the final layout.
+
+## Implementation discipline
+
+For every extraction or move, use this order:
+
+1. Identify current owner and all callers.
+2. Define the target contract and invariant.
+3. Move/extract without changing behavior.
+4. Update composition and build ownership.
+5. Review the diff for duplicated logic and accidental coupling.
+6. Add/adjust focused tests for pure behavior and state transitions.
+7. Verify build/runtime/hardware only in the user's environment when the user explicitly chooses to run those checks.
+
+A refactor is complete when the dependency graph and ownership are simpler, not merely when files are shorter or have new names.

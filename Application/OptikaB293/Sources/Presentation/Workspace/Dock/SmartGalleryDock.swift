@@ -152,7 +152,7 @@ struct NativeSmartGalleryDock: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(OptikaPalette.separator.opacity(0.7), lineWidth: 0.6)
+                    .stroke(OptikaPalette.separator.opacity(OptikaPalette.dockBorderAlpha), lineWidth: 0.6)
             )
         }
         .buttonStyle(PlainButtonStyle())

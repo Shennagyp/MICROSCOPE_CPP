@@ -32,11 +32,11 @@ struct DockCameraFeatureControl: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(OptikaPalette.controlSurface.opacity(0.20))
+                .fill(OptikaPalette.controlSurface.opacity(OptikaPalette.floatingPanelAlpha))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(OptikaPalette.separator.opacity(0.65), lineWidth: 0.5)
+                .stroke(OptikaPalette.separator.opacity(OptikaPalette.subtleBorderAlpha), lineWidth: 0.5)
         )
         .help(featureHelpText)
         .accessibilityElement(children: .contain)

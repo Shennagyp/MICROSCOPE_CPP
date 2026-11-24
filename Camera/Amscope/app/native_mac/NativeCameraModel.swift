@@ -230,6 +230,7 @@ final class NativeCameraModel: ObservableObject {
     }
 
     func selectManualPreviewResolution(to symbol: String) {
+        guard !symbol.isEmpty else { return }
         setAutomaticResolutionEnabled(false)
         changePreviewResolution(to: symbol)
     }

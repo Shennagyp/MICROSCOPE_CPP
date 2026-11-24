@@ -367,3 +367,14 @@ Committed source increments:
 2. Add the panel registry and main-window-scoped controller.
 3. Implement model mutations and persistence before replacing the current renderer.
 4. Adapt the existing two panels through the registry while preserving the current UI behavior.
+
+### Follow-up — rail reopens a closed dock
+
+- Added `NativeCameraModel.showWorkspaceDock(_:)`: selecting a permanent rail item selects that panel, clears stale floating placement and makes the in-window dock visible.
+- Added `closeWorkspaceDock()` and routed the dock close button and floating-window close delegate through it.
+- Routed the main dock close button through the same state transition.
+- Made the complete rectangular rail button bounds explicit and kept the rail overlay above the workspace with hit testing enabled.
+
+**Expected behavior:** after closing either dock presentation, clicking Camera Controls or Smart Gallery on the permanent right rail selects that tool and reopens the docked panel in the main window. The camera session and capture gallery are not affected.
+
+**Verification:** source paths and state transitions statically inspected. Build and runtime verification remain pending on the user's Mac.

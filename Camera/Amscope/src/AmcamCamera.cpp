@@ -439,9 +439,6 @@ buildAmcamFeatureDescriptors(
     const bool exposureReadable = SUCCEEDED(exposureHr);
     const bool exposureRangeValid = SUCCEEDED(exposureRangeHr) &&
         minExposure > 0 && maxExposure >= minExposure;
-    const bool exposureProbe = autoValid && exposureReadable &&
-        exposureRangeValid && exposure >= minExposure && exposure <= maxExposure;
-
     unsigned short gain = 0, minGain = 0, maxGain = 0, defaultGain = 0;
     const HRESULT gainHr = Amcam_get_ExpoAGain(handle, &gain);
     const HRESULT gainRangeHr = Amcam_get_ExpoAGainRange(

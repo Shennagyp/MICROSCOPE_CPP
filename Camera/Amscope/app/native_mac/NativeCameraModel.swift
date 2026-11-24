@@ -33,6 +33,35 @@ final class NativeCameraModel: ObservableObject {
             ?? "No camera selected"
     }
 
+    var informationBarFeatures: [AmscopeCameraFeatureDescriptor] {
+        let preferredTerms = [
+            "exposure time",
+            "exposure",
+            "gain",
+            "saturation",
+            "brightness",
+            "contrast"
+        ]
+        let candidates = featureDescriptors.filter { descriptor in
+            guard descriptor.isReadable else { return false }
+            guard descriptor.kind == .integer ||
+                  descriptor.kind == .floatingPoint else { return false }
+            let identity = (descriptor.name + " " + descriptor.displayName)
+                .lowercased()
+            return preferredTerms.contains { identity.contains($0) }
+        }
+        return candidates.sorted { left, right in
+            func priority(_ descriptor: AmscopeCameraFeatureDescriptor) -> Int {
+                let identity = (descriptor.name + " " + descriptor.displayName)
+                    .lowercased()
+                return preferredTerms.firstIndex {
+                    identity.contains($0)
+                } ?? preferredTerms.count
+            }
+            return priority(left) < priority(right)
+        }.prefix(3).map { $0 }
+    }
+
     var cameraStateText: String {
         switch cameraState {
         case .closed: return "Disconnected"

@@ -2,7 +2,7 @@
 
 #include "amscope/AmcamCamera.h"
 #include "amscope/detail/AcquisitionFrameGate.h"
-#include "camera/qt/FrameStreamMailbox.h"
+#include "camera/FrameStreamMailbox.h"
 
 #include <QMetaType>
 #include <QObject>
@@ -333,7 +333,7 @@ private:
     bool stoppingFeatureWorker_ = false;
 
     // Preserve the original mailbox-at-tail placement in this facade.
-    camera::qt::FrameStreamMailbox frameStreamMailbox_;
+    camera::FrameStreamMailbox frameStreamMailbox_;
 
 };
 } // namespace amscope

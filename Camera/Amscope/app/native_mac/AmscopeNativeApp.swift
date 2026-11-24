@@ -12,6 +12,7 @@ struct AmscopeNativeApp {
 }
 
 final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
+    private let cameraModel = NativeCameraModel.shared
     private var mainWindowController: NSWindowController?
     private var cameraControlsWindowController: NSWindowController?
 
@@ -35,7 +36,7 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
         }
 
         let hostingController = NSHostingController(
-            rootView: CameraControlsWindow()
+            rootView: CameraControlsWindow(model: cameraModel)
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Camera Controls"
@@ -51,7 +52,7 @@ final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
 
     private func showMainWindow() {
         let hostingController = NSHostingController(
-            rootView: MainWindowView()
+            rootView: MainWindowView(model: cameraModel)
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "AmScope"

@@ -228,6 +228,10 @@ const camera::Frame *frameFromStorage(void *storage) {
 
 @end
 
+@interface AmscopeNativeCameraBridge ()
+- (amscope::native_mac::NativeCameraController *)controller;
+@end
+
 @implementation AmscopeNativeCameraBridge
 
 - (instancetype)init {
@@ -471,11 +475,6 @@ const camera::Frame *frameFromStorage(void *storage) {
     if (!frame)
         return nil;
     return [[AmscopeFrameLease alloc] initWithFrame:std::move(frame)];
-}
-
-- (amscope::native_mac::NativeCameraController *)controller {
-    return static_cast<amscope::native_mac::NativeCameraController *>(
-        _controllerStorage);
 }
 
 @end

@@ -14,9 +14,9 @@ The v0.8 user-interface structure is:
 
 - The main window contains two persistent preview panes, Slide 1 and Slide 2, side by side. Either pane can be maximized independently and restored.
 - The camera preview begins at the top of the main window; there is no separate camera toolbar above it.
-- One thin bottom dock contains a draggable horizontal split: camera open/start and editable quick controls on the left, read-only camera/image/session information on the right. The dock can collapse to a narrow handle or detach into a floating utility panel and re-dock.
-- Each slide pane exposes a persistent `Switch Live` control. The live pane is identified by a red outer container border; the inactive pane retains its last image.
-- Up to three supported writable numeric features are exposed as direct value-entry controls in the editable region; the full descriptor editor remains in Camera Controls.
+- One thin bottom dock contains the camera connection indicator/actions, slide target selector, and every available generic camera feature descriptor. The feature strip scrolls horizontally so the dock remains compact. It can collapse or detach into a floating utility panel and re-dock.
+- The camera connection state and name are shown beside the camera actions on the left; camera name, resolution, pixel format, and acquisition metadata are not repeated as read-only property fields in the dock.
+- Each slide pane exposes a persistent `Switch Live` control. The selected live pane is identified by a thin red outer border; the inactive pane retains its last image.
 - Both images are rendered by a single purpose-built AppKit preview owner hosted in SwiftUI, not by SwiftUI `Image` views or per-frame observable properties.
 - The dedicated camera-controls window uses a width-flexible vertical layout inside an explicit scroll viewport; camera, acquisition, and descriptor groups remain reachable when the window is resized or the camera exposes many features.
 
@@ -148,12 +148,12 @@ live destination does not clear or replace the other pane's image. New frames
 replace the image only in the selected destination pane. Stop/Close and pane
 maximize/restore also do not clear the retained slide images.
 
-The bottom information region is a user-resizable horizontal split: editable
-quick-access feature controls are on the left; read-only camera, resolution,
-pixel-format, acquisition-state, and live-destination information are on the right.
-Quick controls are promoted only from supported readable/writable numeric feature
-descriptors; the full descriptor editor remains available in the Camera Controls
-window.
+The bottom dock contains a camera connection indicator and lifecycle actions,
+an explicit Slide 1/Slide 2 live-target selector, and all currently available
+generic camera feature descriptors. The feature controls are laid out horizontally
+and scroll inside the dock; writable descriptors use type-appropriate editors,
+while read-only descriptors show their current values. The dock does not repeat
+camera name, resolution, pixel format, or acquisition state as separate properties.
 
 **Current hardware boundary:** selecting Slide 1 or Slide 2 currently changes
 only the UI's live-frame destination. It does not physically move the microscope
@@ -163,6 +163,8 @@ physical slide switching. A future controller
 operation must perform the physical switch and acknowledge the resulting slide
 position. The controller's acknowledged position, not an optimistic view-local
 selection, must become authoritative when hardware switching is integrated.
+
+**Control scope:** the native bridge currently exposes generic feature descriptors and lifecycle commands. Separate command/telemetry interfaces (trigger configuration, I/O lines, auto white balance, frame-rate statistics, still capture, embedded light source, filter wheel, ST4, focusers, and lens aperture) are defined by the existing camera facade but are not yet exposed by the native bridge. They must not be represented as working dock controls until their asynchronous bridge/controller operations are ported.
 
 **Frame-pool budget:** the current driver pool has four slots. The two slide panes
 may retain at most two displayed frame leases; the latest-frame mailbox may retain

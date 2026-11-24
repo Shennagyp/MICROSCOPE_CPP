@@ -217,6 +217,40 @@ Only after acceptance:
 - Retain the AmScope driver and camera-level diagnostic tools in Camera.
 - Update architecture and build documentation to the final layout.
 
+## Verification checkpoints
+
+**Run the first full configure/build/test checkpoint now, before beginning Phase 5.**
+Phases 1–4 contain substantial C++, Objective-C++, Swift, CMake and ownership
+changes, but source audits do not establish that the product compiles or runs.
+
+With the Qt adapter and standalone preview app disabled, CTest should register
+15 deterministic tests: five Camera/Common tests, six AmScope tests and four
+application policy/geometry tests. Build the native app and all test targets,
+then run the complete CTest suite:
+
+```bash
+cmake -S . -B build/optika-b293-verify \
+  -DOPTIKA_BUILD_NATIVE_APP=ON \
+  -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
+  -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
+  -DBUILD_TESTING=ON \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build/optika-b293-verify --parallel
+ctest --test-dir build/optika-b293-verify --output-on-failure
+```
+
+Only after build and CTest pass should the native app be launched for manual
+UI checks. Camera-connected acquisition, resolution changes, freeze behavior,
+capture-file inspection and shutdown are a subsequent hardware acceptance
+checkpoint; they are not replaced by the deterministic unit tests.
+
+Repeat configure/build/CTest after changes to Camera, the frame feed, image
+ownership, capture, CMake composition or other compiled application contracts.
+Run Phase 6 end-to-end acceptance only after the earlier checkpoints pass and
+the remaining product workflows are implemented. A build or test failure is a
+stop condition: fix it before layering more refactoring on top.
+
 ## Implementation discipline
 
 For every extraction or move, use this order:

@@ -244,8 +244,11 @@ private enum NativeCaptureFileCodec {
         }
 
         guard let item = loadCapture(at: url, slideOverride: slide) else {
-            try? FileManager.default.removeItem(at: url)
-            return .failure(makeError("The capture was saved but its thumbnail could not be generated."))
+            // PNG finalization already succeeded. A gallery-thumbnail failure
+            // must not delete the user's valid capture file.
+            return .failure(makeError(
+                "The PNG was saved, but its gallery thumbnail could not be generated. The file remains in the capture folder."
+            ))
         }
         return .success(item)
     }

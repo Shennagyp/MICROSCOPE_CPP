@@ -413,6 +413,23 @@ acquisition worker remains active during the wait; vendor API calls are
 serialized by the camera API mutex. The one-shot allocation is expected capture
 work and must not be moved into the per-frame preview path.
 
+The current application gallery button is intentionally a different operation:
+it saves the active slide pane's already displayed CGImage. It does not issue a
+new SDK still-capture request or change the camera's readout/resolution. The
+captured PNG therefore represents the current preview frame and its dimensions
+and pixel format, not a separately acquired high-resolution still. The backend
+AmcamCamera::captureStill API is not the route used by this gallery button.
+
+Capture runs on a background worker and is limited to one pending save. Before
+PNG compression and disk I/O, the worker copies the CGImage provider data into
+independent storage and releases the source CGImage. This one explicit
+capture-time copy is deliberate: it returns the live frame-pool slot promptly
+instead of retaining a camera lease during potentially slow encoding or file
+I/O. It does not add work to the continuous acquisition or preview path. A
+thumbnail-generation failure after successful PNG finalization must preserve
+the saved PNG; the gallery may report the thumbnail error, but it must not
+delete the user's capture.
+
 ### 7.4 Presentation decomposition
 
 The two-slide viewer should be composed from focused units with explicit boundaries:

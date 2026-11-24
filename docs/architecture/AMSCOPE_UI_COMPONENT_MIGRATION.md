@@ -235,13 +235,37 @@ The exact chosen component must be checked against its actual public API in the 
 - No new node editor, graph editor, backend, or parallel application service.
 - No general redesign of the product's scientific workflow; this work is a presentation/component migration.
 
+## 12. UI-1 implementation snapshot
+
+The isolated proof target is now committed on this branch:
+
+- `AMSCOPE_BUILD_FLUENT_UI_GALLERY` is OFF by default.
+- CMake fetches only the pinned `FluentQt v1.12.2` release when the option is enabled.
+- Upstream Gallery, examples, tests, Particles, Spatial, Plugins, QML bridge, PySide6, WebAssembly, and install integration are explicitly disabled.
+- The only linked upstream target is `FluentQt::FluentQt`.
+- `Camera/Amscope/app/fluent_ui_gallery.cpp` presents buttons, combo boxes, check boxes, a toggle switch, a numeric input, a slider, cards, and a Light/Dark switch.
+- The gallery actions are local demonstrations only. It has no camera facade, SDK access, session, or frame path.
+- `scripts/run-amscope.sh` accepts the opt-in launcher command:
+  `AMSCOPE_BUILD_FLUENT_UI_GALLERY=ON ./scripts/run-amscope.sh --fluent-ui-gallery`.
+- The production `amscope_preview` target does not link FluentQt and is unchanged by this experiment.
+
+### macOS deployment-target caveat
+
+The pinned upstream CMake file sets `CMAKE_OSX_DEPLOYMENT_TARGET` to `14.0` when the caller has not supplied a value. The actual compiled library and final gallery deployment target must be inspected in the owner build. Do not lower the deployment target merely to silence a warning; verify that the exact release source uses no unavailable APIs and that the selected Qt kit supports the intended deployment range. This requirement may affect whether FluentQt is acceptable for the supported Mac fleet.
+
+### Verification status
+
+- Source and CMake integration reviewed statically.
+- No build, test, gallery launch, screenshot, or hardware run has been performed in this environment.
+- UI-1 remains OPEN until the owner builds and launches the gallery on the target Mac and accepts or rejects the visual direction.
+
 ## 11. Current status
 
 - [x] Existing Widgets shell and component usage inspected.
 - [x] Current global Fusion/QSS styling identified as an important source of the weak component system.
 - [x] FluentQt v1.12.2 assessed as a QWidget-native component candidate.
 - [x] Qt Quick/QQuickWidget rejected as the first migration route because of the existing live preview architecture.
-- [ ] UI-1 dependency build and visual proof on the target Mac.
+- [ ] UI-1 dependency build and visual proof on the target Mac. The opt-in gallery target and launcher are now present; neither has yet been built or run by the owner.
 - [ ] UI-2 through UI-6.
 
 No FluentQt code has been integrated into the production AmScope target yet. This branch begins with the decision and the isolated migration plan; the existing `amscope-native-driver-0.7` branch remains the known working baseline.

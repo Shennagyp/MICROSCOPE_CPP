@@ -98,6 +98,11 @@ private struct NativeFeatureEditor: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+                if let error = model.featureError(for: descriptor) {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
             }
 
             Spacer(minLength: 12)

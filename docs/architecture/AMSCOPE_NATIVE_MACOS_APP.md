@@ -100,7 +100,7 @@ The native application must not link or instantiate `QtAmcamCamera`. The Qt adap
 
 ## 4. Frame handoff and rendering lifetime
 
-The existing `camera::qt::FrameStreamMailbox` is a single-slot, atomic latest-frame mailbox with a notification-pending latch. Its implementation is framework-independent despite its current include path. The native frontend must reuse this behavior, not write a competing queue.
+The shared `camera::FrameStreamMailbox` in `Camera/Common` is a single-slot, atomic latest-frame mailbox with a notification-pending latch. The Qt include path remains as a source-compatibility alias, while `QtAmcamCamera` now consumes the common type directly. The native frontend must use this same implementation, not write a competing queue.
 
 The mailbox contract is:
 

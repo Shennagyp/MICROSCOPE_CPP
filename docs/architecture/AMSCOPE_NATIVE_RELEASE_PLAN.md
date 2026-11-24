@@ -163,51 +163,57 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; FrameView build/tests and MU503 smoke passed; CameraControlPanel implementation added at `17d6b0a`; its Release build/CTest and post-extraction smoke are pending**
+**Status: IN PROGRESS; FrameView build/tests and MU503 smoke passed; File-menu controls window and ImageInfoBar are implemented, but their Release build/CTest and post-change hardware smoke remain pending**
 
 Implemented in this Phase 4 slice:
 
-- Added the standalone `Camera::QtWidgets` static CMake target, depending on `Camera::Common` and Qt Widgets, with a focused offscreen test target.
-- Extracted the preview's `FrameView` into `camera::qtwidgets::FrameView`. Its public contract uses only `camera::FramePtr` and Qt Widgets; it has no AmScope SDK, `AmcamCamera`, or `QtAmcamCamera` dependency.
-- Preserved the existing external-memory `QImage` wrappers for RGB24, RAW8, and RAW16, the retained immutable frame lease, and the post-paint callback. The stream widget does not make an owned pixel copy, perform RAW demosaicing, or introduce a GPU renderer.
-- The AmScope preview now composes this reusable widget. Camera lifecycle, still-image saving, FPS accounting, feature requests, and AmScope accessory panels remain in the application layer.
-- The owner completed a Release configure and full build on `amscope-native-driver-v0.7` at `892b91a57016e570a1e972343f78ed7c42be801c`. The `amscope_preview` executable linked successfully, and all 13/13 CTest tests passed (0.32 seconds), including `camera_qt_widgets_frame_view_tests`.
-- The focused offscreen test covers RGB24, RAW8 and RAW16 paint paths, retention/release of the immutable `FramePtr` lease, invalid/truncated payload rejection, and the post-paint callback.
+- Added the standalone `Camera::QtWidgets` static CMake target, depending on `Camera::Common` and Qt Widgets.
+- Extracted `camera::qtwidgets::FrameView`. Its public contract uses only `camera::FramePtr` and Qt Widgets. It wraps retained external frame memory for RGB24, RAW8 and RAW16; it does not make an owned per-frame pixel copy, demosaic RAW data, or add a GPU renderer.
+- Extracted `camera::qtwidgets::CameraControlPanel`. It accepts common `CameraDeviceInfo` values, preserves opaque device IDs, and reports Refresh/Open/Start/Stop/Close intent through host callbacks. It owns no enumeration, camera session, request scheduler, or backend lifecycle behavior.
+- Added `camera::qtwidgets::ImageInfoBar`. It displays host-supplied imaging facts and values, reports double-click/keyboard edit intent, and has no camera access or feature-write behavior of its own.
+- The main preview is now image-first: the main window contains the live `FrameView` and the bottom `ImageInfoBar`. Camera discovery, Open/Start/Stop/Close, still capture, feature controls, trigger configuration and accessories are hosted in a separate modeless **File → Camera Controls…** window. Discovery is initiated when that window is opened; there is no camera-control toolbar in the main preview.
+- The bottom information bar combines acquired-frame metadata (dimensions, pixel layout/depth, payload size, sequence, frame exposure, event/pull/paint rates, and dropped-frame count) with existing readable image-related camera-feature values. It displays only features actually present and available in the current descriptor inventory.
+- Double-clicking an editable feature item opens a typed value editor. Editing is offered only when the descriptor is available, readable and writable and a complete feature readback is present. The host validates with the existing common feature validator, submits through the existing queued `requestWriteFeature` path, and refreshes descriptors/current values after the backend write. The bar displays the newly confirmed readback, not an optimistic requested value.
+- This increment does **not** add a camera backend, SDK operation, feature descriptor, or saturation support. Saturation was an illustrative example only; the UI does not synthesize unsupported settings. No `AmcamCamera` or vendor SDK source was changed for this UI request.
+- Added the offscreen `camera_qt_widgets_image_info_bar_tests` target for item lifecycle, editable double-click routing, and read-only behavior. Together with `camera_qt_widgets_camera_control_panel_tests` and `camera_qt_widgets_frame_view_tests`, the expected CTest suite is now **15 tests**.
+- Source implementation commits: ImageInfoBar component `aca62b2`; CMake/test registration `1a7749c`; File-menu controls window and info-bar composition `f60029d`; readback/edit gating `922c841`; lazy discovery on opening the controls window `8ff51be`; vector/string editing `a7cc6d5`; info-bar interaction/readback hardening `614213b`; image-property display filtering `775f2b3`. The latest source commit is `775f2b341e7d8fd61c2071e808c13058721c9d76`.
+- This new UI increment has **not** yet been built or tested locally. The prior 13/13 build and prior MU503 smoke record apply to the earlier FrameView increment only. Do not extrapolate that result to this UI reorganization.
 
-The owner subsequently confirmed that the post-extraction MU503 preview sequence passed on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`: launch preview, discover/select the camera, Open, Start and observe changing frames in the extracted `FrameView`, Stop, and Close. The focused record is `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. This closes the physical FrameView integration gate only; it does not establish FPS, sustained acquisition, still capture, feature readback, or the separate supported-feature UI exit criterion.
+Previously accepted FrameView physical check: the owner confirmed the MU503 preview sequence on checkout `5339c441659b45a3bdb30fdce6971f6dc991f885`; record `docs/testing/hardware/phase-4-mu503-frame-view-smoke-2026-11-24.md`. That evidence verifies the FrameView integration before the current File-menu/info-bar change. The new UI still requires a separate smoke check.
 
-### Camera discovery and lifecycle control panel — implemented, verification pending
+Next acceptance gate:
 
-- Added `camera::qtwidgets::CameraControlPanel` to backend-neutral `Camera::QtWidgets`. It consumes common `camera::CameraDeviceInfo` values and retains opaque device IDs.
-- The panel reports Refresh/Open/Start/Stop/Close intent through host-supplied callbacks. The host supplies the coarse presentation state and discovery/lifecycle/other-operation pending flags.
-- The panel owns no enumeration, camera session, vendor error, asynchronous request queue, generation, or backend lifecycle operation. The AmScope preview retains those responsibilities and converts discovered AmScope records to their common base values at the composition boundary.
-- It disables buttons until the corresponding host callback is installed. A faulted session permits Close only.
-- Added `camera_qt_widgets_camera_control_panel_tests` for labels/opaque IDs, callbacks, empty discovery, pending-state gating, and Closed/Open/Streaming/Faulted action availability.
-- Source history: panel contract `a4ca387`, panel implementation `1559099`, AmScope preview/CMake integration `195f0f6`, focused test `5189d40`, preservation of the original accessory/trigger enablement rules `3795427`, callback-presence gating and corresponding test refinement `17d6b0a`, and explicit `QString` include `cd37af6`. The latest source commit is `cd37af622783f4dc8a5d3ae16782955887a286ce`. This increment has **not** yet been built or tested locally. It adds one CTest target, bringing the expected suite from 13 to 14.
-- After local Release build and 14/14 CTest pass, repeat the MU503 discovery/Open/Start/changing-frame/Stop/Close smoke using the new panel. The earlier FrameView smoke does not validate this later panel change.
+1. Release build of the full `amscope_preview` target and all **15/15** CTest tests.
+2. Launch the app and verify the main window contains only the image preview and bottom information bar; open **File → Camera Controls…** and verify all camera operations/settings are in that window.
+3. With the MU503, discover/select, Open, Start, verify changing frames and bottom metadata, Stop, and Close.
+4. Double-click one image-related feature that the current device descriptors report as available/readable/writable; verify the edit goes through the existing write/readback flow and the bar changes only after readback. Do not use saturation as an acceptance target unless the camera already advertises it in its descriptors.
+5. No FPS benchmark or new feature-capability qualification is implied by this UI work.
 
+Phase 4 remains open after these checks until the remaining reusable feature-editor, command, telemetry, and capability presentation slices are completed and the phase-wide exit criteria are met.
 
 Extract only the components needed to turn the preview into a reusable library:
 
-1. Camera discovery and selection — implemented in `CameraControlPanel`; build/test pending.
-2. Open/close/start/stop controls — implemented in `CameraControlPanel`; build/test pending.
-3. Descriptor-driven feature editors, including current-value loading and disabled/unavailable states — next extraction slice.
+1. Camera discovery and lifecycle controls — `CameraControlPanel`, hosted from the File menu.
+2. Bottom image information bar — `ImageInfoBar`, displaying host-supplied frame metadata and confirmed feature values.
+3. Descriptor-driven feature editors, including current-value loading and disabled/unavailable states — existing application editor remains in place; generic extraction is a later slice.
 4. Command controls kept separate from setting writes.
 5. Telemetry presentation with explicit units.
 6. Live frame view and still-capture interaction.
 7. Capability/availability presentation.
 
-The reusable UI target must depend on common camera contracts and Qt, not Amcam headers, `HAmcam`, or backend implementation classes. Backend-specific accessory panels may remain in a separate AmScope UI extension.
+The reusable Qt Widgets target must depend on common camera contracts and Qt, not Amcam headers, `HAmcam`, or backend implementation classes. The AmScope application retains enumeration, request scheduling, validation/readback policy, session ownership, and backend execution. Backend-specific accessory panels may remain in a separate AmScope UI extension.
 
-Convert the current `main.cpp` preview into a composition root that wires the AmScope adapter to reusable widgets. Do not redesign the visual product or add a node editor.
+Do not redesign this as a visual graph editor or add a node editor.
 
 **Exit criteria**
 
 - The essential camera UI is built from reusable components.
-- The preview contains composition/wiring rather than owning the widget implementations.
+- The main preview contains the live image and bottom information bar, not camera-control toolbars or feature panels.
+- All camera controls are reachable through **File → Camera Controls…** and are hosted in that separate window.
+- The information bar shows only actual frame metadata and feature values confirmed by readback; editable items require current available/readable/writable descriptors.
 - Generic widgets have no AmScope SDK dependency.
 - Unsupported controls are not presented as usable.
-- The physical MU503 can be discovered, opened, previewed, controlled through a supported feature, stopped, and closed through the composed UI.
+- The physical MU503 can be discovered, opened, previewed, controlled through an existing supported feature, stopped, and closed through the composed UI.
 
 ### Phase 5 — Reconcile AmScope feature and model claims
 
@@ -309,7 +315,7 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
 | 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView build/tests and MU503 smoke passed; CameraControlPanel added at `17d6b0a`, build/CTest and its MU503 smoke pending; generic feature editor remains |
+| 4 | Reusable Qt camera UI | IN PROGRESS; FrameView is accepted; File-menu controls window and ImageInfoBar source are implemented at `775f2b3`; Release build, 15/15 CTest and new MU503 UI/edit smoke pending; generic feature-editor extraction remains |
 | 5 | AmScope feature/model claim reconciliation | OPEN |
 | 6 | Exported CMake package and external consumers | OPEN |
 | 7 | Integrated AmScope release qualification | OPEN |

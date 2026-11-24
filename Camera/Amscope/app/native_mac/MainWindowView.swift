@@ -40,7 +40,8 @@ struct MainWindowView: View {
                             model.setWorkspaceDockWidth($0, maximum: maximumDockWidth)
                         }
                     )
-                    .frame(width: dockDividerWidth, maxHeight: .infinity)
+                    .frame(width: dockDividerWidth)
+                    .frame(maxHeight: .infinity)
 
                     NativeWorkspaceDock(
                         model: model,
@@ -143,7 +144,7 @@ struct NativeWorkspaceDockResizeDivider: NSViewRepresentable {
 }
 
 @MainActor
-private final class NativeWorkspaceDockResizeDividerView: NSView {
+final class NativeWorkspaceDockResizeDividerView: NSView {
     private var dockWidth: CGFloat
     private var maximumWidth: CGFloat
     private var onResize: ((CGFloat) -> Void)?

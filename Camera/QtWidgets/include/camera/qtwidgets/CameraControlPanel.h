@@ -20,7 +20,9 @@ namespace camera::qtwidgets {
 enum class CameraPanelLifecycleState : std::uint8_t {
     Closed,
     Open,
+    Starting,
     Streaming,
+    Stopping,
     Faulted
 };
 

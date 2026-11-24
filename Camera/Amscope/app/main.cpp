@@ -35,6 +35,7 @@
 #include <QSaveFile>
 #include <QStatusBar>
 #include <QTime>
+#include <QToolBar>
 #include <QSettings>
 #include <QStyleFactory>
 #include <QJsonDocument>

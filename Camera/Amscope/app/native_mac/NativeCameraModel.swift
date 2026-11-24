@@ -61,6 +61,9 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
     @Published private(set) var openedCameraDeviceID: String?
     @Published private(set) var activeSlide: NativeSlideID = .slide1
+    @Published var selectedWorkspaceDockTab: NativeWorkspaceDockTab = .cameraControls
+    @Published var isWorkspaceDockVisible = true
+    @Published var isWorkspaceDockFloating = false
     @Published var errorMessage = ""
     @Published var isShowingError = false
     @Published private(set) var isCameraOperationPending = false

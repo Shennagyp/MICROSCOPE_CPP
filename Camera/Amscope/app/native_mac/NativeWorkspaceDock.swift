@@ -40,7 +40,7 @@ struct NativeWorkspaceDock: View {
                         .font(.system(size: 10, weight: .semibold))
                         .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(BorderlessButtonStyle())
                 .help("Hide dock")
                 .accessibilityLabel("Hide dock")
             }
@@ -97,10 +97,10 @@ struct NativeWorkspaceDock: View {
                     )
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PlainButtonStyle())
         .foregroundColor(selectedTab == tab ? .primary : .secondary)
         .help(tab.title)
-        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+        .accessibilityLabel(tab.title)
     }
 }
 
@@ -131,6 +131,7 @@ private struct NativeCameraControlsDock: View {
                                 .tag(objective.id)
                         }
                     }
+                    .pickerStyle(PopUpButtonPickerStyle())
                     .disabled(model.isCameraOperationPending)
                     .help("Current objective. Configure objectives in File → Microscope Configuration.")
 
@@ -183,7 +184,7 @@ private struct NativeCameraControlsDock: View {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(BorderlessButtonStyle())
                         .help("Refresh camera feature values")
                         .disabled(!model.canAccessFeatures ||
                                   model.isFeatureSnapshotLoading ||
@@ -301,13 +302,17 @@ private struct CameraDockConnectionSection: View {
                         Text(camera.displayName).tag(camera.deviceID)
                     }
                 }
+                .pickerStyle(PopUpButtonPickerStyle())
                 .disabled(!model.canConnectDetectedCamera)
 
                 HStack {
                     Button {
                         model.refreshCameras()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Refresh")
+                        }
                     }
                     .disabled(model.isEnumeratingCameras || model.isCameraOperationPending)
 
@@ -316,19 +321,37 @@ private struct CameraDockConnectionSection: View {
                     Button {
                         model.openAndStartCamera(deviceID: model.selectedDeviceID)
                     } label: {
-                        Label("Open + Start", systemImage: "play.fill")
+                        HStack(spacing: 5) {
+                            Image(systemName: "play.fill")
+                            Text("Open + Start")
+                        }
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color.accentColor.opacity(0.18))
+                        )
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PlainButtonStyle())
                     .disabled(!model.canConnectDetectedCamera || model.selectedDeviceID.isEmpty)
                 }
             } else if model.cameraState == .open {
                 Button {
                     model.startAcquisition()
                 } label: {
-                    Label("Start preview", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.fill")
+                        Text("Start preview")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color.accentColor.opacity(0.18))
+                    )
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PlainButtonStyle())
                 .disabled(!model.canStart)
             } else if model.cameraState == .streaming {
                 Text("Preview is running. Right-click the camera name to Stop or Close.")
@@ -336,13 +359,9 @@ private struct CameraDockConnectionSection: View {
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else if model.cameraState == .starting || model.cameraState == .stopping {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Camera operation in progress…")
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                }
+                Text("Camera operation in progress…")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
             } else if model.cameraState == .faulted {
                 Text("Camera faulted. Right-click the camera name to Close the session.")
                     .font(.system(size: 9))
@@ -365,11 +384,6 @@ private struct CameraDockConnectionSection: View {
 private struct NativeSmartGalleryDock: View {
     @ObservedObject var gallery: NativeCaptureGalleryStore
 
-    private let columns = [
-        GridItem(.flexible(minimum: 100), spacing: 8),
-        GridItem(.flexible(minimum: 100), spacing: 8)
-    ]
-
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -384,10 +398,8 @@ private struct NativeSmartGalleryDock: View {
                 Spacer()
 
                 if gallery.isCapturing {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Saving…")
-                        .font(.system(size: 9))
+                    Text("● Saving…")
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundColor(.secondary)
                 }
             }
@@ -406,7 +418,7 @@ private struct NativeSmartGalleryDock: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(BorderlessButtonStyle())
                 }
                 .padding(8)
                 .background(Color.orange.opacity(0.10))
@@ -433,74 +445,9 @@ private struct NativeSmartGalleryDock: View {
                 .padding(16)
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
-                    LazyVGrid(columns: columns, spacing: 10) {
+                    VStack(spacing: 8) {
                         ForEach(gallery.captures) { item in
-                            Button {
-                                NSWorkspace.shared.open(item.fileURL)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Group {
-                                        if let image = NSImage(data: item.thumbnailData) {
-                                            Image(nsImage: image)
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fit)
-                                        } else {
-                                            ZStack {
-                                                Color.black.opacity(0.08)
-                                                Image(systemName: "photo")
-                                                    .foregroundColor(.secondary)
-                                            }
-                                        }
-                                    }
-                                    .frame(height: 104)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.black.opacity(0.06))
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
-
-                                    HStack(spacing: 4) {
-                                        Text(item.slide.title)
-                                            .font(.system(size: 9, weight: .semibold))
-                                        Spacer(minLength: 0)
-                                        Text(item.dimensionsText)
-                                            .font(.system(size: 8, design: .monospaced))
-                                            .foregroundColor(.secondary)
-                                    }
-
-                                    Text(item.capturedAt, style: .time)
-                                        .font(.system(size: 8))
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(nsColor: NSColor.windowBackgroundColor))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.7), lineWidth: 0.6)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .help("Open capture in the default image viewer")
-                            .contextMenu {
-                                Button {
-                                    gallery.reveal(item)
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "folder")
-                                        Text("Show in Finder")
-                                    }
-                                }
-
-                                Button(role: .destructive) {
-                                    gallery.delete(item)
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "trash")
-                                        Text("Delete Capture")
-                                    }
-                                }
-                            }
+                            captureRow(item)
                         }
                     }
                     .padding(10)
@@ -518,6 +465,80 @@ private struct NativeSmartGalleryDock: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
+        }
+    }
+
+    private func captureRow(_ item: NativeCaptureItem) -> some View {
+        Button {
+            NSWorkspace.shared.open(item.fileURL)
+        } label: {
+            HStack(spacing: 9) {
+                Group {
+                    if let image = NSImage(data: item.thumbnailData) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        ZStack {
+                            Color.black.opacity(0.08)
+                            Image(systemName: "photo")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .frame(width: 108, height: 78)
+                .background(Color.black.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.slide.title)
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(item.dimensionsText)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.secondary)
+                    Text(item.capturedAt, style: .date)
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                    Text(item.capturedAt, style: .time)
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+            .padding(7)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: NSColor.windowBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.7), lineWidth: 0.6)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .help("Open capture in the default image viewer")
+        .contextMenu {
+            Button {
+                gallery.reveal(item)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                    Text("Show in Finder")
+                }
+            }
+
+            Button {
+                gallery.delete(item)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash")
+                    Text("Delete Capture")
+                }
+            }
         }
     }
 }

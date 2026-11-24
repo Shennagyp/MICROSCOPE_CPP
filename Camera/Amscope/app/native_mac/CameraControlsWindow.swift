@@ -17,6 +17,13 @@ struct CameraControlsWindow: View {
                     Button("Refresh") {
                         model.refreshCameras()
                     }
+                    .disabled(model.cameraState != .closed ||
+                              model.isCameraOperationPending)
+                    Button("Refresh") {
+                        model.refreshCameras()
+                    }
+                    .disabled(model.isEnumeratingCameras ||
+                              model.isCameraOperationPending)
                 }
 
                 HStack {

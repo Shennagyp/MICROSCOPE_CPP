@@ -214,9 +214,6 @@ private struct QuickFeatureControl: View {
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .frame(width: 76)
                 .disabled(editingDisabled)
-                .onSubmit {
-                    model.commitDraft(for: descriptor)
-                }
 
                 if let unit = descriptor.unit, !unit.isEmpty {
                     Text(unit)

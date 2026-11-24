@@ -17,7 +17,8 @@
 ## Phase 1 — Native app target and launch shell
 
 - [x] Add an opt-in `AMSCOPE_BUILD_NATIVE_MAC_APP` target; it is OFF by default and requires the Xcode generator.
-- [x] Add the initial SwiftUI app shell, native main window, File-menu entry, and dedicated controls window.
+- [x] Add the initial SwiftUI app shell, AppKit-managed native main window, File-menu entry, and dedicated controls window hosted by `NSHostingController`.
+- [x] Set the initial deployment target to macOS 10.15; avoid the newer SwiftUI `Window` scene API.
 - [x] Add an AppKit `NSViewRepresentable` preview placeholder; no camera frames are connected yet.
 - [ ] Add the Objective-C++ bridge boundary without opening the camera.
 - [ ] Build and launch the native app on the user's Mac.

@@ -4,12 +4,20 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
 
+    private var previewDockHeight: CGFloat {
+        if model.isBottomDockDetached {
+            return 0
+        }
+        return model.isBottomDockCollapsed ? 29 : 51
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             NativeDualPreviewSurface(
                 bridge: model.bridge,
                 activeSlide: model.activeSlide,
-                onActiveSlideChanged: model.selectActiveSlide
+                onActiveSlideChanged: model.selectActiveSlide,
+                bottomDockHeight: previewDockHeight
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 

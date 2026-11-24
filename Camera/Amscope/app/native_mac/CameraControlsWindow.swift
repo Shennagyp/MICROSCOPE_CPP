@@ -35,6 +35,11 @@ struct CameraControlsWindow: View {
                         model.closeCamera()
                     }
                     .disabled(!model.canClose)
+
+                    Spacer()
+
+                    Text(model.cameraStateText)
+                        .foregroundColor(.secondary)
                 }
             }
 
@@ -49,32 +54,31 @@ struct CameraControlsWindow: View {
                         model.stopAcquisition()
                     }
                     .disabled(!model.canStop)
-                }
 
-                HStack {
-                    Text("State")
                     Spacer()
-                    Text(model.cameraStateText)
-                        .foregroundColor(.secondary)
+
+                    if model.isCameraOperationPending {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                 }
             }
 
-            Section(header: Text("Imaging")) {
-                Text("Feature controls will be populated from the camera feature model.")
-                    .foregroundColor(.secondary)
-            }
-
-            Section(header: Text("Hardware")) {
-                Text("Supported camera accessories will appear here.")
-                    .foregroundColor(.secondary)
-            }
+            NativeFeatureSections(model: model)
         }
         .padding()
-        .frame(minWidth: 480, minHeight: 420)
+        .frame(minWidth: 620, minHeight: 560)
         .onAppear {
             if model.cameras.isEmpty {
                 model.refreshCameras()
             }
+        }
+        .alert(isPresented: $model.isShowingError) {
+            Alert(
+                title: Text("Camera Error"),
+                message: Text(model.errorMessage),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 }

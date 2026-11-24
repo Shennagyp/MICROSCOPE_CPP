@@ -1353,7 +1353,7 @@ private:
         // and readback so an asynchronous descriptor refresh cannot invalidate
         // references into featureControls_ while the dialog is open.
         const auto descriptor = found->second.descriptor;
-        const auto currentValue = currentValue;
+        const auto currentValue = *found->second.currentValue;
         if (!descriptor.isAvailable || !descriptor.isReadable ||
             !descriptor.isWritable || !featureReadbackReady_ ||
             pendingFeatureWrite_ ||

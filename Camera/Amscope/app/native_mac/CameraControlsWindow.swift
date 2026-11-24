@@ -13,17 +13,15 @@ struct CameraControlsWindow: View {
                             Text(camera.displayName).tag(camera.deviceID)
                         }
                     }
+                    .disabled(model.cameraState != .closed ||
+                              model.isCameraOperationPending)
 
                     Button("Refresh") {
                         model.refreshCameras()
                     }
-                    .disabled(model.cameraState != .closed ||
-                              model.isCameraOperationPending)
-                    Button("Refresh") {
-                        model.refreshCameras()
-                    }
                     .disabled(model.isEnumeratingCameras ||
-                              model.isCameraOperationPending)
+                              model.isCameraOperationPending ||
+                              model.cameraState != .closed)
                 }
 
                 HStack {

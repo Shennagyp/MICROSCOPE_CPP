@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreGraphics
 import Foundation
 import ImageIO
 
@@ -56,13 +57,15 @@ final class NativeCaptureGalleryStore: ObservableObject {
         let outputDirectory = directoryURL
         let filename = "\(UUID().uuidString)-\(slide.rawValue).png"
         let outputURL = outputDirectory.appendingPathComponent(filename)
+        let captureSource = NativeCaptureImageSource(image: image)
 
-        // This is an explicit still capture. The retained frame lease is held
-        // only for the duration of the asynchronous PNG encode; it is never
-        // inserted into the live-frame mailbox or retained as gallery history.
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // Only the explicit user capture references this source image. The
+        // worker detaches its pixels, clears the source holder, and then does
+        // PNG compression and thumbnail generation without retaining the
+        // camera frame-pool lease as gallery history.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, captureSource] in
             let result = NativeCaptureFileCodec.writeCapture(
-                image,
+                from: captureSource,
                 to: outputURL,
                 slide: slide
             )
@@ -159,13 +162,31 @@ final class NativeCaptureGalleryStore: ObservableObject {
     }
 }
 
+private final class NativeCaptureImageSource {
+    private let lock = NSLock()
+    private var image: CGImage?
+
+    init(image: CGImage) {
+        self.image = image
+    }
+
+    func takeImage() -> CGImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        let image = self.image
+        self.image = nil
+        return image
+    }
+}
+
 private enum NativeCaptureFileCodec {
     static func writeCapture(
-        _ sourceImage: CGImage,
+        from source: NativeCaptureImageSource,
         to url: URL,
         slide: NativeSlideID
     ) -> Result<NativeCaptureItem, NSError> {
-        guard let independentImage = copyPixels(of: sourceImage) else {
+        var liveImage = source.takeImage()
+        guard let independentImage = copyPixelsAndRelease(&liveImage) else {
             return .failure(makeError("Could not detach the image from the live camera frame."))
         }
 
@@ -174,6 +195,13 @@ private enum NativeCaptureFileCodec {
             to: url,
             slide: slide
         )
+    }
+
+    private static func copyPixelsAndRelease(_ source: inout CGImage?) -> CGImage? {
+        guard let image = source else { return nil }
+        let copy = copyPixels(of: image)
+        source = nil
+        return copy
     }
 
     private static func writeIndependentCapture(

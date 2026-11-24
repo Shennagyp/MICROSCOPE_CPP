@@ -246,25 +246,28 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             pulled: snapshot.framesPulled,
             dropped: snapshot.droppedFrames
         )
-        guard let lease = snapshot.lease,
-              let image = lease.createCGImage() else {
-            return
-        }
+        guard let lease = snapshot.lease else { return }
 
+        // A frozen destination still consumes/releases the newest lease, but
+        // does not allocate a color space, provider or CGImage for a frame it
+        // will discard.
         switch activeSlide {
         case .slide1:
-            if !slideOnePane.isImageFrozen {
-                slideOnePane.display(image)
+            guard !slideOnePane.isImageFrozen,
+                  let image = lease.createCGImage() else {
+                return
             }
+            slideOnePane.display(image)
         case .slide2:
-            if !slideTwoPane.isImageFrozen {
-                slideTwoPane.display(image)
+            guard !slideTwoPane.isImageFrozen,
+                  let image = lease.createCGImage() else {
+                return
             }
+            slideTwoPane.display(image)
         }
 
-        // Frozen panes still consume and release the newest lease and keep
-        // acquisition counters current. They do not replace the stable source
-        // image or rewrite toolbar state for every incoming frame.
+        // Frozen panes keep acquisition counters current without replacing
+        // their stable source image. The lease releases when this method exits.
     }
 }
 

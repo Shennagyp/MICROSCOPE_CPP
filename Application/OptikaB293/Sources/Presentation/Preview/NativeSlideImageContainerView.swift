@@ -50,6 +50,12 @@ final class NativeSlideImageContainerView: NSView {
             in: CGRect(origin: .zero, size: bounds.size)
         )
 
+        guard !measurements.isEmpty ||
+              previewMeasurement != nil ||
+              !annotations.isEmpty else {
+            return
+        }
+
         guard let coordinateScale = SlideImageGeometry.coordinateScale(
             imageSize: CGSize(width: CGFloat(image.width), height: CGFloat(image.height)),
             documentSize: bounds.size

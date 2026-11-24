@@ -23,6 +23,11 @@ if(BUILD_TESTING)
     target_link_libraries(camera_common_frame_tests PRIVATE Camera::Common)
     add_test(NAME camera_common_frame_tests COMMAND camera_common_frame_tests)
 
+    add_executable(camera_common_frame_mailbox_tests
+        tests/FrameStreamMailboxTests.cpp)
+    target_link_libraries(camera_common_frame_mailbox_tests PRIVATE Camera::Common)
+    add_test(NAME camera_common_frame_mailbox_tests COMMAND camera_common_frame_mailbox_tests)
+
     add_executable(camera_common_frame_rate_tests
         tests/FrameRateEstimatorTests.cpp)
     target_link_libraries(camera_common_frame_rate_tests PRIVATE Camera::Common)

@@ -223,11 +223,13 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
     find_library(AMSCOPE_APPKIT_FRAMEWORK AppKit REQUIRED)
     find_library(AMSCOPE_FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(AMSCOPE_COREGRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
+    find_library(AMSCOPE_IMAGEIO_FRAMEWORK ImageIO REQUIRED)
 
     add_executable(amscope_native_mac_app MACOSX_BUNDLE
         app/native_mac/AmscopeNativeApp.swift
         app/native_mac/NativeCameraModel.swift
         app/native_mac/NativeCaptureGallery.swift
+        app/native_mac/NativeWorkspaceDock.swift
         app/native_mac/NativeFeatureEditor.swift
         app/native_mac/MainWindowView.swift
         app/native_mac/NativePreviewSurface.swift
@@ -249,7 +251,8 @@ if(AMSCOPE_BUILD_NATIVE_MAC_APP)
         "${AMSCOPE_SWIFTUI_FRAMEWORK}"
         "${AMSCOPE_APPKIT_FRAMEWORK}"
         "${AMSCOPE_FOUNDATION_FRAMEWORK}"
-        "${AMSCOPE_COREGRAPHICS_FRAMEWORK}")
+        "${AMSCOPE_COREGRAPHICS_FRAMEWORK}"
+        "${AMSCOPE_IMAGEIO_FRAMEWORK}")
     set_target_properties(amscope_native_mac_app PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.shennagyp.amscope.native"
         MACOSX_BUNDLE_BUNDLE_VERSION "0.8.0"

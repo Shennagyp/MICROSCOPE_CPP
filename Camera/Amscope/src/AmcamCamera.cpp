@@ -437,6 +437,10 @@ buildAmcamFeatureDescriptors(
     const HRESULT exposureRangeHr = Amcam_get_ExpTimeRange(
         handle, &minExposure, &maxExposure, &defaultExposure);
     const bool exposureReadable = SUCCEEDED(exposureHr);
+    // Keep capability/range validity separate from the last value readback.
+    // The last value can be stale or outside a revised range while automatic
+    // exposure is active; that must not hide the manual control after switching
+    // ExposureAuto to Off.
     const bool exposureRangeValid = SUCCEEDED(exposureRangeHr) &&
         minExposure > 0 && maxExposure >= minExposure;
     unsigned short gain = 0, minGain = 0, maxGain = 0, defaultGain = 0;

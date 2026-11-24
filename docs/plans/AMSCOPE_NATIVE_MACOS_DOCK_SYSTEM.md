@@ -378,3 +378,39 @@ Committed source increments:
 **Expected behavior:** after closing either dock presentation, clicking Camera Controls or Smart Gallery on the permanent right rail selects that tool and reopens the docked panel in the main window. The camera session and capture gallery are not affected.
 
 **Verification:** source paths and state transitions statically inspected. Build and runtime verification remain pending on the user's Mac.
+
+## 12. Follow-up implementation — dock caption and generic measurement scale
+
+### Dock chrome
+
+- The composite workspace dock remains docked in the main window. The whole-dock floating `NSPanel` host and the "Float this dock" action have been removed.
+- The close control is part of a fixed 36-point dock caption header, alongside the active tool title. It is not an overlay floating over panel content and does not scroll with the content.
+- Individual tool panels may still become floating windows as a future docking-system operation. That is distinct from floating the entire right-side dock.
+
+### Application-level optical measurement
+
+The application now computes specimen-plane scale from generic configured component specifications:
+
+```text
+µm per output pixel =
+    sensor pixel pitch (µm) × output pixel factor
+    ───────────────────────────────────────────────
+    objective magnification × reduction-lens magnification
+```
+
+- The calculation is in `NativeMicroscopeMeasurementCalibration`, independent of camera brand, model, image dimensions, preview zoom and display scale.
+- The user configures sensor pixel pitch and the current linear output-pixel factor. A factor of 1.0 means native readout; 2.0 represents 2× linear binning/resampling. ROI cropping alone remains 1.0.
+- The app deliberately does not infer binning from frame dimensions. Identical dimensions may result from cropping, binning or resampling and do not uniquely determine specimen scale.
+- The active objective magnification and the effective combined reduction/relay magnification are taken from microscope configuration.
+- Each measurement captures the scale at the start of the gesture. Changing objective or optics configuration does not retroactively rewrite already recorded measurements.
+- The overlay shows both calculated `µm` and source `px`. Missing or invalid specifications produce a pixel-only label marked "scale unavailable".
+- The microscope configuration displays the calculated `µm/px` before applying changes.
+- Legacy sensor/binning configuration keys are decoded into the generic output factor. A former MU503-named 0.50× relay preset is migrated to a generic 0.50× optical preset.
+
+This remains a specification-derived estimate. For metrologically traceable measurements, calibrate the complete installed optical path against a certified stage micrometer and retain that empirical calibration as a later override.
+
+### Added automated test coverage
+
+`NativeMicroscopeCalibrationTests.swift` now checks the generic formula with multiple sensor pitches, output factors, objectives and reducer magnifications, including invalid inputs. No camera model or output-frame dimensions appear in the calibration API or tests.
+
+**Verification status:** source and CMake registrations statically inspected. No CMake configure, compile, CTest, app launch or physical microscope calibration was run here.

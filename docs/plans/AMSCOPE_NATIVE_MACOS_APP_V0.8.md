@@ -16,15 +16,15 @@
 
 ## Phase 1 — Native app target and launch shell
 
-- [x] Add an opt-in `AMSCOPE_BUILD_NATIVE_MAC_APP` target; it is OFF by default and requires the Xcode generator.
+- [x] Add an opt-in `AMSCOPE_BUILD_NATIVE_MAC_APP` target; it is OFF by default and requires the Ninja generator, not full Xcode.
 - [x] Add the initial SwiftUI app shell, AppKit-managed native main window, File-menu entry, and dedicated controls window hosted by `NSHostingController`.
 - [x] Set the initial deployment target to macOS 10.15; avoid the newer SwiftUI `Window` scene API.
 - [x] Add an AppKit `NSViewRepresentable` preview placeholder; no camera frames are connected yet.
 - [ ] Add the Objective-C++ bridge boundary without opening the camera.
-- [ ] Build and launch the native app on the user's Mac.
+- [ ] Build and launch the native app on the user's Mac using the standalone Command Line Tools toolchain.
 - [ ] Verify a native-only configuration with Qt disabled; do not remove the Qt targets from the repository.
 
-**Current Phase 1 note:** The preview and controls window are scaffolding only. No camera session is created, no stream is consumed, and no build, CTest, or hardware run has been performed for this branch.
+**Current Phase 1 note:** The preview and controls window are scaffolding only. No camera session is created, no stream is consumed, and no build, CTest, or hardware run has been performed for this branch. CMake Swift support is used with Ninja, avoiding the Xcode generator and its `xcodebuild` dependency.
 
 **Gate:** The native application bundle builds and launches independently of Qt, without changing existing driver code.
 

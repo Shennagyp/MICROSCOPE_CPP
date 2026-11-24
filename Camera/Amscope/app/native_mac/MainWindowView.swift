@@ -248,19 +248,22 @@ struct DockCameraFeatureControl: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            // Feature names vary by camera and may be much longer than a
+            // compact two-column row can display. Let the label wrap fully
+            // and keep the editor on its own line.
             Text(descriptor.displayName)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: 96, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             editor
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, minHeight: 42, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
         .padding(.horizontal, 8)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(Color(nsColor: NSColor.controlBackgroundColor))

@@ -10,7 +10,7 @@ struct OptikaB293App {
 
     static func main() {
         let application = NSApplication.shared
-        let delegate = AmscopeApplicationDelegate()
+        let delegate = OptikaB293ApplicationDelegate()
         applicationDelegate = delegate
         application.delegate = delegate
         application.run()
@@ -18,8 +18,9 @@ struct OptikaB293App {
 }
 
 @MainActor
-final class AmscopeApplicationDelegate: NSObject, NSApplicationDelegate {
-    private let cameraModel = NativeCameraModel.shared
+final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
+    private let composition = OptikaB293Composition()
+    private var cameraModel: NativeCameraModel { composition.camera }
     private var mainWindowController: NSWindowController?
     private var cameraControlsWindowController: NSWindowController?
     private var microscopeConfigurationWindowController: NSWindowController?

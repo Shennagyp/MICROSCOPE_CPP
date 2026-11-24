@@ -23,11 +23,11 @@ struct NativeWorkspaceDock: View {
                 .help("Close dock")
                 .accessibilityLabel("Close \(workspace.selectedWorkspaceDockTab.title) dock")
 
-                Image(systemName: model.selectedWorkspaceDockTab.symbolName)
+                Image(systemName: workspace.selectedWorkspaceDockTab.symbolName)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(OptikaPalette.secondaryText)
 
-                Text(model.selectedWorkspaceDockTab.title.uppercased())
+                Text(workspace.selectedWorkspaceDockTab.title.uppercased())
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(OptikaPalette.primaryText)
 
@@ -35,14 +35,14 @@ struct NativeWorkspaceDock: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 36)
-            .background(OptikaPalette.controlSurface.opacity(0.20))
+            .background(OptikaPalette.controlSurface.opacity(OptikaPalette.floatingPanelAlpha))
 
             Divider()
 
             Group {
-                switch model.selectedWorkspaceDockTab {
+                switch workspace.selectedWorkspaceDockTab {
                 case .cameraControls:
-                    NativeCameraControlsDock(model: model)
+                    NativeCameraControlsDock(model: model, workspace: workspace)
                 case .smartGallery:
                     NativeSmartGalleryDock(gallery: gallery)
                 }
@@ -54,7 +54,7 @@ struct NativeWorkspaceDock: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(
-                    OptikaPalette.separator.opacity(0.85),
+                    OptikaPalette.separator.opacity(OptikaPalette.floatingPanelBorderAlpha),
                     lineWidth: 0.8
                 )
         )
@@ -64,8 +64,8 @@ struct NativeWorkspaceDock: View {
 struct NativeWorkspaceDockTabRail: View {
     @ObservedObject var workspace: NativeWorkspaceModel
 
-    static let width: CGFloat = 26
-    private let tabHeight: CGFloat = 104
+    static let width: CGFloat = OptikaLayout.dockRailWidth
+    private let tabHeight: CGFloat = OptikaLayout.dockTabHeight
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,7 +83,7 @@ struct NativeWorkspaceDockTabRail: View {
     }
 
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
-        let isSelected = model.selectedWorkspaceDockTab == tab
+        let isSelected = workspace.selectedWorkspaceDockTab == tab
         let isOpen = workspace.isWorkspaceDockVisible && isSelected
         let accent = OptikaPalette.accent
 
@@ -122,7 +122,7 @@ struct NativeWorkspaceDockTabRail: View {
             )
             .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(isOpen ? OptikaPalette.dockSelectedTabFill : .clear)
+                    .fill(isOpen ? OptikaPalette.dockSelectedTabFill : OptikaPalette.clear)
                     .frame(width: 1.5)
             }
             .contentShape(Rectangle())
@@ -130,7 +130,7 @@ struct NativeWorkspaceDockTabRail: View {
         .buttonStyle(PlainButtonStyle())
         .frame(width: Self.width, height: tabHeight)
         .contentShape(Rectangle())
-        .foregroundColor(isOpen ? .white : OptikaPalette.primaryText)
+        .foregroundColor(isOpen ? OptikaPalette.onAccentText : OptikaPalette.primaryText)
         .help(isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock")
         .accessibilityLabel(
             isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock"

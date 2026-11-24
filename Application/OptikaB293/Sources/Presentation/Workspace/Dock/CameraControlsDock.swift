@@ -3,6 +3,7 @@ import SwiftUI
 
 struct NativeCameraControlsDock: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var workspace: NativeWorkspaceModel
 
     private var additionalFeatureDescriptors: [AmscopeCameraFeatureDescriptor] {
         model.featureDescriptors.filter { $0.name != "AmcamResolutionIndex" }
@@ -144,8 +145,8 @@ struct NativeCameraControlsDock: View {
                     Picker(
                         "Live frame destination",
                         selection: Binding(
-                            get: { model.activeSlide },
-                            set: { model.selectActiveSlide($0) }
+                            get: { workspace.activeSlide },
+                            set: { workspace.selectActiveSlide($0) }
                         )
                     ) {
                         Text("Slide 1").tag(NativeSlideID.slide1)
@@ -159,7 +160,7 @@ struct NativeCameraControlsDock: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(OptikaPalette.controlSurface.opacity(0.20))
+            .background(OptikaPalette.controlSurface.opacity(OptikaPalette.floatingPanelAlpha))
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -174,11 +175,11 @@ private struct CameraDockConnectionSection: View {
 
     private var stateColor: Color {
         switch model.cameraState {
-        case .open, .streaming: return .green
-        case .starting, .stopping: return .orange
-        case .faulted: return .red
-        case .closed: return .secondary
-        @unknown default: return .secondary
+        case .open, .streaming: return OptikaPalette.success
+        case .starting, .stopping: return OptikaPalette.warning
+        case .faulted: return OptikaPalette.live
+        case .closed: return OptikaPalette.secondaryText
+        @unknown default: return OptikaPalette.secondaryText
         }
     }
 
@@ -337,7 +338,7 @@ private struct CameraDockConnectionSection: View {
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 5)
-                            .fill(OptikaPalette.accent.opacity(0.18))
+                            .fill(OptikaPalette.accentSelectionFill)
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -365,7 +366,7 @@ private struct CameraDockConnectionSection: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 7)
-                .stroke(OptikaPalette.separator.opacity(0.7), lineWidth: 0.7)
+                .stroke(OptikaPalette.separator.opacity(OptikaPalette.dockBorderAlpha), lineWidth: 0.7)
         )
     }
 }

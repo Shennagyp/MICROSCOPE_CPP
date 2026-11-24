@@ -460,7 +460,7 @@ private final class NativeSlidePreviewPane: NSView {
         configureIconButton(
             distanceToolButton,
             symbol: "ruler",
-            description: "Measure straight-line distance in source pixels and calibrated micrometers",
+            description: "Measure straight-line distance in source pixels and calculated specimen micrometers",
             action: #selector(selectDistanceToolAction(_:)),
             isToggle: true
         )
@@ -832,11 +832,7 @@ private final class NativeSlideImageView: NSView {
     var hasImage: Bool { currentImage != nil }
 
     private var currentMicrometersPerSourcePixel: CGFloat? {
-        guard let image = currentImage,
-              let micrometersPerPixel = measurementCalibration?.micrometersPerSourcePixel(
-                imageWidth: image.width,
-                imageHeight: image.height
-              ),
+        guard let micrometersPerPixel = measurementCalibration?.micrometersPerSourcePixel,
               micrometersPerPixel.isFinite,
               micrometersPerPixel > 0 else {
             return nil

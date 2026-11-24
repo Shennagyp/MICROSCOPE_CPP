@@ -30,7 +30,7 @@ struct NativeWorkspaceDock: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 // Keep the close hit target on the leading edge. The permanent
-                // floating tool rail overlays the dock's trailing edge.
+                // title rail sits immediately outside the floating panel.
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .semibold))
@@ -69,11 +69,13 @@ struct NativeWorkspaceDock: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
-            Rectangle()
-                .fill(Color(nsColor: NSColor.separatorColor))
-                .frame(width: 1),
-            alignment: .leading
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(
+                    Color(nsColor: NSColor.separatorColor).opacity(0.85),
+                    lineWidth: 0.8
+                )
         )
     }
 }
@@ -101,10 +103,11 @@ struct NativeWorkspaceDockTabRail: View {
 
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
         let isSelected = model.selectedWorkspaceDockTab == tab
+        let isOpen = model.isWorkspaceDockVisible && isSelected
         let accent = Color(nsColor: NSColor.controlAccentColor)
 
         return Button {
-            model.showWorkspaceDock(tab)
+            model.toggleWorkspaceDock(tab)
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: tab.symbolName)
@@ -123,22 +126,22 @@ struct NativeWorkspaceDockTabRail: View {
             .contentShape(Rectangle())
             .background(
                 Rectangle().fill(
-                    isSelected
+                    isOpen
                         ? accent
                         : Color(nsColor: NSColor.windowBackgroundColor)
                 )
             )
             .overlay(
                 Rectangle().stroke(
-                    isSelected
+                    isOpen
                         ? accent
                         : Color(nsColor: NSColor.separatorColor),
-                    lineWidth: isSelected ? 1 : 0.7
+                    lineWidth: isOpen ? 1 : 0.7
                 )
             )
             .overlay(alignment: .leading) {
                 Rectangle()
-                    .fill(isSelected ? Color.white.opacity(0.82) : .clear)
+                    .fill(isOpen ? Color.white.opacity(0.82) : .clear)
                     .frame(width: 1.5)
             }
             .contentShape(Rectangle())
@@ -146,10 +149,17 @@ struct NativeWorkspaceDockTabRail: View {
         .buttonStyle(PlainButtonStyle())
         .frame(width: Self.width, height: tabHeight)
         .contentShape(Rectangle())
-        .foregroundColor(isSelected ? .white : Color(nsColor: NSColor.labelColor))
-        .help("Open \(tab.title)")
-        .accessibilityLabel(tab.title)
-        .accessibilityHint("Shows the \(tab.title) dock")
+        .foregroundColor(isOpen ? .white : Color(nsColor: NSColor.labelColor))
+        .help(isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock")
+        .accessibilityLabel(
+            isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock"
+        )
+        .accessibilityHint(
+            isOpen
+                ? "Hides the floating dock without resizing the viewer."
+                : "Shows the \(tab.title) dock over the viewer."
+        )
+    }
     }
 }
 

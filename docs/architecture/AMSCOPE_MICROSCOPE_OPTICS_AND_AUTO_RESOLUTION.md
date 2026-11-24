@@ -58,7 +58,7 @@ Configuration window:
 - ToupTek FMA050 — 0.50×
 - OPTIKA M-115 — 0.35×
 - OPTIKA M-114 — 0.50×
-- Custom / combined optical path — user-entered name and magnification
+- Custom / combined optical path — user-entered magnification and optional path label
 
 Selecting a named preset sets its nominal magnification. Custom mode accepts a
 user-defined effective magnification and an optional path label. The numerical

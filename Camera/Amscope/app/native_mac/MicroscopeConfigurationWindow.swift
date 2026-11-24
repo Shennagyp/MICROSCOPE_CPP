@@ -380,7 +380,7 @@ struct MicroscopeObjective: Codable, Equatable, Identifiable {
     }
 }
 
-enum CameraRelayPreset: String, Codable, CaseIterable, Identifiable {
+enum CameraRelayPreset: String, Codable, CaseIterable, Identifiable, Hashable {
     case touptekFMA050
     case optikaM115
     case optikaM114

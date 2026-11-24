@@ -4,37 +4,53 @@ import SwiftUI
 struct MainWindowView: View {
     @ObservedObject var model: NativeCameraModel
 
+    private let minimumPreviewWidth: CGFloat = 500
+    private let dockDividerWidth: CGFloat = 6
+
     var body: some View {
         VStack(spacing: 0) {
             workspaceToolbar
             Divider()
 
-            HSplitView {
-                NativeDualPreviewSurface(
-                    bridge: model.bridge,
-                    activeSlide: model.activeSlide,
-                    onActiveSlideChanged: model.selectActiveSlide,
-                    onCapture: { slide, image in
-                        model.captureGallery.capture(image, for: slide)
-                    }
+            GeometryReader { geometry in
+                let maximumDockWidth = max(
+                    280,
+                    geometry.size.width - minimumPreviewWidth - dockDividerWidth
                 )
-                .frame(minWidth: 500, minHeight: 460)
-                .clipped()
-                .layoutPriority(1)
+                let dockWidth = min(model.workspaceDockWidth, maximumDockWidth)
 
-                if model.isWorkspaceDockVisible && !model.isWorkspaceDockFloating {
-                    NativeWorkspaceDock(
-                        model: model,
-                        isFloating: false,
-                        onClose: { model.isWorkspaceDockVisible = false },
-                        onToggleFloating: { model.isWorkspaceDockFloating = true }
+                HStack(spacing: 0) {
+                    NativeDualPreviewSurface(
+                        bridge: model.bridge,
+                        activeSlide: model.activeSlide,
+                        onActiveSlideChanged: model.selectActiveSlide,
+                        onCapture: { slide, image in
+                            model.captureGallery.capture(image, for: slide)
+                        }
                     )
-                    .frame(minWidth: 270, idealWidth: 340, maxWidth: 460)
-                    .frame(maxHeight: .infinity)
-                    .layoutPriority(0)
+                    .frame(minWidth: minimumPreviewWidth, maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .layoutPriority(1)
+
+                    if model.isWorkspaceDockVisible && !model.isWorkspaceDockFloating {
+                        NativeWorkspaceDockResizeDivider(
+                            dockWidth: dockWidth,
+                            maximumWidth: maximumDockWidth,
+                            onResize: { model.setWorkspaceDockWidth($0, maximum: maximumDockWidth) }
+                        )
+
+                        NativeWorkspaceDock(
+                            model: model,
+                            isFloating: false,
+                            onClose: { model.isWorkspaceDockVisible = false },
+                            onToggleFloating: { model.isWorkspaceDockFloating = true }
+                        )
+                        .frame(width: dockWidth, maxHeight: .infinity)
+                        .layoutPriority(0)
+                    }
                 }
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 960, minHeight: 640)
         .background(Color.clear)
@@ -108,6 +124,54 @@ struct MainWindowView: View {
         .padding(.horizontal, 12)
         .frame(height: 36)
         .background(Color(nsColor: NSColor.windowBackgroundColor).opacity(0.55))
+    }
+}
+
+
+private struct NativeWorkspaceDockResizeDivider: View {
+    let dockWidth: CGFloat
+    let maximumWidth: CGFloat
+    let onResize: (CGFloat) -> Void
+
+    @State private var dragStartWidth: CGFloat?
+    @State private var isHovering = false
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(nsColor: NSColor.separatorColor).opacity(isHovering ? 0.9 : 0.45))
+            .frame(width: 6)
+            .overlay {
+                Capsule()
+                    .fill(isHovering ? Color.accentColor : Color(nsColor: NSColor.separatorColor))
+                    .frame(width: isHovering ? 2 : 1)
+                    .padding(.vertical, 5)
+            }
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isHovering = hovering
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if dragStartWidth == nil {
+                            dragStartWidth = dockWidth
+                        }
+                        let start = dragStartWidth ?? dockWidth
+                        onResize(min(max(start - value.translation.width, 280), maximumWidth))
+                    }
+                    .onEnded { value in
+                        let start = dragStartWidth ?? dockWidth
+                        onResize(min(max(start - value.translation.width, 280), maximumWidth))
+                        dragStartWidth = nil
+                    }
+            )
+            .help("Drag to resize the workspace dock")
+            .accessibilityLabel("Resize workspace dock")
     }
 }
 

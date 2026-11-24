@@ -11,6 +11,39 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(CTest)
 
+# Optional component-library proof. Kept out of the production preview target
+# until the exact Qt/macOS build and visual review pass.
+option(AMSCOPE_BUILD_FLUENT_UI_GALLERY
+    "Build the isolated FluentQt component gallery" OFF)
+
+if(AMSCOPE_BUILD_FLUENT_UI_GALLERY)
+    # FluentQt's top-level project declares both C and CXX languages.
+    enable_language(C)
+    find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
+    include(FetchContent)
+
+    # Build only the core QWidget component library. Unrelated upstream modules
+    # must stay out of this experiment.
+    set(FLUENT_QT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_GALLERY OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_PARTICLES OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_SPATIAL OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_PLUGINS OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_QML_BRIDGE OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_PYSIDE6_BINDINGS OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_BUILD_WEBASSEMBLY_SUPPORT OFF CACHE BOOL "" FORCE)
+    set(FLUENT_QT_INSTALL OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        fluentqt
+        GIT_REPOSITORY https://github.com/calvinhxx/Fluent-Qt.git
+        GIT_TAG v1.12.2
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(fluentqt)
+endif()
+
 add_subdirectory(
     "${CMAKE_CURRENT_LIST_DIR}/../Common"
     "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
@@ -245,4 +278,11 @@ endif()
 if(AMSCOPE_BUILD_PREVIEW_APP)
     install(TARGETS amscope_preview
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
+
+if(AMSCOPE_BUILD_FLUENT_UI_GALLERY)
+    add_executable(amscope_fluent_ui_gallery app/fluent_ui_gallery.cpp)
+    target_compile_features(amscope_fluent_ui_gallery PRIVATE cxx_std_17)
+    target_link_libraries(amscope_fluent_ui_gallery
+        PRIVATE FluentQt::FluentQt Qt6::Widgets)
 endif()

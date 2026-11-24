@@ -99,6 +99,38 @@
 
 **Gate:** No measurable acquisition regression beyond baseline noise, no additional camera drops, stable bounded memory, no frame-pool starvation, and correct rendered image formats.
 
+
+## Standalone Command Line Tools build findings (2026-11-24)
+
+The first native-only configure was initially attempted while the local checkout
+was still on `amscope-native-driver-0.7`. CMake correctly reported
+`AMSCOPE_BUILD_NATIVE_MAC_APP` as unused and the native target did not exist.
+After switching to `amscope-native-app-mac.v.0.8`, CMake detected Swift 6.4.2,
+AppleClang 21, and Objective-C++; generation succeeded with Ninja and Qt disabled.
+
+The first native target build reached Swift compilation/linking and exposed
+these frontend integration issues:
+
+- Objective-C `NSError` block parameters are imported into Swift as
+  `any Error`; the model's error presenter now accepts `Error`.
+- The standalone Swift toolchain invocation could not resolve SwiftUI's
+  `StateMacro` plug-in for the information-bar editor. The editor identity is
+  now represented by a low-frequency `@Published` model property and a
+  computed `Binding`, avoiding that macro dependency.
+- The bridge guarantees feature-read completions are dispatched to the main
+  queue. The model now uses `MainActor.assumeIsolated` at that callback
+  boundary, preserving synchronous completion delivery without adding a
+  separate task/dispatch for each feature response.
+
+These are UI/control-plane corrections only. They do not modify
+`AmcamCamera`, its vendor callback, event queue, acquisition worker,
+`Amcam_PullImageV4`, frame storage, frame leases, or the shared mailbox.
+
+**Build status remains pending.** The fixes must be verified by rerunning the
+native target build on the user's Mac. No app launch, camera streaming,
+pixel-format, lease-lifetime, or hardware performance result is claimed from
+the compiler diagnostics alone.
+
 ## Implementation rules
 
 - Do not change `AmcamCamera.cpp`, the SDK callback, event queue, pull loop, or frame-pool layout for UI convenience.

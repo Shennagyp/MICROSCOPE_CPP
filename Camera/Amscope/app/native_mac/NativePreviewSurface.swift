@@ -269,7 +269,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             slideTwoPane.display(image)
         }
 
-        updatePaneStates()
+        // Pane role/status changes are handled by selectActiveSlide and
+        // maximize/restore. Do not rewrite toolbar controls for every frame.
     }
 }
 
@@ -603,8 +604,6 @@ private final class NativeSlidePreviewPane: NSView {
         imageSizingButton.setAccessibilityLabel(description)
         imageSizingButton.isEnabled = imageView.hasImage
         fullResolutionButton.isEnabled = imageView.hasImage
-        captureButton.isEnabled = imageView.hasImage
-        clearOverlayButton.isEnabled = imageView.hasOverlays
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
@@ -614,8 +613,21 @@ private final class NativeSlidePreviewPane: NSView {
     }
 
     func display(_ image: CGImage) {
+        let hadImage = imageView.hasImage
+        let hadOverlays = imageView.hasOverlays
+
         paneFrameCount &+= 1
         imageView.display(image)
+
+        // Update control availability only when the pane receives its first
+        // image or a source-dimension change clears existing overlays.
+        if !hadImage {
+            updateImageSizingButton()
+            updateToolButtonStates()
+        } else if hadOverlays && !imageView.hasOverlays {
+            updateToolButtonStates()
+        }
+
         updateFrameStatisticsLabel()
     }
 
@@ -660,8 +672,6 @@ private final class NativeSlidePreviewPane: NSView {
         }
         maximizeButton.toolTip = maximizeDescription
         maximizeButton.setAccessibilityLabel(maximizeDescription)
-        updateImageSizingButton()
-        updateToolButtonStates()
     }
 
     @objc private func selectLiveTargetAction(_ sender: NSButton) {

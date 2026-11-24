@@ -1,6 +1,19 @@
 import Foundation
 import SwiftUI
 
+enum NativeSlideID: String, CaseIterable, Identifiable, Hashable {
+    case slide1
+    case slide2
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .slide1: return "Slide 1"
+        case .slide2: return "Slide 2"
+        }
+    }
+}
 @MainActor
 final class NativeCameraModel: ObservableObject {
     static let shared = NativeCameraModel()
@@ -10,6 +23,8 @@ final class NativeCameraModel: ObservableObject {
     @Published private(set) var cameras: [AmscopeCameraDevice] = []
     @Published var selectedDeviceID = ""
     @Published private(set) var cameraState: AmscopeNativeCameraState = .closed
+    @Published private(set) var openedCameraDeviceID: String?
+    @Published private(set) var activeSlide: NativeSlideID = .slide1
     @Published private(set) var resolutionText = "—"
     @Published private(set) var pixelFormatText = "—"
     @Published var errorMessage = ""
@@ -41,6 +56,24 @@ final class NativeCameraModel: ObservableObject {
     var selectedCameraName: String {
         cameras.first(where: { $0.deviceID == selectedDeviceID })?.displayName
             ?? "No camera selected"
+    }
+
+    var activeCameraName: String {
+        guard let deviceID = openedCameraDeviceID else {
+            return "Not connected"
+        }
+        return cameras.first(where: { $0.deviceID == deviceID })?.displayName
+            ?? "Connected camera"
+    }
+
+    var canConnectDetectedCamera: Bool {
+        cameraState == .closed &&
+            !isCameraOperationPending &&
+            !isEnumeratingCameras
+    }
+
+    func selectActiveSlide(_ slide: NativeSlideID) {
+        activeSlide = slide
     }
 
     var informationBarFeatures: [AmscopeCameraFeatureDescriptor] {
@@ -138,8 +171,22 @@ final class NativeCameraModel: ObservableObject {
 
     func openSelectedCamera() {
         guard canOpen else { return }
+        openCamera(deviceID: selectedDeviceID, startImmediately: false)
+    }
+
+    func openAndStartCamera(deviceID: String) {
+        guard canConnectDetectedCamera &&
+              cameras.contains(where: { $0.deviceID == deviceID }) else { return }
+        openCamera(deviceID: deviceID, startImmediately: true)
+    }
+
+    private func openCamera(deviceID: String, startImmediately: Bool) {
+        guard canConnectDetectedCamera,
+              cameras.contains(where: { $0.deviceID == deviceID }) else { return }
+
+        selectedDeviceID = deviceID
         isCameraOperationPending = true
-        bridge.openDeviceID(selectedDeviceID) { [weak self] error, _, _ in
+        bridge.openDeviceID(deviceID) { [weak self] error, _, _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
                 self.isCameraOperationPending = false
@@ -147,14 +194,19 @@ final class NativeCameraModel: ObservableObject {
                 self.isFeatureSnapshotLoading = false
                 self.refreshState()
                 if let error = error {
+                    self.openedCameraDeviceID = nil
                     self.present(error)
                 } else {
-                    self.refreshFeatures()
+                    self.openedCameraDeviceID = deviceID
+                    if startImmediately {
+                        self.startAcquisition()
+                    } else {
+                        self.refreshFeatures()
+                    }
                 }
             }
         }
     }
-
     func closeCamera() {
         guard canClose else { return }
         isCameraOperationPending = true
@@ -168,6 +220,7 @@ final class NativeCameraModel: ObservableObject {
                 if let error = error {
                     self.present(error)
                 } else {
+                    self.openedCameraDeviceID = nil
                     self.featureDescriptors = []
                     self.featureValues = [:]
                     self.featureErrors = [:]

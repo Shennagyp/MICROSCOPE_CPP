@@ -235,7 +235,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 
 private final class NativeSlidePreviewPane: NSView {
     private let slide: NativeSlideID
-    private let imageScrollView = NativeSlideImageScrollView()
     private let imageView: NativeSlideImageView
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
@@ -251,14 +250,6 @@ private final class NativeSlidePreviewPane: NSView {
     private var droppedFrameCount: UInt64 = 0
     private var paneFrameCount: UInt64 = 0
 
-    var displayPixelSize: (width: Int, height: Int) {
-        let backingBounds = imageView.convertToBacking(imageView.bounds)
-        return (
-            width: Int(ceil(backingBounds.width)),
-            height: Int(ceil(backingBounds.height))
-        )
-    }
-
     init(slide: NativeSlideID) {
         self.slide = slide
         self.imageView = NativeSlideImageView(slideTitle: slide.title)
@@ -268,13 +259,6 @@ private final class NativeSlidePreviewPane: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("NativeSlidePreviewPane does not support NSCoder initialization")
-    }
-
-    override func layout() {
-        super.layout()
-        imageView.updateDocumentFrame(
-            for: imageScrollView.contentView.bounds.size
-        )
     }
 
     private func configureSubviews() {
@@ -314,19 +298,20 @@ private final class NativeSlidePreviewPane: NSView {
         headerStack.addArrangedSubview(selectButton)
         headerStack.addArrangedSubview(maximizeButton)
 
-        imageScrollView.translatesAutoresizingMaskIntoConstraints = false
-        imageScrollView.documentView = imageView
+        // The image view is always exactly the size of this existing pane
+        // viewport. Only the CGImage's drawing rectangle changes.
+        imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(headerStack)
-        addSubview(imageScrollView)
+        addSubview(imageView)
         NSLayoutConstraint.activate([
             headerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             headerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             headerStack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             headerStack.heightAnchor.constraint(equalToConstant: 28),
-            imageScrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            imageScrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            imageScrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 6),
-            imageScrollView.bottomAnchor.constraint(equalTo: bottomAnchor)
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 6),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
 
@@ -378,66 +363,16 @@ private final class NativeSlidePreviewPane: NSView {
     }
 }
 
-private final class NativeSlideImageScrollView: NSScrollView {
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        configure()
-    }
-
-    private func configure() {
-        borderType = .noBorder
-        hasHorizontalScroller = false
-        hasVerticalScroller = false
-        autohidesScrollers = true
-        drawsBackground = true
-        backgroundColor = NSColor(calibratedWhite: 0.075, alpha: 1)
-        horizontalScrollElasticity = .none
-        verticalScrollElasticity = .none
-        contentView.drawsBackground = true
-        contentView.backgroundColor = backgroundColor
-    }
-
-    override func scrollWheel(with event: NSEvent) {
-        guard let imageView = documentView as? NativeSlideImageView else {
-            super.scrollWheel(with: event)
-            return
-        }
-
-        let delta = event.hasPreciseScrollingDeltas
-            ? event.scrollingDeltaY * 0.008
-            : event.deltaY * 0.12
-        guard delta != 0 else { return }
-
-        let anchor = imageView.viewportPoint(fromWindowPoint: event.locationInWindow)
-        imageView.zoom(by: delta, anchoredAt: anchor)
-    }
-
-    override func magnify(with event: NSEvent) {
-        guard let imageView = documentView as? NativeSlideImageView else {
-            super.magnify(with: event)
-            return
-        }
-
-        let magnification = max(-0.95, event.magnification)
-        let delta = log(1 + magnification) / log(2) * 0.35
-        let anchor = imageView.viewportPoint(fromWindowPoint: event.locationInWindow)
-        imageView.zoom(by: delta, anchoredAt: anchor)
-    }
-}
-
 private final class NativeSlideImageView: NSView {
     private let slideTitle: String
     private var currentImage: CGImage?
 
-    /// 0 = fit this pane; 1 = one camera pixel per physical display pixel.
-    /// Each slide owns its own zoom and scroll position.
+    /// The automatic zoom value starts at the largest aspect-preserving scale
+    /// that covers the pane without outer black bars. It never changes this
+    /// NSView's frame or the dimensions of its parent pane.
     private var zoomProgress: CGFloat = 0
-    private var dragViewportLocation: CGPoint?
+    private var imageOrigin: CGPoint?
+    private var dragLocation: CGPoint?
     private var contextMenuAnchor: CGPoint?
 
     var hasImage: Bool { currentImage != nil }
@@ -446,79 +381,85 @@ private final class NativeSlideImageView: NSView {
     init(slideTitle: String) {
         self.slideTitle = slideTitle
         super.init(frame: .zero)
-        toolTip = "Scroll or pinch to zoom · Drag to pan · Double-click toggles Fit / 1:1 · Right-click for viewing modes"
+        toolTip = "Scroll or pinch to zoom · Drag to pan · Double-click toggles Fill / 1:1 · Right-click for viewing modes"
     }
 
     required init?(coder: NSCoder) {
         fatalError("NativeSlideImageView does not support NSCoder initialization")
     }
 
-    private var imageScrollView: NativeSlideImageScrollView? {
-        enclosingScrollView as? NativeSlideImageScrollView
-    }
-
-    private var clipView: NSClipView? {
-        imageScrollView?.contentView
-    }
-
-    private var viewportSize: CGSize {
-        clipView?.bounds.size ?? .zero
-    }
-
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
 
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if zoomProgress > 0, let imageOrigin {
+            self.imageOrigin = clampedOrigin(imageOrigin, at: currentScale)
+        }
+        needsDisplay = true
+    }
+
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        // Recompute the document/container size when the window moves between
-        // displays. Actual Pixels always remains one physical display pixel
-        // per camera pixel.
-        updateDocumentFrame(for: viewportSize)
+        if zoomProgress >= 0.999 {
+            zoomProgress = 1
+        }
+        if let imageOrigin {
+            self.imageOrigin = clampedOrigin(imageOrigin, at: currentScale)
+        }
         needsDisplay = true
     }
 
     func display(_ image: CGImage) {
-        // Replace the previous provider-backed image. Do not copy the pixels
-        // or retain a frame history. Keep this pane's independent zoom state.
+        let dimensionsChanged = currentImage?.width != image.width ||
+            currentImage?.height != image.height
         currentImage = image
-        updateDocumentFrame(for: viewportSize)
+
+        // A new sensor mode gets a fresh automatic fill scale. Same-size
+        // frames preserve the user's current zoom and pan position.
+        if dimensionsChanged {
+            zoomProgress = 0
+            imageOrigin = nil
+        } else if let imageOrigin {
+            self.imageOrigin = clampedOrigin(imageOrigin, at: currentScale)
+        }
         needsDisplay = true
     }
 
-    // MARK: - Image and container geometry
+    // MARK: - Image geometry
 
     /// AppKit points per camera pixel for one physical display pixel.
     private var actualPixelScale: CGFloat {
         1 / max(window?.backingScaleFactor ?? 1, 1)
     }
 
-    /// Fit the complete image inside this pane, without enlarging source
-    /// pixels beyond the display's native physical-pixel scale.
-    private var fitScale: CGFloat {
+    /// The maximum initial zoom that fills the whole pane. Using max rather
+    /// than min removes letterboxing: one image dimension exactly covers the
+    /// viewport and the other may be cropped. Cap at 1:1 to avoid upscaling
+    /// acquired pixels in the diagnostic viewer.
+    private var automaticFillScale: CGFloat {
         guard let image = currentImage,
               image.width > 0,
               image.height > 0,
-              viewportSize.width > 0,
-              viewportSize.height > 0 else {
+              bounds.width > 0,
+              bounds.height > 0 else {
             return actualPixelScale
         }
 
-        let widthScale = viewportSize.width / CGFloat(image.width)
-        let heightScale = viewportSize.height / CGFloat(image.height)
-        return max(
-            0.000001,
-            min(min(widthScale, heightScale), actualPixelScale)
-        )
+        let widthScale = bounds.width / CGFloat(image.width)
+        let heightScale = bounds.height / CGFloat(image.height)
+        let fillScale = max(widthScale, heightScale)
+        return min(fillScale, actualPixelScale)
     }
 
-    /// Continuous logarithmic progression with exact Fit and Actual Pixels
-    /// endpoints.
+    /// Continuous zoom from the automatic no-bars fill value to exact 1:1.
     private var currentScale: CGFloat {
-        let fit = fitScale
-        let actual = actualPixelScale
-        guard actual > fit, zoomProgress > 0 else { return fit }
-        return fit * pow(actual / fit, zoomProgress)
+        let fillScale = automaticFillScale
+        guard zoomProgress > 0, actualPixelScale > fillScale else {
+            return fillScale
+        }
+        return fillScale * pow(actualPixelScale / fillScale, zoomProgress)
     }
 
     private func imageSize(at scale: CGFloat) -> CGSize {
@@ -529,205 +470,185 @@ private final class NativeSlideImageView: NSView {
         )
     }
 
-    /// The document view is the image container. In Fit it is at least the
-    /// viewport size; as zoom increases, it grows to the scaled image size.
-    /// The NSScrollView clip view remains fixed to the existing pane bounds.
-    private func containerSize(at scale: CGFloat) -> CGSize {
-        let viewport = viewportSize
-        let image = imageSize(at: scale)
-        return CGSize(
-            width: max(viewport.width, image.width),
-            height: max(viewport.height, image.height)
-        )
-    }
-
-    private func imageOriginInContainer(
-        at scale: CGFloat,
-        container: CGSize
-    ) -> CGPoint {
-        let image = imageSize(at: scale)
+    private func centeredOrigin(at scale: CGFloat) -> CGPoint {
+        let size = imageSize(at: scale)
         return CGPoint(
-            x: max(0, (container.width - image.width) / 2),
-            y: max(0, (container.height - image.height) / 2)
+            x: (bounds.width - size.width) / 2,
+            y: (bounds.height - size.height) / 2
         )
     }
 
-    func updateDocumentFrame(for newViewportSize: CGSize) {
-        guard newViewportSize.width > 0, newViewportSize.height > 0 else {
-            return
+    private func clampedOrigin(_ proposed: CGPoint, at scale: CGFloat) -> CGPoint {
+        let size = imageSize(at: scale)
+
+        // If a dimension is larger than the pane, clamp it so no empty
+        // margins can enter from that edge. Smaller dimensions stay centered.
+        let x: CGFloat
+        if size.width <= bounds.width {
+            x = (bounds.width - size.width) / 2
+        } else {
+            x = min(0, max(bounds.width - size.width, proposed.x))
         }
-        let desiredSize = containerSize(at: currentScale)
-        if abs(frame.width - desiredSize.width) > 0.5 ||
-           abs(frame.height - desiredSize.height) > 0.5 {
-            setFrameSize(desiredSize)
+
+        let y: CGFloat
+        if size.height <= bounds.height {
+            y = (bounds.height - size.height) / 2
+        } else {
+            y = min(0, max(bounds.height - size.height, proposed.y))
         }
-        clampScrollOrigin(clipView?.bounds.origin ?? .zero)
+
+        return CGPoint(x: x, y: y)
     }
 
-    private func clampScrollOrigin(_ proposed: CGPoint) {
-        guard let clipView else { return }
-        let maxX = max(0, bounds.width - clipView.bounds.width)
-        let maxY = max(0, bounds.height - clipView.bounds.height)
-        let clamped = CGPoint(
-            x: min(max(0, proposed.x), maxX),
-            y: min(max(0, proposed.y), maxY)
-        )
-        clipView.scroll(to: clamped)
-        imageScrollView?.reflectScrolledClipView(clipView)
+    private func resolvedOrigin(at scale: CGFloat) -> CGPoint {
+        clampedOrigin(imageOrigin ?? centeredOrigin(at: scale), at: scale)
     }
 
-    // MARK: - Presentation modes and zoom
+    // MARK: - Automatic fill and zoom
 
-    private func setFitMode() {
+    private func setAutomaticFill() {
         zoomProgress = 0
-        updateDocumentFrame(for: viewportSize)
-        clampScrollOrigin(.zero)
+        imageOrigin = nil
         needsDisplay = true
     }
 
-    private func setActualPixelsMode(anchor: CGPoint? = nil) {
+    private func setActualPixels() {
         guard currentImage != nil else { return }
-        zoom(to: 1, anchoredAt: anchor ?? CGPoint(
-            x: viewportSize.width / 2,
-            y: viewportSize.height / 2
-        ))
+        zoom(to: 1, anchoredAt: CGPoint(x: bounds.midX, y: bounds.midY))
     }
 
-    private func toggleFitAndActualPixels(at point: CGPoint) {
+    private func toggleFillAndActualPixels() {
         if zoomProgress >= 0.999 {
-            setFitMode()
+            setAutomaticFill()
         } else {
-            setActualPixelsMode(anchor: point)
+            setActualPixels()
         }
     }
 
-    func zoom(by progressDelta: CGFloat, anchoredAt anchor: CGPoint) {
+    private func zoom(by delta: CGFloat, anchoredAt anchor: CGPoint) {
         guard currentImage != nil,
-              progressDelta.isFinite,
-              progressDelta != 0,
-              actualPixelScale > fitScale else {
+              delta.isFinite,
+              delta != 0,
+              actualPixelScale > automaticFillScale else {
             return
         }
 
-        zoom(to: min(1, max(0, zoomProgress + progressDelta)), anchoredAt: anchor)
+        zoom(to: min(1, max(0, zoomProgress + delta)), anchoredAt: anchor)
     }
 
-    private func zoom(to progress: CGFloat, anchoredAt anchor: CGPoint) {
+    private func zoom(to nextProgress: CGFloat, anchoredAt anchor: CGPoint) {
         guard currentImage != nil else { return }
-        let nextProgress = min(1, max(0, progress))
-        guard nextProgress != zoomProgress else { return }
+        let clampedProgress = min(1, max(0, nextProgress))
+        guard clampedProgress != zoomProgress else { return }
 
         let oldScale = currentScale
-        let oldClipOrigin = clipView?.bounds.origin ?? .zero
-        let oldContainer = bounds.size
-        let oldImageOrigin = imageOriginInContainer(
-            at: oldScale,
-            container: oldContainer
-        )
-        let pointInDocument = CGPoint(
-            x: oldClipOrigin.x + anchor.x,
-            y: oldClipOrigin.y + anchor.y
-        )
-        let pointInImage = CGPoint(
-            x: (pointInDocument.x - oldImageOrigin.x) / oldScale,
-            y: (pointInDocument.y - oldImageOrigin.y) / oldScale
+        let oldOrigin = resolvedOrigin(at: oldScale)
+        let imagePoint = CGPoint(
+            x: (anchor.x - oldOrigin.x) / oldScale,
+            y: (anchor.y - oldOrigin.y) / oldScale
         )
 
-        zoomProgress = nextProgress
+        zoomProgress = clampedProgress
         let nextScale = currentScale
-        updateDocumentFrame(for: viewportSize)
+        let proposedOrigin = CGPoint(
+            x: anchor.x - imagePoint.x * nextScale,
+            y: anchor.y - imagePoint.y * nextScale
+        )
 
-        if nextProgress <= 0.0001 {
-            clampScrollOrigin(.zero)
+        if clampedProgress <= 0.0001 {
+            imageOrigin = nil
         } else {
-            let newImageOrigin = imageOriginInContainer(
-                at: nextScale,
-                container: bounds.size
-            )
-            let desiredClipOrigin = CGPoint(
-                x: newImageOrigin.x + pointInImage.x * nextScale - anchor.x,
-                y: newImageOrigin.y + pointInImage.y * nextScale - anchor.y
-            )
-            clampScrollOrigin(desiredClipOrigin)
+            imageOrigin = clampedOrigin(proposedOrigin, at: nextScale)
         }
         needsDisplay = true
     }
 
-    // MARK: - Panning
+    // MARK: - Mouse and trackpad interaction
 
-    /// Converts the event position into viewport-local coordinates. The
-    /// document view conversion includes the scrolled document origin, so
-    /// subtract the clip origin to obtain a stable point inside the viewport.
-    func viewportPoint(fromWindowPoint point: NSPoint) -> CGPoint {
-        let documentPoint = convert(point, from: nil)
-        let clipOrigin = clipView?.bounds.origin ?? .zero
-        return CGPoint(
-            x: documentPoint.x - clipOrigin.x,
-            y: documentPoint.y - clipOrigin.y
+    override func scrollWheel(with event: NSEvent) {
+        guard currentImage != nil else {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        let delta = event.hasPreciseScrollingDeltas
+            ? event.scrollingDeltaY * 0.008
+            : event.deltaY * 0.12
+        zoom(
+            by: delta,
+            anchoredAt: convert(event.locationInWindow, from: nil)
         )
     }
 
-    private func viewportPoint(from event: NSEvent) -> CGPoint {
-        viewportPoint(fromWindowPoint: event.locationInWindow)
+    override func magnify(with event: NSEvent) {
+        guard currentImage != nil else {
+            super.magnify(with: event)
+            return
+        }
+
+        let magnification = max(-0.95, event.magnification)
+        let delta = log(1 + magnification) / log(2) * 0.35
+        zoom(
+            by: delta,
+            anchoredAt: convert(event.locationInWindow, from: nil)
+        )
     }
 
     override func mouseDown(with event: NSEvent) {
-        let point = viewportPoint(from: event)
+        let point = convert(event.locationInWindow, from: nil)
         if event.clickCount >= 2 {
-            toggleFitAndActualPixels(at: point)
-            dragViewportLocation = nil
+            toggleFillAndActualPixels()
+            dragLocation = nil
             return
         }
 
-        guard zoomProgress > 0 else {
-            dragViewportLocation = nil
+        let imageSize = imageSize(at: currentScale)
+        let imageIsLargerThanPane =
+            imageSize.width > bounds.width || imageSize.height > bounds.height
+        guard zoomProgress > 0 || imageIsLargerThanPane else {
+            dragLocation = nil
             return
         }
-        dragViewportLocation = point
+        dragLocation = point
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard zoomProgress > 0,
-              let previousPoint = dragViewportLocation,
-              let clipView else {
-            return
-        }
+        guard let previousPoint = dragLocation else { return }
 
-        let currentPoint = viewportPoint(from: event)
+        let point = convert(event.locationInWindow, from: nil)
         let delta = CGPoint(
-            x: previousPoint.x - currentPoint.x,
-            y: previousPoint.y - currentPoint.y
+            x: point.x - previousPoint.x,
+            y: point.y - previousPoint.y
         )
-        let currentOrigin = clipView.bounds.origin
-        clampScrollOrigin(CGPoint(
-            x: currentOrigin.x + delta.x,
-            y: currentOrigin.y + delta.y
-        ))
-        dragViewportLocation = currentPoint
+        let proposed = CGPoint(
+            x: resolvedOrigin(at: currentScale).x + delta.x,
+            y: resolvedOrigin(at: currentScale).y + delta.y
+        )
+        imageOrigin = clampedOrigin(proposed, at: currentScale)
+        dragLocation = point
+        needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
-        dragViewportLocation = nil
+        dragLocation = nil
     }
 
-    // MARK: - Context menu
-
     override func menu(for event: NSEvent) -> NSMenu? {
-        contextMenuAnchor = viewportPoint(from: event)
+        contextMenuAnchor = convert(event.locationInWindow, from: nil)
 
         let menu = NSMenu()
-        let fitItem = NSMenuItem(
-            title: "Fit Image to Pane",
-            action: #selector(selectFitMode(_:)),
+        let fillItem = NSMenuItem(
+            title: "Fill Pane (No Black Margins)",
+            action: #selector(selectAutomaticFill(_:)),
             keyEquivalent: ""
         )
-        fitItem.target = self
-        fitItem.isEnabled = currentImage != nil
-        menu.addItem(fitItem)
+        fillItem.target = self
+        fillItem.isEnabled = currentImage != nil
+        menu.addItem(fillItem)
 
         let actualItem = NSMenuItem(
             title: "Actual Pixels (1:1)",
-            action: #selector(selectActualPixelsMode(_:)),
+            action: #selector(selectActualPixels(_:)),
             keyEquivalent: ""
         )
         actualItem.target = self
@@ -736,12 +657,12 @@ private final class NativeSlideImageView: NSView {
         return menu
     }
 
-    @objc private func selectFitMode(_ sender: Any?) {
-        setFitMode()
+    @objc private func selectAutomaticFill(_ sender: Any?) {
+        setAutomaticFill()
     }
 
-    @objc private func selectActualPixelsMode(_ sender: Any?) {
-        setActualPixelsMode(anchor: contextMenuAnchor)
+    @objc private func selectActualPixels(_ sender: Any?) {
+        setActualPixels()
     }
 
     // MARK: - Rendering
@@ -772,11 +693,13 @@ private final class NativeSlideImageView: NSView {
 
         let scale = currentScale
         let size = imageSize(at: scale)
-        let origin = imageOriginInContainer(at: scale, container: bounds.size)
-        let targetRect = CGRect(origin: origin, size: size)
+        let targetRect = CGRect(
+            origin: resolvedOrigin(at: scale),
+            size: size
+        )
 
         context.interpolationQuality =
-            scale < actualPixelScale * 0.999 ? .high : .none
+            abs(scale - actualPixelScale) > 0.000001 ? .high : .none
         context.draw(image, in: targetRect)
     }
 }

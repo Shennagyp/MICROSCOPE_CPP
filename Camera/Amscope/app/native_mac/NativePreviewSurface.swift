@@ -547,9 +547,9 @@ private final class NativeSlideImageView: NSView {
         1 / max(window?.backingScaleFactor ?? 1, 1)
     }
 
-    /// Largest aspect-preserving scale that covers the entire viewer viewport.
-    /// It is capped at native 1:1: the image is never enlarged beyond its
-    /// acquired pixel dimensions.
+    /// Largest aspect-preserving scale that keeps the complete source image
+    /// inside the viewer viewport. Diagnostic content is never cropped just
+    /// to eliminate margins. Upscaling beyond native 1:1 is not permitted.
     private var automaticFillScale: CGFloat {
         guard let image = currentImage,
               image.width > 0,
@@ -561,7 +561,7 @@ private final class NativeSlideImageView: NSView {
 
         let widthScale = bounds.width / CGFloat(image.width)
         let heightScale = bounds.height / CGFloat(image.height)
-        return min(max(widthScale, heightScale), actualPixelScale)
+        return min(min(widthScale, heightScale), actualPixelScale)
     }
 
     private var currentScale: CGFloat {

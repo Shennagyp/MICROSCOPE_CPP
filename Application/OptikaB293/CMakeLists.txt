@@ -48,6 +48,7 @@ set(OPTIKA_APP_SOURCES
     Sources/Presentation/Preview/NativeSlideImageContainerView.swift
     Sources/Adapters/Camera/NativeCameraController.cpp
     Sources/Adapters/Camera/NativeCameraController.h
+    Sources/Adapters/Camera/NativeCameraFrameFeed.swift
     Sources/Adapters/Camera/AmscopeNativeCameraBridge.mm
     Sources/Adapters/Camera/AmscopeNativeCameraBridge.h
     include/NativeMac-Bridging-Header.h

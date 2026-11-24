@@ -16,7 +16,7 @@ struct MainWindowView: View {
             let dockWidth = min(workspace.workspaceDockWidth, OptikaLayout.workspaceDockMaximumWidth)
 
             NativeDualPreviewSurface(
-                bridge: model.bridge,
+                frameFeed: model.frameFeed,
                 model: model,
                 microscope: microscope,
                 resolutionCoordinator: resolutionCoordinator,

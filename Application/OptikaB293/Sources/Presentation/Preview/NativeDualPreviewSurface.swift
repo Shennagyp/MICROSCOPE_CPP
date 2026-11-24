@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct NativeDualPreviewSurface: NSViewRepresentable {
-    let bridge: AmscopeNativeCameraBridge
+    let frameFeed: NativeCameraFrameFeed
     let model: NativeCameraModel
     let microscope: MicroscopeConfigurationModel
     let resolutionCoordinator: MicroscopeResolutionCoordinator
@@ -14,7 +14,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
     func makeNSView(context: Context) -> NativeDualPreviewNSView {
         let view = NativeDualPreviewNSView(frame: .zero)
         view.attach(
-            to: bridge,
+            to: frameFeed,
             activeSlide: activeSlide,
             measurementCalibration: measurementCalibration,
             model: model,
@@ -28,7 +28,7 @@ struct NativeDualPreviewSurface: NSViewRepresentable {
 
     func updateNSView(_ nsView: NativeDualPreviewNSView, context: Context) {
         nsView.attach(
-            to: bridge,
+            to: frameFeed,
             activeSlide: activeSlide,
             measurementCalibration: measurementCalibration,
             model: model,
@@ -44,7 +44,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private let splitView = NSSplitView()
     private let slideOnePane = NativeSlidePreviewPane(slide: .slide1)
     private let slideTwoPane = NativeSlidePreviewPane(slide: .slide2)
-    private weak var bridge: AmscopeNativeCameraBridge?
+    private weak var frameFeed: NativeCameraFrameFeed?
     private var measurementCalibration: NativeMicroscopeMeasurementCalibration?
 
     private var activeSlide: NativeSlideID = .slide1
@@ -113,7 +113,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     }
 
     func attach(
-        to bridge: AmscopeNativeCameraBridge,
+        to frameFeed: NativeCameraFrameFeed,
         activeSlide: NativeSlideID,
         measurementCalibration: NativeMicroscopeMeasurementCalibration?,
         model: NativeCameraModel,
@@ -122,9 +122,9 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         workspace: NativeWorkspaceModel,
         onCapture: @escaping (NativeSlideID, CGImage) -> Void
     ) {
-        if self.bridge !== bridge {
-            self.bridge = bridge
-            bridge.onFrameAvailable = { [weak self] in
+        if self.frameFeed !== frameFeed {
+            self.frameFeed = frameFeed
+            frameFeed.setFrameAvailableHandler { [weak self] in
                 MainActor.assumeIsolated {
                     self?.consumeLatestFrame()
                 }
@@ -234,16 +234,16 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     }
 
     private func consumeLatestFrame() {
-        guard let bridge = bridge else { return }
+        guard let frameFeed = frameFeed else { return }
         slideOnePane.updateAcquisitionCounters(
-            pulled: bridge.framesPulled,
-            dropped: bridge.droppedFrames
+            pulled: frameFeed.framesPulled,
+            dropped: frameFeed.droppedFrames
         )
         slideTwoPane.updateAcquisitionCounters(
-            pulled: bridge.framesPulled,
-            dropped: bridge.droppedFrames
+            pulled: frameFeed.framesPulled,
+            dropped: frameFeed.droppedFrames
         )
-        guard let lease = bridge.takeLatestFrame(),
+        guard let lease = frameFeed.takeLatestFrame(),
               let image = lease.createCGImage() else {
             return
         }

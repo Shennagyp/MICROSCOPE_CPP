@@ -206,7 +206,10 @@ The product workspace, a slide document and a camera session are different thing
 
 The camera session owns the native camera handle, connection state and acquisition
 lifecycle. Application UI observes a projection of that state. It does not own the
-native camera handle or issue lifecycle operations directly.
+native camera handle or issue lifecycle operations directly. The concrete
+Objective-C++ bridge is private to `NativeCameraModel`; presentation receives only
+a `NativeCameraFrameFeed` contract for frame notifications, latest-frame leases
+and acquisition counters. This does not create another frame queue or consumer.
 
 `NativeCameraModel` owns session state: device selection, camera state,
 session identity, operation-pending state and Open/Start/Stop/Close commands.
@@ -329,7 +332,7 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
 2. One acquisition worker and one SDK image-pull path.
 3. Immutable frame lease ownership.
 4. Bounded event transfer and latest-frame-wins presentation.
-5. One latest-frame mailbox and one presentation consumer.
+5. One latest-frame mailbox and one presentation consumer, accessed by presentation through `NativeCameraFrameFeed`.
 6. No unbounded main-queue work per frame.
 7. No per-frame SwiftUI state publication.
 8. No extra frame copies, image histories or retained leases introduced by pane composition.

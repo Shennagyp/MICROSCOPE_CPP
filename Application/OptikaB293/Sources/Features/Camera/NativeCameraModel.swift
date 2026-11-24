@@ -3,7 +3,8 @@ import Foundation
 
 @MainActor
 final class NativeCameraModel: ObservableObject {
-    let bridge: AmscopeNativeCameraBridge
+    private let bridge: AmscopeNativeCameraBridge
+    let frameFeed: NativeCameraFrameFeed
     lazy var features = NativeCameraFeatureModel(
         bridge: bridge,
         accessSnapshot: { [weak self] in
@@ -31,6 +32,7 @@ final class NativeCameraModel: ObservableObject {
 
     init(bridge: AmscopeNativeCameraBridge) {
         self.bridge = bridge
+        self.frameFeed = bridge
 
         bridge.onAcquisitionError = { [weak self] error in
             MainActor.assumeIsolated {

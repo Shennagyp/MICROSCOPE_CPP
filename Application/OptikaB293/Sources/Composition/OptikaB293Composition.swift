@@ -2,7 +2,6 @@ import Foundation
 
 @MainActor
 final class OptikaB293Composition {
-    let bridge: AmscopeNativeCameraBridge
     let camera: NativeCameraModel
     let microscope: MicroscopeConfigurationModel
     let resolutionCoordinator: MicroscopeResolutionCoordinator
@@ -18,7 +17,6 @@ final class OptikaB293Composition {
             microscope: microscope
         )
 
-        self.bridge = bridge
         self.microscope = microscope
         self.camera = camera
         self.resolutionCoordinator = resolutionCoordinator

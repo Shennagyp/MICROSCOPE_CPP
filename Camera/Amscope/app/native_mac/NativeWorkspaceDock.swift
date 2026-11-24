@@ -70,11 +70,12 @@ struct NativeWorkspaceDock: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color(nsColor: NSColor.controlBackgroundColor))
-        .overlay(alignment: .leading) {
+        .overlay(
             Rectangle()
                 .fill(Color(nsColor: NSColor.separatorColor))
-                .frame(width: 1)
-        }
+                .frame(width: 1),
+            alignment: .leading
+        )
     }
 
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
@@ -151,8 +152,16 @@ private final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelega
     }
 
     func synchronize() {
-        guard model.isWorkspaceDockVisible && model.isWorkspaceDockFloating else {
+        guard let mainWindow = window else {
             floatingPanel?.orderOut(nil)
+            return
+        }
+
+        guard model.isWorkspaceDockVisible && model.isWorkspaceDockFloating else {
+            if let panel = floatingPanel {
+                mainWindow.removeChildWindow(panel)
+                panel.orderOut(nil)
+            }
             return
         }
 
@@ -186,19 +195,21 @@ private final class NativeWorkspaceDockPanelAnchorNSView: NSView, NSWindowDelega
             floatingPanel = panel
         }
 
-        guard let panel = floatingPanel, !panel.isVisible else { return }
-        if let mainWindow = window {
-            let mainFrame = mainWindow.frame
-            let panelSize = panel.frame.size
-            panel.setFrameOrigin(
-                NSPoint(
-                    x: mainFrame.maxX - panelSize.width - 24,
-                    y: mainFrame.maxY - panelSize.height - 72
-                )
-            )
-        } else {
-            panel.center()
+        guard let panel = floatingPanel else { return }
+        if panel.parent !== mainWindow {
+            panel.parent?.removeChildWindow(panel)
+            mainWindow.addChildWindow(panel, ordered: .above)
         }
+
+        guard !panel.isVisible else { return }
+        let mainFrame = mainWindow.frame
+        let panelSize = panel.frame.size
+        panel.setFrameOrigin(
+            NSPoint(
+                x: mainFrame.maxX - panelSize.width - 24,
+                y: mainFrame.maxY - panelSize.height - 72
+            )
+        )
         panel.makeKeyAndOrderFront(nil)
     }
 

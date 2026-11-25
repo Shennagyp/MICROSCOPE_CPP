@@ -13,18 +13,24 @@ struct MainWindowView: View {
     var body: some View {
         GeometryReader { geometry in
             let previewMinimumWidth = OptikaLayout.dualPreviewMinimumWidth
-            let railWidth = NativeWorkspaceDockTabRail.width
+            let railOverlayWidth = NativeWorkspaceDockTabRail.width
+            let isDockVisible = workspace.isWorkspaceDockVisible
             let maximumDockWidth = min(
                 OptikaLayout.workspaceDockMaximumWidth,
                 max(
                     OptikaLayout.workspaceDockMinimumWidth,
-                    geometry.size.width - previewMinimumWidth - dockDividerWidth - railWidth
+                    geometry.size.width - previewMinimumWidth - dockDividerWidth - railOverlayWidth
                 )
             )
             let dockWidth = min(
                 max(workspace.workspaceDockWidth, OptikaLayout.workspaceDockMinimumWidth),
                 maximumDockWidth
             )
+            // The rail is an overlay, not an HStack child. When the dock is
+            // closed, the preview uses the full window width behind the rail.
+            // When open, the dock and preview end at the rail's leading edge
+            // so the rail never obscures dock content.
+            let workspaceContentWidth = geometry.size.width - (isDockVisible ? railOverlayWidth : 0)
 
             HStack(spacing: 0) {
                 NativeDualPreviewSurface(
@@ -46,7 +52,7 @@ struct MainWindowView: View {
                 )
                 .clipped()
 
-                if workspace.isWorkspaceDockVisible {
+                if isDockVisible {
                     NativeWorkspaceDockResizeDivider(
                         dockWidth: dockWidth,
                         maximumWidth: maximumDockWidth,
@@ -74,12 +80,22 @@ struct MainWindowView: View {
                     .frame(width: dockWidth)
                     .frame(maxHeight: .infinity)
                 }
-
+            }
+            .frame(
+                width: workspaceContentWidth,
+                height: geometry.size.height,
+                alignment: .leading
+            )
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                alignment: .leading
+            )
+            .overlay(alignment: .trailing) {
                 NativeWorkspaceDockTabRail(workspace: workspace)
-                    .frame(width: railWidth)
+                    .frame(width: railOverlayWidth)
                     .frame(maxHeight: .infinity)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
         }
         .frame(

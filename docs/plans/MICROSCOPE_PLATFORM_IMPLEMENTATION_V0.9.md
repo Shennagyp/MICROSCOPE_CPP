@@ -199,7 +199,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C bounded ingress, single-writer runtime, wake/worker primitives, X/Y reducer and an Application StageNavigationRuntime are implemented. Host control-queue composition, real drivers and verified feedback-loss reconciliation remain outstanding.**
+**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C bounded feedback ingress, single-writer runtime, wake/worker primitives, X/Y reducer, Application StageNavigationRuntime and a bounded typed stage-control queue are implemented. Live host callback composition, real drivers and verified feedback-loss reconciliation remain outstanding.**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
@@ -252,7 +252,9 @@ The equipment definition now describes installed topology and static capabilitie
 - DevicePositionObservations mode requires fresh, command-correlated X and Y position observations and checks target deviation plus the retained uncertainty bound before verification.
 - A complete, correlated HomeReferenceEstablished fact is checked against the requested two-axis home and its uncertainty policy. Only then is the home step verified, the X/Y reference restored, and a new absolute move resolved from the preserved SlideId/local point/registration revision.
 - Added focused Application tests for bounded open-loop completion, measured X/Y completion and home-then-restored-move. The test target is registered in Microscope.Application/CMakeLists.txt; no build or test result is claimed here.
-- The worker still relies on the host to supply its typed control-request drain. This class is invoked by that owner-thread drain/feedback handler; it does not create threads or a universal command queue.
+- Added StageNavigationControlQueue, a bounded stage-specific FIFO that wakes RuntimeWakeSignal and rejects full/closed submissions explicitly. Its owner-thread drain creates operation/step state through StageNavigationRuntime::beginRequest and starts at most one active navigation; queued work remains ordered until the active navigation completes.
+- StageNavigationRuntime binds to the serialized operation-runtime owner thread. The first feedback callback can bind it after SerializedRuntimeWorker has bound Core; the control-queue drain also ensures binding before dispatch.
+- The application host still owns the dedicated worker thread, invokes StageNavigationRuntime::processFeedback from the feedback handler and StageNavigationControlQueue::drain from the control handler, and publishes the resulting immutable operation/position projections. No thread or universal command bus is created by these stage-specific types.
 
 **Implementation constraints**
 - Per-runtime state transitions have one logical owner. Adapter callbacks enqueue immutable feedback and never call the reducer directly from device/SDK threads.
@@ -360,7 +362,7 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 The Core inbox/runtime and Application StageNavigationRuntime now provide the state and execution path for one active dual-slide navigation. The runtime worker still accepts a host-supplied typed control drain; it does not create a thread or a universal command bus.
 
 **Next implementation work**
-1. Add the host-owned typed stage-navigation request queue and compose it with SerializedRuntimeWorker. The host creates operation identities/steps, calls StageNavigationRuntime on the owner thread and publishes immutable operation/position snapshots.
+1. Compose StageNavigationControlQueue::drain and StageNavigationRuntime::processFeedback into the live host's SerializedRuntimeWorker callbacks; publish operation snapshots and machine/slide-local position projections through the Application API.
 2. Implement the physical motion-calibration model that supplies StageMotionErrorBudget contributions from measured displacement, residuals and uncertainty. The current budget is an injected value, not a fitted calibration.
 3. Implement feedback-loss reconciliation: stop/inspect the controller, read back or re-home as appropriate, re-establish references, and acknowledge the runtime latch only after reconciliation.
 4. Add stage motion-state, limit and fault reduction plus controlled-stop/timeout handling.

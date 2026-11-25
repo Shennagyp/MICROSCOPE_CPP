@@ -105,7 +105,7 @@ int main() {
               "feedback preserves normalized fact kind");
         check(captured.metadata.source() == ObservationSource::HardwareReadback,
               "feedback preserves observation provenance");
-        check(captured.metadata.source()Sequence == std::optional<std::uint64_t>(91),
+        check(captured.metadata.sourceSequence() == std::optional<std::uint64_t>(91),
               "feedback preserves adapter sequence");
         check(captured.payload.reachedRequestedPosition,
               "feedback payload remains capability-typed");
@@ -311,7 +311,7 @@ int main() {
 
     auto mismatchedMicroscopeReceipt = FeedbackReceipt<SelectorFeedback>::create(
         FeedbackEnvelope<SelectorFeedback>{
-            FeedbackMetadata{
+            FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
                         microscopeId,
@@ -323,7 +323,7 @@ int main() {
                 FeedbackKind::DeviceProgress,
                 ObservationSource::SdkStatus,
                 std::nullopt,
-                std::nullopt},
+                std::nullopt).value(),
             SelectorFeedback{false}},
         receiptTime,
         FeedbackIngressSequence::create(
@@ -335,7 +335,7 @@ int main() {
 
     auto mismatchedGenerationReceipt = FeedbackReceipt<SelectorFeedback>::create(
         FeedbackEnvelope<SelectorFeedback>{
-            FeedbackMetadata{
+            FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
                         microscopeId,
@@ -347,7 +347,7 @@ int main() {
                 FeedbackKind::DeviceProgress,
                 ObservationSource::SdkStatus,
                 std::nullopt,
-                std::nullopt},
+                std::nullopt).value(),
             SelectorFeedback{false}},
         receiptTime,
         FeedbackIngressSequence::create(

@@ -1,6 +1,7 @@
 #include "microscope/core/runtime/Feedback.h"
 
-#include <chrono>\n#include <cstdlib>
+#include <chrono>
+#include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <utility>

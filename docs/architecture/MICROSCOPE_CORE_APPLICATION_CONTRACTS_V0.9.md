@@ -330,3 +330,53 @@ MicroscopeEquipmentDefinition is the immutable validation boundary for one micro
 
 JSON parsing/schema migration remains in Microscope.Application (Phase 5). The Core aggregate accepts typed values and validates domain relationships; it does not parse JSON, access storage or discover hardware.
 
+## 12. Phase 2B objective and camera specification contract
+
+### 12.1 Objective specification
+
+ObjectiveSpecification is attached to the installed EquipmentComponentId. It does not mint a separate objective identity and does not add per-objective behavior classes.
+
+The initial specification stores:
+- Positive nominal magnification.
+- Positive numerical aperture.
+- Positive working distance in micrometers.
+- Chromatic correction classification (achromatic, semi-apochromatic, apochromatic, other or unknown).
+- Field correction classification (plan, non-plan or unknown).
+- Immersion medium (air, water, oil, glycerol, silicone, other or unknown).
+- Optional positive design coverglass thickness in micrometers.
+
+Magnification, numerical aperture and lengths are distinct domain-specific numeric types. Values must be finite and positive. Numerical aperture is not capped at 1.0; values above one are valid for high-NA immersion objectives. The specification records known/unknown characteristics without pretending a missing specification is zero.
+
+### 12.2 Camera sensor and output modes
+
+CameraSpecification is attached to the installed imaging EquipmentComponentId. It stores:
+- Active sensor width/height in sensor pixels.
+- Independent positive X/Y sensor pixel pitch in micrometers.
+- One or more unique CameraOutputMode values.
+
+A CameraOutputMode stores its mode ID, sensor ROI origin and extents, horizontal/vertical binning factors, delivered image dimensions, pixel layout and stable pixel-format code.
+
+The model distinguishes:
+- Sensor coordinates and ROI dimensions.
+- Hardware binning factors.
+- Delivered image dimensions.
+
+The effective geometric mapping is explicit:
+
+    sensorPixelsPerDeliveredPixelX = ROI_width / delivered_width
+    sensorPixelsPerDeliveredPixelY = ROI_height / delivered_height
+
+X and Y ratios are independent. This captures the net mapping for binning, decimation, crop and resampling; it does not infer that the physical binning factor alone explains every output dimension. Sensor pixel pitch is also independent in X and Y. Nominal object-space scale can therefore use the corresponding axis-specific pitch and mapping before dividing by effective optical magnification in the calibration/resolution phase.
+
+The active sensor ROI must be contained within the declared active sensor dimensions. Output mode IDs must be unique per camera. Pixel dimensions and binning factors are nonzero. Pixel format codes are non-empty, NUL-free and whitespace-free.
+
+### 12.3 Aggregate ownership and validation
+
+MicroscopeEquipmentDefinition optionally owns objective and camera specification records alongside physical components, connections and paths. Each specialized record must reference an installed component of the correct broad kind:
+- ObjectiveSpecification → an installed OpticalElement.
+- CameraSpecification → an installed ImagingDevice.
+
+At most one objective specification and one camera specification may be attached to one physical component. A camera or objective specification referencing an uninstalled component is rejected. This is data association, not an executable component subclass hierarchy.
+
+These are equipment-definition facts only. Actual camera capabilities, active output mode, current exposure, gain, online/offline status and readback observations remain runtime/adapter data. JSON loading remains an Application responsibility in Phase 5.
+

@@ -390,6 +390,10 @@ DualSlideCarrierState::currentSlidePosition(
             loaded?CurrentSlidePositionError::SlideNotRegistered:
                    CurrentSlidePositionError::SlideNotInCarrier);
     }
+    if(horizontal.stageComponentId()!=specification_.stageComponentId()||
+       transverse.stageComponentId()!=specification_.stageComponentId())
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            CurrentSlidePositionError::StageComponentMismatch);
     if(horizontal.axisId()!=specification_.horizontalAxisId())
         return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
             CurrentSlidePositionError::HorizontalAxisMismatch);

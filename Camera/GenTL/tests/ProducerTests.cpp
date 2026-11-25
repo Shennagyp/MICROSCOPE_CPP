@@ -2,6 +2,7 @@
 #include "camera/gentl/GenTLFrameAdapter.h"
 
 #include <cstdlib>
+#include <cstdio>
 #include <chrono>
 #include <dlfcn.h>
 #include <filesystem>
@@ -144,11 +145,12 @@ int main(int argc, char** argv) {
         // GCUnregisterEvent must abort a pending EventGetData operation.
         // The mock blocks deterministically until the event is unregistered.
         void* mockLibrary = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
-        if (!mockLibrary) return 25;
+        if (!mockLibrary) { std::fprintf(stderr, "wait cancellation: dlopen failed: %s\\n", dlerror()); return 25; }
         using WaitEnteredFunction = int (*)();
         const auto waitEntered = reinterpret_cast<WaitEnteredFunction>(
             dlsym(mockLibrary, "gentl_mock_event_wait_entered"));
         if (!waitEntered) {
+            std::fprintf(stderr, "wait cancellation: control symbol missing\\n");
             dlclose(mockLibrary);
             return 26;
         }
@@ -156,6 +158,7 @@ int main(int argc, char** argv) {
         auto waitProducer = camera::gentl::Producer::open(bridge, ctiPath);
         const auto waitDevices = waitProducer.discover();
         if (waitDevices.size() != 1) {
+            std::fprintf(stderr, "wait cancellation: device discovery failed\\n");
             dlclose(mockLibrary);
             return 27;
         }
@@ -180,6 +183,7 @@ int main(int argc, char** argv) {
         if (!waitEntered()) {
             waitStream.stop();
             waiter.join();
+            std::fprintf(stderr, "wait cancellation: mock waiter was not entered\\n");
             dlclose(mockLibrary);
             return 28;
         }
@@ -187,7 +191,12 @@ int main(int argc, char** argv) {
         waitStream.stop();
         waiter.join();
         dlclose(mockLibrary);
-        if (waitFailed || waitedFrame.has_value() || waitStream) return 29;
+        if (waitFailed || waitedFrame.has_value() || waitStream) {
+            std::fprintf(stderr, "wait cancellation: failed=%d frame=%d stream=%d\\n",
+                waitFailed ? 1 : 0, waitedFrame.has_value() ? 1 : 0,
+                static_cast<bool>(waitStream) ? 1 : 0);
+            return 29;
+        }
         waitDevice.close();
 
         // A failed DSClose quarantines the native context. Its Consumer and

@@ -47,6 +47,51 @@ struct PortOwner final {
 
 } // namespace
 
+OpticalFunctionCapability::OpticalFunctionCapability(
+    OpticalElementFunction function,
+    std::optional<OpticalCompatibilityId> compatibilityId)
+    : function_(function),
+      compatibilityId_(std::move(compatibilityId)) {}
+
+Result<
+    OpticalFunctionCapability,
+    OpticalFunctionCapabilityError> OpticalFunctionCapability::create(
+        OpticalElementFunction function,
+        std::optional<OpticalCompatibilityId> compatibilityId) {
+    switch (function) {
+    case OpticalElementFunction::PhasePlate:
+    case OpticalElementFunction::PhaseAnnulus:
+    case OpticalElementFunction::Polarizer:
+    case OpticalElementFunction::Analyzer:
+    case OpticalElementFunction::DifferentialInterferencePrism:
+    case OpticalElementFunction::ExcitationFilter:
+    case OpticalElementFunction::EmissionFilter:
+    case OpticalElementFunction::DichroicMirror:
+    case OpticalElementFunction::DarkfieldStop:
+    case OpticalElementFunction::Other:
+        break;
+    default:
+        return Result<
+            OpticalFunctionCapability,
+            OpticalFunctionCapabilityError>::failure(
+                OpticalFunctionCapabilityError::InvalidFunction);
+    }
+
+    return Result<
+        OpticalFunctionCapability,
+        OpticalFunctionCapabilityError>::success(
+            OpticalFunctionCapability(function, std::move(compatibilityId)));
+}
+
+OpticalElementFunction OpticalFunctionCapability::function() const noexcept {
+    return function_;
+}
+
+const std::optional<OpticalCompatibilityId>&
+OpticalFunctionCapability::compatibilityId() const noexcept {
+    return compatibilityId_;
+}
+
 OpticalPort::OpticalPort(
     OpticalPortId id,
     OpticalPortDirection direction)
@@ -76,15 +121,18 @@ OpticalPortDirection OpticalPort::direction() const noexcept {
 EquipmentComponent::EquipmentComponent(
     EquipmentComponentId id,
     EquipmentComponentKind kind,
-    std::vector<OpticalPort> opticalPorts)
+    std::vector<OpticalPort> opticalPorts,
+    std::vector<OpticalFunctionCapability> opticalFunctions)
     : id_(std::move(id)),
       kind_(kind),
-      opticalPorts_(std::move(opticalPorts)) {}
+      opticalPorts_(std::move(opticalPorts)),
+      opticalFunctions_(std::move(opticalFunctions)) {}
 
 Result<EquipmentComponent, EquipmentComponentError> EquipmentComponent::create(
     EquipmentComponentId id,
     EquipmentComponentKind kind,
-    std::vector<OpticalPort> opticalPorts) {
+    std::vector<OpticalPort> opticalPorts,
+    std::vector<OpticalFunctionCapability> opticalFunctions) {
     if (!isKnownComponentKind(kind)) {
         return Result<EquipmentComponent, EquipmentComponentError>::failure(
             EquipmentComponentError::InvalidKind);
@@ -125,11 +173,29 @@ Result<EquipmentComponent, EquipmentComponentError> EquipmentComponent::create(
             EquipmentComponentError::InvalidPortConfiguration);
     }
 
+    if (kind != EquipmentComponentKind::OpticalElement &&
+        !opticalFunctions.empty()) {
+        return Result<EquipmentComponent, EquipmentComponentError>::failure(
+            EquipmentComponentError::OpticalFunctionsOnNonOpticalElement);
+    }
+
+    for (std::size_t i = 0; i < opticalFunctions.size(); ++i) {
+        for (std::size_t j = i + 1; j < opticalFunctions.size(); ++j) {
+            if (opticalFunctions[i].function() == opticalFunctions[j].function() &&
+                opticalFunctions[i].compatibilityId() ==
+                    opticalFunctions[j].compatibilityId()) {
+                return Result<EquipmentComponent, EquipmentComponentError>::failure(
+                    EquipmentComponentError::DuplicateOpticalFunctionCapability);
+            }
+        }
+    }
+
     return Result<EquipmentComponent, EquipmentComponentError>::success(
         EquipmentComponent(
             std::move(id),
             kind,
-            std::move(opticalPorts)));
+            std::move(opticalPorts),
+            std::move(opticalFunctions)));
 }
 
 const EquipmentComponentId& EquipmentComponent::id() const noexcept {
@@ -142,6 +208,11 @@ EquipmentComponentKind EquipmentComponent::kind() const noexcept {
 
 const std::vector<OpticalPort>& EquipmentComponent::opticalPorts() const noexcept {
     return opticalPorts_;
+}
+
+const std::vector<OpticalFunctionCapability>&
+EquipmentComponent::opticalFunctions() const noexcept {
+    return opticalFunctions_;
 }
 
 OpticalConnection::OpticalConnection(

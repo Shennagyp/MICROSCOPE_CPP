@@ -8,9 +8,9 @@ enum OptikaLayout {
     static let workspaceDockMinimumWidth: CGFloat = 280
     static let workspaceDockDefaultWidth: CGFloat = 350
     static let workspaceDockMaximumWidth: CGFloat = 520
-    static let workspaceDockResizeDividerWidth: CGFloat = 6
-    static let dockRailWidth: CGFloat = 26
-    static let dockTabHeight: CGFloat = 104
+    static let workspaceDockResizeDividerWidth: CGFloat = 8
+    static let dockRailWidth: CGFloat = 40
+    static let dockTabHeight: CGFloat = 112
     static let slideMinimumWidth: CGFloat = 240
     static let dualPreviewMinimumWidth: CGFloat = slideMinimumWidth * 2 + 4
     static let microscopeControlsMinimumWidth: CGFloat = 435

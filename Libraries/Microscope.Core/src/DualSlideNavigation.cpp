@@ -132,6 +132,8 @@ SlideRegistration::SlideRegistration(
 Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
     SlideId id,DualSlideSlot slot,SlideGeometry g,
     std::array<SlideCornerMeasurement,4> input,double maxAllowed) {
+    if(slot!=DualSlideSlot::Left&&slot!=DualSlideSlot::Right)
+        return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::InvalidSlot);
     if(!std::isfinite(maxAllowed)||maxAllowed<0)
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::InvalidResidualLimit);
     std::array<std::optional<SlideCornerMeasurement>,4> ordered;
@@ -197,18 +199,24 @@ Result<StagePlanePoint,SlideRegistrationError> SlideRegistration::toStage(SlideL
         return Result<StagePlanePoint,SlideRegistrationError>::failure(SlideRegistrationError::NonFiniteLocalPoint);
     if(!geometry_.contains(p.xMicrometers,p.yMicrometers))
         return Result<StagePlanePoint,SlideRegistrationError>::failure(SlideRegistrationError::LocalPointOutsideSlide);
-    return Result<StagePlanePoint,SlideRegistrationError>::success({
+    const StagePlanePoint mapped{
         transform_[0]+transform_[1]*p.xMicrometers+transform_[2]*p.yMicrometers,
-        transform_[3]+transform_[4]*p.xMicrometers+transform_[5]*p.yMicrometers});
+        transform_[3]+transform_[4]*p.xMicrometers+transform_[5]*p.yMicrometers};
+    if(!std::isfinite(mapped.horizontalMicrometers)||!std::isfinite(mapped.transverseMicrometers))
+        return Result<StagePlanePoint,SlideRegistrationError>::failure(SlideRegistrationError::NonFiniteStagePoint);
+    return Result<StagePlanePoint,SlideRegistrationError>::success(mapped);
 }
 Result<SlideLocalPoint,SlideRegistrationError> SlideRegistration::toSlide(StagePlanePoint p)const {
     if(!std::isfinite(p.horizontalMicrometers)||!std::isfinite(p.transverseMicrometers))
         return Result<SlideLocalPoint,SlideRegistrationError>::failure(SlideRegistrationError::NonFiniteStagePoint);
     const double dx=p.horizontalMicrometers-transform_[0],dy=p.transverseMicrometers-transform_[3];
     const double det=transform_[1]*transform_[5]-transform_[2]*transform_[4];
-    return Result<SlideLocalPoint,SlideRegistrationError>::success({
+    const SlideLocalPoint mapped{
         (dx*transform_[5]-transform_[2]*dy)/det,
-        (transform_[1]*dy-dx*transform_[4])/det});
+        (transform_[1]*dy-dx*transform_[4])/det};
+    if(!std::isfinite(mapped.xMicrometers)||!std::isfinite(mapped.yMicrometers))
+        return Result<SlideLocalPoint,SlideRegistrationError>::failure(SlideRegistrationError::NonFiniteLocalPoint);
+    return Result<SlideLocalPoint,SlideRegistrationError>::success(mapped);
 }
 
 SlideSlotState::SlideSlotState(DualSlideSlot s,std::optional<SlideId> id,std::optional<SlideRegistration> r)

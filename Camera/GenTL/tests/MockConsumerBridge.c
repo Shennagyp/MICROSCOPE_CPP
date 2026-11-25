@@ -97,7 +97,7 @@ int32_t gentl_consumer_invoke(
     case 22:
     case 27:
         if (argument_count != 3) return GC_ERR_INVALID_PARAMETER;
-        *(bool8_t*)pointer(arguments[1]) = true;
+        *(bool8_t*)pointer(arguments[1]) = 1;
         return GC_ERR_SUCCESS;
     case 24:
         if (argument_count != 5 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;

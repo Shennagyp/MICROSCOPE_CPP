@@ -101,12 +101,12 @@ CameraSpecification cameraSpecification(
         componentId,
         dimensions(4096, 3000),
         micrometers(3.45),
-        micrometers(3.45),
+        micrometers(3.60),
         {outputMode(
              "full-frame",
              roi(0, 0, 4096, 3000),
              binning(1, 1),
-             dimensions(2048, 1500)),
+             dimensions(2048, 1000)),
          outputMode(
              "two-by-two-binned",
              roi(256, 100, 2048, 1500),
@@ -218,15 +218,15 @@ void testCameraOutputMappingUsesSensorAndDeliveredDimensions() {
           camera.activeSensorDimensions().height() == 3000,
           "preserves active sensor dimensions");
     check(camera.pixelPitchXMicrometers() == 3.45 &&
-          camera.pixelPitchYMicrometers() == 3.45,
+          camera.pixelPitchYMicrometers() == 3.60,
           "preserves independent X/Y sensor pixel pitches");
     check(camera.outputModes().size() == 2,
           "retains multiple readout/output modes");
 
     const auto& fullFrame = camera.outputModes()[0];
     check(fullFrame.sensorPixelsPerDeliveredPixelX() == 2.0 &&
-          fullFrame.sensorPixelsPerDeliveredPixelY() == 2.0,
-          "full-frame output records two sensor pixels per delivered pixel");
+          fullFrame.sensorPixelsPerDeliveredPixelY() == 3.0,
+          "full-frame output preserves independent X/Y sensor-to-output mappings");
 
     const auto& binned = camera.outputModes()[1];
     check(binned.binning().horizontalFactor() == 2 &&
@@ -307,11 +307,31 @@ void testCameraModeAndSensorValidation() {
               CameraSpecificationError::SensorRegionOutsideActiveArea,
           "rejects an ROI outside the active sensor area");
 
+    auto duplicateModeIds = CameraSpecification::create(
+        cameraId,
+        dimensions(100, 100),
+        micrometers(3.45),
+        micrometers(3.60),
+        {outputMode(
+             "duplicate-mode",
+             roi(0, 0, 100, 100),
+             binning(1, 1),
+             dimensions(100, 100)),
+         outputMode(
+             "duplicate-mode",
+             roi(0, 0, 50, 50),
+             binning(1, 1),
+             dimensions(50, 50))});
+    check(!duplicateModeIds &&
+          duplicateModeIds.error() ==
+              CameraSpecificationError::DuplicateOutputModeId,
+          "rejects duplicate camera output mode identities");
+
     const auto noModes = CameraSpecification::create(
         cameraId,
         dimensions(100, 100),
         micrometers(3.45),
-        micrometers(3.45),
+        micrometers(3.60),
         {});
     check(!noModes &&
           noModes.error() == CameraSpecificationError::NoOutputModes,
@@ -347,6 +367,30 @@ void testEquipmentAggregateValidatesSpecializedComponentReferences() {
               "equipment definition exposes specialized records without duplicating component identity");
     }
 
+    auto duplicateObjectiveDefinition = MicroscopeEquipmentDefinition::create(
+        microscopeId,
+        components,
+        {},
+        {},
+        {objective, objective},
+        {camera});
+    check(!duplicateObjectiveDefinition &&
+          duplicateObjectiveDefinition.error() ==
+              EquipmentDefinitionError::DuplicateObjectiveSpecification,
+          "rejects duplicate objective specifications for one physical component");
+
+    auto duplicateCameraDefinition = MicroscopeEquipmentDefinition::create(
+        microscopeId,
+        components,
+        {},
+        {},
+        {objective},
+        {camera, camera});
+    check(!duplicateCameraDefinition &&
+          duplicateCameraDefinition.error() ==
+              EquipmentDefinitionError::DuplicateCameraSpecification,
+          "rejects duplicate camera specifications for one physical component");
+
     const auto unknownObjective = ObjectiveSpecification::create(
         makeId<EquipmentComponentId>("objective-not-installed"),
         magnification(4.0),
@@ -366,6 +410,28 @@ void testEquipmentAggregateValidatesSpecializedComponentReferences() {
           unknownObjectiveDefinition.error() ==
               EquipmentDefinitionError::ObjectiveReferencesUnknownComponent,
           "rejects an objective specification for an uninstalled component");
+
+    auto cameraWithoutComponent = CameraSpecification::create(
+        makeId<EquipmentComponentId>("camera-not-installed"),
+        dimensions(100, 100),
+        micrometers(3.0),
+        micrometers(3.0),
+        {outputMode(
+            "uninstalled-camera-mode",
+            roi(0, 0, 100, 100),
+            binning(1, 1),
+            dimensions(100, 100))});
+    auto unknownCameraDefinition = MicroscopeEquipmentDefinition::create(
+        microscopeId,
+        components,
+        {},
+        {},
+        {objective},
+        {take(std::move(cameraWithoutComponent))});
+    check(!unknownCameraDefinition &&
+          unknownCameraDefinition.error() ==
+              EquipmentDefinitionError::CameraReferencesUnknownComponent,
+          "rejects a camera specification for an uninstalled component");
 
     auto cameraOnObjective = CameraSpecification::create(
         objectiveId,

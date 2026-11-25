@@ -1,6 +1,5 @@
 #include "camera/gentl/ConsumerBridge.h"
 
-#include <cassert>
 #include <cstdint>
 #include <type_traits>
 #include <stdexcept>
@@ -30,9 +29,9 @@ int main(int argc, char** argv) {
         0x2000,
         0x3000
     };
-    assert(consumer.invokeRaw(
-        camera::gentl::Operation::GcGetInfo,
-        infoArguments, 4) == -11000);
+    if (consumer.invokeRaw(
+        camera::gentl::Operation::gcGetInfo,
+        infoArguments, 4) != -11000) return 6;
 
     bool rejected = false;
     try {

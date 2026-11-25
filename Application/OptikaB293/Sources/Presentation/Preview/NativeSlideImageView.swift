@@ -1,6 +1,6 @@
 import AppKit
 
-enum NativeSlideImageSizingMode {
+enum NativeSlideImageSizingMode: Equatable {
     /// Recalculate image scale whenever this pane's viewport changes.
     case resizable
     /// Keep the selected display scale independent of viewport resizing.

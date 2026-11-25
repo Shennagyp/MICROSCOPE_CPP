@@ -1,6 +1,6 @@
 #include "microscope/core/configuration/ConfigurationTransition.h"
 
-#include <algorithm>
+#include <cstddef>
 #include <map>
 #include <set>
 #include <string>
@@ -152,7 +152,7 @@ Result<
                 return Result<
                     ConfigurationTransitionPlan,
                     ConfigurationTransitionPlanError>::failure(
-                        ConfigurationTransitionPlanError::DuplicateAcquisitionPrecondition);
+                    ConfigurationTransitionPlanError::DuplicateAcquisitionPrecondition);
             }
             acquisitionGateId = step.id();
         }
@@ -162,7 +162,7 @@ Result<
                 return Result<
                     ConfigurationTransitionPlan,
                     ConfigurationTransitionPlanError>::failure(
-                        ConfigurationTransitionPlanError::DuplicateFinalVerification);
+                    ConfigurationTransitionPlanError::DuplicateFinalVerification);
             }
             finalVerificationId = step.id();
         }
@@ -241,8 +241,8 @@ Result<
         ++indegree[dependency.dependentStepId()];
     }
 
-    // Kahn's algorithm produces deterministic topological layers. Each layer
-    // contains requirements that have no dependency on one another.
+    // Kahn's algorithm. Step IDs are sorted in each ready set, giving stable
+    // output layers independent of the caller's input vector order.
     StepIdSet ready;
     for (const auto& entry : indegree) {
         if (entry.second == 0) {
@@ -280,8 +280,6 @@ Result<
                 ConfigurationTransitionPlanError::CyclicDependencies);
     }
 
-    // The inactive-acquisition gate must directly precede every requirement;
-    // final verification must directly follow every other requirement.
     const auto& gateDependents = dependents[*acquisitionGateId];
     const auto& verificationDependents = dependents[*finalVerificationId];
     if (!verificationDependents.empty()) {
@@ -297,7 +295,7 @@ Result<
             return Result<
                 ConfigurationTransitionPlan,
                 ConfigurationTransitionPlanError>::failure(
-                    ConfigurationTransitionPlanError::AcquisitionPreconditionMustPrecedeEveryStep);
+                ConfigurationTransitionPlanError::AcquisitionPreconditionMustPrecedeEveryStep);
         }
         if (step.id() != *finalVerificationId &&
             dependents[step.id()].find(*finalVerificationId) ==
@@ -305,7 +303,7 @@ Result<
             return Result<
                 ConfigurationTransitionPlan,
                 ConfigurationTransitionPlanError>::failure(
-                    ConfigurationTransitionPlanError::FinalVerificationMustFollowEveryStep);
+                ConfigurationTransitionPlanError::FinalVerificationMustFollowEveryStep);
         }
     }
 
@@ -419,11 +417,6 @@ Result<
         IlluminationChannelMustMatch{
             request.illuminationComponentId(),
             request.illuminationChannelId()});
-    const auto exposurePolicy = appendStep(
-        "configuration.exposure-policy",
-        ExposurePolicyMustBeHonored{
-            request.cameraComponentId(),
-            request.exposurePolicy()});
 
     std::optional<ConfigurationTransitionStepId> apertureTarget;
     if (desiredConfiguration.condenserApertureTarget()) {
@@ -450,7 +443,8 @@ Result<
             "configuration.initial-exposure-preset",
             InitialExposurePresetMustBeConsidered{
                 request.cameraComponentId(),
-                *desiredConfiguration.exposurePreset()});
+                *desiredConfiguration.exposurePreset(),
+                request.exposurePolicy()});
     }
 
     const auto finalVerification = appendStep(
@@ -462,27 +456,29 @@ Result<
             ConfigurationTransitionPlan,
             ConfigurationTransitionPlannerError>::failure(*buildError);
     }
+
     if (!acquisitionGate || !pathSelection || !objectiveSelection ||
         !condenserSelection || !cameraModeSelection ||
-        !illuminationChannelSelection || !exposurePolicy || !finalVerification) {
+        !illuminationChannelSelection || !finalVerification) {
         return Result<
             ConfigurationTransitionPlan,
             ConfigurationTransitionPlannerError>::failure(
                 ConfigurationTransitionPlannerError::InvalidGeneratedPlan);
     }
 
+    // All configuration work is constrained by acquisition inactivity.
     for (const auto& step : steps) {
-        if (step.id() != *acquisitionGate &&
-            step.id() != *finalVerification) {
+        if (step.id() != *acquisitionGate) {
             appendDependency(*acquisitionGate, step.id());
         }
     }
 
+    // Selector relationships define ordering; unrelated selectors remain
+    // eligible for the same execution layer.
     appendDependency(*pathSelection, *cameraModeSelection);
     appendDependency(*objectiveSelection, *cameraModeSelection);
     appendDependency(*pathSelection, *illuminationChannelSelection);
     appendDependency(*objectiveSelection, *illuminationChannelSelection);
-    appendDependency(*cameraModeSelection, *exposurePolicy);
 
     for (const auto& additional : additionalOpticalSelections) {
         appendDependency(additional, *cameraModeSelection);
@@ -496,7 +492,7 @@ Result<
         appendDependency(*illuminationChannelSelection, *intensityTarget);
     }
     if (exposurePreset) {
-        appendDependency(*exposurePolicy, *exposurePreset);
+        appendDependency(*cameraModeSelection, *exposurePreset);
     }
 
     if (buildError) {

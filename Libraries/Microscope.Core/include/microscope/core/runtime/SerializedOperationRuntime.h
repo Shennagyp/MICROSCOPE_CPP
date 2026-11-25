@@ -336,6 +336,22 @@ public:
         return Result<StepStatus,SerializedOperationRuntimeError>::success(step->status);
     }
 
+    // Starts Core verification after DeviceActionCompleted when the host has
+    // evaluated a Core-derived, bounded estimate or other already available
+    // evidence. This records a Core control decision, not synthetic device
+    // feedback. The lifecycle permits it only from AwaitingObservation.
+    Result<StepStatus,SerializedOperationRuntimeError> beginStepVerification(
+        const OperationId& operationId,const StepId& stepId) {
+        auto owner=requireOwnerThread();
+        if(!owner)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(owner.error());
+        if(feedbackInbox_->feedbackLossLatched())
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::FeedbackLossUnresolved);
+        return applyControlStepEvent(
+            operationId,stepId,StepLifecycleEvent::VerificationStarted);
+    }
+
     Result<StepStatus,SerializedOperationRuntimeError> recordStepVerification(
         const OperationId& operationId,const StepId& stepId,bool succeeded) {
         auto owner=requireOwnerThread();

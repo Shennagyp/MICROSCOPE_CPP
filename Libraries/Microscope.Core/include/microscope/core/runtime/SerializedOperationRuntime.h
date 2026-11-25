@@ -428,6 +428,49 @@ public:
         return snapshotFor(*operation);
     }
 
+    // Commits the operation-level verification result after every step has
+    // reached Verified. This is distinct from beginOperationVerification().
+    // A feedback-loss latch blocks both success and failure finalization until
+    // the host has reconciled the physical device state.
+    Result<OperationSnapshot,SerializedOperationRuntimeError> recordOperationVerification(
+        const OperationId& operationId,bool succeeded) {
+        auto owner=requireOwnerThread();
+        if(!owner)
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(owner.error());
+        auto* operation=findOperation(operationId);
+        if(!operation)
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownOperation);
+        if(isTerminal(operation->status))
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::OperationTerminal);
+        if(feedbackInbox_->feedbackLossLatched())
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::FeedbackLossUnresolved);
+        if(operation->status!=OperationStatus::Verifying || operation->steps.empty())
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::OperationIncomplete);
+        for(const auto& step:operation->steps) {
+            if(step.status!=StepStatus::Verified)
+                return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                    SerializedOperationRuntimeError::OperationIncomplete);
+        }
+        if(!canIncrementRevision(*operation))
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::SnapshotRevisionExhausted);
+
+        const auto event=succeeded
+            ?OperationLifecycleEvent::Succeeded
+            :OperationLifecycleEvent::Failed;
+        auto next=applyOperationLifecycleEvent(operation->status,event);
+        if(!next)
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::InvalidTransition);
+        operation->status=next.value();
+        ++operation->revision;
+        return snapshotFor(*operation);
+    }
+
     Result<OperationSnapshot,SerializedOperationRuntimeError> operationSnapshot(
         const OperationId& operationId) const {
         auto owner=requireOwnerThread();

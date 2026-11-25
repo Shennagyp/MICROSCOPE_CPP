@@ -192,6 +192,11 @@ int main() {
     auto operationVerification=take(runtime->beginOperationVerification(operation));
     check(operationVerification.status()==OperationStatus::Verifying,
           "operation-level verification begins only after every step is Verified");
+    auto prematureOperationCompletion=runtime->recordOperationVerification(operation,true);
+    check(prematureOperationCompletion &&
+          prematureOperationCompletion.value().status()==OperationStatus::Succeeded &&
+          runtime->operationSnapshot(operation).value().status()==OperationStatus::Succeeded,
+          "only the owner can commit operation success after operation-level verification");
 
     auto oldSession=staleSessionFeedback(deviceSession(3));
     check(runtime->feedbackIngress().submit(std::move(oldSession))==FeedbackSubmitStatus::Enqueued,

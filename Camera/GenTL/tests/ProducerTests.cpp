@@ -1,4 +1,5 @@
 #include "camera/gentl/Producer.h"
+#include "camera/gentl/GenTLFrameAdapter.h"
 
 #include <cstdlib>
 #include <filesystem>
@@ -88,7 +89,36 @@ int main(int argc, char** argv) {
             frame->pixelFormat != UINT64_C(0x01080001) ||
             frame->pixelFormatNamespace != GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
             frame->width != 4 || frame->height != 4 ||
-            frame->imagePresent != true || frame->incomplete) return 14;
+            frame->imageOffset != 0 || frame->xPadding != 0 ||
+            frame->yPadding != 0 || frame->payloadType != GenTL::PAYLOAD_TYPE_IMAGE ||
+            frame->imagePresent != true || frame->containsChunkData != false ||
+            frame->incomplete) return 14;
+
+        const auto commonFrame = camera::gentl::makeCommonFrame(*frame);
+        if (!commonFrame ||
+            (*commonFrame)->pixelFormat != camera::PixelFormat::Raw8 ||
+            (*commonFrame)->width != 4 || (*commonFrame)->height != 4 ||
+            (*commonFrame)->strideBytes != 4 ||
+            (*commonFrame)->significantBitsPerPixel != 8 ||
+            (*commonFrame)->storageBitsPerPixel != 8 ||
+            (*commonFrame)->pixels != frame->payload ||
+            !(*commonFrame)->pixelFormatIdentifier ||
+            (*commonFrame)->pixelFormatIdentifier->scheme != "pfnc" ||
+            (*commonFrame)->pixelFormatIdentifier->value != UINT64_C(0x01080001) ||
+            !(*commonFrame)->timestamp ||
+            (*commonFrame)->timestamp->ticks != 123456789 ||
+            (*commonFrame)->timestamp->ticksPerSecond != UINT64_C(1000000000) ||
+            (*commonFrame)->sequenceNumber != 42) return 15;
+
+        auto incompleteFrame = *frame;
+        incompleteFrame.incomplete = true;
+        if (camera::gentl::makeCommonFrame(incompleteFrame)) return 16;
+        auto paddedFrame = *frame;
+        paddedFrame.xPadding = 1;
+        if (camera::gentl::makeCommonFrame(paddedFrame)) return 17;
+        auto chunkedFrame = *frame;
+        chunkedFrame.containsChunkData = true;
+        if (camera::gentl::makeCommonFrame(chunkedFrame)) return 18;
 
         // The data-stream lease keeps the device handle alive after its
         // DeviceSession owner releases its reference.
@@ -96,10 +126,10 @@ int main(int argc, char** argv) {
         if (device) return 15;
         const auto frameAfterDeviceOwnerClose = stream.nextFrame(100);
         if (!frameAfterDeviceOwnerClose ||
-            frameAfterDeviceOwnerClose->frameId != 42) return 16;
+            frameAfterDeviceOwnerClose->frameId != 42) return 20;
 
         stream.stop();
-        if (stream) return 17;
+        if (stream) return 21;
 
         // A failed DSClose quarantines the native context. Its Consumer and
         // dynamically loaded C ABI bridge must outlive all public wrappers.
@@ -110,19 +140,19 @@ int main(int argc, char** argv) {
             auto quarantineProducer =
                 camera::gentl::Producer::open(quarantineBridge, ctiPath);
             const auto quarantineDevices = quarantineProducer.discover();
-            if (quarantineDevices.size() != 1) return 18;
+            if (quarantineDevices.size() != 1) return 22;
             auto quarantineDevice =
                 quarantineProducer.openDevice(quarantineDevices.front());
             auto quarantineStream =
                 quarantineDevice.openDataStream("stream0", 3);
             quarantineStream.start();
-            if (setenv("MOCK_GENTL_FAIL_DS_CLOSE", "1", 1) != 0) return 19;
+            if (setenv("MOCK_GENTL_FAIL_DS_CLOSE", "1", 1) != 0) return 23;
             quarantineStream.stop();
             unsetenv("MOCK_GENTL_FAIL_DS_CLOSE");
             quarantineDevice.close();
         }
         quarantineBridge.reset();
-        if (retainedBridge.expired()) return 20;
+        if (retainedBridge.expired()) return 24;
     } catch (...) {
         result = 13;
     }

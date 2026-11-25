@@ -245,13 +245,36 @@ void testDiagnosticsAreSeparateValues() {
           whitespaceMessage.error() == DiagnosticError::EmptyMessage,
           "rejects a whitespace-only diagnostic message");
 
+    auto nulCode = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        std::string("code\0suffix", 11),
+        "A message is present.");
+    check(!nulCode && nulCode.error() == DiagnosticError::InvalidCode,
+          "rejects an embedded NUL in a diagnostic code");
+
+    auto nulMessage = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "configuration.profile.incomplete",
+        std::string("message\0suffix", 14));
+    check(!nulMessage && nulMessage.error() == DiagnosticError::InvalidMessage,
+          "rejects an embedded NUL in a diagnostic message");
+
+    auto whitespaceContext = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "configuration.profile.incomplete",
+        "A message is present.",
+        DiagnosticContext{std::string("  \t "), std::nullopt, std::nullopt});
+    check(!whitespaceContext &&
+          whitespaceContext.error() == DiagnosticError::InvalidContextValue,
+          "rejects whitespace-only diagnostic context values");
+
     auto emptyContextValue = Diagnostic::create(
         DiagnosticSeverity::Warning,
         "configuration.profile.incomplete",
         "A message is present.",
         DiagnosticContext{std::string(""), std::nullopt, std::nullopt});
     check(!emptyContextValue &&
-          emptyContextValue.error() == DiagnosticError::EmptyContextValue,
+          emptyContextValue.error() == DiagnosticError::InvalidContextValue,
           "uses absent context values instead of empty-string sentinels");
 
     auto invalidSeverity = Diagnostic::create(

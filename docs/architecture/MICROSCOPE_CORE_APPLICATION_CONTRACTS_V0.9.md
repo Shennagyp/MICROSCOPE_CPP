@@ -92,7 +92,7 @@ Validate numeric finiteness and applicable ranges. Resolution, accuracy, precisi
 
 Normal contract failures use typed results, not Boolean return values or exceptions for routine control flow.
 
-Use a C++17 Result<T, E> convention based on a discriminated success/error value, with an explicit no-value specialization or Status<E> for operations that return no value. E is specific to the boundary/use case; do not collapse failures into one global string error.
+Use a C++17 Result<T, E> convention based on a discriminated success/error value, with an explicit no-value specialization or Status<E> for operations that return no value. Result and Status types are marked [[nodiscard]] so callers are warned when an outcome is discarded. E is specific to the boundary/use case; do not collapse failures into one global string error.
 
 A failure contains a stable machine-readable code, human-readable message, relevant entity/operation/device context and optional field/path context. Retryability is included only when the owner can justify it.
 

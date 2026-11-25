@@ -132,7 +132,7 @@ int main() {
           "operation starts through the lifecycle reducer");
     check(runtime->createStep(operation,step).value()==StepStatus::Pending,
           "operation owns a pending step");
-    check(runtime->dispatchCommand(operation,step,command).value()==StepStatus::Dispatched,
+    check(runtime->dispatchCommand(operation,step,command,session).value()==StepStatus::Dispatched,
           "command dispatch is recorded before adapter invocation");
     check(runtime->recordAdapterAccepted(operation,step).value()==StepStatus::AdapterAccepted,
           "adapter acceptance is distinct from device acknowledgement");
@@ -195,7 +195,7 @@ int main() {
     take(runtime->createOperation(failureOperation));
     take(runtime->startOperation(failureOperation));
     take(runtime->createStep(failureOperation,failureStep));
-    take(runtime->dispatchCommand(failureOperation,failureStep,failureCommand));
+    take(runtime->dispatchCommand(failureOperation,failureStep,failureCommand,session));
     take(runtime->recordAdapterAccepted(failureOperation,failureStep));
     auto failure=adapterFailure(session,failureOperation,failureStep,failureCommand);
     check(runtime->feedbackIngress().submit(std::move(failure))==FeedbackSubmitStatus::Enqueued,
@@ -216,9 +216,43 @@ int main() {
     check(wrongThreadRejected.load(),
           "state queries from another thread are rejected by owner-thread affinity");
 
+    const auto reconnectOperation=id<OperationId>("operation-session-reconnect");
+    const auto reconnectStep=id<StepId>("step-session-reconnect");
+    const auto reconnectCommand=id<CommandId>("command-session-reconnect");
+    take(runtime->createOperation(reconnectOperation));
+    take(runtime->startOperation(reconnectOperation));
+    take(runtime->createStep(reconnectOperation,reconnectStep));
+    take(runtime->dispatchCommand(reconnectOperation,reconnectStep,reconnectCommand,session));
+    take(runtime->recordAdapterAccepted(reconnectOperation,reconnectStep));
+
+    const auto replacementSession=deviceSession(5);
+    check(bool(runtime->openDeviceSession(replacementSession)),
+          "opening a replacement device session retires the previous session");
+    check(runtime->stepStatus(reconnectOperation,reconnectStep).value()==StepStatus::Failed&&
+          runtime->operationSnapshot(reconnectOperation).value().status()==OperationStatus::Failed,
+          "reconnect fails active work bound to the retired device session");
+    auto oldGenerationFeedback=acknowledgement(
+        session,reconnectOperation,reconnectStep,reconnectCommand);
+    check(runtime->feedbackIngress().submit(std::move(oldGenerationFeedback))==
+          FeedbackSubmitStatus::Enqueued,
+          "late feedback from the retired session reaches the runtime freshness gate");
+    auto oldGenerationResult=take(runtime->processNextFeedback());
+    check(oldGenerationResult&&oldGenerationResult->disposition==
+          FeedbackProcessingDisposition::StaleDeviceSession,
+          "retired-session callback cannot update a reconnect operation");
+    auto replacementGenerationFeedback=acknowledgement(
+        replacementSession,reconnectOperation,reconnectStep,reconnectCommand);
+    check(runtime->feedbackIngress().submit(std::move(replacementGenerationFeedback))==
+          FeedbackSubmitStatus::Enqueued,
+          "replacement-session feedback reaches the operation state gate");
+    auto replacementGenerationResult=take(runtime->processNextFeedback());
+    check(replacementGenerationResult&&replacementGenerationResult->disposition==
+          FeedbackProcessingDisposition::TerminalOperationFeedback,
+          "new session cannot continue a terminal operation created on the old session");
+
     check(bool(runtime->closeDeviceSession(
-        id<DeviceId>("stage"),take(DeviceSessionGeneration::create(4)))),
-        "current device session can be closed by its owner");
+        id<DeviceId>("stage"),take(DeviceSessionGeneration::create(5)))),
+        "current replacement device session can be closed by its owner");
     check(signal.available.load()>=5&&signal.closed.load()==0,
           "runtime receives all accepted feedback wakeups without premature closure");
 
@@ -243,7 +277,7 @@ int main() {
           FeedbackSubmitStatus::QueueFull&&overflowRuntime->feedbackLossLatched(),
           "dropped feedback latches runtime reconciliation state");
     auto blockedDispatch=overflowRuntime->dispatchCommand(
-        overflowOperation,overflowStep,overflowCommand);
+        overflowOperation,overflowStep,overflowCommand,deviceSession(4,8));
     check(!blockedDispatch&&blockedDispatch.error()==
           SerializedOperationRuntimeError::FeedbackLossUnresolved,
           "runtime blocks new hardware dispatch while feedback loss is unresolved");
@@ -259,7 +293,7 @@ int main() {
           !overflowRuntime->feedbackLossLatched(),
           "owner can acknowledge feedback loss after draining and reconciling");
     check(overflowRuntime->dispatchCommand(
-          overflowOperation,overflowStep,overflowCommand).value()==StepStatus::Dispatched,
+          overflowOperation,overflowStep,overflowCommand,deviceSession(4,8)).value()==StepStatus::Dispatched,
           "command dispatch resumes after feedback loss reconciliation");
 
     overflowRuntime->closeFeedbackIngress();

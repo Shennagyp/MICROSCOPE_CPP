@@ -484,8 +484,8 @@ Result<
     appendDependency(*cameraModeSelection, *exposurePolicy);
 
     for (const auto& additional : additionalOpticalSelections) {
-        appendDependency(*additional, *cameraModeSelection);
-        appendDependency(*additional, *illuminationChannelSelection);
+        appendDependency(additional, *cameraModeSelection);
+        appendDependency(additional, *illuminationChannelSelection);
     }
 
     if (apertureTarget) {

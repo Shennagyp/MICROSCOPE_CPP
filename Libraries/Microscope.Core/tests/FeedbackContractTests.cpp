@@ -67,6 +67,22 @@ int main() {
     check(!sessionBinding.matches(oldRuntime),
           "session binding rejects feedback from an earlier runtime incarnation");
 
+    const auto activeStep = ActiveOperationStepBinding::create(
+        OperationCorrelation{operationId,stepId,commandId});
+    check(activeStep.matches(OperationCorrelation{operationId,stepId,commandId}),
+          "active operation step accepts its own command correlation");
+    check(activeStep.matches(OperationCorrelation{operationId,stepId,std::nullopt}),
+          "active operation step accepts step-correlated completion without a command ID");
+    check(!activeStep.matches(OperationCorrelation{
+        operationId,StepId::create("step-old").value(),commandId}),
+          "active operation step rejects feedback from a different step");
+    check(!activeStep.matches(OperationCorrelation{
+        operationId,stepId,CommandId::create("command-old").value()}),
+          "active operation step rejects feedback from a superseded command");
+    check(!activeStep.matches(OperationCorrelation{
+        OperationId::create("operation-old").value(),stepId,commandId}),
+          "active operation step rejects feedback from another operation");
+
     struct SelectorStateObservation final {
         bool reachedRequestedPosition;
     };

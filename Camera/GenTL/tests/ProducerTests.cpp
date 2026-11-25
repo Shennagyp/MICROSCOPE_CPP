@@ -1,6 +1,8 @@
 #include "camera/gentl/Producer.h"
 
+#include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -98,6 +100,29 @@ int main(int argc, char** argv) {
 
         stream.stop();
         if (stream) return 17;
+
+        // A failed DSClose quarantines the native context. Its Consumer and
+        // dynamically loaded C ABI bridge must outlive all public wrappers.
+        std::weak_ptr<camera::gentl::ConsumerBridge> retainedBridge;
+        auto quarantineBridge = camera::gentl::ConsumerBridge::load(argv[1]);
+        retainedBridge = quarantineBridge;
+        {
+            auto quarantineProducer =
+                camera::gentl::Producer::open(quarantineBridge, ctiPath);
+            const auto quarantineDevices = quarantineProducer.discover();
+            if (quarantineDevices.size() != 1) return 18;
+            auto quarantineDevice =
+                quarantineProducer.openDevice(quarantineDevices.front());
+            auto quarantineStream =
+                quarantineDevice.openDataStream("stream0", 3);
+            quarantineStream.start();
+            if (setenv("MOCK_GENTL_FAIL_DS_CLOSE", "1", 1) != 0) return 19;
+            quarantineStream.stop();
+            unsetenv("MOCK_GENTL_FAIL_DS_CLOSE");
+            quarantineDevice.close();
+        }
+        quarantineBridge.reset();
+        if (retainedBridge.expired()) return 20;
     } catch (...) {
         result = 13;
     }

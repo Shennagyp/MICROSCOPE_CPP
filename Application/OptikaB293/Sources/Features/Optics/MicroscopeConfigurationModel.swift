@@ -81,7 +81,11 @@ final class MicroscopeConfigurationModel: ObservableObject {
     }
 
     func updateConfiguration(_ updated: MicroscopeOpticalConfiguration) {
-        configuration = updated
+        var merged = updated
+        // The microscope editor owns an optical draft, not exposure settings.
+        // Preserve profiles saved independently while that draft was open.
+        merged.objectiveExposureProfiles = configuration.objectiveExposureProfiles
+        configuration = merged
     }
 
     private func persistConfiguration() {

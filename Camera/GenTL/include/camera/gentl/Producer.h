@@ -32,6 +32,10 @@ struct DataStreamFrame {
     std::optional<std::uint64_t> pixelFormatNamespace;
     std::optional<std::size_t> width;
     std::optional<std::size_t> height;
+    std::optional<std::size_t> imageOffset;
+    std::optional<std::size_t> xPadding;
+    std::optional<std::size_t> yPadding;
+    std::optional<std::uint64_t> payloadType;
     std::optional<bool> imagePresent;
     bool incomplete = false;
 };

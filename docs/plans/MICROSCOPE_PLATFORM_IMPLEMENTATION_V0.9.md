@@ -110,7 +110,10 @@ No Microscope.Core or Microscope.Application C++ library is claimed to exist yet
 - Define Slide and SlideType as physical preparation identity and taxonomy.
 - Enforce the baseline relationship: each Slide references exactly one existing Sample; one Sample may have many Slides.
 - Make Slide.SampleId the authoritative relationship. Do not persist an authoritative SlideIds collection on Sample; provide reverse lookup through a query/index.
-- Define the Sample and Slide record contracts, Tile metadata contract and versioned SlideConfigurationSnapshot.
+- Define the Sample record fields: stable SampleId, SampleTypeId when classified, display label, optional external accession and source/collection metadata.
+- Define the Slide record fields: stable SlideId, required SampleId, SlideTypeId when classified, display label, versioned preparation snapshot and package reference.
+- Define Tile metadata: stable TileId/SlideId, optional display label/order hint and optional position evidence with provenance; never treat display order as physical coordinates.
+- Define the versioned SlideConfigurationSnapshot and immutable Sample/Slide identity semantics.
 - Make Tile belong to one Slide; permit no physical position and do not interpret ordering/index as coordinates.
 - Define archive/deletion constraints: Sample archival does not cascade-delete slides or image data; a referenced Sample cannot be destructively deleted.
 - Define independent Sample and Slide package persistence. Slide packages retain SampleId and remain independently movable; the Sample record is not duplicated inside the Slide package as another authority.
@@ -127,7 +130,9 @@ No Microscope.Core or Microscope.Application C++ library is claimed to exist yet
 - Resolve the Sample context through Slide.SampleId rather than maintaining a second editable Sample relationship on the run.
 - Define Tile as a stable field identity: a run can produce multiple tiles, and a tile can receive frames from multiple runs.
 - Require each ImageFrame to reference exactly one AcquisitionRun and one Tile belonging to that run's Slide.
+- Define ImageFrame metadata: immutable frame identity, run/tile references, payload reference and integrity metadata, capture timestamp, delivered dimensions/pixel format, camera/readout context and actual settings when available.
 - Preserve original frame payloads immutably and separate payload storage from capture metadata.
+- Keep requested values distinct from actual device observations; missing readbacks remain unknown.
 - Commit a recoverable run identity before dispatch; persist payload/integrity metadata before publishing a frame as available.
 - Add optional position evidence, explicit missing/failed frames, Z planes, exposure brackets and partial-run persistence.
 - Integrate existing camera frame delivery through its adapter without changing the existing bounded frame/lease/preview pipeline.

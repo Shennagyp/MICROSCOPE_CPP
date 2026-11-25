@@ -251,11 +251,15 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     MicroscopeId microscopeId,
     std::vector<EquipmentComponent> components,
     std::vector<OpticalConnection> connections,
-    std::vector<OpticalPath> opticalPaths)
+    std::vector<OpticalPath> opticalPaths,
+    std::vector<ObjectiveSpecification> objectiveSpecifications,
+    std::vector<CameraSpecification> cameraSpecifications)
     : microscopeId_(std::move(microscopeId)),
       components_(std::move(components)),
       connections_(std::move(connections)),
-      opticalPaths_(std::move(opticalPaths)) {}
+      opticalPaths_(std::move(opticalPaths)),
+      objectiveSpecifications_(std::move(objectiveSpecifications)),
+      cameraSpecifications_(std::move(cameraSpecifications)) {}
 
 Result<
     MicroscopeEquipmentDefinition,
@@ -263,7 +267,9 @@ Result<
         MicroscopeId microscopeId,
         std::vector<EquipmentComponent> components,
         std::vector<OpticalConnection> connections,
-        std::vector<OpticalPath> opticalPaths) {
+        std::vector<OpticalPath> opticalPaths,
+        std::vector<ObjectiveSpecification> objectiveSpecifications,
+        std::vector<CameraSpecification> cameraSpecifications) {
     if (components.empty()) {
         return Result<
             MicroscopeEquipmentDefinition,
@@ -291,6 +297,54 @@ Result<
                     EquipmentDefinitionError>::failure(
                         EquipmentDefinitionError::DuplicatePortId);
             }
+        }
+    }
+
+    std::set<EquipmentComponentId> objectiveComponentIds;
+    for (const auto& objective : objectiveSpecifications) {
+        if (!objectiveComponentIds.insert(objective.componentId()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateObjectiveSpecification);
+        }
+
+        const auto component = componentIndex.find(objective.componentId());
+        if (component == componentIndex.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::ObjectiveReferencesUnknownComponent);
+        }
+        if (component->second->kind() != EquipmentComponentKind::OpticalElement) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::ObjectiveComponentWrongKind);
+        }
+    }
+
+    std::set<EquipmentComponentId> cameraComponentIds;
+    for (const auto& camera : cameraSpecifications) {
+        if (!cameraComponentIds.insert(camera.componentId()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateCameraSpecification);
+        }
+
+        const auto component = componentIndex.find(camera.componentId());
+        if (component == componentIndex.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::CameraReferencesUnknownComponent);
+        }
+        if (component->second->kind() != EquipmentComponentKind::ImagingDevice) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::CameraComponentWrongKind);
         }
     }
 
@@ -471,7 +525,9 @@ Result<
                 std::move(microscopeId),
                 std::move(components),
                 std::move(connections),
-                std::move(opticalPaths)));
+                std::move(opticalPaths),
+                std::move(objectiveSpecifications),
+                std::move(cameraSpecifications)));
 }
 
 const MicroscopeId& MicroscopeEquipmentDefinition::microscopeId() const noexcept {
@@ -491,6 +547,17 @@ MicroscopeEquipmentDefinition::connections() const noexcept {
 const std::vector<OpticalPath>&
 MicroscopeEquipmentDefinition::opticalPaths() const noexcept {
     return opticalPaths_;
+}
+
+
+const std::vector<ObjectiveSpecification>&
+MicroscopeEquipmentDefinition::objectiveSpecifications() const noexcept {
+    return objectiveSpecifications_;
+}
+
+const std::vector<CameraSpecification>&
+MicroscopeEquipmentDefinition::cameraSpecifications() const noexcept {
+    return cameraSpecifications_;
 }
 
 } // namespace microscope::core

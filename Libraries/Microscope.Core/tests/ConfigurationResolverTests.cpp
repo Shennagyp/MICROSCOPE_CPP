@@ -565,6 +565,21 @@ void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
               incompatible,
               "configuration.optical_function.requirement_not_satisfied"),
           "rejects phase contrast when the selected phase components do not match the required compatibility identity");
+
+    const unrelatedOpticalComponentRequest = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::PhaseContrast,
+        phaseProfile.id(),
+        {makeId<EquipmentComponentId>("polarizer")});
+    const unrelatedSelection = ConfigurationResolver::resolve(
+        fixture.equipment, phaseCatalog, unrelatedOpticalComponentRequest);
+    check(!unrelatedSelection.isResolved() &&
+          hasDiagnosticCode(
+              unrelatedSelection,
+              "configuration.additional_optical_component.not_allowed_by_profile"),
+          "rejects an additional optical component that does not satisfy any selected profile requirement");
 }
 
 void testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms() {

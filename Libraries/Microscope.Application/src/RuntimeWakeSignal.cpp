@@ -71,4 +71,13 @@ std::optional<RuntimeWakeSnapshot> RuntimeWakeSignal::waitForChange(
     return snapshotLocked();
 }
 
+RuntimeWakeSnapshot RuntimeWakeSignal::waitForChange(
+    std::uint64_t observedGeneration) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    changed_.wait(lock,[this,observedGeneration]{
+        return changedFrom(observedGeneration);
+    });
+    return snapshotLocked();
+}
+
 } // namespace microscope::application::runtime

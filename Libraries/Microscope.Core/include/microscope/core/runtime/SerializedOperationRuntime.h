@@ -43,6 +43,7 @@ enum class FeedbackProcessingDisposition {
     StaleOperation,
     StaleStep,
     StaleCommand,
+    WrongDeviceSessionForStep,
     TerminalOperationFeedback,
     StepTransitionNotAllowed,
     SnapshotRevisionExhausted

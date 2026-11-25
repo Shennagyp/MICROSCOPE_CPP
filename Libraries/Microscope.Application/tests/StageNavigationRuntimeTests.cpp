@@ -294,6 +294,7 @@ void testOpenLoopBoundedEstimateCompletesNavigation() {
         verificationPolicy(
             application::motion::StageNavigationPositionVerificationMode::BoundedCommandEstimate),
         fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
 
     fixture.prepareOperation("open-loop-operation", "open-loop-step");
     auto started = take(navigation.beginNavigation(
@@ -334,6 +335,7 @@ void testControllerPositionObservationsVerifyNavigation() {
         verificationPolicy(
             application::motion::StageNavigationPositionVerificationMode::DevicePositionObservations),
         fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
 
     fixture.prepareOperation("observed-operation", "observed-step");
     take(navigation.beginNavigation(
@@ -389,6 +391,7 @@ void testHomingRestoresSlideLocalTarget() {
         verificationPolicy(
             application::motion::StageNavigationPositionVerificationMode::BoundedCommandEstimate),
         fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
 
     fixture.prepareOperation("home-operation", "home-step");
     auto homing = take(navigation.beginNavigation(

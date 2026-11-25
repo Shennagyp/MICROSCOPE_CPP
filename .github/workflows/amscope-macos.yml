@@ -20,8 +20,6 @@ on:
     paths:
       - "Camera/Amscope/**"
       - "Camera/Common/**"
-      - "Camera/Qt/**"
-      - "Camera/QtWidgets/**"
       - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"

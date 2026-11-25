@@ -615,7 +615,7 @@ void testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms() {
          take(OpticalFunctionRequirement::create(
              OpticalElementFunction::DifferentialInterferencePrism,
              dicCompatibilityId,
-             2)}}));
+             2))}));
     const auto dicCatalog = take(ConfigurationProfileCatalog::create({dicProfile}));
 
     const auto polarizerId = makeId<EquipmentComponentId>("polarizer");

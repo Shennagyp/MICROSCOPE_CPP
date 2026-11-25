@@ -69,4 +69,16 @@ if(BUILD_TESTING)
     add_test(
         NAME microscope_application_serialized_runtime_worker_tests
         COMMAND microscope_application_serialized_runtime_worker_tests)
+
+    add_executable(microscope_application_stage_position_feedback_reducer_tests
+        tests/StagePositionFeedbackReducerTests.cpp)
+    target_link_libraries(microscope_application_stage_position_feedback_reducer_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_stage_position_feedback_reducer_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_stage_position_feedback_reducer_tests
+        COMMAND microscope_application_stage_position_feedback_reducer_tests)
 endif()

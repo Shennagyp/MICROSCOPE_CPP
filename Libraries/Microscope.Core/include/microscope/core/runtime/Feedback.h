@@ -2,6 +2,7 @@
 
 #include "microscope/core/ids/Ids.h"
 
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -29,9 +30,11 @@ enum class ObservationSource {
     Unknown
 };
 
+// Present only when the adapter has a valid tick rate. ticksPerSecond must
+// be greater than zero; absence of a timestamp is represented by nullopt.
 struct DeviceTimestamp final {
-    std::uint64_t ticks = 0;
-    std::uint64_t ticksPerSecond = 0;
+    std::uint64_t ticks;
+    std::uint64_t ticksPerSecond;
     std::optional<std::string> clockDomain;
 };
 
@@ -57,7 +60,7 @@ struct FeedbackCorrelation final {
 
 struct FeedbackMetadata final {
     FeedbackCorrelation correlation;
-    FeedbackKind kind = FeedbackKind::DeviceStateObserved;
+    FeedbackKind kind;
     ObservationSource source = ObservationSource::Unknown;
     std::optional<std::uint64_t> sourceSequence;
     std::optional<DeviceTimestamp> deviceTimestamp;
@@ -80,6 +83,19 @@ enum class FeedbackSubmitStatus {
 // Implementations are thread-safe. submit() transfers ownership of the
 // normalized message to the ingress. QueueFull/Closed must be surfaced to
 // the runtime; silent loss must never allow an operation to verify.
+// Core-owned receipt metadata. This uses the Core process monotonic clock,
+// not the device clock carried in FeedbackMetadata.
+struct FeedbackReceiptMetadata final {
+    std::chrono::steady_clock::time_point receivedAt;
+    std::uint64_t ingressSequence;
+};
+
+template <typename TPayload>
+struct FeedbackReceipt final {
+    FeedbackEnvelope<TPayload> feedback;
+    FeedbackReceiptMetadata receipt;
+};
+
 template <typename TPayload>
 class IFeedbackIngress {
 public:

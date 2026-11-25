@@ -245,6 +245,7 @@ int main() {
 
     const auto homeAxes = take(core::StageAxisSet::create({
         id<core::StageAxisId>("x"), id<core::StageAxisId>("y")}));
+    const auto requestedHome = core::HomeAxes::create(homeAxes);
     const auto homeOperation = id<core::OperationId>("home-op");
     const auto homeStep = id<core::StepId>("home-step");
     const auto homeCommand = id<core::CommandId>("home-command");
@@ -254,11 +255,15 @@ int main() {
     take(runtime->dispatchCommand(homeOperation, homeStep, homeCommand, currentSession));
     take(runtime->recordAdapterAccepted(homeOperation, homeStep));
 
+    const auto homeCommandContext = take(
+        core::StageMotionCommandContext::create(
+            currentSession,
+            core::OperationCorrelation{homeOperation, homeStep, homeCommand}));
     auto homeResult = process(homeReferenceFeedback(
         currentSession, homeOperation, homeStep, homeCommand));
     auto prematureHome = application::motion::StagePositionFeedbackReducer::
         applyVerifiedHomeReference(
-            state, homeResult, homeAxes, *runtime, homeOperation, homeStep);
+            state, homeResult, homeCommandContext, requestedHome, *runtime);
     check(!prematureHome &&
           prematureHome.error().code ==
               application::motion::StagePositionFeedbackReducerErrorCode::HomeStepNotVerified &&
@@ -270,7 +275,7 @@ int main() {
         runtime->recordStepVerification(homeOperation, homeStep, true));
     auto referenced = take(
         application::motion::StagePositionFeedbackReducer::applyVerifiedHomeReference(
-            state, homeResult, homeAxes, *runtime, homeOperation, homeStep));
+            state, homeResult, homeCommandContext, requestedHome, *runtime));
     check(verifiedHomeStep == core::StepStatus::Verified &&
           referenced.disposition ==
               application::motion::StagePositionFeedbackDisposition::HomeReferenceApplied &&

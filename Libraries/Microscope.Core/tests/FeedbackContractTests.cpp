@@ -181,6 +181,18 @@ int main() {
               FeedbackIngressSequenceError::DifferentRuntimeScope,
           "rejects ordering ingress sequences from different runtimes");
 
+    const auto nextRuntimeGeneration =
+        RuntimeGeneration::create(4).value();
+    const auto nextGenerationSequence =
+        FeedbackIngressSequence::create(
+            microscopeId, runtimeId, nextRuntimeGeneration, 20).value();
+    const auto crossGenerationOrder =
+        validIngressSequence.value().precedes(nextGenerationSequence);
+    check(!crossGenerationOrder &&
+          crossGenerationOrder.error() ==
+              FeedbackIngressSequenceError::DifferentRuntimeScope,
+          "rejects ordering ingress sequences from different runtime generations");
+
     const auto receiptTime = std::chrono::steady_clock::time_point{
         std::chrono::steady_clock::duration{1234}};
     auto receivedResult = FeedbackReceipt<SelectorFeedback>::create(
@@ -238,6 +250,54 @@ int main() {
     check(!mismatchedReceipt &&
           mismatchedReceipt.error() == FeedbackReceiptError::RuntimeScopeMismatch,
           "rejects a receipt whose ingress sequence belongs to another runtime");
+
+    auto mismatchedMicroscopeReceipt = FeedbackReceipt<SelectorFeedback>::create(
+        FeedbackEnvelope<SelectorFeedback>{
+            FeedbackMetadata{
+                FeedbackCorrelation{
+                    RuntimeDeviceCorrelation{
+                        microscopeId,
+                        runtimeId,
+                        generation,
+                        deviceSessionGeneration,
+                        deviceId},
+                    std::nullopt},
+                FeedbackKind::DeviceProgress,
+                ObservationSource::SdkStatus,
+                std::nullopt,
+                std::nullopt},
+            SelectorFeedback{false}},
+        receiptTime,
+        FeedbackIngressSequence::create(
+            otherMicroscopeId, runtimeId, generation, 21).value());
+    check(!mismatchedMicroscopeReceipt &&
+          mismatchedMicroscopeReceipt.error() ==
+              FeedbackReceiptError::RuntimeScopeMismatch,
+          "rejects a receipt whose ingress sequence belongs to another microscope");
+
+    auto mismatchedGenerationReceipt = FeedbackReceipt<SelectorFeedback>::create(
+        FeedbackEnvelope<SelectorFeedback>{
+            FeedbackMetadata{
+                FeedbackCorrelation{
+                    RuntimeDeviceCorrelation{
+                        microscopeId,
+                        runtimeId,
+                        generation,
+                        deviceSessionGeneration,
+                        deviceId},
+                    std::nullopt},
+                FeedbackKind::DeviceProgress,
+                ObservationSource::SdkStatus,
+                std::nullopt,
+                std::nullopt},
+            SelectorFeedback{false}},
+        receiptTime,
+        FeedbackIngressSequence::create(
+            microscopeId, runtimeId, nextRuntimeGeneration, 22).value());
+    check(!mismatchedGenerationReceipt &&
+          mismatchedGenerationReceipt.error() ==
+              FeedbackReceiptError::RuntimeScopeMismatch,
+          "rejects a receipt whose ingress sequence belongs to another runtime generation");
 
     if (failures != 0) {
         std::cerr << failures << " feedback contract test(s) failed.\n";

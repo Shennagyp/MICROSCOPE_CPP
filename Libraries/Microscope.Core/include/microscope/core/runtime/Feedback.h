@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace microscope::core {
@@ -247,6 +248,10 @@ private:
 // state bag. The envelope is independent of vendor SDK types.
 template <typename TPayload>
 class FeedbackEnvelope final {
+    static_assert(
+        std::is_object<TPayload>::value && !std::is_array<TPayload>::value,
+        "FeedbackEnvelope payload must be an owned object value, not a reference or array.");
+
 public:
     [[nodiscard]] static FeedbackEnvelope create(
         FeedbackMetadata metadata,

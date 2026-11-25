@@ -48,11 +48,11 @@ public:
                 DiagnosticError::InvalidSeverity);
         }
 
-        if (code.find_first_not_of(" \\t\\n\\r\\f\\v") == std::string::npos) {
+        if (code.find_first_not_of(" \t\n\r\f\v") == std::string::npos) {
             return Result<Diagnostic, DiagnosticError>::failure(
                 DiagnosticError::EmptyCode);
         }
-        if (message.find_first_not_of(" \\t\\n\\r\\f\\v") == std::string::npos) {
+        if (message.find_first_not_of(" \t\n\r\f\v") == std::string::npos) {
             return Result<Diagnostic, DiagnosticError>::failure(
                 DiagnosticError::EmptyMessage);
         }

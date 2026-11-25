@@ -1,3 +1,12 @@
+cmake_minimum_required(VERSION 3.21)
+
+# Permit this library to be configured independently or included by the
+# repository's root project.
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    project(MicroscopeCore VERSION 0.9.0 LANGUAGES CXX)
+    include(CTest)
+endif()
+
 add_library(microscope_core STATIC
     src/Identity.cpp)
 add_library(Microscope::Core ALIAS microscope_core)

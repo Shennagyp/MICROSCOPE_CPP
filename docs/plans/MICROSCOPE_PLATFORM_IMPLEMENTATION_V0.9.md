@@ -46,15 +46,20 @@ No Microscope.Core or Microscope.Application C++ library is claimed to exist yet
 
 **Exit:** architecture and implementation plan are committed and linked from the architecture index.
 
-### Phase 1 — C++ library foundations
-- Add Libraries/Microscope.Core and Libraries/Microscope.Application.
-- Add independent CMake targets using the current C++17 baseline.
-- Define identity types, units, Result/diagnostic conventions and API visibility.
-- Define Core adapter ports, operation IDs, command IDs, feedback envelopes and observation provenance.
-- Define Application public API and subscription/operation-handle semantics.
-- Ensure Core has no dependency on JSON, UI, vendor SDK or Application.
+### Phase 1 — C++ library foundations and public contracts
+- Implement the minimum independently buildable Libraries/Microscope.Core and Libraries/Microscope.Application C++17 targets.
+- Make Application depend on Core; keep Core dependent only on the C++ standard library.
+- Implement strongly typed opaque identity wrappers and the injected identity-generation boundary.
+- Implement typed Result/Status, boundary-specific errors and Diagnostic conventions.
+- Define feedback correlation metadata, source/provenance and runtime ingress contracts; do not invent device payloads before a real capability is modeled.
+- Define the minimal immutable OperationHandle/snapshot and Application runtime-lifecycle boundary.
+- Establish public-header naming, ownership, include and ABI conventions.
+- Keep capability-specific command ports with the equipment/capability phase that first consumes them; do not create a universal device command interface.
+- Keep JSON parsing, concrete adapter factories and full runtime composition for Phase 5.
+- Keep the operation/step reducer, dependency scheduling, timeout and recovery execution for Phase 4.
+- Ensure Core has no dependency on JSON, UI, OS APIs, vendor SDKs, Camera::Common or Application in its initial public API.
 
-**Exit:** independent library build graph and contract tests; Application depends on Core only.
+**Exit:** both targets build independently; Application links to Core and not vice versa; initial public contracts compile and have deterministic type/validation tests; feedback ingress metadata has contract tests. Full operation-state execution and simulated-device lifecycle tests remain Phase 4 acceptance, not a Phase 1 claim.
 
 ### Phase 2 — Equipment model
 - Model microscope identity and installed component identity.
@@ -170,4 +175,13 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 ## Immediate next implementation task
 
-Start Phase 1 only after reviewing the public contract names and event/feedback envelope. The first source change should create real, independently buildable C++ targets with a small set of consumed public contracts. Do not create empty folders or stub classes for every future subsystem.
+The public contract review is recorded in ../architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
+
+Implement Phase 1 as a narrow source slice:
+1. Add independent C++17 Core and Application CMake targets.
+2. Add the first strong ID, Result/Status and Diagnostic public headers.
+3. Add feedback correlation/provenance/ingress metadata contracts.
+4. Add the minimal Application runtime/operation-handle boundary.
+5. Add focused contract tests for type separation, validation and feedback metadata.
+
+Do not implement the full workflow executor, JSON loader, factory registry, microscope equipment catalog, device-specific command ports or acquisition persistence in this slice. Those belong to later phases. Do not create empty directories or stub classes for future subsystems.

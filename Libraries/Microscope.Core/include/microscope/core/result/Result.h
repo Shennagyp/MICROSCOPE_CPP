@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <utility>
 #include <variant>
 
@@ -84,6 +85,10 @@ public:
 
     [[nodiscard]] const E& error() const & {
         return std::get<1>(storage_);
+    }
+
+    [[nodiscard]] E&& error() && {
+        return std::get<1>(std::move(storage_));
     }
 
 private:

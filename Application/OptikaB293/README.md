@@ -36,15 +36,16 @@ cmake --build build/optika-b293-ninja --parallel
 ctest --test-dir build/optika-b293-ninja --output-on-failure
 ```
 
-Launch the app with the dedicated CMake target:
+Launch the app with the repository launcher:
 
 ```bash
-cmake --build build/optika-b293-ninja --target run_optika_b293_dualslide_app
+./scripts/run-optika-b293.sh
 ```
 
-This target builds the application if needed and opens the generated app bundle.
-CMake resolves the bundle path directly; no shell path search or conditional
-is required.
+The launcher resolves the repository root from its own location, configures the
+existing Ninja build directory, builds the native target, verifies the expected
+bundle path, and opens it. It does not depend on the caller's working directory
+or a shell-side bundle search.
 
 Use a fresh build directory when changing CMake generators. CMake does not
 allow an existing build tree configured with one generator to be reused with

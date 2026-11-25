@@ -257,8 +257,8 @@ cmake -S . -B build/optika-b293-ninja -G Ninja \
 cmake --build build/optika-b293-ninja --parallel
 ctest --test-dir build/optika-b293-ninja --output-on-failure
 
-# Build if needed, then launch the native application
-cmake --build build/optika-b293-ninja --target run_optika_b293_dualslide_app
+# Configure/build and launch through the repository-owned launcher
+./scripts/run-optika-b293.sh
 ```
 
 Use a new build directory when switching generators. CMake caches the selected
@@ -267,7 +267,7 @@ from Unix Makefiles or Xcode to Ninja.
 
 The build and deterministic tests now pass. Launch the native app using the
 CMake target below; it builds the app if needed and opens the generated bundle
-without a separate `find`/`if` shell script. Then inspect the workspace, dock,
+through the repository-owned launcher script, following the established AmScope launcher pattern. Then inspect the workspace, dock,
 camera controls and microscope configuration windows. Camera-connected acquisition, resolution changes,
 freeze behavior, capture-file inspection and shutdown remain a separate
 hardware acceptance checkpoint; they are not replaced by deterministic tests.

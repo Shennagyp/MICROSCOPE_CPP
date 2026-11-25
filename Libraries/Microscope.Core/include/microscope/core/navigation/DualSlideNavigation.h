@@ -118,7 +118,7 @@ public:
         ObservationSource horizontalSource,ObservationSource transverseSource) const;
 private:
     SlideRegistration(SlideId,DualSlideSlot,SlideGeometry,
-        std::array<SlideCornerMeasurement,4>,std::array<double,6>,std::array<double,4>,double,double);
+        std::array<SlideCornerMeasurement,4>,std::array<double,6>,std::array<double,4>,double,double,double);
     SlideId slideId_;
     DualSlideSlot slot_;
     SlideGeometry geometry_;

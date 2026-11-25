@@ -25,7 +25,19 @@ cmake -S Libraries/Microscope.Application -B build/microscope-application
 cmake --build build/microscope-application --target microscope_application
 ```
 
-Set `-DBUILD_TESTING=OFF` to omit the focused contract-test targets. The default CTest configuration adds tests for the contracts owned by each library.
+To build and run the focused tests in the user's development environment, build the default targets and invoke CTest:
+
+```sh
+cmake --build build/microscope-core
+ctest --test-dir build/microscope-core --output-on-failure
+
+cmake --build build/microscope-application
+ctest --test-dir build/microscope-application --output-on-failure
+```
+
+The Application standalone build also configures its Core source dependency, so its CTest directory contains both libraries' tests. Set `-DBUILD_TESTING=OFF` to omit the focused contract-test targets.
+
+These commands are instructions only; no build or test result is implied by this document.
 
 ## Current implementation boundary
 

@@ -176,7 +176,7 @@ std::optional<T> readTypedInfo(
 
 } // namespace
 
-class ProducerContext final {
+class ProducerContext final : public std::enable_shared_from_this<ProducerContext> {
 public:
     struct InterfaceState {
         GenTL::IF_HANDLE handle = nullptr;
@@ -190,6 +190,16 @@ public:
         shutdown();
     }
 
+    // Called with mutex held. A quarantined context is retained for process
+    // lifetime so its Consumer and dynamically loaded C ABI bridge cannot be
+    // unloaded while a CTI still owns native handles or callbacks.
+    void quarantineLocked() noexcept;
+
+    // Destructor-time cleanup failures cannot retain this object through
+    // shared_from_this(); retain the Consumer itself, which owns the C ABI
+    // bridge and its GenTL implementation context.
+    void retainConsumerOnFailedShutdown() noexcept;
+
     void shutdown() noexcept {
         std::lock_guard<std::mutex> guard(mutex);
         if (quarantined) return;
@@ -198,6 +208,7 @@ public:
             const auto status = consumer.invoke(Operation::ifClose, it->handle);
             if (status != GenTL::GC_ERR_SUCCESS) {
                 quarantined = true;
+                retainConsumerOnFailedShutdown();
                 return;
             }
         }
@@ -231,6 +242,32 @@ public:
     std::vector<InterfaceState> interfaces;
 };
 
+void ProducerContext::quarantineLocked() noexcept {
+    if (quarantined) return;
+    quarantined = true;
+    try {
+        static auto* registryMutex = new std::mutex;
+        static auto* registry =
+            new std::vector<std::shared_ptr<ProducerContext>>;
+        std::lock_guard<std::mutex> guard(*registryMutex);
+        registry->push_back(shared_from_this());
+    } catch (...) {
+        retainConsumerOnFailedShutdown();
+    }
+}
+
+void ProducerContext::retainConsumerOnFailedShutdown() noexcept {
+    try {
+        static auto* registryMutex = new std::mutex;
+        static auto* registry = new std::vector<Consumer>;
+        std::lock_guard<std::mutex> guard(*registryMutex);
+        registry->push_back(std::move(consumer));
+    } catch (...) {
+        // Preserve the object in place if allocation itself is unavailable.
+        // Its destructor may still run, but this is the last-resort OOM path.
+    }
+}
+
 
 class DeviceSessionState final {
 public:
@@ -263,7 +300,7 @@ public:
                 const auto status =
                     owner->consumer.invoke(Operation::devClose, device);
                 if (status != GenTL::GC_ERR_SUCCESS) {
-                    owner->quarantined = true;
+                    owner->quarantineLocked();
                 }
             }
         }
@@ -487,7 +524,7 @@ DeviceSession Producer::openDevice(
         const auto closeStatus =
             context_->consumer.invoke(Operation::devClose, device);
         if (closeStatus != GenTL::GC_ERR_SUCCESS) {
-            context_->quarantined = true;
+            context_->quarantineLocked();
         }
         check(portStatus, "DevGetPort");
         throw std::runtime_error("DevGetPort succeeded without returning a PORT_HANDLE.");
@@ -775,7 +812,7 @@ struct DataStreamSession::Impl {
                 stream, payloadBytes, nullptr, &handle),
                 "DSAllocAndAnnounceBuffer");
             if (!handle) {
-                context->quarantined = true;
+                context->quarantineLocked();
                 throw std::runtime_error(
                     "DSAllocAndAnnounceBuffer succeeded without returning a BUFFER_HANDLE.");
             }
@@ -823,7 +860,7 @@ struct DataStreamSession::Impl {
                     Operation::dsStopAcquisition,
                     streamHandle, GenTL::ACQ_STOP_FLAGS_DEFAULT);
                 if (status != GenTL::GC_ERR_SUCCESS) {
-                    context->quarantined = true;
+                    context->quarantineLocked();
                     safeToRelease = false;
                 }
             }
@@ -834,7 +871,7 @@ struct DataStreamSession::Impl {
                     Operation::gcUnregisterEvent,
                     streamHandle, GenTL::EVENT_NEW_BUFFER);
                 if (status != GenTL::GC_ERR_SUCCESS) {
-                    context->quarantined = true;
+                    context->quarantineLocked();
                     safeToRelease = false;
                 }
             }
@@ -850,7 +887,7 @@ struct DataStreamSession::Impl {
                     Operation::dsFlushQueue,
                     streamHandle, GenTL::ACQ_QUEUE_ALL_DISCARD);
                 if (status != GenTL::GC_ERR_SUCCESS) {
-                    context->quarantined = true;
+                    context->quarantineLocked();
                     safeToRelease = false;
                 }
 
@@ -862,7 +899,7 @@ struct DataStreamSession::Impl {
                             Operation::dsRevokeBuffer,
                             streamHandle, buffer.handle, &memory, &privateData);
                         if (status != GenTL::GC_ERR_SUCCESS) {
-                            context->quarantined = true;
+                            context->quarantineLocked();
                             safeToRelease = false;
                             break;
                         }

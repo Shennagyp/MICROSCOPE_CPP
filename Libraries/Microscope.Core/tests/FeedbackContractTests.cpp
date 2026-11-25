@@ -48,13 +48,15 @@ int main() {
     FeedbackEnvelope<SelectorFeedback> feedback{
         FeedbackMetadata{
             FeedbackCorrelation{
-                microscopeId,
-                runtimeId,
-                generation,
-                operationId,
-                stepId,
-                commandId,
-                deviceId},
+                RuntimeDeviceCorrelation{
+                    microscopeId,
+                    runtimeId,
+                    generation,
+                    deviceId},
+                OperationCorrelation{
+                    operationId,
+                    stepId,
+                    commandId}},
             ObservationSource::HardwareReadback,
             std::uint64_t{91},
             DeviceTimestamp{1200, 1000, std::string("device-clock-A")}},
@@ -70,13 +72,22 @@ int main() {
 
     if (ingress.lastFeedback) {
         const auto& captured = *ingress.lastFeedback;
-        check(captured.metadata.correlation.operationId == operationId,
-              "feedback retains operation correlation");
-        check(captured.metadata.correlation.commandId.has_value() &&
-              *captured.metadata.correlation.commandId == commandId,
-              "feedback retains command correlation");
-        check(captured.metadata.correlation.deviceId == deviceId,
+        check(captured.metadata.correlation.operation.has_value(),
+              "operation feedback has explicit operation correlation");
+        if (captured.metadata.correlation.operation) {
+            check(captured.metadata.correlation.operation->operationId == operationId,
+                  "feedback retains operation correlation");
+            check(captured.metadata.correlation.operation->stepId == stepId,
+                  "feedback retains step correlation");
+            check(captured.metadata.correlation.operation->commandId.has_value() &&
+                  *captured.metadata.correlation.operation->commandId == commandId,
+                  "feedback retains command correlation");
+        }
+        check(captured.metadata.correlation.runtimeDevice.deviceId == deviceId,
               "feedback retains logical device identity");
+        check(captured.metadata.correlation.runtimeDevice.microscopeId == microscopeId &&
+              captured.metadata.correlation.runtimeDevice.runtimeId == runtimeId,
+              "feedback retains runtime and microscope scope");
         check(captured.metadata.source == ObservationSource::HardwareReadback,
               "feedback preserves observation provenance");
         check(captured.metadata.sourceSequence == std::optional<std::uint64_t>(91),
@@ -84,6 +95,27 @@ int main() {
         check(captured.payload.reachedRequestedPosition,
               "feedback payload remains capability-typed");
     }
+
+    FeedbackEnvelope<SelectorFeedback> telemetry{
+        FeedbackMetadata{
+            FeedbackCorrelation{
+                RuntimeDeviceCorrelation{
+                    microscopeId,
+                    runtimeId,
+                    generation,
+                    deviceId},
+                std::nullopt},
+            ObservationSource::SdkStatus,
+            std::nullopt,
+            std::nullopt},
+        SelectorFeedback{false}};
+    CapturingIngress<SelectorFeedback> telemetryIngress;
+    const auto telemetryResult = telemetryIngress.submit(std::move(telemetry));
+    check(telemetryResult == FeedbackSubmitStatus::Accepted,
+          "ingress accepts unsolicited device telemetry without operation IDs");
+    check(telemetryIngress.lastFeedback.has_value() &&
+          !telemetryIngress.lastFeedback->metadata.correlation.operation.has_value(),
+          "telemetry does not fabricate operation or step identities");
 
     if (failures != 0) {
         std::cerr << failures << " feedback contract test(s) failed.\n";

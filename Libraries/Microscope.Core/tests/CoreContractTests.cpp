@@ -179,8 +179,15 @@ void testDiagnosticsAreSeparateValues() {
         "  \t",
         "A message is present.");
     check(!whitespaceCode &&
-          whitespaceCode.error() == DiagnosticError::EmptyCode,
-          "rejects a whitespace-only diagnostic code");
+          whitespaceCode.error() == DiagnosticError::InvalidCode,
+          "rejects whitespace in a diagnostic code");
+
+    auto emptyCode = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "",
+        "A message is present.");
+    check(!emptyCode && emptyCode.error() == DiagnosticError::EmptyCode,
+          "rejects an empty diagnostic code");
 
     auto whitespaceMessage = Diagnostic::create(
         DiagnosticSeverity::Warning,

@@ -27,6 +27,7 @@ enum class ObservationSource {
     SdkStatus,
     OperatorConfirmation,
     CalibratedEstimate,
+    AdapterReport,
     Unknown
 };
 
@@ -110,7 +111,8 @@ enum class FeedbackMetadataError {
     InvalidFactKind,
     InvalidObservationSource,
     MissingOperationCorrelation,
-    MissingCommandCorrelation
+    MissingCommandCorrelation,
+    InvalidAdapterFailureSource
 };
 
 // Metadata is created through a validator so fact categories cannot omit
@@ -141,6 +143,7 @@ public:
         case ObservationSource::SdkStatus:
         case ObservationSource::OperatorConfirmation:
         case ObservationSource::CalibratedEstimate:
+        case ObservationSource::AdapterReport:
         case ObservationSource::Unknown:
             break;
         default:
@@ -178,6 +181,12 @@ public:
         if (kind == FeedbackKind::DeviceActionCompleted && !actionCompletionSource) {
             return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
                 FeedbackMetadataError::InvalidObservationSource);
+        }
+
+        if (kind == FeedbackKind::AdapterFailure &&
+            source != ObservationSource::AdapterReport) {
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::InvalidAdapterFailureSource);
         }
 
         return Result<FeedbackMetadata, FeedbackMetadataError>::success(

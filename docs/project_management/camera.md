@@ -2,9 +2,11 @@
 
 **Canonical project:** the reusable camera subsystem in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
-**Current application/implementation branch:** `OPTIKA-B293-DUALSLIDE-APP`  
-**Current inspected application baseline:** `4c278aed3af29e51b7485a2902080d84314af73b`  
-**Roadmap revision:** Camera Module — non-Qt, no camera-UI deliverable
+**Current Camera implementation branch:** `camera-v.2.0`  
+**Current Camera branch HEAD:** `8ba5fa3791264919bf85586322f095b59a0ec1d5`  
+**Camera library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
+**Current Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
+**Roadmap revision:** Camera Module v2.0 — non-Qt, no camera-UI deliverable
 
 ## 1. Scope and ownership
 
@@ -32,7 +34,7 @@ Do not split this work into separate projects named AmScope, MU503 or GenTL. Pro
 
 ## 2. Current application integration and ownership boundary
 
-The current Optika application branch is `OPTIKA-B293-DUALSLIDE-APP`, inspected at `4c278aed3af29e51b7485a2902080d84314af73b`.
+The current Optika application branch is `OPTIKA-B293-DUALSLIDE-APP`, inspected at `4c278aed3af29e51b7485a2902080d84314af73b`. Camera library development does not continue on this application branch.
 
 The application GUI is implemented with **SwiftUI/AppKit**, not Qt. Its camera-facing composition is visible in:
 - `Application/OptikaB293/Sources/Features/Camera/NativeCameraModel.swift` — application camera state and lifecycle orchestration;
@@ -243,7 +245,7 @@ The later `AMSCOPE_NATIVE_RELEASE_PLAN.md` was written for a Qt-based preview/UI
 | `amscope-native-driver-0.6` | Common camera contracts and frame representation |
 | `amscope-native-driver-0.7` | Qt adapter and reusable Qt Widgets implementation; now legacy for the revised roadmap |
 | `amscope-native-app-mac.v.0.8` and `amscope-native-app-mac.v.0.8-docksystem` | Native macOS application integration history |
-| `OPTIKA-B293-DUALSLIDE-APP` | Current Optika SwiftUI/AppKit application and camera integration |
+| `OPTIKA-B293-DUALSLIDE-APP-v.0.9` | Source snapshot from which the current `Camera/` tree was brought forward; 307 Camera blobs match `camera-v.2.0` exactly |\n| `camera-v.2.0` | Canonical Camera Module v2.0 development branch |\n| `OPTIKA-B293-DUALSLIDE-APP` | Separate current Optika SwiftUI/AppKit application and camera integration |
 | `project_manager` | Workstream governance, status and continuation handoff |
 
 The separate repositories `AMSCOPE_DRIVER` and `AMSCOPE_MU503_DRIVER` contain research/prototype histories. They are not separate active production camera projects in this register.
@@ -257,7 +259,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 | 0 | Historically accepted by owner | Historical baseline and MU503 records exist. Reconcile exact current branch/commit before treating the baseline as current. |
 | 1 | Historically accepted by owner; hardening remains | Native single-session driver exists. Callback quiescence and deterministic full SDK lifecycle fault injection remain material safety concerns. |
 | 2 | Implemented in substantial part; closure requires reconciliation | `Camera::Common` contains model, frame, feature-validation and mailbox contracts. Verify all original slices and ensure provider-neutral semantics are complete. |
-| 3 | Partially implemented; not accepted under revised scope | `Amscope::Driver` exposes a non-Qt C++ API and `Camera::Common` has a non-Qt mailbox. The Optika app uses a native Objective-C++/Swift adapter. Existing Qt targets/options/source remain in the repository and build configuration; remove Qt from the supported package/build dependency graph before closure. |
+| 3 | IN PROGRESS; non-Qt build gate passed | `Amscope::Driver` exposes a non-Qt C++ API and `Camera::Common` has a non-Qt mailbox. Qt adapter/preview options now default OFF. Workflow #45651928831 passed 11/11 non-Qt CTest on Intel and Apple Silicon. Public dependency audit and external-consumer validation remain. |
 | 4 | Blocked follow-on | Existing GenTL/GenApi Consumer integration choice, target CTI Producer and physical CTI camera remain prerequisites. |
 | 5 | Open | Broad AmScope implementation exists; reconcile every claim to source, model evidence, tests and physical support. |
 | 6 | Open | Initial install rules exist; exported package and clean non-Qt external consumer qualification remain. |
@@ -268,9 +270,9 @@ This ledger separates source presence, automated evidence, physical evidence and
 - MU503 RGB24 record: 1280 × 960, 3,840-byte row stride and 3,686,400-byte payload for the recorded run.
 - v0.7 FrameView smoke record: discovery/open/start, changing frames, stop and close. This validates the historical Qt FrameView integration only; it is not a current Optika GUI acceptance record.
 - Separate MU503 diagnostic runs reported approximately 91 FPS at 640 × 480 with zero reported drops in the recorded short runs. Do not conflate these with the separate 835-frame/60.722-second diagnostic record or claim long-duration qualification from them.
-- The existing CMake tree contains `Camera::Common`, `Amscope::Driver`, Qt adapter/widgets targets and tests. Their presence does not make Qt part of the revised target architecture.
+- The existing CMake tree contains `Camera::Common`, `Amscope::Driver` and legacy Qt adapter/widgets targets. The Qt options now default OFF and are disabled in the v2.0 CI path.
 - The inspected Optika application target links `Amscope::Driver` and Apple frameworks; its camera models, Objective-C++ bridge and frame-feed adapter are application-owned.
-- The exact current Optika branch head inspected for this revision is `4c278aed3af29e51b7485a2902080d84314af73b`. This is a source inspection checkpoint, not a test result.
+- Source comparison found the 307 files under `Camera/` identical between `OPTIKA-B293-DUALSLIDE-APP-v.0.9` and `camera-v.2.0`; no Camera library copy was missing.\n- Non-Qt CI run [#45651928831](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45651928831) passed on Intel x86_64 and Apple Silicon arm64 at `5cf5bc352e2df926a2cc0317acaccfd3a912602d`, with 11/11 non-Qt CTest tests and driver/diagnostic architecture checks. This is CI evidence, not physical-camera qualification.\n- The exact current Optika branch head inspected for this revision is `4c278aed3af29e51b7485a2902080d84314af73b`. This is an application source inspection checkpoint, not a test result.
 
 ### Unresolved risks and gaps
 
@@ -278,7 +280,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 2. Complete deterministic native SDK lifecycle fault injection, including Open/Start/Stop/Pull/Close failures.
 3. Complete production RAW/common-frame hardware qualification.
 4. Reconcile all SDK features, commands, telemetry and model profiles against actual hardware evidence.
-5. Remove Qt as a required dependency from the supported Camera Module build/package configuration; decide separately whether legacy Qt source is deleted or archived.
+5. Audit public target/header dependency visibility and the installed non-Qt consumer; decide separately whether legacy Qt source is deleted or archived.
 6. Complete exported CMake package and clean non-Qt external-consumer qualification.
 7. Resolve the existing GenTL Consumer integration choice and acquire a real CTI Producer/camera.
 8. Complete release qualification for every declared supported model/provider combination.
@@ -303,9 +305,10 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 ## 8. Continuation handoff
 
-**Governing roadmap:** this revised non-Qt Camera Module Phases 0–7 plan.  
+**Governing roadmap:** Camera v2.0 Phases 0–7 and [CAMERA_V2_DEVELOPMENT_STATUS.md](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/camera-v.2.0/docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md).  
 **Historical authority:** original Phases 0–8 document on `amscope-native-driver-v.0.2`.  
-**Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
+**Active Camera branch:** `camera-v.2.0` at `8ba5fa3791264919bf85586322f095b59a0ec1d5`.  
+**Application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 
 Before changing camera code:
@@ -330,7 +333,7 @@ A compile, mock, UI smoke test or green CI run is not interchangeable with a phy
 
 ## 9. Authoritative records
 
-- [Original Camera Module roadmap — historical Phases 0–8](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/amscope-native-driver-v.0.2/docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
+- [Camera v2.0 current development status and continuation plan](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/camera-v.2.0/docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md)\n- [Original Camera Module roadmap — historical Phases 0–8](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/amscope-native-driver-v.0.2/docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
 - [Later AmScope release plan — historical Qt/UI execution plan](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/OPTIKA-B293-DUALSLIDE-APP/docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md)
 - [AmScope implementation inventory](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/OPTIKA-B293-DUALSLIDE-APP/docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md)
 - [Native SDK test-seam and callback-quiescence analysis](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/OPTIKA-B293-DUALSLIDE-APP/docs/architecture/AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md)

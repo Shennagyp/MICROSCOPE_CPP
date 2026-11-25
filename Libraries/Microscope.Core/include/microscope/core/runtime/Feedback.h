@@ -125,9 +125,9 @@ enum class FeedbackSubmitStatus {
     Closed
 };
 
-// Core-owned receipt metadata. This uses the Core process monotonic clock,
-// not the device clock carried in FeedbackMetadata. ingressSequence starts at
-// one and increases within one runtime generation.
+// Core-owned, runtime-local receipt metadata. receivedAt is a monotonic
+// ordering/deadline value and is not a durable wall-clock timestamp.
+// ingressSequence starts at one and increases within one runtime generation.
 struct FeedbackReceiptMetadata final {
     std::chrono::steady_clock::time_point receivedAt;
     std::uint64_t ingressSequence;

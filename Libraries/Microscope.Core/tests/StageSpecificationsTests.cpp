@@ -2,6 +2,8 @@
 #include "microscope/core/equipment/StageSpecifications.h"
 
 #include <iostream>
+#include <optional>
+#include <string>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>

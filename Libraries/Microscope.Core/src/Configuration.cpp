@@ -585,15 +585,29 @@ ExposurePolicy ConfigurationRequest::exposurePolicy() const noexcept {
     return exposurePolicy_;
 }
 
+ResolvedConfiguration::ResolvedConfiguration(
+    MicroscopeId microscopeId,
+    ConfigurationRequest request)
+    : microscopeId_(std::move(microscopeId)),
+      request_(std::move(request)) {}
+
+const MicroscopeId& ResolvedConfiguration::microscopeId() const noexcept {
+    return microscopeId_;
+}
+
+const ConfigurationRequest& ResolvedConfiguration::request() const noexcept {
+    return request_;
+}
+
 ConfigurationResolution::ConfigurationResolution(
-    std::optional<ConfigurationRequest> resolvedRequest,
+    std::optional<ResolvedConfiguration> resolvedConfiguration,
     Diagnostics diagnostics)
-    : resolvedRequest_(std::move(resolvedRequest)),
+    : resolvedConfiguration_(std::move(resolvedConfiguration)),
       diagnostics_(std::move(diagnostics)) {}
 
-const std::optional<ConfigurationRequest>&
-ConfigurationResolution::resolvedRequest() const noexcept {
-    return resolvedRequest_;
+const std::optional<ResolvedConfiguration>&
+ConfigurationResolution::resolvedConfiguration() const noexcept {
+    return resolvedConfiguration_;
 }
 
 const Diagnostics& ConfigurationResolution::diagnostics() const noexcept {
@@ -601,7 +615,7 @@ const Diagnostics& ConfigurationResolution::diagnostics() const noexcept {
 }
 
 bool ConfigurationResolution::isResolved() const noexcept {
-    return resolvedRequest_.has_value();
+    return resolvedConfiguration_.has_value();
 }
 
 ConfigurationResolution ConfigurationResolver::resolve(
@@ -928,7 +942,9 @@ ConfigurationResolution ConfigurationResolver::resolve(
         return ConfigurationResolution(std::nullopt, std::move(diagnostics));
     }
 
-    return ConfigurationResolution(request, std::move(diagnostics));
+    return ConfigurationResolution(
+        ResolvedConfiguration(equipment.microscopeId(), request),
+        std::move(diagnostics));
 }
 
 } // namespace microscope::core

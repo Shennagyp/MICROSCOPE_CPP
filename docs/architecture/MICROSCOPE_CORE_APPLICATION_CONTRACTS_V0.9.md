@@ -155,9 +155,9 @@ Feedback from an old runtime generation, old device-session generation, or a dif
 
 ### 5.3 Typed feedback and provenance
 
-The common correlation envelope is separate from the payload. Payloads are closed, strongly typed Core values defined with the capability that uses them.
+The common correlation/metadata envelope is separate from the payload. Each TPayload is a concrete Core value defined for the capability and fact semantics that produce it; its fields preserve the actual observation/result rather than a generic success flag.
 
-Do not use std::any, JSON objects, arbitrary string maps or vendor SDK structures as the feedback contract. Do not invent a universal device-state value bag. Add payload alternatives only with a real capability port.
+Do not use bare bool/string values, std::any, JSON objects, arbitrary string maps or vendor SDK structures as the feedback contract. Do not invent a universal device-state value bag. Add payload types only with a real capability port and preserve their provenance and units.
 
 Observation provenance distinguishes hardware readback/encoder, device event, SDK status, operator confirmation, calibrated estimate, adapter report and unknown. Operator confirmation is not sensor verification. A calibrated estimate is not a measured position.
 

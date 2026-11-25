@@ -226,9 +226,12 @@ struct ObjectiveExposureSettingsWindow: View {
                         isOn: Binding(
                             get: { isAutomaticExposureEnabled },
                             set: { enabled in
-                                features.writeEnumeration(
-                                    enabled ? "Continuous" : "Off",
-                                    for: autoDescriptor
+                                features.applyExposureProfile(
+                                    ObjectiveExposureProfile(
+                                        automaticExposureEnabled: enabled,
+                                        manualExposureTimeMicroseconds:
+                                            storedProfile.manualExposureTimeMicroseconds
+                                    )
                                 )
                             }
                         )

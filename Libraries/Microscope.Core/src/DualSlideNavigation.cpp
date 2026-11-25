@@ -237,8 +237,15 @@ SlideRegistration::estimateSlidePosition(
             SlideRegistrationError::NonFiniteStagePoint);
     auto local=toSlide(p);
     if(!local)return Result<SlidePositionEstimate,SlideRegistrationError>::failure(local.error());
+    // For an affine rectangle map the four-corner interpolation weights have
+    // an L1 norm no greater than 1.5 anywhere inside the slide. This scales the
+    // maximum corner uncertainty/residual into a conservative stage-plane
+    // registration envelope before the inverse-transform propagation below.
+    if(!geometry_.contains(local.value().xMicrometers,local.value().yMicrometers))
+        return Result<SlidePositionEstimate,SlideRegistrationError>::failure(
+            SlideRegistrationError::LocalPointOutsideSlide);
     const double det=std::abs(transform_[1]*transform_[5]-transform_[2]*transform_[4]);
-    const double registrationBound=maximumCornerUncertainty_+maxResidual_;
+    const double registrationBound=1.5*(maximumCornerUncertainty_+maxResidual_);
     const double stageXBound=ex+registrationBound;
     const double stageYBound=ey+registrationBound;
     const double xBound=(std::abs(transform_[5])*stageXBound+
@@ -409,9 +416,12 @@ DualSlideCarrierState::currentSlidePosition(
         errorToMicrometers(*horizontal.accumulatedPositionErrorBound(),horizontal.unit()),
         errorToMicrometers(*transverse.accumulatedPositionErrorBound(),transverse.unit()),
         horizontal.evidence(),transverse.evidence(),horizontal.source(),transverse.source());
-    if(!estimate)
-        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
-            CurrentSlidePositionError::InvalidEstimate);
+    if(!estimate) {
+        const auto error=estimate.error()==SlideRegistrationError::LocalPointOutsideSlide
+            ? CurrentSlidePositionError::PositionOutsideSlide
+            : CurrentSlidePositionError::InvalidEstimate;
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(error);
+    }
     return Result<SlidePositionEstimate,CurrentSlidePositionError>::success(
         std::move(estimate).value());
 }

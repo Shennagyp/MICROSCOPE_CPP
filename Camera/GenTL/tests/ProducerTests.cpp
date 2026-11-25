@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
         // The data-stream lease keeps the device handle alive after its
         // DeviceSession owner releases its reference.
         device.close();
-        if (device) return 15;
+        if (device) return 19;
         const auto frameAfterDeviceOwnerClose = stream.nextFrame(100);
         if (!frameAfterDeviceOwnerClose ||
             frameAfterDeviceOwnerClose->frameId != 42) return 20;
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
         quarantineBridge.reset();
         if (retainedBridge.expired()) return 24;
     } catch (...) {
-        result = 13;
+        result = 99;
     }
 
     std::filesystem::remove_all(directory);

@@ -33,6 +33,8 @@ void testStrongIdentityTypes() {
                   "SlideId must not convert to TileId");
     static_assert(!std::is_convertible<RuntimeId, MicroscopeId>::value,
                   "RuntimeId must not convert to MicroscopeId");
+    static_assert(!std::is_convertible<RuntimeGeneration, DeviceSessionGeneration>::value,
+                  "runtime generation must not convert to device-session generation");
 
     auto sampleResult = SampleId::create("sample-opaque-001");
     auto slideResult = SlideId::create("slide-opaque-001");

@@ -1,6 +1,6 @@
 # Microscope C++ libraries
 
-The platform libraries are separate C++17 targets with compiler extensions disabled on the libraries and their contract-test targets:
+The platform libraries are separate C++17 targets with the language standard pinned to exactly C++17 and compiler extensions disabled on the libraries and their contract-test targets:
 
 | CMake target | Source directory | Responsibility |
 |---|---|---|

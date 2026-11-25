@@ -55,6 +55,10 @@ stream.start();
 if (auto frame = stream.nextFrame(1000)) {
     // frame->payload is an independent copy; the GenTL buffer is requeued.
     // Optional metadata remains optional when the Producer does not report it.
+    if (auto common = camera::gentl::makeCommonFrame(*frame)) {
+        camera::FramePtr commonFrame = *common;
+        // Common consumers receive the immutable backend-neutral frame.
+    }
 }
 
 stream.stop();
@@ -99,7 +103,7 @@ Implemented:
 - remote-port read/write and `LOCAL`/`FILE` GenApi XML retrieval;
 - process-lifetime retention after cleanup failure.
 
-Mock CI: [workflow #45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203), commit `549433466098c5daeb63d72609776d958a35c2fe`. Both Intel x86_64 and Apple Silicon arm64 passed 2/2 CTest tests and architecture checks. The tests cover the mock bridge, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, and quarantine retention.
+Mock CI: [workflow #45686459352](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45686459352), commit `03f674aa7c39ac5b80d6f4a2329b930cb5d81e8c`. Both Intel x86_64 and Apple Silicon arm64 passed 9/9 CTest tests and architecture checks. The tests cover the mock bridge, discovery, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, quarantine retention, Common frame projection/layout rejection and Common feature/command contracts.
 
 Not yet validated:
 - the latest frame-adapter and command-contract commits (CI run for the current branch is pending);
@@ -107,7 +111,7 @@ Not yet validated:
 - a vendor CTI Producer;
 - a physical GenTL camera;
 - actual GenTL payload/metadata behavior under acquisition;
-- GenApi SDK compilation, XML parsing and feature mapping;
+- GenApi SDK compilation, XML parsing and feature/command mapping;
 - external consumer packaging and deployment of the C ABI dylib/Swift runtime.
 
 A passing mock workflow is software evidence only. It is not a real CTI or hardware qualification.

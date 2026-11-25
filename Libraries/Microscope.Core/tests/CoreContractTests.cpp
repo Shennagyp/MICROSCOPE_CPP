@@ -174,6 +174,31 @@ void testDiagnosticsAreSeparateValues() {
           emptyMessage.error() == DiagnosticError::EmptyMessage,
           "rejects a diagnostic without a message");
 
+    auto whitespaceCode = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "  \t",
+        "A message is present.");
+    check(!whitespaceCode &&
+          whitespaceCode.error() == DiagnosticError::EmptyCode,
+          "rejects a whitespace-only diagnostic code");
+
+    auto whitespaceMessage = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "configuration.profile.incomplete",
+        " \n ");
+    check(!whitespaceMessage &&
+          whitespaceMessage.error() == DiagnosticError::EmptyMessage,
+          "rejects a whitespace-only diagnostic message");
+
+    auto emptyContextValue = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "configuration.profile.incomplete",
+        "A message is present.",
+        DiagnosticContext{std::string(""), std::nullopt, std::nullopt});
+    check(!emptyContextValue &&
+          emptyContextValue.error() == DiagnosticError::EmptyContextValue,
+          "uses absent context values instead of empty-string sentinels");
+
     auto invalidSeverity = Diagnostic::create(
         static_cast<DiagnosticSeverity>(255),
         "configuration.profile.incomplete",

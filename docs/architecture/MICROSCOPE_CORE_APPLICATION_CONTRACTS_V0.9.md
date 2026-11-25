@@ -490,3 +490,30 @@ ExposurePolicy is distinct from ExposurePreset. This first slice records the sel
 
 JSON schema parsing and profile loading remain in Microscope.Application in Phase 5. The Core resolver receives already-constructed typed profile and equipment values.
 
+### 15.5 Contrast-specific optical function requirements
+
+Installed OpticalElement components may declare one or more OpticalFunctionCapability values:
+- PhasePlate, PhaseAnnulus.
+- Polarizer, Analyzer, DifferentialInterferencePrism.
+- ExcitationFilter, EmissionFilter, DichroicMirror.
+- DarkfieldStop or Other.
+
+A capability may carry an OpticalCompatibilityId. This is a stable matching identity, not a component class or executable rule. It supports exact pairing such as a phase plate and matching condenser phase annulus. A component cannot declare the same function/compatibility pair more than once. Non-OpticalElement components cannot declare optical functions.
+
+A ConfigurationProfile may declare OpticalFunctionRequirement values. Each requirement identifies a function, optional required compatibility identity and minimum number of distinct selected components. Requirements with the same function and compatibility identity are duplicates and rejected.
+
+ConfigurationRequest may include selected additional optical component IDs. They must be unique and must not duplicate the primary objective or condenser selections. The resolver verifies that each selected additional component:
+- Exists in the installed definition.
+- Is an OpticalElement.
+- Occurs on at least one selected optical path.
+- Satisfies at least one optical-function requirement in the selected profile.
+
+The resolver evaluates profile requirements across the set of selected optical elements consisting of the selected objective, selected condenser and selected additional optical components. Each physical component counts at most once toward a given requirement, even if it is referenced through several selected paths. Optional compatibility IDs must match exactly.
+
+Examples:
+- Phase contrast can require one PhasePlate and one PhaseAnnulus with the same OpticalCompatibilityId. The objective and condenser selections may satisfy these requirements directly.
+- DIC can require a Polarizer, an Analyzer and at least two DifferentialInterferencePrism components sharing a DIC compatibility identity. The request explicitly selects the additional components.
+- Fluorescence profiles can similarly require matching excitation/emission filters and dichroic mirror components.
+
+The resolver returns the diagnostic code configuration.optical_function.requirement_not_satisfied when a required function/count is not met. It rejects additional component selections that are not allowed by any optical-function requirement. These checks remain pure data validation; no component selection command is issued.
+

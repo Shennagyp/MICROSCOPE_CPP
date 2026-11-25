@@ -1,4 +1,4 @@
-name: Amcam macOS build
+name: AmScope macOS driver
 
 on:
   push:
@@ -63,19 +63,14 @@ jobs:
           clang++ --version
           cmake --version
 
-      - name: Install Qt 6
-        run: |
-          brew install qt@6
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
-
-      - name: Configure driver, Qt adapter, preview app, and hardware test
+      - name: Configure non-Qt camera driver and diagnostics
         run: |
           cmake -S Camera/Amscope -B build/amscope \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
             -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
-            -DAMSCOPE_BUILD_QT_ADAPTER=ON \
-            -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+            -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
+            -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
             -DAMSCOPE_BUILD_NATIVE_PROBE=ON \
             -DAMSCOPE_BUILD_SDK_WAIT_PROBE=ON \
             -DBUILD_TESTING=ON
@@ -83,45 +78,29 @@ jobs:
       - name: Compile
         run: cmake --build build/amscope --config Release --parallel
 
-      - name: Run common camera contract tests
+      - name: Run non-Qt camera contract and driver tests
         run: ctest --test-dir build/amscope --output-on-failure
 
-      - name: Verify SDK, libraries, and application architectures
+      - name: Verify SDK, driver, diagnostics, and architectures
         run: |
           test -f build/amscope/libcamera_amscope_driver.dylib
-          test -f build/amscope/libcamera_amscope_qt.a
           test -f build/amscope/libamcam.dylib
-          test -x build/amscope/amscope_preview
-          test -x build/amscope/amscope_hardware_rate_test
           test -x build/amscope/amscope_native_probe
           test -x build/amscope/amscope_sdk_wait_probe
           lipo build/amscope/libcamera_amscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
-          lipo build/amscope/libcamera_amscope_qt.a -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
-          lipo build/amscope/amscope_preview -verify_arch "${{ matrix.architecture }}"
-          lipo build/amscope/amscope_hardware_rate_test -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/amscope_native_probe -verify_arch "${{ matrix.architecture }}"
           lipo build/amscope/amscope_sdk_wait_probe -verify_arch "${{ matrix.architecture }}"
-          otool -L build/amscope/amscope_preview
-          otool -L build/amscope/amscope_hardware_rate_test
           otool -L build/amscope/amscope_native_probe
           otool -L build/amscope/amscope_sdk_wait_probe
           otool -L build/amscope/libcamera_amscope_driver.dylib
-          file build/amscope/libcamera_amscope_qt.a
 
       - name: Exercise diagnostic probe help paths
         run: |
           build/amscope/amscope_native_probe --help
           build/amscope/amscope_sdk_wait_probe --help
 
-      - name: Confirm preview executable
-        run: test -x build/amscope/amscope_preview
-
-      - name: Validate launcher syntax
+      - name: Validate non-Qt launcher syntax
         run: |
-          bash -n scripts/run-amscope.sh
           bash -n scripts/run-amscope-native-probe.sh
           bash -n scripts/run-amscope-vendor-wait-probe.sh
-
-      - name: Build and run one-command launcher smoke check
-        run: scripts/run-amscope.sh --list-cameras

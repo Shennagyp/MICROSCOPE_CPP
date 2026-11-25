@@ -26,9 +26,6 @@ public:
     // Called only after Core has verified a completed homing/reference action
     // and received the final reference position evidence.
     static Result<StageAxisPositionState,StageAxisPositionStateError> homed(
-        EquipmentComponentId stageComponentId,AxisPosition homePosition,double positionErrorBound,
-        StagePositionEvidence evidence,ObservationSource source);
-    static Result<StageAxisPositionState,StageAxisPositionStateError> homed(
         EquipmentComponentId stageComponentId,const AxisPositionObservation& observation,
         ObservationSource source);
 
@@ -37,9 +34,6 @@ public:
 
     Result<StageAxisPositionState,StageAxisPositionStateError> afterPositionObservation(
         const AxisPositionObservation&,ObservationSource source) const;
-    Result<StageAxisPositionState,StageAxisPositionStateError> afterPositionObservation(
-        AxisPosition observedPosition,double observationErrorBound,
-        StagePositionEvidence evidence,ObservationSource source) const;
 
     StageAxisPositionState invalidateMachineReference() const;
 

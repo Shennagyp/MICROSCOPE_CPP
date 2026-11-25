@@ -16,19 +16,17 @@ Keep the current macOS application as one frontend. Preserve the existing camera
 ## Current repository baseline
 
 The current branch contains:
-- Root CMake project using C++ and an optional native macOS application target; the new Core and Application targets are added before existing camera/application targets. `OPTIKA_BUILD_AMSCOPE=OFF` permits a platform-only root configuration without the macOS/vendor camera dependency; the default remains ON.
-- Microscope.Core and Microscope.Application are C++17 static libraries with standalone CMake entry support; configuring Application independently adds its required Core source dependency.
-- Camera/Amscope as the reusable camera driver capability.
-- Application/OptikaB293 containing the current SwiftUI/AppKit application, Objective-C++ camera bridge and current Swift microscope configuration/resolution models.
-- Libraries/Microscope.Core and Libraries/Microscope.Application as separate C++17 static-library targets integrated by the root CMake project.
-- Initial Core contracts: strong IDs, RuntimeGeneration, Result/Status, diagnostics, operation/step status values and typed feedback metadata/ingress.
-- Initial Application contracts: runtime/operation handles and runtime/operation value projections.
-- Focused Core identity/result/diagnostic, feedback and Application runtime-handle test sources registered with CTest; they have not been built or executed here.
-- Existing architecture documentation describing the transitional native application and its preview invariants.
+- A root CMake project with optional native macOS application and AmScope targets. Core and Application are included independently; `OPTIKA_BUILD_AMSCOPE=OFF` permits a platform-only root configuration.
+- `Microscope::Core` and `Microscope::Application` as separate C++17 static libraries with standalone CMake configuration; Application brings in Core as its source dependency when configured independently.
+- `Camera/Amscope` as the existing reusable camera capability and `Application/OptikaB293` as the current SwiftUI/AppKit frontend, Objective-C++ bridge and transitional Swift microscope configuration/resolution implementation.
+- Core contracts for strong IDs, distinct runtime/device-session generations, [[nodiscard]] Result/Status, validated diagnostics, operation/step status values, typed feedback correlation and ingress/receipt metadata.
+- Application value contracts for runtime/operation handles, RuntimeSnapshot and Core-snapshot-backed OperationView with validated composite identity.
+- Core identity/diagnostic/feedback and Application handle/projection test sources registered with CTest. They have not been built or executed here.
+- Architecture, public-contract and standalone-library documentation.
 
-The new libraries are an initial Phase 1 source slice, not a completed platform implementation. No equipment model, configuration resolver, operation executor, JSON loader, adapter factory registry, persistence implementation or hardware integration is claimed to exist yet.
+The two libraries are an initial Phase 1 source slice, not a completed platform implementation. Equipment/configuration models, the serialized operation executor, JSON loading, adapter factory/runtime composition, persistence, calibration, acquisition and hardware workflow integration are not implemented or claimed.
 
-The first source slice is intentionally foundational: Core currently implements identifier-value validation, while the feedback ingress is a typed adapter-facing contract rather than a completed queue/executor. Application currently provides runtime/operation handle values rather than a runtime manager or adapter composition implementation.
+The feedback ingress is currently a typed contract, not a queue/executor. Application currently provides handle/snapshot value contracts, not a runtime manager or adapter-composition implementation.
 
 ## Migration rules
 

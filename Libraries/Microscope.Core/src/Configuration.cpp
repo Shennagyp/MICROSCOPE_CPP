@@ -833,9 +833,21 @@ ConfigurationResolution ConfigurationResolver::resolve(
             "The selected condenser has no installed condenser specification.",
             "EquipmentComponent",
             request.condenserComponentId().value());
+    } else if (profile->condenserApertureTarget()) {
+        const double target = profile->condenserApertureTarget()->value();
+        if (target < condenser->minimumApertureNA() ||
+            target > condenser->maximumApertureNA()) {
+            appendError(
+                diagnostics,
+                "configuration.condenser.aperture_target_out_of_range",
+                "The profile condenser aperture target is outside the installed condenser NA range.",
+                "EquipmentComponent",
+                request.condenserComponentId().value());
+        }
     }
 
     const auto* camera = findCamera(equipment, request.cameraComponentId());
+    const CameraOutputMode* selectedCameraMode = nullptr;
     if (camera == nullptr) {
         appendError(
             diagnostics,
@@ -844,24 +856,50 @@ ConfigurationResolution ConfigurationResolver::resolve(
             "EquipmentComponent",
             request.cameraComponentId().value());
     } else {
-        const bool modeExists = std::any_of(
+        const auto mode = std::find_if(
             camera->outputModes().begin(),
             camera->outputModes().end(),
-            [&request](const CameraOutputMode& mode) {
-                return mode.id() == request.cameraModeId();
+            [&request](const CameraOutputMode& value) {
+                return value.id() == request.cameraModeId();
             });
-        if (!modeExists) {
+        if (mode == camera->outputModes().end()) {
             appendError(
                 diagnostics,
                 "configuration.camera.mode_not_available",
                 "The selected camera output mode is not supported by the selected camera.",
                 "EquipmentComponent",
                 request.cameraComponentId().value());
+        } else {
+            selectedCameraMode = &*mode;
+        }
+
+        if (profile->exposurePreset()) {
+            if (!camera->exposureTimeRange()) {
+                appendError(
+                    diagnostics,
+                    "configuration.camera.exposure_capability_missing",
+                    "The selected camera does not declare an exposure-time capability range required by the profile preset.",
+                    "EquipmentComponent",
+                    request.cameraComponentId().value());
+            } else {
+                const double target =
+                    profile->exposurePreset()->exposureTimeMicroseconds();
+                if (target < camera->exposureTimeRange()->minimumMicroseconds() ||
+                    target > camera->exposureTimeRange()->maximumMicroseconds()) {
+                    appendError(
+                        diagnostics,
+                        "configuration.camera.exposure_preset_out_of_range",
+                        "The profile exposure preset is outside the selected camera's declared exposure-time range.",
+                        "EquipmentComponent",
+                        request.cameraComponentId().value());
+                }
+            }
         }
     }
 
     const auto* illumination = findIllumination(
         equipment, request.illuminationComponentId());
+    const IlluminationChannel* selectedIlluminationChannel = nullptr;
     if (illumination == nullptr) {
         appendError(
             diagnostics,
@@ -870,21 +908,56 @@ ConfigurationResolution ConfigurationResolver::resolve(
             "EquipmentComponent",
             request.illuminationComponentId().value());
     } else {
-        const bool channelExists = std::any_of(
+        const auto channel = std::find_if(
             illumination->channels().begin(),
             illumination->channels().end(),
-            [&request](const IlluminationChannel& channel) {
-                return channel.id() == request.illuminationChannelId();
+            [&request](const IlluminationChannel& value) {
+                return value.id() == request.illuminationChannelId();
             });
-        if (!channelExists) {
+        if (channel == illumination->channels().end()) {
             appendError(
                 diagnostics,
                 "configuration.illumination.channel_not_available",
                 "The selected illumination channel is not present on the selected source.",
                 "EquipmentComponent",
                 request.illuminationComponentId().value());
+        } else {
+            selectedIlluminationChannel = &*channel;
+        }
+
+        if (profile->illuminationIntensityTarget() &&
+            selectedIlluminationChannel != nullptr) {
+            const auto& target = *profile->illuminationIntensityTarget();
+            const auto& intensityRange =
+                selectedIlluminationChannel->intensityRange();
+            if (selectedIlluminationChannel->controlKind() !=
+                    IlluminationControlKind::Continuous ||
+                !intensityRange) {
+                appendError(
+                    diagnostics,
+                    "configuration.illumination.intensity_control_unavailable",
+                    "The selected illumination channel does not expose continuous intensity control required by the profile.",
+                    "EquipmentComponent",
+                    request.illuminationComponentId().value());
+            } else if (target.unit() != intensityRange->unit()) {
+                appendError(
+                    diagnostics,
+                    "configuration.illumination.intensity_unit_mismatch",
+                    "The profile illumination target unit does not match the selected channel's declared intensity unit.",
+                    "EquipmentComponent",
+                    request.illuminationComponentId().value());
+            } else if (target.value() < intensityRange->minimum() ||
+                       target.value() > intensityRange->maximum()) {
+                appendError(
+                    diagnostics,
+                    "configuration.illumination.intensity_target_out_of_range",
+                    "The profile illumination intensity target is outside the selected channel's declared range.",
+                    "EquipmentComponent",
+                    request.illuminationComponentId().value());
+            }
         }
     }
+
 
     if (!selectedPaths.empty()) {
         const auto requireOnSelectedPaths = [&diagnostics, &selectedPaths](
@@ -1052,7 +1125,12 @@ ConfigurationResolution ConfigurationResolver::resolve(
     }
 
     return ConfigurationResolution(
-        ResolvedConfiguration(equipment.microscopeId(), request),
+        ResolvedConfiguration(
+            equipment.microscopeId(),
+            request,
+            profile->condenserApertureTarget(),
+            profile->illuminationIntensityTarget(),
+            profile->exposurePreset()),
         std::move(diagnostics));
 }
 

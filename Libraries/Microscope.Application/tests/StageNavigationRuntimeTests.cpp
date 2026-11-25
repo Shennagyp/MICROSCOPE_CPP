@@ -239,13 +239,15 @@ struct RuntimeFixture final {
     std::unique_ptr<core::SerializedOperationRuntime<
         core::StageMotionFeedbackPayload>> runtime;
 
-    RuntimeFixture() {
+    explicit RuntimeFixture(bool openDeviceSession = true) {
         runtime = take(core::SerializedOperationRuntime<
             core::StageMotionFeedbackPayload>::create(
                 device.microscopeId, device.runtimeId,
                 device.runtimeGeneration, 16, wake));
         take(runtime->bindOwnerThread());
-        take(runtime->openDeviceSession(device));
+        if (openDeviceSession) {
+            take(runtime->openDeviceSession(device));
+        }
     }
 
     void prepareOperation(const char* operationId, const char* stepId) {
@@ -439,6 +441,43 @@ void testControlQueueDrainsOnRuntimeOwnerThread() {
           "closed stage queue rejects further requests");
 }
 
+void testDispatchPreconditionFailureTerminatesOperation() {
+    RuntimeFixture fixture(false);
+    const auto installedCarrier = carrier();
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageNavigationRuntime::create(
+        installedCarrier,
+        referencedPosition(installedCarrier.specification()),
+        homingPolicy(),
+        errorBudget(),
+        verificationPolicy(
+            application::motion::StageNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    auto queue = take(application::motion::StageNavigationControlQueue::create(
+        2, fixture.wake));
+
+    const application::motion::StageNavigationControlRequest request{
+        id<core::SlideId>("slide-left"), {20000.0, 10000.0},
+        navigationIds("missing-device-operation", "missing-device-step",
+                      "missing-device-command", "missing-device-restored-step",
+                      "missing-device-restored-command")};
+    check(queue->submit(request) ==
+              application::motion::StageNavigationControlSubmitStatus::Enqueued,
+          "request can enter the control queue before device-session validation");
+
+    auto drained = take(queue->drain(navigation));
+    check(drained.outcomes.size() == 1 &&
+          drained.outcomes.front().update &&
+          drained.outcomes.front().update->disposition ==
+              application::motion::StageNavigationRuntimeDisposition::NavigationFailed,
+          "a dispatch rejected before the driver is called becomes a terminal navigation failure");
+    auto operation = take(fixture.runtime->operationSnapshot(
+        id<core::OperationId>("missing-device-operation")));
+    check(operation.status() == core::OperationStatus::Failed &&
+          port.moveToCalls == 0 && !navigation.navigationActive(),
+          "pre-dispatch failure does not leave a Running operation or claim that hardware received the command");
+}
+
 void testHomingRestoresSlideLocalTarget() {
     RuntimeFixture fixture;
     const auto installedCarrier = carrier();
@@ -496,6 +535,7 @@ int main() {
     testOpenLoopBoundedEstimateCompletesNavigation();
     testControllerPositionObservationsVerifyNavigation();
     testControlQueueDrainsOnRuntimeOwnerThread();
+    testDispatchPreconditionFailureTerminatesOperation();
     testHomingRestoresSlideLocalTarget();
 
     if (failures != 0) {

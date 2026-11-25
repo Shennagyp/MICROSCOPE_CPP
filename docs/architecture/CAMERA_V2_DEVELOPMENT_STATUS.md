@@ -2,9 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Current branch HEAD at this refresh:** `fbc105381b9339beccecbcdf56a1081e754d61be`  
-**Latest CMake/CI implementation checkpoint:** `a6f3409d920b46de18f2d86227e51eb021e1cc2b`  
+**Latest reviewed source checkpoint:** `af19d7e08b24469d7df101baef1d4632019d7937`  
 **Latest non-Qt CI pass:** `5cf5bc352e2df926a2cc0317acaccfd3a912602d`  
+**Current code validation:** expanded run #45653938133 pending against `af19d7e08b24469d7df101baef1d4632019d7937`  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -89,12 +89,24 @@ Original-to-current crosswalk: Original 0→0; 1→1; 2→2; 3 (driver/control/Q
 
 | Commit | Change | Effect |
 |---|---|---|
-| `70a7486` | Make Qt integrations opt-in legacy targets | `AMSCOPE_BUILD_QT_ADAPTER` and `AMSCOPE_BUILD_PREVIEW_APP` default OFF. |
-| `5cf5bc3` | Validate non-Qt driver on macOS | First non-Qt workflow removed Qt install/preview build and passed on Intel and Apple Silicon. |\n| `69dbc65` | Exclude Qt facade from non-Qt install | `QtAmcamCamera.h` is excluded from the default installed include tree; it is installed only when the legacy Qt adapter is enabled. |\n| `3e2b328` | Verify installed non-Qt header surface | CI installs to a clean prefix and checks required common/native headers plus absence of `QtAmcamCamera.h`. |\n| `a6f3409` | Exercise non-Qt CMake defaults | Workflow omits explicit Qt-OFF cache flags so CMake defaults themselves must configure without Qt. |\n| `fbc1053` | Archive historical v0.7 handoff | Old Qt-preview continuation instructions are marked superseded and point to this v2.0 status document. |
+| `70a7486` | Make Qt integrations opt-in legacy targets | Qt adapter and preview options default OFF. |
+| `5cf5bc3` | First non-Qt macOS CI | No Qt install or preview build; driver/probes built and 11/11 non-Qt CTest tests passed on arm64 and x86_64. |
+| `69dbc65` | Exclude Qt facade from non-Qt install | Prevented installing the Qt facade header in the default install; superseded by the physical header relocation below. |
+| `3e2b328` | Install-surface CI check | Added required-header and no-Qt-header installation assertions. |
+| `a6f3409` | Exercise non-Qt CMake defaults | CI now relies on the OFF-by-default Qt options rather than explicitly setting them. |
+| `ac90288` | Define Camera v2.0 development status | Added the governing v2.0 phase ledger and continuation plan. |
+| `1ac6404`, `e5078d3`, `79d43f0` | Align driver README and ownership description | Document non-Qt build/API and identify legacy preview components. |
+| `fbc1053` | Archive old continuation handoff | v0.7 Qt-preview handoff is clearly marked historical. |
+| `d250add`, `e187cfd` | Archive stale inventory and release plan | Historical Qt/UI documents no longer appear as current project governance. |
+| `85f0a1d`, `affcccf` | Add public non-Qt API contract test | Compile/link/runtime check for API type invariants, initial Closed state, zero counters and idempotent close without hardware enumeration. |
+| `287c0e9`, `62115c4`, `8c36506` | Isolate legacy Qt facade | Move Qt header out of Amscope::Driver include root; expose/install it only through the optional Qt target. |
+| `af19d7e` | Compile installed non-Qt public headers in CI | After installing to a clean prefix, syntax-compile the public API test source using installed headers. |
 
-Current source checkpoint: `fbc105381b9339beccecbcdf56a1081e754d61be`. The latest build/configuration changes are at `a6f3409d920b46de18f2d86227e51eb021e1cc2b`; subsequent commits in this checkpoint are documentation-only.
+Latest implementation/configuration checkpoint: `af19d7e08b24469d7df101baef1d4632019d7937`. The non-Qt workflow run [#45653938133](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45653938133) is pending at this checkpoint. Its intended assertions include the expanded CTest suite, architecture checks, installed public-header presence/absence, and syntax compilation of the installed non-Qt public API. Do not report these latest checks as passing until this exact run completes.
 
-The non-Qt workflow passed at the exact implementation/configuration commit `5cf5bc352e2df926a2cc0317acaccfd3a912602d`: GitHub Actions run [#45651928831](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45651928831) completed successfully on Apple Silicon arm64 and Intel x86_64. Both jobs configured without Qt, compiled the driver and two diagnostic probes, passed **11/11 non-Qt CTest tests**, verified the driver/vendor/probe artifacts and architecture slices, and exercised probe help paths. This is CI evidence for the non-Qt build and automated suite only; no local test or physical-camera run is claimed. The later install-header and default-config changes are not yet validated by CI. Run `45652811606` was cancelled by the workflow's concurrency policy and a replacement run is expected for the next branch update. Do not treat the install-header filter or default-config-only validation as passed until that run completes.
+The earlier validated run [#45651928831](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45651928831) passed on Apple Silicon arm64 and Intel x86_64 at `5cf5bc352e2df926a2cc0317acaccfd3a912602d`, with 11/11 non-Qt CTest tests. It does not include the later public API test or installed-header syntax check.
+
+No local build, test or physical-camera run is claimed in this status update.
 
 ## 6. Highest-priority unresolved risks
 

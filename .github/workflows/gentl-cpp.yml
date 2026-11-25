@@ -69,9 +69,7 @@ jobs:
           unzip -q build/GenICam_Package_2026.07.zip -d build/genicam-package
           GENAPI_HEADER="$(find build/genicam-package -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
           if [ -z "$GENAPI_HEADER" ]; then
-            echo "GenApi SDK candidates in official package:"
-            find build/genicam-package -type f | grep -Ei 'GenApi|Mac64_Universal' | head -n 100 || true
-            SDK_ARCHIVE="$(find build/genicam-package -type f | grep -Ei 'Mac64.*SDK.*(zip|tar[.]gz|tgz)$' | head -n 1 || true)"
+            SDK_ARCHIVE="$(find build/genicam-package -type f | grep -Ei 'Mac64.*SDK.*(zip|tar[.]gz|tgz)' | head -n 1 || true)"
             test -n "$SDK_ARCHIVE"
             case "$SDK_ARCHIVE" in
               *.zip) unzip -q "$SDK_ARCHIVE" -d build/genapi-sdk ;;
@@ -83,63 +81,9 @@ jobs:
           GENAPI_ROOT="$(cd "${GENAPI_HEADER%/library/CPP/include/GenApi/GenApi.h}" && pwd)"
           test -f "$GENAPI_ROOT/library/CPP/include/GenApi/GenApi.h"
           echo "GenApi SDK library candidates:"
-          find "$GENAPI_ROOT" -type f | grep -E '/(lib)?(GenApi|GCBase)[^/]*[.](dylib|a)
-
-      - name: Configure official GenApi integration
-        run: |
-          cmake -S Camera/GenTL -B build/gentl-genapi \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
-            -DBUILD_TESTING=OFF \
-            -DCAMERA_GENTL_ENABLE_GENAPI=ON \
-            -DGENAPI_ROOT="$GENAPI_ROOT" \
-            -DGENAPI_INCLUDE_DIR="$GENAPI_ROOT/library/CPP/include" \
-            -DGENAPI_LIBRARY="$GENAPI_LIBRARY" \
-            -DGCBASE_LIBRARY="$GCBASE_LIBRARY"
-
-      - name: Build official GenApi integration
-        run: cmake --build build/gentl-genapi --config Release --parallel
-
-      - name: Verify GenApi architecture
-        run: |
-          lipo build/gentl-genapi/libcamera_gentl_genapi.a -verify_arch "${{ matrix.architecture }}"
- | sort | head -n 100 || true
-          GENAPI_LIBRARY="$(find "$GENAPI_ROOT" -type f | grep -E '/libGenApi[^/]*[.](dylib|a)
-
-      - name: Configure official GenApi integration
-        run: |
-          cmake -S Camera/GenTL -B build/gentl-genapi \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
-            -DBUILD_TESTING=OFF \
-            -DCAMERA_GENTL_ENABLE_GENAPI=ON \
-            -DGENAPI_ROOT="$GENAPI_ROOT"
-
-      - name: Build official GenApi integration
-        run: cmake --build build/gentl-genapi --config Release --parallel
-
-      - name: Verify GenApi architecture
-        run: |
-          lipo build/gentl-genapi/libcamera_gentl_genapi.a -verify_arch "${{ matrix.architecture }}"
- | head -n 1 || true)"
-          GCBASE_LIBRARY="$(find "$GENAPI_ROOT" -type f | grep -E '/libGCBase[^/]*[.](dylib|a)
-
-      - name: Configure official GenApi integration
-        run: |
-          cmake -S Camera/GenTL -B build/gentl-genapi \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
-            -DBUILD_TESTING=OFF \
-            -DCAMERA_GENTL_ENABLE_GENAPI=ON \
-            -DGENAPI_ROOT="$GENAPI_ROOT"
-
-      - name: Build official GenApi integration
-        run: cmake --build build/gentl-genapi --config Release --parallel
-
-      - name: Verify GenApi architecture
-        run: |
-          lipo build/gentl-genapi/libcamera_gentl_genapi.a -verify_arch "${{ matrix.architecture }}"
- | head -n 1 || true)"
+          find "$GENAPI_ROOT" -type f | grep -E '/(lib)?(GenApi|GCBase)[^/]*[.](dylib|a)' | sort | head -n 100 || true
+          GENAPI_LIBRARY="$(find "$GENAPI_ROOT" -type f | grep -E '/libGenApi[^/]*[.](dylib|a)' | head -n 1 || true)"
+          GCBASE_LIBRARY="$(find "$GENAPI_ROOT" -type f | grep -E '/libGCBase[^/]*[.](dylib|a)' | head -n 1 || true)"
           test -n "$GENAPI_LIBRARY"
           test -n "$GCBASE_LIBRARY"
           echo "GENAPI_ROOT=$GENAPI_ROOT" >> "$GITHUB_ENV"
@@ -153,7 +97,10 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
             -DBUILD_TESTING=OFF \
             -DCAMERA_GENTL_ENABLE_GENAPI=ON \
-            -DGENAPI_ROOT="$GENAPI_ROOT"
+            -DGENAPI_ROOT="$GENAPI_ROOT" \
+            -DGENAPI_INCLUDE_DIR="$GENAPI_ROOT/library/CPP/include" \
+            -DGENAPI_LIBRARY="$GENAPI_LIBRARY" \
+            -DGCBASE_LIBRARY="$GCBASE_LIBRARY"
 
       - name: Build official GenApi integration
         run: cmake --build build/gentl-genapi --config Release --parallel

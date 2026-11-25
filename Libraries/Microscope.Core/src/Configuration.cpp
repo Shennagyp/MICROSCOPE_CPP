@@ -26,6 +26,24 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool isKnownOpticalElementFunction(
+    OpticalElementFunction value) noexcept {
+    switch (value) {
+    case OpticalElementFunction::PhasePlate:
+    case OpticalElementFunction::PhaseAnnulus:
+    case OpticalElementFunction::Polarizer:
+    case OpticalElementFunction::Analyzer:
+    case OpticalElementFunction::DifferentialInterferencePrism:
+    case OpticalElementFunction::ExcitationFilter:
+    case OpticalElementFunction::EmissionFilter:
+    case OpticalElementFunction::DichroicMirror:
+    case OpticalElementFunction::DarkfieldStop:
+    case OpticalElementFunction::Other:
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool isKnownExposurePolicy(ExposurePolicy value) noexcept {
     switch (value) {
     case ExposurePolicy::Manual:
@@ -154,6 +172,56 @@ void appendError(
 
 } // namespace
 
+OpticalFunctionRequirement::OpticalFunctionRequirement(
+    OpticalElementFunction function,
+    std::optional<OpticalCompatibilityId> compatibilityId,
+    std::uint32_t minimumComponentCount)
+    : function_(function),
+      compatibilityId_(std::move(compatibilityId)),
+      minimumComponentCount_(minimumComponentCount) {}
+
+Result<
+    OpticalFunctionRequirement,
+    OpticalFunctionRequirementError> OpticalFunctionRequirement::create(
+        OpticalElementFunction function,
+        std::optional<OpticalCompatibilityId> compatibilityId,
+        std::uint32_t minimumComponentCount) {
+    if (!isKnownOpticalElementFunction(function)) {
+        return Result<
+            OpticalFunctionRequirement,
+            OpticalFunctionRequirementError>::failure(
+                OpticalFunctionRequirementError::InvalidFunction);
+    }
+    if (minimumComponentCount == 0) {
+        return Result<
+            OpticalFunctionRequirement,
+            OpticalFunctionRequirementError>::failure(
+                OpticalFunctionRequirementError::ZeroMinimumComponentCount);
+    }
+
+    return Result<
+        OpticalFunctionRequirement,
+        OpticalFunctionRequirementError>::success(
+            OpticalFunctionRequirement(
+                function,
+                std::move(compatibilityId),
+                minimumComponentCount));
+}
+
+OpticalElementFunction OpticalFunctionRequirement::function() const noexcept {
+    return function_;
+}
+
+const std::optional<OpticalCompatibilityId>&
+OpticalFunctionRequirement::compatibilityId() const noexcept {
+    return compatibilityId_;
+}
+
+std::uint32_t
+OpticalFunctionRequirement::minimumComponentCount() const noexcept {
+    return minimumComponentCount_;
+}
+
 ConfigurationProfile::ConfigurationProfile(
     ConfigurationProfileId id,
     ContrastMethod contrastMethod,
@@ -162,7 +230,8 @@ ConfigurationProfile::ConfigurationProfile(
     std::vector<OpticalPathId> compatibleOpticalPathIds,
     std::vector<EquipmentComponentId> compatibleCameraIds,
     std::vector<EquipmentComponentId> compatibleIlluminationIds,
-    std::vector<EquipmentComponentId> requiredPathComponentIds)
+    std::vector<EquipmentComponentId> requiredPathComponentIds,
+    std::vector<OpticalFunctionRequirement> requiredOpticalFunctions)
     : id_(std::move(id)),
       contrastMethod_(contrastMethod),
       compatibleObjectiveIds_(std::move(compatibleObjectiveIds)),
@@ -170,7 +239,8 @@ ConfigurationProfile::ConfigurationProfile(
       compatibleOpticalPathIds_(std::move(compatibleOpticalPathIds)),
       compatibleCameraIds_(std::move(compatibleCameraIds)),
       compatibleIlluminationIds_(std::move(compatibleIlluminationIds)),
-      requiredPathComponentIds_(std::move(requiredPathComponentIds)) {}
+      requiredPathComponentIds_(std::move(requiredPathComponentIds)),
+      requiredOpticalFunctions_(std::move(requiredOpticalFunctions)) {}
 
 Result<
     ConfigurationProfile,
@@ -182,7 +252,8 @@ Result<
         std::vector<OpticalPathId> compatibleOpticalPathIds,
         std::vector<EquipmentComponentId> compatibleCameraIds,
         std::vector<EquipmentComponentId> compatibleIlluminationIds,
-        std::vector<EquipmentComponentId> requiredPathComponentIds) {
+        std::vector<EquipmentComponentId> requiredPathComponentIds,
+        std::vector<OpticalFunctionRequirement> requiredOpticalFunctions) {
     if (!isKnownContrastMethod(contrastMethod)) {
         return Result<
             ConfigurationProfile,
@@ -249,6 +320,20 @@ Result<
                 ConfigurationProfileError::DuplicateRequiredComponent);
     }
 
+    for (std::size_t i = 0; i < requiredOpticalFunctions.size(); ++i) {
+        for (std::size_t j = i + 1; j < requiredOpticalFunctions.size(); ++j) {
+            if (requiredOpticalFunctions[i].function() ==
+                    requiredOpticalFunctions[j].function() &&
+                requiredOpticalFunctions[i].compatibilityId() ==
+                    requiredOpticalFunctions[j].compatibilityId()) {
+                return Result<
+                    ConfigurationProfile,
+                    ConfigurationProfileError>::failure(
+                        ConfigurationProfileError::DuplicateOpticalFunctionRequirement);
+            }
+        }
+    }
+
     return Result<
         ConfigurationProfile,
         ConfigurationProfileError>::success(
@@ -260,7 +345,8 @@ Result<
                 std::move(compatibleOpticalPathIds),
                 std::move(compatibleCameraIds),
                 std::move(compatibleIlluminationIds),
-                std::move(requiredPathComponentIds)));
+                std::move(requiredPathComponentIds),
+                std::move(requiredOpticalFunctions)));
 }
 
 const ConfigurationProfileId& ConfigurationProfile::id() const noexcept {
@@ -299,6 +385,11 @@ ConfigurationProfile::compatibleIlluminationIds() const noexcept {
 const std::vector<EquipmentComponentId>&
 ConfigurationProfile::requiredPathComponentIds() const noexcept {
     return requiredPathComponentIds_;
+}
+
+const std::vector<OpticalFunctionRequirement>&
+ConfigurationProfile::requiredOpticalFunctions() const noexcept {
+    return requiredOpticalFunctions_;
 }
 
 ConfigurationProfileCatalog::ConfigurationProfileCatalog(
@@ -347,7 +438,8 @@ ConfigurationRequest::ConfigurationRequest(
     CameraModeId cameraModeId,
     EquipmentComponentId illuminationComponentId,
     IlluminationChannelId illuminationChannelId,
-    ExposurePolicy exposurePolicy)
+    ExposurePolicy exposurePolicy,
+    std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds)
     : profileId_(std::move(profileId)),
       contrastMethod_(contrastMethod),
       objectiveComponentId_(std::move(objectiveComponentId)),
@@ -357,7 +449,9 @@ ConfigurationRequest::ConfigurationRequest(
       cameraModeId_(std::move(cameraModeId)),
       illuminationComponentId_(std::move(illuminationComponentId)),
       illuminationChannelId_(std::move(illuminationChannelId)),
-      exposurePolicy_(exposurePolicy) {}
+      exposurePolicy_(exposurePolicy),
+      selectedAdditionalOpticalComponentIds_(
+          std::move(selectedAdditionalOpticalComponentIds)) {}
 
 Result<
     ConfigurationRequest,
@@ -371,7 +465,8 @@ Result<
         CameraModeId cameraModeId,
         EquipmentComponentId illuminationComponentId,
         IlluminationChannelId illuminationChannelId,
-        ExposurePolicy exposurePolicy) {
+        ExposurePolicy exposurePolicy,
+        std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds) {
     if (!isKnownContrastMethod(contrastMethod)) {
         return Result<
             ConfigurationRequest,
@@ -403,6 +498,18 @@ Result<
         }
     }
 
+    std::set<EquipmentComponentId> uniqueAdditionalOpticalComponentIds;
+    for (const auto& componentId : selectedAdditionalOpticalComponentIds) {
+        if (componentId == objectiveComponentId ||
+            componentId == condenserComponentId ||
+            !uniqueAdditionalOpticalComponentIds.insert(componentId).second) {
+            return Result<
+                ConfigurationRequest,
+                ConfigurationRequestError>::failure(
+                    ConfigurationRequestError::DuplicateAdditionalOpticalComponent);
+        }
+    }
+
     return Result<
         ConfigurationRequest,
         ConfigurationRequestError>::success(
@@ -416,7 +523,8 @@ Result<
                 std::move(cameraModeId),
                 std::move(illuminationComponentId),
                 std::move(illuminationChannelId),
-                exposurePolicy));
+                exposurePolicy,
+                std::move(selectedAdditionalOpticalComponentIds)));
 }
 
 const ConfigurationProfileId& ConfigurationRequest::profileId() const noexcept {
@@ -437,6 +545,11 @@ const EquipmentComponentId& ConfigurationRequest::condenserComponentId() const n
 
 const std::vector<OpticalPathId>& ConfigurationRequest::opticalPathIds() const noexcept {
     return opticalPathIds_;
+}
+
+const std::vector<EquipmentComponentId>&
+ConfigurationRequest::selectedAdditionalOpticalComponentIds() const noexcept {
+    return selectedAdditionalOpticalComponentIds_;
 }
 
 const EquipmentComponentId& ConfigurationRequest::cameraComponentId() const noexcept {

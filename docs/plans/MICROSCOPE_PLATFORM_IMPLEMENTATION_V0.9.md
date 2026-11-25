@@ -88,12 +88,14 @@ This closes the initial library/build/API foundation only. It does not claim a m
 - Equipment definitions describe installed equipment and nominal capabilities. Runtime observations, current positions, calibration results and deployment-specific adapter bindings do not belong in the static equipment model.
 - No actual OPTIKA B-293 component inventory is assumed until it is supplied/verified; examples are generic and must be labeled as illustrative.
 
-**Phase 2A first vertical slice**
-- Add strong IDs for installed equipment components, optical ports, optical connections, light paths and stages/axes as consumed.
-- Add immutable Core value types for optical components, ports, connections, path traversal steps and ordered paths.
-- Add MicroscopeEquipmentDefinition as the aggregate boundary for one physical microscope definition.
-- Add deterministic validation for duplicate identities, foreign references, invalid port direction and disconnected consecutive path steps.
-- Add contract tests for shared components across paths, beam-splitter branching, multiple camera output paths and invalid routes.
+**Phase 2A committed source progress**
+- Added strong EquipmentComponentId, OpticalPortId, OpticalConnectionId and OpticalPathId values. AxisId is deferred until the Stage/axis model consumes it.
+- Added factory-created OpticalPort, EquipmentComponent, OpticalConnection, OpticalPathStep and OpticalPath values.
+- Added immutable MicroscopeEquipmentDefinition aggregate with validation for non-empty component sets, unique identities, foreign references, port ownership/direction, one physical connection per port and route continuity.
+- Component kind constrains the interface: optical elements need input/output capability; imaging devices need input; illumination devices need output; mechanical assemblies have no optical ports.
+- Added an illustrative shared-condenser/shared-beam-splitter fixture with two camera paths, proving that the component is stored once and reused by both paths.
+- Added negative contract cases for duplicate component identity, unknown ports, direction mismatch, reused physical ports, missing route edges, foreign path ports, incomplete path steps and invalid component port layouts.
+- CMake now builds OpticalTopology.cpp and registers microscope_core_equipment_tests. Cross-platform CI for this new slice is pending; no local build/test claim is made.
 
 **Exit:** representative equipment definitions map to typed Core values and validate without per-microscope behavior subclasses. Phase 2 is complete only after 2A–2E and the full definition contract tests are implemented.
 

@@ -57,12 +57,33 @@ enum class RuntimeLifecycle {
     Faulted
 };
 
-// Value projection only. Application implementations publish a new revision;
-// previously returned snapshots are not mutated.
-struct RuntimeSnapshot final {
-    RuntimeHandle handle;
-    RuntimeLifecycle lifecycle = RuntimeLifecycle::Initializing;
-    std::uint64_t revision = 0;
+enum class RuntimeSnapshotError {
+    InvalidLifecycle,
+    ZeroRevision
+};
+
+// Immutable application projection. Every lifecycle update publishes a new
+// snapshot revision; an existing snapshot is never mutated.
+class RuntimeSnapshot final {
+public:
+    [[nodiscard]] static core::Result<RuntimeSnapshot, RuntimeSnapshotError> create(
+        RuntimeHandle handle,
+        RuntimeLifecycle lifecycle,
+        std::uint64_t revision);
+
+    [[nodiscard]] const RuntimeHandle& handle() const noexcept;
+    [[nodiscard]] RuntimeLifecycle lifecycle() const noexcept;
+    [[nodiscard]] std::uint64_t revision() const noexcept;
+
+private:
+    RuntimeSnapshot(
+        RuntimeHandle handle,
+        RuntimeLifecycle lifecycle,
+        std::uint64_t revision);
+
+    RuntimeHandle handle_;
+    RuntimeLifecycle lifecycle_;
+    std::uint64_t revision_;
 };
 
 enum class OperationViewError {

@@ -2,9 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest implementation checkpoint:** `b9945dcb7435808f4315051f5af7214ffdac2143` — treats `GC_ERR_INVALID_HANDLE` as expected frame-wait cancellation only after stream shutdown has begun, covering the race where event unregistration wins before `EventGetData` enters the Consumer.  
-**Latest fully CI-validated checkpoint:** `b9945dcb7435808f4315051f5af7214ffdac2143` — GenTL/GenApi workflow [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and XML-backed runtime tests.  
-**CI:** GenTL/GenApi workflow [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214) passed both architectures. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed its four jobs; Qt/UI is now excluded from active scope.  
+**Latest implementation checkpoint:** `b1d0a61de841736f76cf4ec005f807e60310d71b` — extends GenApi integration tests to write/read floating-point and string features, and verifies floating-point increment rejection.  
+**Latest fully CI-validated checkpoint:** `b1d0a61de841736f76cf4ec005f807e60310d71b` — GenTL/GenApi workflow [#45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and XML-backed runtime tests.  
+**CI:** GenTL/GenApi workflow [#45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447) passed both architectures. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed its four jobs; Qt/UI is now excluded from active scope.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -126,6 +126,7 @@ Active dependency order: 0 → 1 → 2 → 5 → 6 → 7 → 8. Original Phases 
 | `9043f82` | Traverse nested GenApi categories | Recursively enumerate features and commands reachable through Root category descendants, deduplicate node references, and test nested feature reads plus nested command execution. |
 | `09f14fd`–`31ac9f6` | Transfer owned frame payload | `makeCommonFrame` accepts a `DataStreamFrame` by value and moves its payload into `camera::Frame`; exact payload-size checks run against the transferred storage. Both architectures passed [#45701918457](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701918457). |
 | `b9945dc` | Handle shutdown/unregister race | `EventGetData` returns `nullopt` for `GC_ERR_INVALID_HANDLE` only when shutdown is already in progress; both architectures passed [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214). |
+| `b1d0a61` | Complete scalar GenApi write coverage | Added Float/String write-readback and Float increment validation tests; both architectures passed [#45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447). |
 
 ### CI evidence
 

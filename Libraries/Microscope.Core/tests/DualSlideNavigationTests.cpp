@@ -10,6 +10,12 @@ template<class T,class E>T take(Result<T,E> r){if(!r)throw std::runtime_error("f
 template<class T>T id(const char*s){return take(T::create(s));}
 AxisSpecification axis(const char*s){return take(AxisSpecification::create(id<StageAxisId>(s),AxisMotionType::Linear,AxisCoordinateUnit::Micrometers,take(AxisOperatingRange::create(-100000,150000,AxisCoordinateUnit::Micrometers)),take(PositiveAxisResolution::create(0.1)),std::nullopt,std::nullopt,std::nullopt,AxisPositionFeedbackCapability::DeviceReported));}
 StageSpecification stage(){return take(StageSpecification::create(id<EquipmentComponentId>("stage"),{axis("x"),axis("y")}));}
+StageAxisPositionState axisPosition(const char* stageId,const char* axisId,double value,double uncertainty) {
+ auto position=take(AxisPosition::create(id<StageAxisId>(axisId),value,AxisCoordinateUnit::Micrometers));
+ auto observation=take(AxisPositionObservation::create(position,uncertainty,StagePositionEvidence::EncoderMeasured));
+ return take(StageAxisPositionState::homed(
+     id<EquipmentComponentId>(stageId),observation,ObservationSource::HardwareReadback));
+}
 SlideRegistration registration(const char*s,DualSlideSlot slot,double x,const char* revision="v1"){
  auto g=take(SlideGeometry::create(75000,25000));auto src=ObservationSource::HardwareReadback;
  auto tl=take(SlideCornerMeasurement::create(SlideCorner::TopLeft,{x,20000},src,0.5));
@@ -85,14 +91,8 @@ int main(){
  auto rslot=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right"),right));
  auto carrier=take(DualSlideCarrierState::create(spec.value(),std::move(lslot),std::move(rslot)));
  check(carrier.registrationFor(id<SlideId>("left"))&&carrier.registrationFor(id<SlideId>("right")),"two slides retain separate simultaneous registrations");
- auto hx=take(StageAxisPositionState::homed(
-     id<EquipmentComponentId>("stage"),
-     take(AxisPosition::create(id<StageAxisId>("x"),42500,AxisCoordinateUnit::Micrometers)),
-     0.5,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
- auto hy=take(StageAxisPositionState::homed(
-     id<EquipmentComponentId>("stage"),
-     take(AxisPosition::create(id<StageAxisId>("y"),32500,AxisCoordinateUnit::Micrometers)),
-     1.0,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+ auto hx=axisPosition("stage","x",42500,0.5);
+ auto hy=axisPosition("stage","y",32500,1.0);
  auto current=carrier.currentSlidePosition(id<SlideId>("left"),hx,hy);
  check(current&&std::abs(current.value().position.xMicrometers-37500)<1e-6&&
        std::abs(current.value().position.yMicrometers-12500)<1e-6,
@@ -104,17 +104,11 @@ int main(){
  auto unknownCurrent=carrier.currentSlidePosition(id<SlideId>("left"),unknownX,hy);
  check(!unknownCurrent&&unknownCurrent.error()==CurrentSlidePositionError::PositionUnknown,
        "unreferenced stage position cannot be presented as a slide coordinate");
- auto outsideSlide=take(StageAxisPositionState::homed(
-     id<EquipmentComponentId>("stage"),
-     take(AxisPosition::create(id<StageAxisId>("x"),100000,AxisCoordinateUnit::Micrometers)),
-     0.1,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+ auto outsideSlide=axisPosition("stage","x",100000,0.1);
  auto outsidePosition=carrier.currentSlidePosition(id<SlideId>("left"),outsideSlide,hy);
  check(!outsidePosition&&outsidePosition.error()==CurrentSlidePositionError::PositionOutsideSlide,
        "does not report a selected-slide position when the stage is physically outside that slide");
- auto foreignStageX=take(StageAxisPositionState::homed(
-     id<EquipmentComponentId>("another-stage"),
-     take(AxisPosition::create(id<StageAxisId>("x"),42500,AxisCoordinateUnit::Micrometers)),
-     0.1,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+ auto foreignStageX=axisPosition("another-stage","x",42500,0.1);
  auto foreignStagePosition=carrier.currentSlidePosition(id<SlideId>("left"),foreignStageX,hy);
  check(!foreignStagePosition&&foreignStagePosition.error()==CurrentSlidePositionError::StageComponentMismatch,
        "rejects same-named axes belonging to another installed stage");

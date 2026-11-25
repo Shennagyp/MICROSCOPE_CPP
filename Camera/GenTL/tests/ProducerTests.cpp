@@ -13,7 +13,7 @@
 #include <thread>
 #include <vector>
 
-int main(int argc, char** argv) {
+int runProducerTests(int argc, char** argv) {
     if (argc != 2) return 1;
 
     const auto directory =
@@ -226,5 +226,13 @@ int main(int argc, char** argv) {
     }
 
     std::filesystem::remove_all(directory);
+    return result;
+}
+
+
+int main(int argc, char** argv) {
+    const int result = runProducerTests(argc, argv);
+    if (result != 0)
+        std::fprintf(stderr, "ProducerTests failed with code %d\\n", result);
     return result;
 }

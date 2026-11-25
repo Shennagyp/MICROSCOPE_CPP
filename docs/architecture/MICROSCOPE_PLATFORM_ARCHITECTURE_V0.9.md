@@ -179,6 +179,8 @@ A light path is an explicit physical optical route through installed components.
 - A component shared by multiple paths has one EquipmentComponentId and may participate in multiple paths.
 - A beam splitter or selector may create alternative paths using distinct physical ports for the branches.
 - Cameras attach to appropriate output ports/paths, not merely to an objective.
+- OpticalElement components may declare typed installed functions such as phase plate, phase annulus, polarizer, analyzer, DIC prism, excitation/emission filter, dichroic mirror or darkfield stop.
+- A function capability may carry an OpticalCompatibilityId so physically mating elements can be matched without embedding behavior in their classes. Duplicate function/compatibility pairs on one component are rejected.
 - The topology describes equipment; it is not a visual node editor, executable behavior graph or configuration resolver.
 - Configuration profiles select valid routes and component states in Phase 3.
 
@@ -263,13 +265,21 @@ Configuration profiles describe valid desired arrangements and relationships. Th
 
 A profile can specify:
 
-- Applicability/selection conditions.
+- Applicability/selection conditions and allowed installed component identities.
+- Required optical functions on selected components, including optional compatibility identities and minimum distinct-component counts.
 - Required components and component states.
-- Required light paths.
+- One or more required light paths.
 - Illumination and condenser settings.
 - Camera presets and exposure policies.
 - Dependencies, exclusions and compatibility constraints.
 - Whether a value is mandatory, recommended or optional.
+
+Examples of declarative function requirements:
+- Phase contrast: selected objective exposes a phase plate and selected condenser arrangement exposes a phase annulus with the same OpticalCompatibilityId.
+- DIC: selected optical elements expose a compatible polarizer, analyzer and required number of DIC prisms, with matching compatibility identity.
+- Fluorescence: a profile can require excitation filter, emission filter and dichroic mirror functions with one shared compatibility identity.
+
+A request explicitly selects additional optical component identities required by its profile. The resolver verifies their installed optical-element kind, path membership and match to at least one profile requirement. It then checks each required function/count across the selected objective, condenser and additional optical component set.
 
 ### 6.2 Independent configuration dimensions
 

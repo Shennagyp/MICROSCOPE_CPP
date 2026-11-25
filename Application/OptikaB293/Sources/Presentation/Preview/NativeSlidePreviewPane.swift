@@ -29,6 +29,7 @@ final class NativeSlidePreviewPane: NSView {
     private let actionStack = NSStackView()
     private let toolStack = NSStackView()
     private let annotationPlate = NSView()
+    private let frameRatePlate = NSView()
     private let actionPlate = NSView()
     private let toolPlate = NSView()
     private let microscopeControlsPlate = NSView()
@@ -181,6 +182,9 @@ final class NativeSlidePreviewPane: NSView {
         // presented as compact corner annotations over the image viewport;
         // actions remain available in a separate floating control cluster.
         configureAnnotationPlate(annotationPlate)
+        configureAnnotationPlate(frameRatePlate)
+        frameRateLabel.translatesAutoresizingMaskIntoConstraints = false
+        frameRatePlate.addSubview(frameRateLabel)
         configureAnnotationPlate(actionPlate)
         configureAnnotationPlate(toolPlate)
         configureAnnotationPlate(microscopeControlsPlate)
@@ -191,7 +195,6 @@ final class NativeSlidePreviewPane: NSView {
         annotationStack.spacing = 9
         annotationStack.translatesAutoresizingMaskIntoConstraints = false
         annotationStack.addArrangedSubview(titleLabel)
-        annotationStack.addArrangedSubview(frameRateLabel)
         annotationStack.addArrangedSubview(statusLabel)
 
         actionStack.orientation = .horizontal
@@ -227,6 +230,7 @@ final class NativeSlidePreviewPane: NSView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
         addSubview(annotationPlate)
+        addSubview(frameRatePlate)
         addSubview(actionPlate)
         addSubview(toolPlate)
         addSubview(microscopeControlsPlate)
@@ -242,6 +246,30 @@ final class NativeSlidePreviewPane: NSView {
             annotationStack.bottomAnchor.constraint(equalTo: annotationPlate.bottomAnchor, constant: -6),
             annotationPlate.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             annotationPlate.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+
+            frameRateLabel.leadingAnchor.constraint(
+                equalTo: frameRatePlate.leadingAnchor,
+                constant: 9
+            ),
+            frameRateLabel.trailingAnchor.constraint(
+                equalTo: frameRatePlate.trailingAnchor,
+                constant: -9
+            ),
+            frameRateLabel.topAnchor.constraint(
+                equalTo: frameRatePlate.topAnchor,
+                constant: 5
+            ),
+            frameRateLabel.bottomAnchor.constraint(
+                equalTo: frameRatePlate.bottomAnchor,
+                constant: -5
+            ),
+            frameRatePlate.leadingAnchor.constraint(
+                equalTo: annotationPlate.leadingAnchor
+            ),
+            frameRatePlate.topAnchor.constraint(
+                equalTo: annotationPlate.bottomAnchor,
+                constant: 5
+            ),
 
             actionStack.leadingAnchor.constraint(equalTo: actionPlate.leadingAnchor, constant: 5),
             actionStack.trailingAnchor.constraint(equalTo: actionPlate.trailingAnchor, constant: -5),

@@ -58,7 +58,7 @@ AxisCoordinateUnit AxisPosition::unit()const noexcept{return unit_;}
 
 AxisPositionObservation::AxisPositionObservation(
     AxisPosition position,double uncertainty,StagePositionEvidence evidence)
-    :position_(std::move(position)),uncertaintyMicrometers_(uncertainty),evidence_(evidence) {}
+    :position_(std::move(position)),uncertaintyInAxisUnit_(uncertainty),evidence_(evidence) {}
 Result<AxisPositionObservation,AxisPositionObservationError>
 AxisPositionObservation::create(
     AxisPosition position,double uncertainty,StagePositionEvidence evidence) {
@@ -72,7 +72,7 @@ AxisPositionObservation::create(
         AxisPositionObservation(std::move(position),uncertainty,evidence));
 }
 const AxisPosition& AxisPositionObservation::position()const noexcept{return position_;}
-double AxisPositionObservation::uncertaintyMicrometers()const noexcept{return uncertaintyMicrometers_;}
+double AxisPositionObservation::uncertaintyInAxisUnit()const noexcept{return uncertaintyInAxisUnit_;}
 StagePositionEvidence AxisPositionObservation::evidence()const noexcept{return evidence_;}
 
 AxisDisplacement::AxisDisplacement(StageAxisId a,double v,AxisCoordinateUnit u):axisId_(std::move(a)),value_(v),unit_(u){}

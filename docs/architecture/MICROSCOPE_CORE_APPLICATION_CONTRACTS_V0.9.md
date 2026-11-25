@@ -256,11 +256,11 @@ Libraries/
     └── src/
 ~~~
 
-This is a target boundary, not a demand to create empty directories. Add only headers/implementation units used by the first consumer.
+This is a target boundary, not a demand to create empty directories. Add only headers/implementation units used by a real consumer.
 
 Initial public headers cover strong identifiers, typed result/diagnostics, runtime/operation correlation, feedback ingress and serialized state boundary, plus the minimal Application runtime lifecycle/operation-handle facade.
 
-Capability-specific command/payload headers are added only when a real capability uses them. Do not stub equipment, optical topology, calibration, Sample/Slide persistence or image documents into Phase 1.
+Capability-specific command/payload headers are added only when a real capability uses them. Do not stub later equipment specifications, calibration, Sample/Slide persistence or image documents before their phase consumes them. Phase 2A now contains the first concrete optical-topology model.
 
 ## 9. Phase 1 exclusions
 
@@ -278,7 +278,7 @@ Do not add:
 
 ## 10. Phase 1 review and acceptance gate
 
-Before source implementation, review that:
+The Phase 1 foundation gate has passed. Its accepted evidence is:
 
 1. Strong identifiers cannot be mixed accidentally and remain stable across storage moves.
 2. Normal failures are typed; diagnostics are separate from failure.
@@ -291,4 +291,42 @@ Before source implementation, review that:
 9. Camera common types and the existing frame path are reused without duplication/replacement.
 10. Core has no JSON, UI, operating-system or vendor SDK dependency.
 
-**Phase 1 source exit:** real, independently buildable C++17 Core and Application targets; Application depends on Core; no empty speculative modules; first consumed contracts have deterministic tests; operation feedback/state transitions have simulated-adapter contract tests. A source/document commit is not evidence that this exit has passed.
+**Phase 1 source exit:** satisfied by the cross-platform CI matrix. Core and Application configure/build independently and in the root platform-only composition; their registered contract tests pass on Ubuntu GCC, macOS Clang and Windows MSVC. This does not satisfy Phase 4 operation-executor/simulated-device acceptance or hardware acceptance.
+
+## 11. Phase 2A equipment and optical-topology contract
+
+The first equipment model is a typed Core value model, not a general-purpose graph framework.
+
+### 11.1 Physical component identity
+
+- Every installed physical part has one EquipmentComponentId within its microscope definition.
+- EquipmentComponentKind distinguishes OpticalElement, ImagingDevice, IlluminationDevice, MechanicalAssembly and Other. It is classification data, not a behavioral subclass hierarchy.
+- Specialized equipment records introduced in later Phase 2 slices (Objective, Camera, IlluminationSource, Condenser, Stage) refer to the same EquipmentComponentId. They must not create a second identity for the same physical unit.
+- An EquipmentComponent owns its optical ports. OpticalPortId values are unique within one MicroscopeEquipmentDefinition.
+- OpticalElement requires at least one input-capable and one output-capable port. ImagingDevice requires an input-capable port. IlluminationDevice requires an output-capable port. MechanicalAssembly has no optical ports. Other remains extensible without inferred behavior.
+
+### 11.2 Physical connections
+
+OpticalConnection is a directed physical adjacency from an output-capable port to an input-capable port on a different component.
+
+- A physical port participates in at most one OpticalConnection. A component that branches light exposes separate physical output ports for its branches.
+- Bidirectional port capability is explicit; it does not mean the port may be connected to multiple components.
+- Internal passage through an optical component is not represented as a self-connection. It is represented by a path step pairing that component's entry and exit ports.
+
+### 11.3 Ordered paths and shared hardware
+
+An OpticalPath has a stable OpticalPathId and an ordered sequence of OpticalPathStep values. Each step references one EquipmentComponentId and its entry/exit ports.
+
+- The first step may omit its entry port; every later step requires one.
+- The last step may omit its exit port; every earlier step requires one.
+- Where two steps are consecutive, the previous exit and next entry must be joined by the corresponding directed OpticalConnection.
+- Entry/exit ports must belong to the component named by their step and have compatible directions.
+- Shared optical elements are stored once in the component collection. Multiple paths reference the same EquipmentComponentId; a beam splitter uses different output ports for different branches.
+- This representation is equipment topology and ordered light propagation, not an editor graph, command graph, configuration profile or executable behavior model.
+
+### 11.4 Aggregate validation
+
+MicroscopeEquipmentDefinition is the immutable validation boundary for one microscope's component/connection/path collections. Its factory rejects an empty component collection, duplicate component/port/connection/path identities, foreign connection/path references, invalid port ownership/direction, a port connected more than once, same-component physical connections, incomplete interior path steps and missing route connections.
+
+JSON parsing/schema migration remains in Microscope.Application (Phase 5). The Core aggregate accepts typed values and validates domain relationships; it does not parse JSON, access storage or discover hardware.
+

@@ -283,6 +283,7 @@ private:
 enum class FeedbackSubmitStatus {
     Enqueued,
     QueueFull,
+    WrongRuntimeScope,
     Closed
 };
 

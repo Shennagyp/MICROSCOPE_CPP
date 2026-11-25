@@ -15,7 +15,7 @@ final class NativeSlidePreviewPane: NSView {
     private let imageView: NativeSlideImageView
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
-    private let pullFrameRateLabel = NSTextField(labelWithString: "FPS 0.0")
+    private let frameRateLabel = NSTextField(labelWithString: "FPS 0.0")
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "", target: nil, action: nil)
@@ -41,8 +41,6 @@ final class NativeSlidePreviewPane: NSView {
     // The image view owns freeze state; expose it read-only to the frame router.
     var isImageFrozen: Bool { imageView.isImageFrozen }
 
-    private var pullFrameRateMeter = FrameRateCounterMeter()
-    private var frameRateRefreshTimer: Timer?
     private var currentIsActiveTarget = false
     private var currentIsMaximized = false
     private var lastToolbarState: NativeSlidePreviewToolbarState?
@@ -58,10 +56,6 @@ final class NativeSlidePreviewPane: NSView {
         fatalError("NativeSlidePreviewPane does not support NSCoder initialization")
     }
 
-    deinit {
-        frameRateRefreshTimer?.invalidate()
-    }
-
     private func configureSubviews() {
         titleLabel.stringValue = slide.title.uppercased()
         titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
@@ -75,14 +69,14 @@ final class NativeSlidePreviewPane: NSView {
         statusLabel.font = NSFont.systemFont(ofSize: 9, weight: .bold)
         statusLabel.textColor = OptikaPalette.nsSecondaryText
         statusLabel.textColor = OptikaPalette.nsSecondaryText
-        pullFrameRateLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
-        pullFrameRateLabel.textColor = OptikaPalette.nsSecondaryText
-        pullFrameRateLabel.lineBreakMode = .byTruncatingTail
-        pullFrameRateLabel.toolTip =
+        frameRateLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
+        frameRateLabel.textColor = OptikaPalette.nsSecondaryText
+        frameRateLabel.lineBreakMode = .byTruncatingTail
+        frameRateLabel.toolTip =
             "FPS: successful Amcam_PullImageV4 calls per second, derived from the driver's monotonic pull counter. Both slide panes show the same acquisition rate; it is not a sensor-reported FPS value."
-        pullFrameRateLabel.setContentHuggingPriority(.required, for: .horizontal)
-        pullFrameRateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        pullFrameRateLabel.setAccessibilityLabel("Camera pull rate")
+        frameRateLabel.setContentHuggingPriority(.required, for: .horizontal)
+        frameRateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        frameRateLabel.setAccessibilityLabel("Camera pull rate")
 
         imageSizingButton.bezelStyle = .texturedRounded
         imageSizingButton.controlSize = .small
@@ -189,8 +183,8 @@ final class NativeSlidePreviewPane: NSView {
         // actions remain available in a separate floating control cluster.
         configureAnnotationPlate(annotationPlate)
         configureAnnotationPlate(pullFrameRatePlate)
-        pullFrameRateLabel.translatesAutoresizingMaskIntoConstraints = false
-        pullFrameRatePlate.addSubview(pullFrameRateLabel)
+        frameRateLabel.translatesAutoresizingMaskIntoConstraints = false
+        pullFrameRatePlate.addSubview(frameRateLabel)
         configureAnnotationPlate(actionPlate)
         configureAnnotationPlate(toolPlate)
         configureAnnotationPlate(microscopeControlsPlate)
@@ -253,19 +247,19 @@ final class NativeSlidePreviewPane: NSView {
             annotationPlate.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             annotationPlate.topAnchor.constraint(equalTo: topAnchor, constant: 10),
 
-            pullFrameRateLabel.leadingAnchor.constraint(
+            frameRateLabel.leadingAnchor.constraint(
                 equalTo: pullFrameRatePlate.leadingAnchor,
                 constant: 9
             ),
-            pullFrameRateLabel.trailingAnchor.constraint(
+            frameRateLabel.trailingAnchor.constraint(
                 equalTo: pullFrameRatePlate.trailingAnchor,
                 constant: -9
             ),
-            pullFrameRateLabel.topAnchor.constraint(
+            frameRateLabel.topAnchor.constraint(
                 equalTo: pullFrameRatePlate.topAnchor,
                 constant: 5
             ),
-            pullFrameRateLabel.bottomAnchor.constraint(
+            frameRateLabel.bottomAnchor.constraint(
                 equalTo: pullFrameRatePlate.bottomAnchor,
                 constant: -5
             ),
@@ -302,7 +296,6 @@ final class NativeSlidePreviewPane: NSView {
             )
         ])
         synchronizeToolbarState()
-        startFrameRateRefreshTimer()
     }
 
     private func configureIconButton(
@@ -467,15 +460,11 @@ final class NativeSlidePreviewPane: NSView {
         plate.translatesAutoresizingMaskIntoConstraints = false
     }
 
-    func updatePullRate(pulledFrames: UInt64) {
-        let previousPullRate = pullFrameRateMeter.framesPerSecond
-        pullFrameRateMeter.record(
-            pulledFrames,
-            at: ProcessInfo.processInfo.systemUptime
-        )
-        if previousPullRate != pullFrameRateMeter.framesPerSecond {
-            updatePullFrameRateLabel()
-        }
+    func updateFrameRate(_ framesPerSecond: Double) {
+        guard framesPerSecond.isFinite else { return }
+        let value = String(format: "FPS %.1f", framesPerSecond)
+        guard frameRateLabel.stringValue != value else { return }
+        frameRateLabel.stringValue = value
     }
 
     func updateMeasurementCalibration(
@@ -537,25 +526,6 @@ final class NativeSlidePreviewPane: NSView {
         if !hadImage || (hadOverlays && !imageView.hasOverlays) {
             synchronizeToolbarState()
         }
-    }
-
-    private func startFrameRateRefreshTimer() {
-        guard frameRateRefreshTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            let now = ProcessInfo.processInfo.systemUptime
-            self.pullFrameRateMeter.refresh(at: now)
-            self.updatePullFrameRateLabel()
-        }
-        frameRateRefreshTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-
-    private func updatePullFrameRateLabel() {
-        let pullFPS = String(format: "%.1f", pullFrameRateMeter.framesPerSecond)
-        let value = "FPS \(pullFPS)"
-        guard pullFrameRateLabel.stringValue != value else { return }
-        pullFrameRateLabel.stringValue = value
     }
 
     func updatePresentationState(isActiveTarget: Bool, isMaximized: Bool) {

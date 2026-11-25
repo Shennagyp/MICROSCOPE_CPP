@@ -478,23 +478,31 @@ std::string DeviceSession::portUrl() const {
 }
 
 void DeviceSession::close() {
-    if (!device_) return;
-    if (!context_) {
+    if (!device_) {
+        context_.reset();
+        remotePort_ = nullptr;
+        return;
+    }
+    auto context = context_;
+    if (!context) {
         device_ = nullptr;
         remotePort_ = nullptr;
         return;
     }
-    std::lock_guard<std::mutex> guard(context_->mutex);
-    const auto status =
-        context_->consumer.invoke(Operation::devClose, device_);
-    if (status != GenTL::GC_ERR_SUCCESS) {
-        context_->quarantined = true;
+
+    GenTL::GC_ERROR status = GenTL::GC_ERR_SUCCESS;
+    {
+        std::lock_guard<std::mutex> guard(context->mutex);
+        status = context->consumer.invoke(Operation::devClose, device_);
+        if (status != GenTL::GC_ERR_SUCCESS) {
+            context->quarantined = true;
+        }
         device_ = nullptr;
         remotePort_ = nullptr;
+    }
+    if (status != GenTL::GC_ERR_SUCCESS) {
         check(status, "DevClose");
     }
-    device_ = nullptr;
-    remotePort_ = nullptr;
     context_.reset();
 }
 

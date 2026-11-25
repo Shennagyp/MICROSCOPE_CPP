@@ -11,6 +11,19 @@
 namespace microscope::core {
 namespace {
 
+[[nodiscard]] bool isKnownIlluminationIntensityUnit(
+    IlluminationIntensityUnit unit) noexcept {
+    switch (unit) {
+    case IlluminationIntensityUnit::Percent:
+    case IlluminationIntensityUnit::Milliamperes:
+    case IlluminationIntensityUnit::Milliwatts:
+    case IlluminationIntensityUnit::Relative:
+    case IlluminationIntensityUnit::DeviceDefined:
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool isKnownContrastMethod(ContrastMethod value) noexcept {
     switch (value) {
     case ContrastMethod::Brightfield:
@@ -185,6 +198,54 @@ void appendError(
 
 } // namespace
 
+IlluminationIntensitySetting::IlluminationIntensitySetting(
+    double value,
+    IlluminationIntensityUnit unit)
+    : value_(value),
+      unit_(unit) {}
+
+Result<
+    IlluminationIntensitySetting,
+    IlluminationIntensitySettingError> IlluminationIntensitySetting::create(
+        double value,
+        IlluminationIntensityUnit unit) {
+    if (!isKnownIlluminationIntensityUnit(unit)) {
+        return Result<
+            IlluminationIntensitySetting,
+            IlluminationIntensitySettingError>::failure(
+                IlluminationIntensitySettingError::InvalidUnit);
+    }
+    if (!std::isfinite(value) || value < 0.0) {
+        return Result<
+            IlluminationIntensitySetting,
+            IlluminationIntensitySettingError>::failure(
+                IlluminationIntensitySettingError::InvalidValue);
+    }
+    return Result<
+        IlluminationIntensitySetting,
+        IlluminationIntensitySettingError>::success(
+            IlluminationIntensitySetting(value, unit));
+}
+
+double IlluminationIntensitySetting::value() const noexcept {
+    return value_;
+}
+
+IlluminationIntensityUnit IlluminationIntensitySetting::unit() const noexcept {
+    return unit_;
+}
+
+ExposurePreset::ExposurePreset(PositiveMicroseconds exposureTime)
+    : exposureTime_(exposureTime) {}
+
+ExposurePreset ExposurePreset::create(PositiveMicroseconds exposureTime) {
+    return ExposurePreset(exposureTime);
+}
+
+double ExposurePreset::exposureTimeMicroseconds() const noexcept {
+    return exposureTime_.value();
+}
+
 OpticalFunctionRequirement::OpticalFunctionRequirement(
     OpticalElementFunction function,
     std::optional<OpticalCompatibilityId> compatibilityId,
@@ -244,7 +305,10 @@ ConfigurationProfile::ConfigurationProfile(
     std::vector<EquipmentComponentId> compatibleCameraIds,
     std::vector<EquipmentComponentId> compatibleIlluminationIds,
     std::vector<EquipmentComponentId> requiredPathComponentIds,
-    std::vector<OpticalFunctionRequirement> requiredOpticalFunctions)
+    std::vector<OpticalFunctionRequirement> requiredOpticalFunctions,
+    std::optional<NonNegativeNumericalAperture> condenserApertureTarget,
+    std::optional<IlluminationIntensitySetting> illuminationIntensityTarget,
+    std::optional<ExposurePreset> exposurePreset)
     : id_(std::move(id)),
       contrastMethod_(contrastMethod),
       compatibleObjectiveIds_(std::move(compatibleObjectiveIds)),
@@ -253,7 +317,10 @@ ConfigurationProfile::ConfigurationProfile(
       compatibleCameraIds_(std::move(compatibleCameraIds)),
       compatibleIlluminationIds_(std::move(compatibleIlluminationIds)),
       requiredPathComponentIds_(std::move(requiredPathComponentIds)),
-      requiredOpticalFunctions_(std::move(requiredOpticalFunctions)) {}
+      requiredOpticalFunctions_(std::move(requiredOpticalFunctions)),
+      condenserApertureTarget_(std::move(condenserApertureTarget)),
+      illuminationIntensityTarget_(std::move(illuminationIntensityTarget)),
+      exposurePreset_(std::move(exposurePreset)) {}
 
 Result<
     ConfigurationProfile,
@@ -266,7 +333,10 @@ Result<
         std::vector<EquipmentComponentId> compatibleCameraIds,
         std::vector<EquipmentComponentId> compatibleIlluminationIds,
         std::vector<EquipmentComponentId> requiredPathComponentIds,
-        std::vector<OpticalFunctionRequirement> requiredOpticalFunctions) {
+        std::vector<OpticalFunctionRequirement> requiredOpticalFunctions,
+        std::optional<NonNegativeNumericalAperture> condenserApertureTarget,
+        std::optional<IlluminationIntensitySetting> illuminationIntensityTarget,
+        std::optional<ExposurePreset> exposurePreset) {
     if (!isKnownContrastMethod(contrastMethod)) {
         return Result<
             ConfigurationProfile,
@@ -359,7 +429,10 @@ Result<
                 std::move(compatibleCameraIds),
                 std::move(compatibleIlluminationIds),
                 std::move(requiredPathComponentIds),
-                std::move(requiredOpticalFunctions)));
+                std::move(requiredOpticalFunctions),
+                std::move(condenserApertureTarget),
+                std::move(illuminationIntensityTarget),
+                std::move(exposurePreset)));
 }
 
 const ConfigurationProfileId& ConfigurationProfile::id() const noexcept {
@@ -403,6 +476,21 @@ ConfigurationProfile::requiredPathComponentIds() const noexcept {
 const std::vector<OpticalFunctionRequirement>&
 ConfigurationProfile::requiredOpticalFunctions() const noexcept {
     return requiredOpticalFunctions_;
+}
+
+const std::optional<NonNegativeNumericalAperture>&
+ConfigurationProfile::condenserApertureTarget() const noexcept {
+    return condenserApertureTarget_;
+}
+
+const std::optional<IlluminationIntensitySetting>&
+ConfigurationProfile::illuminationIntensityTarget() const noexcept {
+    return illuminationIntensityTarget_;
+}
+
+const std::optional<ExposurePreset>&
+ConfigurationProfile::exposurePreset() const noexcept {
+    return exposurePreset_;
 }
 
 ConfigurationProfileCatalog::ConfigurationProfileCatalog(
@@ -587,9 +675,15 @@ ExposurePolicy ConfigurationRequest::exposurePolicy() const noexcept {
 
 ResolvedConfiguration::ResolvedConfiguration(
     MicroscopeId microscopeId,
-    ConfigurationRequest request)
+    ConfigurationRequest request,
+    std::optional<NonNegativeNumericalAperture> condenserApertureTarget,
+    std::optional<IlluminationIntensitySetting> illuminationIntensityTarget,
+    std::optional<ExposurePreset> exposurePreset)
     : microscopeId_(std::move(microscopeId)),
-      request_(std::move(request)) {}
+      request_(std::move(request)),
+      condenserApertureTarget_(std::move(condenserApertureTarget)),
+      illuminationIntensityTarget_(std::move(illuminationIntensityTarget)),
+      exposurePreset_(std::move(exposurePreset)) {}
 
 const MicroscopeId& ResolvedConfiguration::microscopeId() const noexcept {
     return microscopeId_;
@@ -597,6 +691,21 @@ const MicroscopeId& ResolvedConfiguration::microscopeId() const noexcept {
 
 const ConfigurationRequest& ResolvedConfiguration::request() const noexcept {
     return request_;
+}
+
+const std::optional<NonNegativeNumericalAperture>&
+ResolvedConfiguration::condenserApertureTarget() const noexcept {
+    return condenserApertureTarget_;
+}
+
+const std::optional<IlluminationIntensitySetting>&
+ResolvedConfiguration::illuminationIntensityTarget() const noexcept {
+    return illuminationIntensityTarget_;
+}
+
+const std::optional<ExposurePreset>&
+ResolvedConfiguration::exposurePreset() const noexcept {
+    return exposurePreset_;
 }
 
 ConfigurationResolution::ConfigurationResolution(

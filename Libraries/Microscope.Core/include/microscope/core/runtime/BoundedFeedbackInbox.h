@@ -51,6 +51,7 @@ public:
 
     FeedbackSubmitStatus submit(FeedbackEnvelope<TPayload> feedback) override {
         bool notifyFeedbackLoss=false;
+        bool notifyClosed=false;
         FeedbackSubmitStatus status=FeedbackSubmitStatus::Closed;
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -66,6 +67,7 @@ public:
 
             if(nextSequence_==0) {
                 closed_=true;
+                notifyClosed=true;
                 if(!feedbackLossLatched_) {
                     feedbackLossLatched_=true;
                     notifyFeedbackLoss=true;
@@ -82,6 +84,7 @@ public:
                     microscopeId_,runtimeId_,runtimeGeneration_,nextSequence_);
                 if(!sequence) {
                     closed_=true;
+                    notifyClosed=true;
                     if(!feedbackLossLatched_) {
                         feedbackLossLatched_=true;
                         notifyFeedbackLoss=true;
@@ -93,6 +96,7 @@ public:
                         std::move(sequence).value());
                     if(!receipt) {
                         closed_=true;
+                        notifyClosed=true;
                         if(!feedbackLossLatched_) {
                             feedbackLossLatched_=true;
                             notifyFeedbackLoss=true;
@@ -112,6 +116,8 @@ public:
 
         if(status==FeedbackSubmitStatus::Enqueued)
             available_.notify_one();
+        else if(notifyClosed)
+            available_.notify_all();
 
         if(notifyFeedbackLoss) {
             // Do not let adapter callback exceptions escape a native driver

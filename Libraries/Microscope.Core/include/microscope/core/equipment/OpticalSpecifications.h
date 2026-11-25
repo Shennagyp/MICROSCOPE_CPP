@@ -22,6 +22,10 @@ struct NominalMagnificationTag final {};
 struct NumericalApertureTag final {};
 struct PositiveNanometersTag final {};
 struct CondenserApertureTag final {};
+struct AxisResolutionTag final {};
+struct AxisAccuracyTag final {};
+struct AxisRepeatabilityTag final {};
+struct AxisUncertaintyTag final {};
 } // namespace detail
 
 // Domain-specific positive scalar values. These are not a general unit system.
@@ -100,6 +104,12 @@ private:
 
 using NonNegativeNumericalAperture =
     NonNegativeFiniteValue<detail::CondenserApertureTag>;
+using PositiveAxisResolution = PositiveFiniteValue<detail::AxisResolutionTag>;
+using NonNegativeAxisAccuracy = NonNegativeFiniteValue<detail::AxisAccuracyTag>;
+using NonNegativeAxisRepeatability =
+    NonNegativeFiniteValue<detail::AxisRepeatabilityTag>;
+using NonNegativeAxisUncertainty =
+    NonNegativeFiniteValue<detail::AxisUncertaintyTag>;
 
 enum class ObjectiveChromaticCorrection {
     Achromatic,

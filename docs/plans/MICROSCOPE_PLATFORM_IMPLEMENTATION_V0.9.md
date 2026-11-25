@@ -16,7 +16,7 @@ Keep the current macOS application as one frontend. Preserve the existing camera
 ## Current repository baseline
 
 The current branch contains:
-- Root CMake project using C++ and an optional native macOS application target; the new Core and Application targets are added before existing camera/application targets.
+- Root CMake project using C++ and an optional native macOS application target; the new Core and Application targets are added before existing camera/application targets. `OPTIKA_BUILD_AMSCOPE=OFF` permits a platform-only root configuration without the macOS/vendor camera dependency; the default remains ON.
 - Microscope.Core and Microscope.Application are C++17 static libraries with standalone CMake entry support; configuring Application independently adds its required Core source dependency.
 - Camera/Amscope as the reusable camera driver capability.
 - Application/OptikaB293 containing the current SwiftUI/AppKit application, Objective-C++ camera bridge and current Swift microscope configuration/resolution models.

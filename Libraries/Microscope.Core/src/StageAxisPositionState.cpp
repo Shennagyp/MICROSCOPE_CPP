@@ -56,14 +56,9 @@ Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::homed(
     EquipmentComponentId stageComponentId,const AxisPositionObservation& observation,
     ObservationSource source) {
-    return homed(stageComponentId,observation.position(),
-        observation.uncertaintyInAxisUnit(),observation.evidence(),source);
-}
-
-Result<StageAxisPositionState,StageAxisPositionStateError>
-StageAxisPositionState::homed(
-    EquipmentComponentId stageComponentId,AxisPosition position,double error,
-    StagePositionEvidence evidence,ObservationSource source) {
+    const auto& position=observation.position();
+    const double error=observation.uncertaintyInAxisUnit();
+    const auto evidence=observation.evidence();
     if(!std::isfinite(error)||error<0)
         return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
             StageAxisPositionStateError::InvalidUncertainty);
@@ -121,15 +116,9 @@ StageAxisPositionState::afterCommandedDisplacement(
 Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::afterPositionObservation(
     const AxisPositionObservation& observation,ObservationSource source) const {
-    return afterPositionObservation(
-        observation.position(),observation.uncertaintyInAxisUnit(),
-        observation.evidence(),source);
-}
-
-Result<StageAxisPositionState,StageAxisPositionStateError>
-StageAxisPositionState::afterPositionObservation(
-    AxisPosition observed,double uncertainty,StagePositionEvidence evidence,
-    ObservationSource source) const {
+    const auto& observed=observation.position();
+    const double uncertainty=observation.uncertaintyInAxisUnit();
+    const auto evidence=observation.evidence();
     if(observed.axisId()!=axisId_)
         return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
             StageAxisPositionStateError::AxisMismatch);

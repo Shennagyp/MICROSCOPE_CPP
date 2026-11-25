@@ -1,6 +1,8 @@
 #include "camera/gentl/GenApiDeviceAccess.h"
 #include "camera/gentl/Producer.h"
 
+#include <Base/GCException.h>
+
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -96,6 +98,9 @@ int main(int argc, char** argv) {
 
         std::cout << "GenApi feature and command integration tests passed.\n";
         return EXIT_SUCCESS;
+    } catch (const GenICam::GenericException& error) {
+        std::cerr << "GenApi runtime error: " << error.GetDescription() << '\n';
+        return EXIT_FAILURE;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return EXIT_FAILURE;

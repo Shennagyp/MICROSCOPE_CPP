@@ -36,8 +36,9 @@ SlideRegistration registration(
     return take(SlideRegistration::create(
         id<SlideId>(slideId),id<CalibrationRevisionId>(revision),slot,geometry,{tl,tr,br,bl},0.5));
 }
-StageAxisPositionState homed(const char* axisId,double position,double error) {
+StageAxisPositionState homed(const char* axisId,double position,double error,const char* stageId="stage") {
     return take(StageAxisPositionState::homed(
+        id<EquipmentComponentId>(stageId),
         take(AxisPosition::create(id<StageAxisId>(axisId),position,AxisCoordinateUnit::Micrometers)),
         error,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
 }
@@ -103,7 +104,7 @@ int main() {
 
     const auto unverified=StageNavigationPlanner::resolveAfterHoming(
         carrier,target,
-        take(StageAxisPositionState::unknown(id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers)),
+        take(StageAxisPositionState::unknown(id<EquipmentComponentId>("stage"),id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers)),
         homed("y",0,0.1),policy);
     check(!unverified&&unverified.error()==StageNavigationPlanningError::HomingNotVerified,
           "does not dispatch the saved target before homing/reference is verified");
@@ -123,10 +124,14 @@ int main() {
 
     const auto unknown=StageNavigationPlanner::plan(
         carrier,target,
-        take(StageAxisPositionState::unknown(id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers)),
+        take(StageAxisPositionState::unknown(id<EquipmentComponentId>("stage"),id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers)),
         homed("y",30000,0.1),policy);
     check(unknown&&std::holds_alternative<StageHomeThenMovePlan>(unknown.value()),
           "unknown machine reference plans homing instead of inventing a coordinate");
+    const auto foreignStage=StageNavigationPlanner::plan(
+        carrier,target,homed("x",25000,0.1,"another-stage"),homed("y",30000,0.1),policy);
+    check(!foreignStage&&foreignStage.error()==StageNavigationPlanningError::StageComponentMismatch,
+          "rejects same-named axes from a different installed stage");
 
     if(failures!=0) {
         std::cerr<<failures<<" stage navigation planner test(s) failed\n";

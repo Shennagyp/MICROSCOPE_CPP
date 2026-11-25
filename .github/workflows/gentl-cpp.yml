@@ -1,0 +1,58 @@
+name: Camera GenTL C++ bridge
+
+on:
+  push:
+    branches:
+      - camera-v.2.0
+    paths:
+      - "Camera/GenTL/**"
+      - ".github/workflows/gentl-cpp.yml"
+  pull_request:
+    branches:
+      - camera-v.2.0
+    paths:
+      - "Camera/GenTL/**"
+      - ".github/workflows/gentl-cpp.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: camera-gentl-cpp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: GenTL bridge — ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple Silicon arm64
+            runner: macos-15
+            architecture: arm64
+          - name: Intel x86_64
+            runner: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          cmake -S Camera/GenTL -B build/gentl \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build/gentl --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build/gentl --output-on-failure
+
+      - name: Verify architecture
+        run: |
+          lipo build/gentl/libcamera_gentl_consumer_bridge.a -verify_arch "${{ matrix.architecture }}"

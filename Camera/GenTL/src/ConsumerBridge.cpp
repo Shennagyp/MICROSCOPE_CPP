@@ -58,18 +58,21 @@ std::shared_ptr<ConsumerBridge> ConsumerBridge::load(
             resolve<VersionFunction>(library, "gentl_consumer_header_version");
         const auto invoke = resolve<InvokeFunction>(library, "gentl_consumer_invoke");
 
-        auto result = std::shared_ptr<ConsumerBridge>(new ConsumerBridge(
-            library, create, destroy, bridgeVersion, headerVersion, invoke));
-
-        if (result->bridgeAbiVersion() != expectedBridgeAbi) {
+        if (bridgeVersion() != expectedBridgeAbi) {
             throw std::runtime_error("Unsupported GenTL Consumer bridge ABI version.");
         }
-        if (result->genTLHeaderVersion() != expectedGenTLHeader) {
+        if (headerVersion() != expectedGenTLHeader) {
             throw std::runtime_error("GenTL Consumer bridge was not built against GenTL 1.6.");
         }
+
+        auto* raw = new ConsumerBridge(
+            nullptr, create, destroy, bridgeVersion, headerVersion, invoke);
+        auto result = std::shared_ptr<ConsumerBridge>(raw);
+        raw->libraryHandle_ = library;
+        library = nullptr;
         return result;
     } catch (...) {
-        dlclose(library);
+        if (library) dlclose(library);
         throw;
     }
 }

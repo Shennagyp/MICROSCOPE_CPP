@@ -54,6 +54,51 @@ bool OperationHandle::belongsTo(const RuntimeHandle& runtime) const noexcept {
     return runtime_.identifiesSameRuntime(runtime);
 }
 
+RuntimeSnapshot::RuntimeSnapshot(
+    RuntimeHandle handle,
+    RuntimeLifecycle lifecycle,
+    std::uint64_t revision)
+    : handle_(std::move(handle)),
+      lifecycle_(lifecycle),
+      revision_(revision) {}
+
+core::Result<RuntimeSnapshot, RuntimeSnapshotError> RuntimeSnapshot::create(
+    RuntimeHandle handle,
+    RuntimeLifecycle lifecycle,
+    std::uint64_t revision) {
+    switch (lifecycle) {
+    case RuntimeLifecycle::Initializing:
+    case RuntimeLifecycle::Active:
+    case RuntimeLifecycle::Closing:
+    case RuntimeLifecycle::Closed:
+    case RuntimeLifecycle::Faulted:
+        break;
+    default:
+        return core::Result<RuntimeSnapshot, RuntimeSnapshotError>::failure(
+            RuntimeSnapshotError::InvalidLifecycle);
+    }
+
+    if (revision == 0) {
+        return core::Result<RuntimeSnapshot, RuntimeSnapshotError>::failure(
+            RuntimeSnapshotError::ZeroRevision);
+    }
+
+    return core::Result<RuntimeSnapshot, RuntimeSnapshotError>::success(
+        RuntimeSnapshot(std::move(handle), lifecycle, revision));
+}
+
+const RuntimeHandle& RuntimeSnapshot::handle() const noexcept {
+    return handle_;
+}
+
+RuntimeLifecycle RuntimeSnapshot::lifecycle() const noexcept {
+    return lifecycle_;
+}
+
+std::uint64_t RuntimeSnapshot::revision() const noexcept {
+    return revision_;
+}
+
 OperationView::OperationView(
     OperationHandle handle,
     core::OperationSnapshot snapshot)

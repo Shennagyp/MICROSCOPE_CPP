@@ -18,9 +18,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(CTest)
 
-add_subdirectory(
-    "${CMAKE_CURRENT_LIST_DIR}/../Common"
-    "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
+if(NOT TARGET Camera::Common)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../Common"
+        "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
+endif()
 set(AMSCOPE_VENDOR_SDK_ROOT
     "${CMAKE_CURRENT_LIST_DIR}/../VendorSDK/AmscopeVendorSDK"
     CACHE PATH "Path to the bundled Amscope vendor SDK")

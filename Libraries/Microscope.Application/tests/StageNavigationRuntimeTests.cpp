@@ -478,6 +478,54 @@ void testDispatchPreconditionFailureTerminatesOperation() {
           "pre-dispatch failure does not leave a Running operation or claim that hardware received the command");
 }
 
+void testFeedbackLossInvalidatesPositionFromControlDrain() {
+    RuntimeFixture fixture;
+    const auto installedCarrier = carrier();
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageNavigationRuntime::create(
+        installedCarrier,
+        referencedPosition(installedCarrier.specification()),
+        homingPolicy(),
+        errorBudget(),
+        verificationPolicy(
+            application::motion::StageNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    auto queue = take(application::motion::StageNavigationControlQueue::create(
+        2, fixture.wake));
+
+    for (int i = 0; i < 16; ++i) {
+        const auto feedback = positionFeedback(
+            fixture.device,
+            id<core::OperationId>("telemetry-operation"),
+            id<core::StepId>("telemetry-step"),
+            id<core::CommandId>("telemetry-command"),
+            "x", 21000.0 + static_cast<double>(i));
+        check(fixture.runtime->feedbackIngress().submit(feedback) ==
+                  core::FeedbackSubmitStatus::Enqueued,
+              "feedback fills the bounded ingress before the overflow attempt");
+    }
+    const auto overflow = positionFeedback(
+        fixture.device,
+        id<core::OperationId>("overflow-operation"),
+        id<core::StepId>("overflow-step"),
+        id<core::CommandId>("overflow-command"),
+        "x", 22000.0);
+    check(fixture.runtime->feedbackIngress().submit(overflow) ==
+              core::FeedbackSubmitStatus::QueueFull &&
+          fixture.runtime->feedbackLossLatched(),
+          "overflow latches feedback loss even when the rejected item cannot be queued");
+
+    auto drained = take(queue->drain(navigation));
+    check(drained.healthUpdate &&
+          drained.healthUpdate->disposition ==
+              application::motion::StageNavigationRuntimeDisposition::FeedbackLossDetected &&
+          !navigation.position().horizontal().positionIsUsable() &&
+          !navigation.position().transverse().positionIsUsable(),
+          "owner control drain invalidates both machine references without requiring another feedback item");
+    check(fixture.runtime->feedbackLossLatched(),
+          "the stage runtime does not acknowledge feedback loss before physical reconciliation");
+}
+
 void testHomingRestoresSlideLocalTarget() {
     RuntimeFixture fixture;
     const auto installedCarrier = carrier();
@@ -536,6 +584,7 @@ int main() {
     testControllerPositionObservationsVerifyNavigation();
     testControlQueueDrainsOnRuntimeOwnerThread();
     testDispatchPreconditionFailureTerminatesOperation();
+    testFeedbackLossInvalidatesPositionFromControlDrain();
     testHomingRestoresSlideLocalTarget();
 
     if (failures != 0) {

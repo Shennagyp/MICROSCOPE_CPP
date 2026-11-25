@@ -277,11 +277,11 @@ public:
         if(identity_.operationId!=candidate.operationId ||
            identity_.stepId!=candidate.stepId)
             return false;
-        if(candidate.commandId) {
-            return identity_.commandId &&
+        if(identity_.commandId) {
+            return candidate.commandId &&
                    *identity_.commandId==*candidate.commandId;
         }
-        return true;
+        return !candidate.commandId;
     }
 
     bool matches(const FeedbackMetadata& feedback) const noexcept {

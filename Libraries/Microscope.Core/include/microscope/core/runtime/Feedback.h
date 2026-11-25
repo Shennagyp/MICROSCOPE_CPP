@@ -33,7 +33,7 @@ enum class ObservationSource {
 
 enum class DeviceTimestampError {
     ZeroTickRate,
-    EmptyClockDomain
+    InvalidClockDomain
 };
 
 // A device timestamp is constructible only with an explicit positive tick
@@ -48,9 +48,13 @@ public:
             return Result<DeviceTimestamp, DeviceTimestampError>::failure(
                 DeviceTimestampError::ZeroTickRate);
         }
-        if (clockDomain && clockDomain->empty()) {
-            return Result<DeviceTimestamp, DeviceTimestampError>::failure(
-                DeviceTimestampError::EmptyClockDomain);
+        if (clockDomain) {
+            const auto clockDomainValidation =
+                validateOpaqueIdentifier(*clockDomain);
+            if (!clockDomainValidation) {
+                return Result<DeviceTimestamp, DeviceTimestampError>::failure(
+                    DeviceTimestampError::InvalidClockDomain);
+            }
         }
 
         return Result<DeviceTimestamp, DeviceTimestampError>::success(

@@ -128,16 +128,20 @@ enum class FeedbackSubmitStatus {
 };
 
 enum class FeedbackIngressSequenceError {
-    ZeroSequence
+    ZeroSequence,
+    DifferentRuntimeScope
 };
 
-// A Core-assigned positive sequence. It is deliberately distinct from the
-// optional adapter/device source sequence, where zero may be a valid value.
+// Positive Core-assigned receive sequence scoped to one runtime incarnation.
+// Values from different runtime generations are never ordered against each other.
 class FeedbackIngressSequence final {
 public:
     [[nodiscard]] static Result<
         FeedbackIngressSequence,
-        FeedbackIngressSequenceError> create(std::uint64_t value) {
+        FeedbackIngressSequenceError> create(
+            RuntimeId runtimeId,
+            RuntimeGeneration runtimeGeneration,
+            std::uint64_t value) {
         if (value == 0) {
             return Result<
                 FeedbackIngressSequence,
@@ -148,50 +152,107 @@ public:
         return Result<
             FeedbackIngressSequence,
             FeedbackIngressSequenceError>::success(
-                FeedbackIngressSequence(value));
+                FeedbackIngressSequence(
+                    std::move(runtimeId),
+                    runtimeGeneration,
+                    value));
+    }
+
+    [[nodiscard]] const RuntimeId& runtimeId() const noexcept {
+        return runtimeId_;
+    }
+
+    [[nodiscard]] RuntimeGeneration runtimeGeneration() const noexcept {
+        return runtimeGeneration_;
     }
 
     [[nodiscard]] std::uint64_t value() const noexcept {
         return value_;
     }
 
-    friend bool operator==(
-        FeedbackIngressSequence left,
-        FeedbackIngressSequence right) noexcept {
-        return left.value_ == right.value_;
+    [[nodiscard]] bool belongsTo(
+        const RuntimeId& runtimeId,
+        RuntimeGeneration runtimeGeneration) const noexcept {
+        return runtimeId_ == runtimeId &&
+               runtimeGeneration_ == runtimeGeneration;
     }
 
-    friend bool operator!=(
-        FeedbackIngressSequence left,
-        FeedbackIngressSequence right) noexcept {
-        return !(left == right);
-    }
+    [[nodiscard]] Result<bool, FeedbackIngressSequenceError> precedes(
+        const FeedbackIngressSequence& other) const {
+        if (!belongsTo(other.runtimeId_, other.runtimeGeneration_)) {
+            return Result<bool, FeedbackIngressSequenceError>::failure(
+                FeedbackIngressSequenceError::DifferentRuntimeScope);
+        }
 
-    friend bool operator<(
-        FeedbackIngressSequence left,
-        FeedbackIngressSequence right) noexcept {
-        return left.value_ < right.value_;
+        return Result<bool, FeedbackIngressSequenceError>::success(
+            value_ < other.value_);
     }
 
 private:
-    explicit FeedbackIngressSequence(std::uint64_t value) noexcept
-        : value_(value) {}
+    FeedbackIngressSequence(
+        RuntimeId runtimeId,
+        RuntimeGeneration runtimeGeneration,
+        std::uint64_t value)
+        : runtimeId_(std::move(runtimeId)),
+          runtimeGeneration_(runtimeGeneration),
+          value_(value) {}
 
+    RuntimeId runtimeId_;
+    RuntimeGeneration runtimeGeneration_;
     std::uint64_t value_;
 };
 
 // Core-owned, runtime-local receipt metadata. receivedAt is a monotonic
 // ordering/deadline value and is not a durable wall-clock timestamp.
-// ingressSequence starts at one and increases within one runtime generation.
 struct FeedbackReceiptMetadata final {
     std::chrono::steady_clock::time_point receivedAt;
     FeedbackIngressSequence ingressSequence;
 };
 
+enum class FeedbackReceiptError {
+    RuntimeScopeMismatch
+};
+
 template <typename TPayload>
-struct FeedbackReceipt final {
-    FeedbackEnvelope<TPayload> feedback;
-    FeedbackReceiptMetadata receipt;
+class FeedbackReceipt final {
+public:
+    [[nodiscard]] static Result<FeedbackReceipt, FeedbackReceiptError> create(
+        FeedbackEnvelope<TPayload> feedback,
+        std::chrono::steady_clock::time_point receivedAt,
+        FeedbackIngressSequence ingressSequence) {
+        const auto& runtime = feedback.metadata.correlation.runtimeDevice;
+        if (!ingressSequence.belongsTo(
+                runtime.runtimeId,
+                runtime.runtimeGeneration)) {
+            return Result<FeedbackReceipt, FeedbackReceiptError>::failure(
+                FeedbackReceiptError::RuntimeScopeMismatch);
+        }
+
+        return Result<FeedbackReceipt, FeedbackReceiptError>::success(
+            FeedbackReceipt(
+                std::move(feedback),
+                FeedbackReceiptMetadata{
+                    receivedAt,
+                    std::move(ingressSequence)}));
+    }
+
+    [[nodiscard]] const FeedbackEnvelope<TPayload>& feedback() const noexcept {
+        return feedback_;
+    }
+
+    [[nodiscard]] const FeedbackReceiptMetadata& receipt() const noexcept {
+        return receipt_;
+    }
+
+private:
+    FeedbackReceipt(
+        FeedbackEnvelope<TPayload> feedback,
+        FeedbackReceiptMetadata receipt)
+        : feedback_(std::move(feedback)),
+          receipt_(std::move(receipt)) {}
+
+    FeedbackEnvelope<TPayload> feedback_;
+    FeedbackReceiptMetadata receipt_;
 };
 
 // Implementations are thread-safe. Enqueued means the ingress owns the
@@ -207,5 +268,4 @@ public:
     [[nodiscard]] virtual FeedbackSubmitStatus submit(
         FeedbackEnvelope<TPayload> feedback) = 0;
 };
-
 } // namespace microscope::core

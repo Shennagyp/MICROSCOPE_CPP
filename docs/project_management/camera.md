@@ -46,7 +46,7 @@ The Optika GUI is implemented with **SwiftUI/AppKit**, not Qt. Its camera-facing
 - `Application/OptikaB293/Sources/Adapters/Camera/NativeCameraController.cpp/.h` — application adapter/controller and serialized command execution;
 - `Application/OptikaB293/Sources/Adapters/Camera/NativeCameraFrameFeed.swift` — narrow latest-frame consumption protocol.
 
-The Optika application target links `Amscope::Driver` and native Apple frameworks. Its application shell and presentation are not supplied by the Camera Module. The Optika application owns its presentation. No reusable Qt UI or preview deliverable remains in the active Camera Module scope.
+The Optika application target links `Amscope::Driver` and native Apple frameworks. Its application shell and presentation are application-owned. No reusable Qt UI or preview deliverable remains in the active Camera Module scope.
 
 Ownership remains layered:
 1. `AmcamCamera` is the sole owner of the AmScope SDK handle/session and native acquisition.
@@ -191,9 +191,7 @@ Export stable namespaced CMake targets, package config/version files, public hea
 
 Required consumer configurations:
 - clean non-Qt consumer using only the core driver/common contracts;
-- clean Qt consumer using the explicitly exported streaming/UI targets;
 - no repository-relative paths;
-- no Qt leakage into non-Qt consumers;
 - provider SDK dependencies private unless that provider is selected.
 
 **Status:** Initial install rules exist. The non-Qt installed-header and syntax check has passed. Exported package/config/version files and clean native/GenTL external consumer projects remain open; Qt consumers are excluded from the revised scope.
@@ -304,7 +302,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** to be updated from `camera-v.2.0`. **Latest implementation checkpoint:** `682724d04e9abaea4f91e73d7e3de57136421045`. The official GenApi 3.5.1 SDK build passed Intel and Apple Silicon in [#45688350553](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45688350553). The empty-payload frame-adapter regression run [#45690108087](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45690108087) is pending Apple Silicon completion. The earlier bridge/stream baseline `549433466098c5daeb63d72609776d958a35c2fe` passed both architectures in [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
+**Latest Camera status checkpoint:** to be updated from `camera-v.2.0`. **Latest implementation checkpoint:** `682724d04e9abaea4f91e73d7e3de57136421045`. The official GenApi 3.5.1 SDK build passed Intel and Apple Silicon in [#45688350553](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45688350553). The empty-payload frame-adapter regression [#45690108087](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45690108087) passed Intel; Apple Silicon is still queued. The earlier bridge/stream baseline `549433466098c5daeb63d72609776d958a35c2fe` passed both architectures in [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

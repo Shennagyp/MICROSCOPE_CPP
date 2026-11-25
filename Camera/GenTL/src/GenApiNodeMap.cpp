@@ -14,7 +14,7 @@ GenApiPort::GenApiPort(std::shared_ptr<DeviceSession> device) noexcept
 
 GenApi::EAccessMode GenApiPort::GetAccessMode() const {
     if (!device_ || !*device_) return GenApi::NA;
-    return device_->accessFlags() == GenTL::DEVICE_ACCESS_READONLY
+    return (device_->accessFlags() & GenTL::DEVICE_ACCESS_READONLY) != 0
         ? GenApi::RO
         : GenApi::RW;
 }

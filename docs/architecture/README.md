@@ -3,6 +3,7 @@
 ## Authoritative platform target
 
 - [Microscope Platform Architecture v0.9](MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md) — authoritative ownership, C++ library boundaries, JSON microscope definitions, adapter composition, operation/feedback lifecycle, calibration, slides, acquisition, persistence and frontend independence.
+- [Microscope Core and Application Contracts v0.9](MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md) — Phase 1 public contract conventions for identities, results, feedback correlation, adapter ports, runtime/API boundaries and compatibility with Camera::Common.
 - [Microscope Platform Implementation Plan v0.9](../plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md) — incremental migration phases and acceptance criteria.
 
 ## Existing implementation references

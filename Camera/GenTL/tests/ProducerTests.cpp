@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
             frame->frameId != 42 ||
             frame->timestampNanoseconds != 123456789 ||
             frame->pixelFormat != UINT64_C(0x01080001) ||
-            frame->pixelFormatNamespace != PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
+            frame->pixelFormatNamespace != GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
             frame->width != 4 || frame->height != 4 ||
             frame->imagePresent != true || frame->incomplete) return 14;
 

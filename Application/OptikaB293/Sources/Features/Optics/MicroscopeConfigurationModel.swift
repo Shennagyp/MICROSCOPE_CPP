@@ -17,6 +17,9 @@ final class MicroscopeConfigurationModel: ObservableObject {
         configuration: .optikaB293
     )
 
+    /// Notifies camera orchestration when the selected objective changes.
+    var onActiveObjectiveChanged: (() -> Void)?
+
     /// Notifies application-level orchestration after a persisted optical change.
     var onConfigurationChanged: (() -> Void)?
 
@@ -50,12 +53,30 @@ final class MicroscopeConfigurationModel: ObservableObject {
     }
 
     func selectObjective(_ objectiveID: String) {
-        guard configuration.objectives.contains(where: {
-            $0.id == objectiveID
-        }) else { return }
+        guard objectiveID != configuration.activeObjectiveID,
+              configuration.objectives.contains(where: {
+                  $0.id == objectiveID
+              }) else { return }
 
         var updated = configuration
         updated.activeObjectiveID = objectiveID
+        configuration = updated
+        onActiveObjectiveChanged?()
+    }
+
+    func updateExposureProfile(
+        _ profile: ObjectiveExposureProfile,
+        for objectiveID: String
+    ) {
+        guard configuration.objectives.contains(where: {
+            $0.id == objectiveID
+        }) else { return }
+        guard configuration.objectiveExposureProfiles[objectiveID] != profile else {
+            return
+        }
+
+        var updated = configuration
+        updated.objectiveExposureProfiles[objectiveID] = profile
         configuration = updated
     }
 

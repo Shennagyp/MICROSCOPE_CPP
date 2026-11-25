@@ -1004,13 +1004,16 @@ Migration rules:
 
 **Exit:** one authoritative platform architecture and a traceable migration plan.
 
-### Phase 1 — C++ library foundations
+### Phase 1 — C++ library foundations and public contracts
 - Create independent CMake targets for Microscope.Core and Microscope.Application.
-- Establish C++17 public API conventions, strong IDs, units, diagnostics and Result semantics.
-- Establish Core port/event contracts and Application API boundary.
+- Establish C++17 public API conventions, strong IDs, units, typed Result/Status and Diagnostic semantics.
+- Define common feedback correlation, provenance, ingress and operation-handle contracts.
+- Establish the capability-specific adapter-port convention; add real device command ports only with the capability that first consumes them.
+- Define the minimal Application runtime lifecycle/API boundary without adding JSON loaders or the factory registry yet.
+- Keep the first Core public API independent of Camera::Common, UI, OS APIs, vendor SDKs, JSON and Application.
 - Confirm dependency direction with build-graph inspection.
 
-**Exit:** both libraries build independently; Application depends on Core; Core has no frontend, vendor SDK or JSON dependency.
+**Exit:** both libraries build independently; Application depends on Core and not vice versa; initial public contracts compile and have focused type/validation/feedback-metadata tests. Full operation-state execution and simulated-device lifecycle tests remain Phase 4 acceptance.
 
 ### Phase 2 — Core equipment and optical model
 - Define microscope, component identity, objectives, cameras, light paths, illumination, condenser, stage and axes.
@@ -1027,17 +1030,18 @@ Migration rules:
 **Exit:** objective/contrast/light-path/camera combinations resolve from data; invalid or unavailable combinations are diagnosed; no configuration behavior resides in objective/filter classes or UI.
 
 ### Phase 4 — Core operation runtime and feedback
-- Define operation, step, command, feedback and observation contracts.
+- Define operation, step and dependency-plan contracts.
+- Add the first real capability-specific typed command ports and normalized typed feedback payloads.
 - Implement correlation, event ordering, serialized state reduction, timeouts, cancellation and partial-failure handling.
-- Execute through simulated adapter ports first.
-- Verify that device completion and Core verification remain separate.
+- Execute through simulated implementations of the real capability ports first.
+- Verify that adapter acceptance, device acknowledgement, hardware action completion and Core verification remain separate.
 
 **Exit:** tests cover accepted/rejected commands, delayed feedback, duplicate/stale/late feedback, missing readback, manual confirmation, failure, timeout, cancellation and dependent-step ordering.
 
 ### Phase 5 — JSON definitions, deployments and Application composition
 - Define/version microscope and deployment JSON schemas.
 - Implement Application-owned definition catalog/loader and typed conversion.
-- Implement explicit adapter factory registration and resource claiming.
+- Implement explicit adapter factory registration and resource claiming for the already-defined capability ports.
 - Create/open/close multiple microscope runtimes.
 
 **Exit:** valid JSON creates a Core runtime; invalid schema, invalid equipment topology and unavailable adapters produce distinct diagnostics.

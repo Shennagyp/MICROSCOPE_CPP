@@ -371,9 +371,13 @@ Core issues a new DeviceSessionGeneration for each device open/reopen within a r
 
 Feedback associated with an active operation additionally carries OperationId and StepId as one indivisible correlation, plus CommandId where related to a dispatched command. Unsolicited telemetry has no operation correlation; it cannot satisfy an active operation's completion predicate.
 
-Every item also carries a normalized feedback fact category, source/provenance, optional adapter/device source sequence, optional device timestamp with its clock domain and a positive explicit tick rate, and a typed payload or normalized diagnostic. Initial adapter fact categories are DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure. CommandDispatched and TimeoutElapsed remain Core runtime facts. When feedback enters Core, the runtime separately stamps monotonic receipt time and Core ingress sequence; neither replaces device time or adapter source sequence.
+Every item also carries a normalized feedback fact category, source/provenance, optional adapter/device source sequence, optional device timestamp with its clock domain and a positive explicit tick rate, and a typed payload or normalized diagnostic. Initial adapter fact categories are DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure. CommandDispatched and TimeoutElapsed remain Core runtime facts.
 
-The Core uses these identifiers/generations to reject duplicate, stale, unrelated or late feedback. A callback from a previous operation or runtime generation must not update the current operation merely because it concerns the same physical device.
+Adapter/device source sequence is scoped to DeviceSessionGeneration; zero may be a valid first sequence and absence means the source does not report one. On ingress, Core wraps the feedback in a receipt with a separate positive Core ingress sequence and a monotonic steady-clock receipt time. The receipt sequence orders arrival within a runtime generation and is not interchangeable with device source sequence. The steady-clock value is runtime-local for ordering/deadlines, not a durable wall-clock timestamp.
+
+Ingress submission outcomes are Enqueued, QueueFull and Closed. Enqueued transfers ownership of the feedback to Core; it does not mean that an adapter accepted a hardware command. On QueueFull, the ingress itself must latch feedback loss and mark affected device/runtime state unknown before returning. It cannot rely on a later adapter callback to report the loss. Correlated loss blocks verification of affected work; uncorrelated telemetry loss makes that device's observed state uncertain. The condition is cleared only after explicit reconciliation/readback establishes the required state. Closed means that runtime ingress has been disposed.
+
+The Core uses these identities/generations to reject duplicate, stale, unrelated or late feedback. A callback from a previous operation, runtime generation or device-session generation must not update the current state merely because it concerns the same physical device.
 
 ### 7.4 Observation provenance
 

@@ -1,0 +1,274 @@
+# Microscope Core and Application Contracts — v0.9
+
+**Architecture reference:** MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
+**Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
+**Status:** Phase 1 contract specification; not an implementation claim.  
+**Language baseline:** C++17.
+
+## 1. Purpose
+
+This document fixes the smallest public contract surface required to begin the two-library implementation.
+
+- **Microscope.Core** owns microscope-domain meaning, validation, planning, operation state and feedback evaluation.
+- **Microscope.Application** loads definitions/deployments, composes adapters, manages Core runtimes and exposes use cases to front ends.
+- Hardware/storage adapters implement ports declared by the owning contract layer.
+- Front ends submit application intents and render application projections.
+
+This does not specify every future subsystem. Equipment-specific command types, persisted record schemas, calibration algorithms and acquisition payload details are introduced with the phases that consume them.
+
+The first implementation uses C++17. Microscope.Core must not acquire Qt, Swift/Objective-C++, JSON, vendor SDK, DICOM or filesystem dependencies.
+
+## 2. Ownership and dependency rules
+
+| Concern | Owner | Boundary |
+|---|---|---|
+| Strong identities, result/diagnostic conventions and domain units | Core | Stable C++ value contracts |
+| Equipment meaning and configuration rules | Core | Typed values and pure functions |
+| Operation/step state and completion predicates | Core | Serialized runtime and pure state transitions |
+| Hardware command semantics | Core | Capability-specific command types and ports |
+| SDK/protocol translation and physical I/O | Adapter | Implements Core ports |
+| Normalized hardware feedback | Adapter produces; Core evaluates | Correlated envelope and typed payload |
+| JSON parsing and schema migration | Application / JSON infrastructure | Converts versioned input to typed Core values |
+| Adapter factories and endpoint bindings | Application composition | Explicit registration and construction |
+| Runtime lifecycle and frontend API | Application | Owns Core runtime lifetime and projections |
+| UI and transient interaction | Front end | No microscope policy or SDK access |
+
+Core must not depend on Application. Application may depend on Core. Adapter implementations depend on the Core port they implement and the relevant SDK/driver. The executable/host links Application and selected concrete adapters.
+
+Do not introduce a generic plugin framework, service locator, universal message bus, universal workflow engine or generic string-based command API.
+
+## 3. Public C++ type conventions
+
+### 3.1 Strong identifiers
+
+Use distinct strong types for at least:
+
+- MicroscopeId, RuntimeId and RuntimeGeneration
+- DeviceId
+- SampleId, SlideId and TileId
+- AcquisitionPlanId, AcquisitionRunId, ImageFrameId and DerivedImageId
+- OperationId, StepId and CommandId
+- A calibration identity/revision type when Phase 6 defines its lifecycle
+
+An identifier is opaque. It is not a label, display index, path, serial number or timestamp. Strong types must not implicitly convert to each other or to an untyped string. Serialization uses a stable textual representation without making its format part of domain meaning.
+
+Persisted IDs remain stable across renames, folder moves, exports and imports. Identity generation is injected at the boundary that creates the entity/runtime; Core does not depend on a particular UUID library. The generator provides collision-resistant values in the persistence namespace, and persistence rejects collisions rather than overwriting records.
+
+DeviceId is the logical endpoint from the microscope definition. A vendor enumeration index or transient SDK handle is not a DeviceId.
+
+### 3.2 Value and ownership semantics
+
+- Small domain facts are value types; long-lived runtime ownership is explicit and RAII-based.
+- Polymorphic public interfaces have virtual destructors.
+- Use std::optional<T> for genuine absence; do not use undocumented zero/empty/sentinel values.
+- Use std::variant for closed alternatives with distinct meanings.
+- std::string_view is only for synchronous, non-retained input. Queued/retained work owns its strings and payloads.
+- Public types expose no vendor handles, Qt objects, Swift objects or filesystem paths.
+- Prefer concrete value types over inheritance hierarchies. Runtime polymorphism belongs at actual adapter-port and factory boundaries.
+
+### 3.3 Units and numeric values
+
+A physical quantity must not be an unexplained double in a public domain contract.
+
+Use named quantity types or an explicit value-plus-unit representation with a documented canonical unit:
+
+| Quantity | Initial canonical unit |
+|---|---|
+| Length / displacement | micrometre (µm) |
+| Angle | radian (rad) |
+| Duration | microsecond (µs) |
+| Image coordinate | pixel (px), with defined axis and origin |
+| Pixel count / dimensions | integer pixel count |
+
+Serialized records carry explicit unit identifiers or a schema-defined unit. Conversion occurs at named boundaries. Do not create a general dimensional-analysis framework until actual operations require one.
+
+Validate numeric finiteness and applicable ranges. Resolution, accuracy, precision, repeatability and uncertainty remain distinct. Conversion does not imply measurement accuracy. Device-native units remain in adapter translation code unless explicitly modeled as a reported domain observation.
+
+## 4. Result, error and diagnostic conventions
+
+Normal contract failures use typed results, not Boolean return values or exceptions for routine control flow.
+
+Use a C++17 Result<T, E> convention based on a discriminated success/error value, with an explicit no-value specialization or Status<E> for operations that return no value. E is specific to the boundary/use case; do not collapse failures into one global string error.
+
+A failure contains a stable machine-readable code, human-readable message, relevant entity/operation/device context and optional field/path context. Retryability is included only when the owner can justify it.
+
+Adapter failures may preserve an opaque backend code and backend context. Core must not reinterpret a vendor native code as a cross-vendor semantic code.
+
+A Diagnostic is separate from failure. Validation may succeed while returning warnings/information. Diagnostics have severity, stable code, message and optional context. User-facing text is not the machine-readable code.
+
+Infrastructure/host boundaries may catch exceptions and translate them to typed failures. Exceptions must not escape device callbacks, cross a C ABI or represent ordinary validation, unavailable capability, timeout or rejected commands.
+
+## 5. Operation and feedback contracts
+
+### 5.1 Distinct facts and ownership
+
+| Fact | Produced by | Meaning |
+|---|---|---|
+| OperationRequested | Application/front end | A domain intent was submitted |
+| CommandDispatched | Core runtime | Core invoked a specific adapter port |
+| AdapterAccepted | Adapter submission result, recorded by Core | Adapter accepted responsibility for handling the command |
+| DeviceAcknowledged | Adapter, based on SDK/device evidence | Device/SDK acknowledged the command, when available |
+| DeviceProgress | Adapter | Device/SDK reported progress |
+| DeviceActionCompleted | Adapter | One physical action is reported complete |
+| DeviceStateObserved | Adapter | A state value was read/reported, with provenance |
+| StepVerified | Core | Evidence satisfies the step completion predicate |
+| OperationSucceeded | Core | All required steps met required completion/assurance conditions |
+| OperationFailed | Adapter or Core, with origin identified | Device/adapter or domain execution failed |
+| TimeoutElapsed | Core runtime | Core deadline elapsed without sufficient evidence |
+
+CommandDispatched is a Core fact, not adapter feedback. The port's immediate submission result distinguishes adapter acceptance from immediate rejection. Adapter acceptance means only that the adapter has assumed responsibility. Device acknowledgement is a separate later fact and may not exist for every device.
+
+An SDK call returning or a selector stopping does not by itself prove the requested physical state. DeviceActionCompleted is not StepVerified.
+
+### 5.2 Correlation and timestamps
+
+Feedback associated with active work carries:
+
+- MicroscopeId, RuntimeId and RuntimeGeneration
+- OperationId and StepId
+- CommandId when related to a command
+- logical DeviceId
+- optional adapter/device source sequence
+- feedback kind and typed payload
+- source/provenance
+- device timestamp and clock domain/timebase when available
+
+Core stamps receipt time using its monotonic clock and assigns its own ingress sequence. Device timestamps remain device observations; they are not compared directly with the Core monotonic clock without a documented clock mapping.
+
+Unsolicited telemetry may omit operation/step/command correlation, but must identify runtime, device and source generation. It cannot satisfy an active operation's completion predicate without valid correlation.
+
+Feedback from an old runtime generation or a different/superseded operation, step or command is stale for that work. It may be retained diagnostically but must not mutate current operation state.
+
+### 5.3 Typed feedback and provenance
+
+The common correlation envelope is separate from the payload. Payloads are closed, strongly typed Core values defined with the capability that uses them.
+
+Do not use std::any, JSON objects, arbitrary string maps or vendor SDK structures as the feedback contract. Do not invent a universal device-state value bag. Add payload alternatives only with a real capability port.
+
+Observation provenance distinguishes hardware readback/encoder, device event, SDK status, operator confirmation, calibrated estimate and unknown. Operator confirmation is not sensor verification. A calibrated estimate is not a measured position.
+
+### 5.4 Capability-specific ports
+
+Ports accept capability-specific Core command types. Examples introduced in their owning phases include objective selection, optical selector movement, illumination configuration, stage motion and camera acquisition.
+
+Each port receives a typed command with correlation IDs, returns a typed immediate submission result (accepted responsibility or rejected), and emits normalized asynchronous feedback through the runtime-provided ingress. It does not mutate Core state. Vendor-specific details remain inside the adapter unless a normalized domain fact exists.
+
+Do not create a universal IDevice.Execute(DeviceCommand) port merely to avoid defining real capabilities. Factor shared mechanics only when real ports have identical semantics and lifecycle requirements.
+
+### 5.5 Runtime state and notifications
+
+Core owns operation and step state. Initial operation states:
+
+Accepted, Running, AwaitingOperator, Verifying, Succeeded, Failed, PartiallyCompleted, CancellationRequested, Cancelled.
+
+Initial step states:
+
+Pending, Dispatched, AdapterAccepted, DeviceAcknowledged, Executing, AwaitingOperator, AwaitingObservation, Verifying, Verified, Failed, TimedOut, Skipped.
+
+A device need not emit every intermediate state. Missing acknowledgement/progress must not be fabricated.
+
+The runtime exposes an operation handle containing OperationId, immutable operation snapshot/query, asynchronous cancellation request and subscription to immutable operation events/snapshots.
+
+A cancellation request is not proof that hardware stopped. Late feedback cannot convert terminal failure/cancellation into success. Core reconciles physical state before a dependent operation requiring a known safe state.
+
+### 5.6 Threading and callbacks
+
+Each Core runtime has one serialized logical owner for state reduction.
+
+Adapter callbacks may run on SDK/device threads. They only copy/normalize data and submit it to runtime feedback ingress; they do not call reducers, mutate Core state or invoke front ends directly.
+
+Feedback ingress is thread-safe. Queue saturation/loss is surfaced as a lost-feedback/unknown-state condition; it cannot be silently discarded while an operation can still be marked successful. Runtime processing serializes accepted feedback and rejects stale correlation/generation.
+
+Application subscribers receive immutable notifications on an application-controlled delivery context, never a hardware callback thread. Notification callbacks cannot re-enter Core state mutation.
+
+Live image-frame delivery is a separate high-rate data path, not the ordinary operation-feedback channel.
+
+## 6. Microscope.Application boundary
+
+Application is the composition/frontend boundary, not a second microscope engine.
+
+Initial responsibilities:
+- Load versioned microscope definitions and deployment bindings.
+- Ask Core to validate typed equipment definitions.
+- Resolve registered adapter factories for logical endpoints.
+- Claim exclusive hardware resources before runtime activation.
+- Create/open/query/close/dispose Core runtimes.
+- Expose domain-specific commands/queries and operation handles.
+- Publish immutable runtime and operation projections.
+- Coordinate persistence, workspace catalogs and slide-folder selection without transferring policy into UI.
+
+The public API is use-case-oriented. It does not expose a generic string command executor, public service locator, raw adapter factories to front ends or mutable Core internals.
+
+A RuntimeId is bound to one physical MicroscopeId. One physical microscope has at most one active controlling runtime in a host. A conflicting second open fails with a typed resource-conflict result.
+
+The host registers concrete factories explicitly during composition. The registry is internal to Application composition, not a dynamic plugin platform.
+
+A front end may hold an operation handle and query/subscribe to its state. It does not own the operation, adapter or device session.
+
+## 7. Existing camera contract compatibility
+
+The repository already contains Camera::Common: camera::Frame, FramePtr, camera discovery/capability values, feature descriptors/access and FrameStreamMailbox. These types remain owned by the camera capability.
+
+Do not copy or rename them into Microscope.Core. The first Core public API must not depend on AmScope, Qt, GenTL or vendor structures.
+
+camera::FramePtr is an immutable in-memory frame lease used by the camera pipeline. Domain ImageFrame is a persisted acquisition record with stable identity, run/tile references, capture metadata and an immutable payload reference. They are not interchangeable. The camera adapter/integration boundary maps delivered frame leases into acquisition/persistence contracts without changing the existing bounded frame pool, lease ownership, latest-frame mailbox or preview path.
+
+A direct Core dependency on Camera::Common is not assumed. Add one only if a concrete public contract requires it and the dependency remains backend-neutral and acyclic.
+
+## 8. Initial target/header boundary
+
+The first Phase 1 source slice should be small:
+
+~~~text
+Libraries/
+├── Microscope.Core/
+│   ├── CMakeLists.txt
+│   ├── include/microscope/core/
+│   │   ├── ids/
+│   │   ├── result/
+│   │   └── runtime/
+│   └── src/
+└── Microscope.Application/
+    ├── CMakeLists.txt
+    ├── include/microscope/application/
+    │   ├── runtime/
+    │   └── composition/
+    └── src/
+~~~
+
+This is a target boundary, not a demand to create empty directories. Add only headers/implementation units used by the first consumer.
+
+Initial public headers cover strong identifiers, typed result/diagnostics, runtime/operation correlation, feedback ingress and serialized state boundary, plus the minimal Application runtime lifecycle/operation-handle facade.
+
+Capability-specific command/payload headers are added only when a real capability uses them. Do not stub equipment, optical topology, calibration, Sample/Slide persistence or image documents into Phase 1.
+
+## 9. Phase 1 exclusions
+
+Do not add:
+- Generic event bus or event-sourcing store.
+- Generic workflow/process engine.
+- Universal hardware command interface.
+- General dependency-injection/service-locator framework.
+- Custom dimensional-analysis library.
+- JSON parser or JSON types in Core.
+- Core-owned image buffer pool or replacement frame stream.
+- Placeholder classes for every future subsystem.
+- Qt/Swift/UI dependencies in Core or Application.
+- New camera lifecycle abstraction that collapses backend differences.
+
+## 10. Phase 1 review and acceptance gate
+
+Before source implementation, review that:
+
+1. Strong identifiers cannot be mixed accidentally and remain stable across storage moves.
+2. Normal failures are typed; diagnostics are separate from failure.
+3. CommandDispatched, AdapterAccepted, DeviceAcknowledged, DeviceActionCompleted and StepVerified are distinct facts with distinct owners.
+4. Operation feedback is correlated to runtime, operation, step, command and device.
+5. Adapter callbacks cannot mutate Core state directly.
+6. Missing readback or lost feedback cannot produce verified success.
+7. Capability ports are typed; no universal command bus exists.
+8. Application owns composition/runtime lifetime but does not implement microscope policy.
+9. Camera common types and the existing frame path are reused without duplication/replacement.
+10. Core has no JSON, UI, operating-system or vendor SDK dependency.
+
+**Phase 1 source exit:** real, independently buildable C++17 Core and Application targets; Application depends on Core; no empty speculative modules; first consumed contracts have deterministic tests; operation feedback/state transitions have simulated-adapter contract tests. A source/document commit is not evidence that this exit has passed.

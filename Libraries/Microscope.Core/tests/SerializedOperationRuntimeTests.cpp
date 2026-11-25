@@ -189,6 +189,32 @@ int main() {
           FeedbackProcessingDisposition::UncorrelatedDeviceFeedback,
           "uncorrelated telemetry is surfaced without mutating an operation");
 
+    auto cameraSession=session;
+    cameraSession.deviceId=id<DeviceId>("camera");
+    take(runtime->openDeviceSession(cameraSession));
+    const auto deviceBoundOperation=id<OperationId>("operation-device-bound");
+    const auto deviceBoundStep=id<StepId>("step-device-bound");
+    const auto deviceBoundCommand=id<CommandId>("command-device-bound");
+    take(runtime->createOperation(deviceBoundOperation));
+    take(runtime->startOperation(deviceBoundOperation));
+    take(runtime->createStep(deviceBoundOperation,deviceBoundStep));
+    take(runtime->dispatchCommand(
+        deviceBoundOperation,deviceBoundStep,deviceBoundCommand,session));
+    take(runtime->recordAdapterAccepted(deviceBoundOperation,deviceBoundStep));
+    auto wrongDeviceFeedback=acknowledgement(
+        cameraSession,deviceBoundOperation,deviceBoundStep,deviceBoundCommand);
+    check(runtime->feedbackIngress().submit(std::move(wrongDeviceFeedback))==
+          FeedbackSubmitStatus::Enqueued,
+          "feedback from another current device session reaches the step identity gate");
+    auto wrongDeviceResult=take(runtime->processNextFeedback());
+    check(wrongDeviceResult&&wrongDeviceResult->disposition==
+          FeedbackProcessingDisposition::WrongDeviceSessionForStep&&
+          runtime->stepStatus(deviceBoundOperation,deviceBoundStep).value()==StepStatus::AdapterAccepted,
+          "a valid camera session cannot acknowledge a command dispatched to the stage");
+    check(bool(runtime->closeDeviceSession(
+        id<DeviceId>("camera"),take(DeviceSessionGeneration::create(4)))),
+        "unrelated device session can close without altering stage-bound work");
+
     const auto failureOperation=id<OperationId>("operation-failure");
     const auto failureStep=id<StepId>("step-failure");
     const auto failureCommand=id<CommandId>("command-failure");

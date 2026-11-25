@@ -128,7 +128,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 3 — Declarative configuration
 
-**In progress — 3A–3C validated; 3D source in CI; 3E representative profile suite added**
+**Phase 3 complete — 3A–3E implemented and cross-platform validated**
 
 **Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
 
@@ -176,7 +176,7 @@ The equipment definition now describes installed topology and static capabilitie
 - Polarized light requires a compatible polarizer/analyzer pair; a negative case rejects the missing analyzer.
 - The DIC transition-plan test checks that every additional component selection precedes dependent camera-output and illumination-channel requirements.
 - Representative profiles are constructed as typed test data. This does not seed a universal profile catalog or bind profile values to a vendor microscope; JSON profile loading remains Application Phase 5.
-- Full current-head cross-platform validation is pending in [run 122](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45636792527).
+- The representative profile suite passed the complete three-platform matrix in [run 122](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45636792527).
 
 **Implementation constraints**
 - Objective, contrast method, optical path, camera mode and illumination remain independent dimensions. The resolver combines them; behavior is not implemented in Objective4x/PhaseObjective/DICObjective subclasses.
@@ -187,7 +187,7 @@ The equipment definition now describes installed topology and static capabilitie
 - Resolver output must not claim hardware state was changed or verified. Transition execution and device feedback remain Phase 4.
 - Keep JSON schema/loading in Application Phase 5. Phase 3 operates on typed Core values.
 
-**Phase 3D committed source progress — cross-platform CI pending**
+**Phase 3D committed source progress — cross-platform CI passed**
 - Added ConfigurationTransitionStepId, typed ConfigurationTransitionRequirement variants, immutable ConfigurationTransitionStep and prerequisite-to-dependent ConfigurationTransitionDependency values.
 - Added microscope-scoped ConfigurationTransitionPlan with step/edge identity validation, reference validation, duplicate/self-edge rejection and cycle detection.
 - The plan requires one AcquisitionMustBeInactive root and one DesiredConfigurationMustBeVerified sink. Every requirement is directly gated by acquisition inactivity and directly precedes final verification.
@@ -195,7 +195,7 @@ The equipment definition now describes installed topology and static capabilitie
 - Added ConfigurationTransitionPlanner to emit the complete desired requirement set from ResolvedConfiguration: optical paths, objective/condenser/additional optics, camera mode, illumination channel, optional aperture/intensity/exposure targets and explicit exposure policy.
 - The planner does not diff current observations, issue commands or claim completion. Phase 4 owns verified-effective-state reconciliation and hardware execution.
 - Added tests for required typed nodes, root/sink ordering, parallel selection layers, optional-target omission, malformed path requirements, self-dependencies and cycles.
-- The earlier run 121 completed Ubuntu and Windows successfully, but its macOS job was still queued when the next test commit superseded it. The corrected source HEAD is being validated together with the expanded representative-profile tests in [run 122](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45636792527).
+- The corrected transition model and expanded representative-profile tests passed the complete current-head matrix on Ubuntu GCC, macOS Clang and Windows MSVC, including Core standalone, Application standalone and root platform-only builds/tests: [run 122](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45636792527).
 
 **Phase 3A–3C exit:** satisfied and cross-platform validated. **Phase 3D source exit:** the deterministic adapter-neutral dependency DAG, safety root, verification sink, cycle checks and execution layers are implemented; final current-head cross-platform validation is pending. **Phase 3E source exit:** representative brightfield, phase, DIC and polarized-light profile cases are present; current-head CI is pending. Verified-state reconciliation and execution remain Phase 4.
 

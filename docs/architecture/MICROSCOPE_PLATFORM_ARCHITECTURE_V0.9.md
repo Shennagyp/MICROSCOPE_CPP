@@ -331,9 +331,11 @@ The implemented Phase 3D plan uses typed requirement nodes for:
 - Exposure policy and optional initial exposure preset.
 - Final desired-configuration verification.
 
-Edges mean prerequisite → dependent. Acquisition inactivity is a root prerequisite for every requirement; final verification is downstream of all requirements. Objective/path/component constraints order dependent camera and illumination requirements; independent selections remain in the same topological layer. The planner returns deterministic execution layers and rejects duplicate identities/edges, unknown references and cycles.
+Edges mean prerequisite → dependent. Acquisition inactivity is a root prerequisite for every requirement; final verification is downstream of all requirements. Objective/path/component constraints order dependent camera and illumination requirements; independent selections remain in the same topological layer. The planner returns deterministic execution layers and rejects duplicate identities/edges, unknown references and cycles. ExposurePolicyMustBeHonored is separate from the optional InitialExposurePresetMustBeConsidered requirement.
 
-These nodes remain desired-state facts, not commands. The plan does not assume selectors are motorized, does not define vendor operations, retries or execution state, and does not claim any step has completed. Those concerns belong to Phase 4.
+The DAG is a dependency description, not an execution concurrency directive. A shared topological layer indicates no declared dependency between two requirements; Phase 4 still owns resource arbitration and adapter concurrency. The planner conservatively emits the full desired requirement set and does not remove nodes based on observations or assumed defaults.
+
+These nodes remain desired-state facts, not commands. The plan does not assume selectors are motorized, does not define vendor operations, retries or execution state, and does not claim any step has completed. Those concerns belong to Phase 4. The detailed Core contract is specified in section 15.7 of MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
 
 
 ## 7. Operations, actions, feedback and completion

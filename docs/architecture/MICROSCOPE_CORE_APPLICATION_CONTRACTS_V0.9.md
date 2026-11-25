@@ -540,3 +540,31 @@ A successful result is ResolvedConfiguration, which carries:
 
 The profile target values are desired configuration data, not current values, observations, effective state or commands. The presence of an ExposurePreset does not override Manual/Automatic/ConstrainedAutomatic policy. Phase 3D describes the transition requirements; Phase 4 decides execution and completion using adapter feedback.
 
+### 15.7 Transition-plan and dependency-DAG contract
+
+The transition planner consumes only a successful ResolvedConfiguration. It is a pure Core transformation and returns a microscope-scoped ConfigurationTransitionPlan. It does not accept current hardware observations, infer effective state, issue commands or mutate runtime state.
+
+Each ConfigurationTransitionStep has a strong ConfigurationTransitionStepId and one typed ConfigurationTransitionRequirement. The current requirement vocabulary is:
+- AcquisitionMustBeInactive.
+- OpticalPathSetMustMatch.
+- ObjectiveSelectionMustMatch and CondenserSelectionMustMatch.
+- AdditionalOpticalComponentSelectionMustMatch for each explicitly selected additional optical element.
+- CameraOutputModeMustMatch and IlluminationChannelMustMatch.
+- Optional CondenserApertureMustMatch and IlluminationIntensityMustMatch targets.
+- ExposurePolicyMustBeHonored.
+- Optional InitialExposurePresetMustBeConsidered.
+- DesiredConfigurationMustBeVerified.
+
+ExposurePolicyMustBeHonored is always separate from InitialExposurePresetMustBeConsidered. The policy requirement is present even when the profile has no initial preset. When a preset exists, it is considered only after camera output mode and exposure policy prerequisites. The planner does not silently convert Manual, Automatic or ConstrainedAutomatic into a hardware action.
+
+ConfigurationTransitionDependency is a directed edge from prerequisiteStepId to dependentStepId. ConfigurationTransitionPlan validates:
+- Unique step IDs and exactly one acquisition-inactive precondition and final-verification requirement.
+- Every dependency references existing steps and is neither self-referential nor duplicated.
+- The dependency graph is acyclic.
+- AcquisitionMustBeInactive is a direct prerequisite of every other step.
+- Every other step is a direct prerequisite of DesiredConfigurationMustBeVerified.
+
+The plan computes deterministic topological execution layers. Step IDs within a ready layer are ordered deterministically. A shared layer means the requirements have no declared dependency edge between them; it does not authorize concurrent device access. Phase 4 runtime owns resource arbitration, adapter concurrency and actual execution policy.
+
+The planner emits the full desired requirement set conservatively. It does not omit a requirement based on an observation or an assumed default. Phase 4 may reconcile the plan against a verified effective-configuration snapshot; unknown or unverified observations are not an effective state. No plan node is a vendor SDK command, and a plan's presence does not mean any requirement was applied or verified.
+

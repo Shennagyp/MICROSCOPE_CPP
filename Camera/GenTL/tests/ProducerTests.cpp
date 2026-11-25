@@ -65,8 +65,38 @@ int main(int argc, char** argv) {
         device.writePort(0x10203040, {0x10, 0x20, 0x30, 0x40});
         if (device.portUrl() != "Mock://DevicePort") return 11;
 
+        bool rejectedInsufficientBuffers = false;
+        try {
+            auto invalid = device.openDataStream("stream0", 1);
+            (void)invalid;
+        } catch (const std::invalid_argument&) {
+            rejectedInsufficientBuffers = true;
+        }
+        if (!rejectedInsufficientBuffers) return 12;
+
+        auto stream = device.openDataStream("stream0", 3);
+        if (!stream) return 13;
+        stream.start();
+        const auto frame = stream.nextFrame(100);
+        if (!frame || frame->payload.size() != 16 ||
+            frame->payload.front() != 0x30 ||
+            frame->payload.back() != 0x3F ||
+            frame->frameId != 42 ||
+            frame->timestampNanoseconds != 123456789 ||
+            frame->pixelFormat != UINT64_C(0x01080001) ||
+            frame->width != 4 || frame->height != 4 ||
+            frame->imagePresent != true || frame->incomplete) return 14;
+
+        // The data-stream lease keeps the device handle alive after its
+        // DeviceSession owner releases its reference.
         device.close();
-        if (device) return 12;
+        if (device) return 15;
+        const auto frameAfterDeviceOwnerClose = stream.nextFrame(100);
+        if (!frameAfterDeviceOwnerClose ||
+            frameAfterDeviceOwnerClose->frameId != 42) return 16;
+
+        stream.stop();
+        if (stream) return 17;
     } catch (...) {
         result = 13;
     }

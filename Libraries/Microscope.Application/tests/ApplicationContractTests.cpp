@@ -138,6 +138,28 @@ int main() {
               application::OperationViewError::RuntimeIdentityMismatch,
           "rejects a snapshot from an earlier runtime generation");
 
+    const auto otherMicroscopeId =
+        core::MicroscopeId::create("microscope-002").value();
+    const auto foreignMicroscopeSnapshot = core::OperationSnapshot::create(
+        otherMicroscopeId,
+        runtimeId,
+        generation1,
+        operationId,
+        core::OperationStatus::Running,
+        6).value();
+    auto foreignMicroscopeView = application::OperationView::create(
+        operation, foreignMicroscopeSnapshot);
+    check(!foreignMicroscopeView &&
+          foreignMicroscopeView.error() ==
+              application::OperationViewError::RuntimeIdentityMismatch,
+          "rejects a snapshot from another microscope even when runtime and operation IDs match");
+
+    application::RuntimeHandle otherMicroscopeRuntime(
+        otherMicroscopeId, runtimeId, generation1);
+    check(!first.targetsSameMicroscope(otherMicroscopeRuntime) &&
+          !first.identifiesSameRuntime(otherMicroscopeRuntime),
+          "runtime identity includes the physical microscope identity");
+
     const auto secondRuntimeId =
         core::RuntimeId::create("runtime-002").value();
     const auto foreignRuntimeSnapshot = core::OperationSnapshot::create(

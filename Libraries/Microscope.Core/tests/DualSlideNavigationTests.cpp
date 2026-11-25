@@ -10,13 +10,13 @@ template<class T,class E>T take(Result<T,E> r){if(!r)throw std::runtime_error("f
 template<class T>T id(const char*s){return take(T::create(s));}
 AxisSpecification axis(const char*s){return take(AxisSpecification::create(id<StageAxisId>(s),AxisMotionType::Linear,AxisCoordinateUnit::Micrometers,take(AxisOperatingRange::create(-100000,150000,AxisCoordinateUnit::Micrometers)),take(PositiveAxisResolution::create(0.1)),std::nullopt,std::nullopt,std::nullopt,AxisPositionFeedbackCapability::DeviceReported));}
 StageSpecification stage(){return take(StageSpecification::create(id<EquipmentComponentId>("stage"),{axis("x"),axis("y")}));}
-SlideRegistration registration(const char*s,DualSlideSlot slot,double x){
+SlideRegistration registration(const char*s,DualSlideSlot slot,double x,const char* revision="v1"){
  auto g=take(SlideGeometry::create(75000,25000));auto src=ObservationSource::HardwareReadback;
  auto tl=take(SlideCornerMeasurement::create(SlideCorner::TopLeft,{x,20000},src,0.5));
  auto tr=take(SlideCornerMeasurement::create(SlideCorner::TopRight,{x+75000,20000},src,0.5));
  auto br=take(SlideCornerMeasurement::create(SlideCorner::BottomRight,{x+75000,45000},src,0.5));
  auto bl=take(SlideCornerMeasurement::create(SlideCorner::BottomLeft,{x,45000},src,0.5));
- return take(SlideRegistration::create(id<SlideId>(s),id<CalibrationRevisionId>(std::string(s)+"-registration-v1"),slot,g,{tl,tr,br,bl},1.0));
+ return take(SlideRegistration::create(id<SlideId>(s),id<CalibrationRevisionId>(std::string(s)+"-registration-"+revision),slot,g,{tl,tr,br,bl},1.0));
 }
 void equipmentDefinitionOwnsCarrier() {
  auto s=stage();
@@ -112,7 +112,7 @@ int main(){
  auto leftCommand=carrier.commandFor(leftTarget);
  auto rightCommand=carrier.commandFor(rightTarget);
  check(leftCommand&&rightCommand&&leftCommand.value().targets()[0].value()!=rightCommand.value().targets()[0].value(),"navigation resolves the selected SlideId through its own registration");
- auto changedLeft=registration("left",DualSlideSlot::Left,6000);
+ auto changedLeft=registration("left",DualSlideSlot::Left,6000,"v2");
  auto changedCarrier=take(DualSlideCarrierState::create(spec,
      take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("left"),changedLeft)),
      take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right"),right))));

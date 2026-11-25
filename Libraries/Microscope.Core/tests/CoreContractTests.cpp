@@ -268,6 +268,18 @@ void testDiagnosticsAreSeparateValues() {
           whitespaceContext.error() == DiagnosticError::InvalidContextValue,
           "rejects whitespace-only diagnostic context values");
 
+    auto nulContextValue = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "configuration.profile.incomplete",
+        "A message is present.",
+        DiagnosticContext{
+            std::string("ConfigurationProfile\0Alias", 26),
+            std::nullopt,
+            std::nullopt});
+    check(!nulContextValue &&
+          nulContextValue.error() == DiagnosticError::InvalidContextValue,
+          "rejects an embedded NUL in diagnostic context");
+
     auto emptyContextValue = Diagnostic::create(
         DiagnosticSeverity::Warning,
         "configuration.profile.incomplete",

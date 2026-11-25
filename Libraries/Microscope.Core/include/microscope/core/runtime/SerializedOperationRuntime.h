@@ -30,7 +30,8 @@ enum class SerializedOperationRuntimeError {
     DuplicateStep,
     UnknownStep,
     InvalidTransition,
-    SnapshotRevisionExhausted
+    SnapshotRevisionExhausted,
+    FeedbackLossUnresolved
 };
 
 enum class FeedbackProcessingDisposition {
@@ -65,6 +66,8 @@ template <typename TPayload>
 class SerializedOperationRuntime final {
 public:
     using Pointer = std::unique_ptr<SerializedOperationRuntime>;
+
+    ~SerializedOperationRuntime() { feedbackInbox_->close(); }
 
     static Result<Pointer,SerializedOperationRuntimeError> create(
         MicroscopeId microscopeId,
@@ -225,6 +228,9 @@ public:
         if(operation->status!=OperationStatus::Running)
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::InvalidTransition);
+        if(feedbackInbox_->feedbackLossLatched())
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::FeedbackLossUnresolved);
         auto* step=findStep(*operation,stepId);
         if(!step)
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
@@ -301,6 +307,9 @@ public:
         if(step->status!=StepStatus::Verifying)
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::StepNotVerifying);
+        if(feedbackInbox_->feedbackLossLatched())
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::FeedbackLossUnresolved);
         if(!canIncrementRevision(*operation))
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::SnapshotRevisionExhausted);
@@ -318,10 +327,11 @@ public:
             bool hasVerifiedStep=false;
             for(const auto& candidate:operation->steps)
                 if(candidate.status==StepStatus::Verified)hasVerifiedStep=true;
+            const bool partial=hasVerifiedStep&&operation->status!=OperationStatus::Accepted;
             auto terminal=applyOperationLifecycleEvent(
                 operation->status,
-                hasVerifiedStep?OperationLifecycleEvent::PartiallyCompleted:
-                                OperationLifecycleEvent::Failed);
+                partial?OperationLifecycleEvent::PartiallyCompleted:
+                        OperationLifecycleEvent::Failed);
             if(!terminal)
                 return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                     SerializedOperationRuntimeError::InvalidTransition);
@@ -347,6 +357,9 @@ public:
         if(isTerminal(operation->status))
             return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::OperationTerminal);
+        if(feedbackInbox_->feedbackLossLatched())
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::FeedbackLossUnresolved);
         if(operation->steps.empty())
             return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::OperationIncomplete);

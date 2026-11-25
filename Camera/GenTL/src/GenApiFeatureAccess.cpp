@@ -286,7 +286,7 @@ GenApiFeatureAccess::writeFeature(
     try {
         return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraFeatureResult<std::monostate> {
-            auto* node = nodeMap._GetNode(GenICam::gcstring(featureName.c_str()));
+            auto* node = detail::findRootFeatureNode(nodeMap, featureName);
             if (!node) {
                 return makeError(ErrorCode::FeatureNotFound, featureName,
                                  "GenApi feature was not found.");

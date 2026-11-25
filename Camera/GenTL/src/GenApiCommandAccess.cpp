@@ -125,7 +125,7 @@ GenApiCommandAccess::isCommandDone(std::string_view name) {
     try {
         return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraCommandResult<bool> {
-            auto* node = nodeMap._GetNode(GenICam::gcstring(commandName.c_str()));
+            auto* node = detail::findRootFeatureNode(nodeMap, commandName);
             if (!node || node->GetPrincipalInterfaceType() != GenApi::intfICommand)
                 return makeError(ErrorCode::CommandNotFound, commandName,
                                  "GenApi command was not found.");

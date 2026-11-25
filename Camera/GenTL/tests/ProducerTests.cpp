@@ -2,10 +2,14 @@
 #include "camera/gentl/GenTLFrameAdapter.h"
 
 #include <cstdlib>
+#include <chrono>
+#include <dlfcn.h>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 int main(int argc, char** argv) {
@@ -135,6 +139,56 @@ int main(int argc, char** argv) {
 
         stream.stop();
         if (stream) return 21;
+
+
+        // GCUnregisterEvent must abort a pending EventGetData operation.
+        // The mock blocks deterministically until the event is unregistered.
+        void* mockLibrary = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+        if (!mockLibrary) return 25;
+        using WaitEnteredFunction = int (*)();
+        const auto waitEntered = reinterpret_cast<WaitEnteredFunction>(
+            dlsym(mockLibrary, "gentl_mock_event_wait_entered"));
+        if (!waitEntered) {
+            dlclose(mockLibrary);
+            return 26;
+        }
+
+        auto waitProducer = camera::gentl::Producer::open(bridge, ctiPath);
+        const auto waitDevices = waitProducer.discover();
+        if (waitDevices.size() != 1) {
+            dlclose(mockLibrary);
+            return 27;
+        }
+        auto waitDevice = waitProducer.openDevice(waitDevices.front());
+        auto waitStream = waitDevice.openDataStream("stream0", 3);
+        waitStream.start();
+
+        std::optional<camera::gentl::DataStreamFrame> waitedFrame;
+        bool waitFailed = false;
+        std::thread waiter([&] {
+            try {
+                waitedFrame = waitStream.nextFrame(5000);
+            } catch (...) {
+                waitFailed = true;
+            }
+        });
+
+        const auto waitDeadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (!waitEntered() && std::chrono::steady_clock::now() < waitDeadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (!waitEntered()) {
+            waitStream.stop();
+            waiter.join();
+            dlclose(mockLibrary);
+            return 28;
+        }
+
+        waitStream.stop();
+        waiter.join();
+        dlclose(mockLibrary);
+        if (waitFailed || waitedFrame.has_value() || waitStream) return 29;
+        waitDevice.close();
 
         // A failed DSClose quarantines the native context. Its Consumer and
         // dynamically loaded C ABI bridge must outlive all public wrappers.

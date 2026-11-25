@@ -72,10 +72,10 @@ Ownership and lifecycle:
 - `DataStreamSession` retains the device state; it can outlive the `DeviceSession` wrapper.
 - Each stream has a bounded announced-buffer set (1–64; the Producer's minimum is enforced).
 - Acquisition uses `EVENT_NEW_BUFFER`, `EventGetData`, typed buffer metadata queries and explicit requeue.
-- `nextFrame(timeoutMilliseconds)` permits one waiter per stream. It returns `nullopt` on timeout.
+- `nextFrame(timeoutMilliseconds)` permits one waiter per stream. It returns `nullopt` on timeout. `GCUnregisterEvent` terminates pending `EventGetData` waits with `GC_ERR_ABORT`; stream shutdown uses this specified cancellation path before waiting for active calls to drain.
 - Payload bytes are copied before the announced buffer is requeued. This avoids exposing a pointer whose contents the Producer may overwrite on the next acquisition.
 - GenTL timeout arguments are nanoseconds; the public discovery and frame-wait APIs accept milliseconds and convert with overflow checks.
-- Cleanup stops acquisition, unregisters the event (which drains active event reads), flushes the queue, revokes buffers and closes the stream.
+- Cleanup stops acquisition, unregisters the event (which aborts pending event waits), waits for active calls to drain, flushes the queue, revokes buffers and closes the stream. `EventKill` is not used as a substitute: the GenTL 1.6 contract only aborts one pending waiter per call, while event unregistration terminates all pending waits.
 - If cleanup fails, the native context and C ABI bridge are retained for process lifetime. They are not unloaded while CTI handles may still exist.
 
 `DataStreamFrame` preserves payload bytes, frame ID, nanosecond timestamp, pixel-format identifier and namespace, dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete image payloads with explicit zero offset/padding and no chunk data into `camera::Frame`. PFNC Mono8 is the first typed layout mapping; unknown formats retain their opaque identifier and payload but remain `PixelFormat::Unknown` with no invented stride. Packed, planar, multipart, compressed and padded formats remain unsupported by this projection.

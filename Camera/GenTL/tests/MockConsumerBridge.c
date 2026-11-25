@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 
 static int context_token;
 static uint8_t register_memory[0x10000];
@@ -113,6 +114,12 @@ static BUFFER_HANDLE stream_handles[8];
 static size_t stream_buffer_count;
 static BUFFER_HANDLE queued_buffers[8];
 static size_t queued_buffer_count;
+static atomic_int event_wait_entered = 0;
+static atomic_int event_unregistered = 0;
+
+int gentl_mock_event_wait_entered(void) {
+    return atomic_load_explicit(&event_wait_entered, memory_order_acquire);
+}
 
 static void* pointer(uint64_t value) {
     return (void*)(uintptr_t)value;
@@ -330,16 +337,27 @@ int32_t gentl_consumer_invoke(
     case 8: // GCRegisterEvent
         if (argument_count != 3 || arguments[0] != 0x5555 ||
             arguments[1] != EVENT_NEW_BUFFER) return GC_ERR_INVALID_PARAMETER;
+        atomic_store_explicit(&event_wait_entered, 0, memory_order_release);
+        atomic_store_explicit(&event_unregistered, 0, memory_order_release);
         *(EVENT_HANDLE*)pointer(arguments[2]) = (EVENT_HANDLE)(uintptr_t)0x6666;
         return GC_ERR_SUCCESS;
     case 9: // GCUnregisterEvent
-        return argument_count == 2 && arguments[0] == 0x5555 &&
-            arguments[1] == EVENT_NEW_BUFFER ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+        if (argument_count != 2 || arguments[0] != 0x5555 ||
+            arguments[1] != EVENT_NEW_BUFFER) return GC_ERR_INVALID_PARAMETER;
+        atomic_store_explicit(&event_unregistered, 1, memory_order_release);
+        return GC_ERR_SUCCESS;
     case 10: { // EventGetData
         if (argument_count != 4 || arguments[0] != 0x6666)
             return GC_ERR_INVALID_HANDLE;
         size_t* size = (size_t*)pointer(arguments[2]);
         if (!size || !pointer(arguments[1])) return GC_ERR_INVALID_PARAMETER;
+        if (arguments[3] > UINT64_C(1000000000)) {
+            atomic_store_explicit(&event_wait_entered, 1, memory_order_release);
+            while (!atomic_load_explicit(&event_unregistered, memory_order_acquire)) {
+                /* Deterministic pending-wait fixture: unregister must abort this call. */
+            }
+            return GC_ERR_ABORT;
+        }
         if (queued_buffer_count == 0) return GC_ERR_TIMEOUT;
         if (*size < sizeof(EVENT_NEW_BUFFER_DATA)) {
             *size = sizeof(EVENT_NEW_BUFFER_DATA);

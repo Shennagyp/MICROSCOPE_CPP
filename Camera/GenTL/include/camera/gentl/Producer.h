@@ -32,12 +32,15 @@ struct DataStreamFrame {
     std::optional<std::uint64_t> pixelFormatNamespace;
     std::optional<std::size_t> width;
     std::optional<std::size_t> height;
+    std::optional<std::size_t> deliveredImageHeight;
     std::optional<std::size_t> imageOffset;
     std::optional<std::size_t> xPadding;
     std::optional<std::size_t> yPadding;
     std::optional<std::size_t> payloadType;
     std::optional<bool> imagePresent;
     std::optional<bool> containsChunkData;
+    std::optional<bool> dataLargerThanBuffer;
+    std::optional<bool> isComposite;
     bool incomplete = false;
 };
 

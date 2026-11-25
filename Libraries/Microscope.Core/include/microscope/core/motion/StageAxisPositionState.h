@@ -31,6 +31,8 @@ public:
 
     Result<StageAxisPositionState,StageAxisPositionStateError> afterCommandedDisplacement(
         const AxisDisplacement&,std::optional<double> additionalErrorBound) const;
+    Result<StageAxisPositionState,StageAxisPositionStateError> afterCommandedPosition(
+        const AxisPosition&,std::optional<double> additionalErrorBound) const;
 
     Result<StageAxisPositionState,StageAxisPositionStateError> afterPositionObservation(
         const AxisPositionObservation&,ObservationSource source) const;

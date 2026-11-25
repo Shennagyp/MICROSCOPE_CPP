@@ -29,6 +29,7 @@ struct DataStreamFrame {
     std::optional<std::uint64_t> frameId;
     std::optional<std::uint64_t> timestampNanoseconds;
     std::optional<std::uint64_t> pixelFormat;
+    std::optional<std::uint64_t> pixelFormatNamespace;
     std::optional<std::size_t> width;
     std::optional<std::size_t> height;
     std::optional<bool> imagePresent;

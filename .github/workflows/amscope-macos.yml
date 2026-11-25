@@ -69,8 +69,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
             -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
-            -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
-            -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
             -DAMSCOPE_BUILD_NATIVE_PROBE=ON \
             -DAMSCOPE_BUILD_SDK_WAIT_PROBE=ON \
             -DBUILD_TESTING=ON

@@ -2,7 +2,7 @@
 
 **Architecture reference:** ../architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
-**Status:** Phase 1 in progress; initial Core/Application targets and foundational contracts are committed. Build/test validation has not been performed in this environment.
+**Status:** Phase 1 completed; Phase 2 equipment modeling in progress. Cross-platform CI passed on Ubuntu GCC, macOS Clang and Windows MSVC for Core standalone, Application standalone and root platform-only builds/tests. [Workflow run](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45583316832).
 
 ## Objective
 
@@ -53,46 +53,49 @@ The feedback ingress is currently a typed contract, not a queue/executor. Applic
 
 ### Phase 1 — C++ library foundations and public contracts
 
-**Committed source progress (not yet build/test validated):**
-- Root CMake includes the independent Core and Application targets.
-- Core static library contains strong opaque IDs, distinct RuntimeGeneration/DeviceSessionGeneration value types, [[nodiscard]] Result/Status, factory-validated Diagnostic with whitespace/NUL-free code and message, validated context values; opaque IDs and supplied clock-domain labels reject empty/whitespace-only values and embedded NUL while remaining independent of filesystem path syntax, operation/step status values, runtime/device feedback scope, optional operation correlation, normalized FeedbackKind with factory-enforced enum/correlation/provenance validation including AdapterReport failure provenance, and immutable factory-created FeedbackEnvelope values, validated DeviceTimestamp, MicroscopeId/RuntimeId/RuntimeGeneration-scoped FeedbackIngressSequence and factory-validated feedback receipt values.
-- FeedbackMetadata, DeviceTimestamp, FeedbackIngressSequence and FeedbackReceipt cannot be default-constructed around their validated creation paths; negative contract tests cover missing command/operation correlation, invalid evidence provenance and cross-runtime/cross-microscope receipt scopes.
-- Feedback correlation supports unsolicited telemetry without fabricating OperationId/StepId, while operation feedback requires both and optionally carries CommandId. Device-session generation rejects callbacks from a previous device connection even when the microscope runtime remains active; Core receipt sequence is separate from adapter source sequence.
-- Core OperationSnapshot is factory-created, immutable, validates a known operation status and positive revision, carries the full MicroscopeId/RuntimeId/RuntimeGeneration/OperationId identity, and uses a strictly increasing revision scoped to that operation identity.
-- Application static library contains runtime/operation handles and immutable runtime/operation projections; RuntimeSnapshot is factory-created and validates known lifecycle/positive revision with a strictly increasing revision scoped to its RuntimeHandle, while OperationView validates the full Core OperationSnapshot identity against its handle and returns typed mismatch errors. Handles are scoped to the runtime incarnation and are locator values, not authorization tokens.
-- Static review corrections committed: direct standard-library includes in tests, explicit feedback enqueue outcome (Enqueued), validated device timestamp/timebase/clock-domain values, per-device-session generation, runtime-scoped positive Core ingress sequence/receipt factory, sequence assignment atomically with successful FIFO enqueue, no-wrap runtime-generation exhaustion rule, feedback fact correlation/provenance/enum validators, queue-overflow loss latch plus independent runtime wake contract, full composite OperationSnapshot identity, factory-only OperationView creation, [[nodiscard]] Result/Status and exact C++17 mode with extensions disabled.
-- Focused Core identity/result/diagnostic tests, feedback contract tests and Application runtime-handle tests are registered with CTest.
-- The current AmScope camera driver and Camera::Common targets remain separate and unchanged.
+**Completed**
 
-**Remaining Phase 1 work:**
-- Review unit value conventions and ensure no premature general-purpose dimensional framework is introduced.
-- Complete static review of public headers, CMake dependency direction, API naming and source compatibility.
-- Build each library independently and then through the root project.
-- Run focused Core/Application contract tests and inspect generated dependency graphs.
+**Accepted evidence**
+- Core and Application are separate C++17 static libraries; Core depends only on the C++ standard library, and Application links publicly to Core.
+- Each target configures independently; Application's standalone project adds its Core source dependency. The root project can configure the platform libraries with AmScope and the native macOS application disabled.
+- Strong identity values, [[nodiscard]] Result/Status, validated diagnostics, operation/step status values, immutable feedback envelopes/receipts, feedback correlation/provenance validation, device/runtime session generations, and immutable runtime/operation snapshots are implemented.
+- Feedback ingress overflow, wakeup, ordering, provenance and correlation invariants are specified as contracts. The actual queue/executor is reserved for Phase 4.
+- Core, Application and the root platform-only composition all built and passed their registered CTest suites on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 6](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45583316832).
+- The existing AmScope driver and Camera::Common pipeline remain separate targets; no camera acquisition/preview rewrite was part of Phase 1.
 
-The implementation bullets below define the full Phase 1 intent; the committed source progress above must not be mistaken for phase completion.
-- Implement the minimum independently buildable Libraries/Microscope.Core and Libraries/Microscope.Application C++17 targets.
-- Make Application depend on Core; keep Core dependent only on the C++ standard library.
-- Implement strongly typed opaque identity wrappers that validate caller-supplied values. Keep ID generation outside Core; add an injected identity-source contract only when a real entity/runtime creation use case first consumes it.
-- Implement typed Result/Status, boundary-specific errors and Diagnostic conventions.
-- Define feedback correlation metadata, source/provenance and runtime ingress contracts; do not invent device payloads before a real capability is modeled.
-- Define the minimal immutable OperationHandle/snapshot and Application runtime-lifecycle boundary.
-- Establish public-header naming, ownership, include and ABI conventions.
-- Keep capability-specific command ports with the equipment/capability phase that first consumes them; do not create a universal device command interface.
-- Keep JSON parsing, concrete adapter factories and full runtime composition for Phase 5.
-- Keep the operation/step reducer, dependency scheduling, timeout and recovery execution for Phase 4.
-- Ensure Core has no dependency on JSON, UI, OS APIs, vendor SDKs, Camera::Common or Application in its initial public API.
+**Boundary of completion**
+This closes the initial library/build/API foundation only. It does not claim a microscope equipment model, configuration resolver, operation executor, JSON loader, adapter registry, persistence, calibration, acquisition or frontend migration.
 
-**Exit:** both targets build independently; Application links to Core and not vice versa; initial public contracts compile and have deterministic type/validation tests; feedback ingress metadata has contract tests. Full operation-state execution and simulated-device lifecycle tests remain Phase 4 acceptance, not a Phase 1 claim.
+**Exit:** satisfied. Further runtime feedback lifecycle tests, simulated-device execution and hardware acceptance remain assigned to Phase 4 and hardware acceptance respectively.
 
-### Phase 2 — Equipment model
-- Model microscope identity and installed component identity.
-- Model optical components, component ports/connections, light paths and shared elements.
-- Model objectives, cameras/sensor modes, illumination, condenser and stage/axes.
-- Include motion capability and performance specifications without mechanical transmission detail.
-- Define how the JSON data maps to typed Core values.
+### Phase 2 — Core equipment and optical model
 
-**Exit:** equipment definitions validate, including shared optical components and multiple camera paths.
+**In progress**
+
+**Modeling sequence**
+1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; directed port connections; ordered light paths; shared components represented once and referenced by multiple paths; topology validation.
+2. **2B — Optical specifications and imaging:** objectives and their specification values; sensor geometry; camera output/readout modes; camera-to-optical-path attachment; explicit sensor-pixel to delivered-pixel mapping inputs.
+3. **2C — Illumination and condenser:** source identity/control capability and condenser identity/optical compatibility data, independent of objective classes.
+4. **2D — Stage and axes:** linear/rotary axis identity and unit; range, nominal resolution, accuracy, repeatability/precision, feedback provenance and uncertainty fields. No mechanical transmission implementation details.
+5. **2E — Complete definition validation:** validate references, uniqueness, port ownership/direction, connected route continuity, component sharing and required subsystem references.
+
+**Implementation constraints**
+- All physical parts have one stable EquipmentComponentId; specialized records (Objective, Camera, IlluminationSource, Condenser and Stage) refer to that identity rather than minting a second ID for the same physical part.
+- Optical topology is a typed domain representation, not a node editor, arbitrary graph framework or executable behavior graph.
+- A light path is an ordered route over real physical component ports. Connections describe which ports are physically connected; path steps describe traversal through a component. A shared component is stored once and reused by many path definitions.
+- Component categories and specifications are data. Do not create per-objective/per-filter behavioral subclasses.
+- Use only domain-specific unit values needed by this model (for example, micrometers, magnification, numerical aperture, pixel dimensions and explicit linear/rotary axis units). Do not introduce a universal dimensional-analysis framework in this phase.
+- Equipment definitions describe installed equipment and nominal capabilities. Runtime observations, current positions, calibration results and deployment-specific adapter bindings do not belong in the static equipment model.
+- No actual OPTIKA B-293 component inventory is assumed until it is supplied/verified; examples are generic and must be labeled as illustrative.
+
+**Phase 2A first vertical slice**
+- Add strong IDs for installed equipment components, optical ports, optical connections, light paths and stages/axes as consumed.
+- Add immutable Core value types for optical components, ports, connections, path traversal steps and ordered paths.
+- Add MicroscopeEquipmentDefinition as the aggregate boundary for one physical microscope definition.
+- Add deterministic validation for duplicate identities, foreign references, invalid port direction and disconnected consecutive path steps.
+- Add contract tests for shared components across paths, beam-splitter branching, multiple camera output paths and invalid routes.
+
+**Exit:** representative equipment definitions map to typed Core values and validate without per-microscope behavior subclasses. Phase 2 is complete only after 2A–2E and the full definition contract tests are implemented.
 
 ### Phase 3 — Declarative configuration
 - Define profile selection and applicability.
@@ -202,4 +205,4 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 The public contract review is recorded in ../architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
 
-The initial Phase 1 source slice is committed. The next work is static review, build validation and focused contract validation in the user's development environment. Then address any findings before expanding the Core/Application API. Do not move into the full workflow executor, JSON loader, factory registry, microscope equipment catalog, device-specific command ports or acquisition persistence until their planned phases. Do not create empty directories or stub classes for future subsystems.
+Phase 1 is closed by cross-platform standalone/composed CI. The current implementation task is Phase 2A: build the first typed optical-equipment and route-topology vertical slice in Core, with deterministic validation and tests. Keep JSON parsing in Phase 5, configuration behavior in Phase 3, operation execution in Phase 4 and concrete adapter registration in Phase 5. Do not add empty modules or speculative framework abstractions.

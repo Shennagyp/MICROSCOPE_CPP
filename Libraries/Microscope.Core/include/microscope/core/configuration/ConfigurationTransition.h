@@ -2,6 +2,7 @@
 
 #include "microscope/core/configuration/Configuration.h"
 #include "microscope/core/ids/Ids.h"
+#include "microscope/core/result/Result.h"
 
 #include <optional>
 #include <variant>
@@ -9,43 +10,57 @@
 
 namespace microscope::core {
 
-// Typed desired-state requirements. They deliberately describe no SDK command,
-// control transport, motorization assumption or device-specific operation.
+// Requirements are desired-state facts, not adapter commands. The Phase 4
+// runtime interprets them through installed adapter ports.
 struct AcquisitionMustBeInactive final {};
+
 struct OpticalPathSetMustMatch final {
     std::vector<OpticalPathId> pathIds;
 };
+
 struct ObjectiveSelectionMustMatch final {
     EquipmentComponentId objectiveComponentId;
 };
+
 struct CondenserSelectionMustMatch final {
     EquipmentComponentId condenserComponentId;
 };
+
 struct AdditionalOpticalComponentSelectionMustMatch final {
     EquipmentComponentId componentId;
 };
+
 struct CameraOutputModeMustMatch final {
     EquipmentComponentId cameraComponentId;
     CameraModeId cameraModeId;
 };
+
 struct IlluminationChannelMustMatch final {
     EquipmentComponentId illuminationComponentId;
     IlluminationChannelId channelId;
 };
+
 struct CondenserApertureMustMatch final {
     EquipmentComponentId condenserComponentId;
     NonNegativeNumericalAperture target;
 };
+
 struct IlluminationIntensityMustMatch final {
     EquipmentComponentId illuminationComponentId;
     IlluminationChannelId channelId;
     IlluminationIntensitySetting target;
 };
+
+struct ExposurePolicyMustBeHonored final {
+    EquipmentComponentId cameraComponentId;
+    ExposurePolicy policy;
+};
+
 struct InitialExposurePresetMustBeConsidered final {
     EquipmentComponentId cameraComponentId;
     ExposurePreset preset;
-    ExposurePolicy policy;
 };
+
 struct DesiredConfigurationMustBeVerified final {};
 
 using ConfigurationTransitionRequirement = std::variant<
@@ -58,6 +73,7 @@ using ConfigurationTransitionRequirement = std::variant<
     IlluminationChannelMustMatch,
     CondenserApertureMustMatch,
     IlluminationIntensityMustMatch,
+    ExposurePolicyMustBeHonored,
     InitialExposurePresetMustBeConsidered,
     DesiredConfigurationMustBeVerified>;
 
@@ -91,9 +107,8 @@ enum class ConfigurationTransitionDependencyError {
     SelfDependency
 };
 
-// Edge direction is prerequisite -> dependent. The graph expresses ordering
-// constraints; execution layers expose requirements that may be considered
-// concurrently by a later runtime.
+// Edge direction is prerequisite -> dependent. Independent requirements may
+// share an execution layer; the plan is not a universal linear script.
 class ConfigurationTransitionDependency final {
 public:
     [[nodiscard]] static Result<
@@ -132,9 +147,9 @@ enum class ConfigurationTransitionPlanError {
     FinalVerificationMustFollowEveryStep
 };
 
-// The plan is bound to a resolved microscope target. It contains requirements,
-// not commands, and is intentionally conservative: it does not diff against
-// observations or infer that unverified state already matches the target.
+// Immutable, microscope-scoped dependency DAG. It conservatively describes
+// all desired requirements; it does not diff unverified observations or emit
+// device commands. Runtime reconciliation belongs to Phase 4.
 class ConfigurationTransitionPlan final {
 public:
     [[nodiscard]] static Result<

@@ -17,7 +17,7 @@ The platform consists of two principal C++ libraries, infrastructure implementat
 5. Each physical microscope is described by JSON data. Runtime state, calibration records and slide data are persisted separately.
 6. Microscope operations are asynchronous, ordered, correlated and feedback-driven. A request being accepted is not equivalent to a physical action completing or a microscope configuration being verified.
 7. Optical and motion calibration are independent. Optical calibration starts from equipment specifications and can be refined with a microscope ruler slide. It is reused for matching optical configurations, not repeated for every slide.
-8. Slide records and tiles are persistent domain data. An acquisition cannot start without an active, valid slide session.
+8. Sample, Slide and Tile records represent source material, physical preparation and acquired fields separately. Acquisition is recorded against a Slide and the actual Microscope; it cannot start without an active, valid slide session.
 9. The live microscope viewer and saved-image viewer are separate presentation workflows. Annotations and measurements are persistent structured data, never destructive overlays on source pixels.
 10. Existing camera acquisition, frame-pool, lease and preview behavior must be preserved during migration.
 
@@ -670,7 +670,7 @@ Calibration records are owned by the microscope/configuration calibration stores
 
 Each acquisition and physical measurement preserves the calibration revision and relevant values used. A slide is therefore interpretable historically without owning another copy of the calibration system.
 
-## 11. Slides, tiles and acquisition
+## 11. Samples, slides, tiles and acquisition
 
 ### 11.1 Specimen, preparation and acquisition identities
 

@@ -183,6 +183,17 @@ The OPTIKA B293 dual-slide carrier is declared against one StageSpecification an
 
 Carrier occupancy and registration are runtime state, separate from static equipment definition and persistent Slide identity. Re-homing the stage does not restore a slide registration if the physical slide moved in its slot.
 
+### Stage position ownership and accumulated error
+
+StageAxisPositionState is the Core per-axis runtime value for machine position. It distinguishes an unusable/unreferenced coordinate from a position usable in the current machine frame, and retains the evidence kind and ObservationSource.
+
+Commanded movement updates the estimated coordinate only while the machine reference and starting position are valid. Its additional modeled error bound is accumulated conservatively. If either the previous or additional bound is unknown, the resulting bound remains unknown.
+
+A ControllerReported position observation updates the reported coordinate but cannot reduce an existing open-loop error bound: controller status may report its own command coordinate rather than independently measured physical motion. EncoderMeasured or ExternalMeasured observations can replace the accumulated bound with their supplied measurement uncertainty. Such observations do not establish a machine reference by themselves; only a verified homing/reference operation does that.
+
+The re-home policy compares the accumulated bound with a threshold in the axis's declared unit. An invalid reference, unavailable position, unknown error bound or threshold exceedance requires homing. A homing result supplies a new referenced machine position and homing uncertainty. It does not update or repair the two slide registrations.
+
+
 
 ### 5.5 Runtime state and notifications
 

@@ -33,27 +33,29 @@ bool validError(std::optional<double> v) noexcept {
 }
 }
 StageAxisPositionState::StageAxisPositionState(
-    StageAxisId axisId,AxisCoordinateUnit unit,std::optional<AxisPosition> position,
+    EquipmentComponentId stageComponentId,StageAxisId axisId,AxisCoordinateUnit unit,
+    std::optional<AxisPosition> position,
     std::optional<double> error,StagePositionEvidence evidence,ObservationSource source,
     StageMachineReferenceStatus reference)
-    :axisId_(std::move(axisId)),unit_(unit),position_(std::move(position)),
+    :stageComponentId_(std::move(stageComponentId)),axisId_(std::move(axisId)),unit_(unit),position_(std::move(position)),
      accumulatedErrorBound_(error),evidence_(evidence),source_(source),
      referenceStatus_(reference) {}
 
 Result<StageAxisPositionState,StageAxisPositionStateError>
-StageAxisPositionState::unknown(StageAxisId axisId,AxisCoordinateUnit unit) {
+StageAxisPositionState::unknown(EquipmentComponentId stageComponentId,StageAxisId axisId,AxisCoordinateUnit unit) {
     if(!physicalUnit(unit))
         return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
             StageAxisPositionStateError::UnsupportedCoordinateUnit);
     return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
-        StageAxisPositionState(std::move(axisId),unit,std::nullopt,std::nullopt,
+        StageAxisPositionState(std::move(stageComponentId),std::move(axisId),unit,std::nullopt,std::nullopt,
             StagePositionEvidence::Unknown,ObservationSource::Unknown,
             StageMachineReferenceStatus::Unreferenced));
 }
 
 Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::homed(
-    AxisPosition position,double error,StagePositionEvidence evidence,ObservationSource source) {
+    EquipmentComponentId stageComponentId,AxisPosition position,double error,
+    StagePositionEvidence evidence,ObservationSource source) {
     if(!std::isfinite(error)||error<0)
         return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
             StageAxisPositionStateError::InvalidUncertainty);
@@ -66,7 +68,7 @@ StageAxisPositionState::homed(
     const auto axis=position.axisId();
     const auto unit=position.unit();
     return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
-        StageAxisPositionState(axis,unit,std::move(position),error,evidence,source,
+        StageAxisPositionState(std::move(stageComponentId),axis,unit,std::move(position),error,evidence,source,
             StageMachineReferenceStatus::Referenced));
 }
 
@@ -85,7 +87,7 @@ StageAxisPositionState::afterCommandedDisplacement(
 
     if(referenceStatus_!=StageMachineReferenceStatus::Referenced||!position_) {
         return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
-            StageAxisPositionState(axisId_,unit_,position_,std::nullopt,
+            StageAxisPositionState(stageComponentId_,axisId_,unit_,position_,std::nullopt,
                 StagePositionEvidence::Unknown,ObservationSource::Unknown,
                 referenceStatus_));
     }
@@ -103,7 +105,7 @@ StageAxisPositionState::afterCommandedDisplacement(
     }
 
     return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
-        StageAxisPositionState(axisId_,unit_,std::move(newPosition).value(),newError,
+        StageAxisPositionState(stageComponentId_,axisId_,unit_,std::move(newPosition).value(),newError,
             StagePositionEvidence::CommandDerivedEstimate,
             ObservationSource::CalibratedEstimate,referenceStatus_));
 }
@@ -137,15 +139,16 @@ StageAxisPositionState::afterPositionObservation(
     }
 
     return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
-        StageAxisPositionState(axisId_,unit_,std::move(observed),error,evidence,source,
+        StageAxisPositionState(stageComponentId_,axisId_,unit_,std::move(observed),error,evidence,source,
             referenceStatus_));
 }
 
 StageAxisPositionState StageAxisPositionState::invalidateMachineReference() const {
-    return StageAxisPositionState(axisId_,unit_,position_,accumulatedErrorBound_,
+    return StageAxisPositionState(stageComponentId_,axisId_,unit_,position_,accumulatedErrorBound_,
         evidence_,source_,StageMachineReferenceStatus::Unreferenced);
 }
 
+const EquipmentComponentId& StageAxisPositionState::stageComponentId()const noexcept{return stageComponentId_;}
 const StageAxisId& StageAxisPositionState::axisId()const noexcept{return axisId_;}
 AxisCoordinateUnit StageAxisPositionState::unit()const noexcept{return unit_;}
 const std::optional<AxisPosition>& StageAxisPositionState::position()const noexcept{return position_;}

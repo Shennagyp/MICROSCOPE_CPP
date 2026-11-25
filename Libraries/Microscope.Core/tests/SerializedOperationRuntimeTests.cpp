@@ -192,9 +192,8 @@ int main() {
     auto operationVerification=take(runtime->beginOperationVerification(operation));
     check(operationVerification.status()==OperationStatus::Verifying,
           "operation-level verification begins only after every step is Verified");
-    auto prematureOperationCompletion=runtime->recordOperationVerification(operation,true);
-    check(prematureOperationCompletion &&
-          prematureOperationCompletion.value().status()==OperationStatus::Succeeded &&
+    auto operationCompleted=take(runtime->recordOperationVerification(operation,true));
+    check(operationCompleted.status()==OperationStatus::Succeeded &&
           runtime->operationSnapshot(operation).value().status()==OperationStatus::Succeeded,
           "only the owner can commit operation success after operation-level verification");
 
@@ -263,6 +262,16 @@ int main() {
     check(runtime->recordStepVerification(homeOperation,homeStep,true).value()==
           StepStatus::Verified,
           "host evidence policy can verify the correlated home-reference step");
+    auto prematureHomeFinalization=runtime->recordOperationVerification(homeOperation,false);
+    check(!prematureHomeFinalization &&
+          prematureHomeFinalization.error()==SerializedOperationRuntimeError::OperationIncomplete,
+          "operation finalization is rejected until operation-level verification begins");
+    auto homeOperationVerification=take(runtime->beginOperationVerification(homeOperation));
+    check(homeOperationVerification.status()==OperationStatus::Verifying,
+          "a home-only operation enters operation-level verification after its step is verified");
+    auto rejectedOperation=take(runtime->recordOperationVerification(homeOperation,false));
+    check(rejectedOperation.status()==OperationStatus::Failed,
+          "operation-level verification failure is distinct from step verification and marks the operation Failed");
 
     const auto failureOperation=id<OperationId>("operation-failure");
     const auto failureStep=id<StepId>("step-failure");

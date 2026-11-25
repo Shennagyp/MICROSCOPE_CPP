@@ -84,9 +84,11 @@ int main(){
  auto carrier=take(DualSlideCarrierState::create(spec.value(),std::move(lslot),std::move(rslot)));
  check(carrier.registrationFor(id<SlideId>("left"))&&carrier.registrationFor(id<SlideId>("right")),"two slides retain separate simultaneous registrations");
  auto hx=take(StageAxisPositionState::homed(
+     id<EquipmentComponentId>("stage"),
      take(AxisPosition::create(id<StageAxisId>("x"),42500,AxisCoordinateUnit::Micrometers)),
      0.5,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
  auto hy=take(StageAxisPositionState::homed(
+     id<EquipmentComponentId>("stage"),
      take(AxisPosition::create(id<StageAxisId>("y"),32500,AxisCoordinateUnit::Micrometers)),
      1.0,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
  auto current=carrier.currentSlidePosition(id<SlideId>("left"),hx,hy);
@@ -96,16 +98,24 @@ int main(){
  check(current&&std::abs(current.value().xErrorBoundMicrometers-1.25)<1e-6&&
        std::abs(current.value().yErrorBoundMicrometers-1.75)<1e-6,
        "slide-local position carries propagated stage and registration uncertainty");
- auto unknownX=take(StageAxisPositionState::unknown(id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers));
+ auto unknownX=take(StageAxisPositionState::unknown(id<EquipmentComponentId>("stage"),id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers));
  auto unknownCurrent=carrier.currentSlidePosition(id<SlideId>("left"),unknownX,hy);
  check(!unknownCurrent&&unknownCurrent.error()==CurrentSlidePositionError::PositionUnknown,
        "unreferenced stage position cannot be presented as a slide coordinate");
  auto outsideSlide=take(StageAxisPositionState::homed(
+     id<EquipmentComponentId>("stage"),
      take(AxisPosition::create(id<StageAxisId>("x"),100000,AxisCoordinateUnit::Micrometers)),
      0.1,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
  auto outsidePosition=carrier.currentSlidePosition(id<SlideId>("left"),outsideSlide,hy);
  check(!outsidePosition&&outsidePosition.error()==CurrentSlidePositionError::PositionOutsideSlide,
        "does not report a selected-slide position when the stage is physically outside that slide");
+ auto foreignStageX=take(StageAxisPositionState::homed(
+     id<EquipmentComponentId>("another-stage"),
+     take(AxisPosition::create(id<StageAxisId>("x"),42500,AxisCoordinateUnit::Micrometers)),
+     0.1,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+ auto foreignStagePosition=carrier.currentSlidePosition(id<SlideId>("left"),foreignStageX,hy);
+ check(!foreignStagePosition&&foreignStagePosition.error()==CurrentSlidePositionError::StageComponentMismatch,
+       "rejects same-named axes belonging to another installed stage");
  auto wrongRight=registration("wrong-right",DualSlideSlot::Right,-95000);
  auto wrongRightState=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("wrong-right"),wrongRight));
  auto wrongOrder=DualSlideCarrierState::create(spec.value(),

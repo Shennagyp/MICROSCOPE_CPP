@@ -32,9 +32,11 @@ int main(){
    StagePositionEvidence::ControllerReported,ObservationSource::SdkStatus));
  check(controller.accumulatedPositionErrorBound().value()>=11.0,
        "controller-reported coordinate does not erase accumulated open-loop error");
- auto encoder=take(third.afterPositionObservation(
+ auto encoderObservation=take(AxisPositionObservation::create(
    take(AxisPosition::create(x,4000,AxisCoordinateUnit::Micrometers)),0.2,
-   StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+   StagePositionEvidence::EncoderMeasured));
+ auto encoder=take(third.afterPositionObservation(
+   encoderObservation,ObservationSource::HardwareReadback));
  check(encoder.accumulatedPositionErrorBound().value()==0.2,
        "independent encoder measurement replaces the accumulated position uncertainty");
  auto invalidated=encoder.invalidateMachineReference();

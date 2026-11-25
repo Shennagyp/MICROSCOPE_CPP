@@ -53,6 +53,8 @@ int main() {
         bool reachedRequestedPosition;
     };
 
+    static_assert(!std::is_default_constructible<FeedbackEnvelope<SelectorFeedback>>::value,
+                  "FeedbackEnvelope must be created through its immutable factory");
     static_assert(!std::is_default_constructible<FeedbackMetadata>::value,
                   "FeedbackMetadata must be created through its validator");
     static_assert(!std::is_default_constructible<DeviceTimestamp>::value,
@@ -62,7 +64,7 @@ int main() {
     static_assert(!std::is_default_constructible<FeedbackReceipt<SelectorFeedback>>::value,
                   "FeedbackReceipt must be created through its scope validator");
 
-    FeedbackEnvelope<SelectorFeedback> feedback{
+    auto feedback = FeedbackEnvelope<SelectorFeedback>::create(
         FeedbackMetadata::create(
             FeedbackCorrelation{
                 RuntimeDeviceCorrelation{
@@ -79,7 +81,7 @@ int main() {
             ObservationSource::HardwareReadback,
             std::uint64_t{91},
             DeviceTimestamp::create(1200, 1000, std::string("device-clock-A")).value()).value(),
-        SelectorFeedback{true}};
+        SelectorFeedback{true});
 
     CapturingIngress<SelectorFeedback> ingress;
     const auto result = ingress.submit(std::move(feedback));
@@ -91,32 +93,32 @@ int main() {
 
     if (ingress.lastFeedback) {
         const auto& captured = *ingress.lastFeedback;
-        check(captured.metadata.correlation().operation.has_value(),
+        check(captured.metadata().correlation().operation.has_value(),
               "operation feedback has explicit operation correlation");
-        if (captured.metadata.correlation().operation) {
-            check(captured.metadata.correlation().operation->operationId == operationId,
+        if (captured.metadata().correlation().operation) {
+            check(captured.metadata().correlation().operation->operationId == operationId,
                   "feedback retains operation correlation");
-            check(captured.metadata.correlation().operation->stepId == stepId,
+            check(captured.metadata().correlation().operation->stepId == stepId,
                   "feedback retains step correlation");
-            check(captured.metadata.correlation().operation->commandId.has_value() &&
-                  *captured.metadata.correlation().operation->commandId == commandId,
+            check(captured.metadata().correlation().operation->commandId.has_value() &&
+                  *captured.metadata().correlation().operation->commandId == commandId,
                   "feedback retains command correlation");
         }
-        check(captured.metadata.correlation().runtimeDevice.deviceId == deviceId,
+        check(captured.metadata().correlation().runtimeDevice.deviceId == deviceId,
               "feedback retains logical device identity");
-        check(captured.metadata.correlation().runtimeDevice.microscopeId == microscopeId &&
-              captured.metadata.correlation().runtimeDevice.runtimeId == runtimeId,
+        check(captured.metadata().correlation().runtimeDevice.microscopeId == microscopeId &&
+              captured.metadata().correlation().runtimeDevice.runtimeId == runtimeId,
               "feedback retains runtime and microscope scope");
-        check(captured.metadata.correlation().runtimeDevice.deviceSessionGeneration ==
+        check(captured.metadata().correlation().runtimeDevice.deviceSessionGeneration ==
                   deviceSessionGeneration,
               "feedback retains the current device session generation");
-        check(captured.metadata.kind() == FeedbackKind::DeviceStateObserved,
+        check(captured.metadata().kind() == FeedbackKind::DeviceStateObserved,
               "feedback preserves normalized fact kind");
-        check(captured.metadata.source() == ObservationSource::HardwareReadback,
+        check(captured.metadata().source() == ObservationSource::HardwareReadback,
               "feedback preserves observation provenance");
-        check(captured.metadata.sourceSequence() == std::optional<std::uint64_t>(91),
+        check(captured.metadata().sourceSequence() == std::optional<std::uint64_t>(91),
               "feedback preserves adapter sequence");
-        check(captured.payload.reachedRequestedPosition,
+        check(captured.payload().reachedRequestedPosition,
               "feedback payload remains capability-typed");
     }
 
@@ -134,16 +136,16 @@ int main() {
             ObservationSource::SdkStatus,
             std::nullopt,
             std::nullopt).value(),
-        SelectorFeedback{false}};
+        SelectorFeedback{false});
     CapturingIngress<SelectorFeedback> telemetryIngress;
     const auto telemetryResult = telemetryIngress.submit(std::move(telemetry));
     check(telemetryResult == FeedbackSubmitStatus::Enqueued,
           "ingress enqueues unsolicited device telemetry without operation IDs");
     check(telemetryIngress.lastFeedback.has_value() &&
-          !telemetryIngress.lastFeedback->metadata.correlation().operation.has_value(),
+          !telemetryIngress.lastFeedback->metadata().correlation().operation.has_value(),
           "telemetry does not fabricate operation or step identities");
     check(telemetryIngress.lastFeedback.has_value() &&
-          telemetryIngress.lastFeedback->metadata.kind() == FeedbackKind::DeviceProgress,
+          telemetryIngress.lastFeedback->metadata().kind() == FeedbackKind::DeviceProgress,
           "telemetry preserves its normalized fact category");
 
     const auto telemetryCorrelation = FeedbackCorrelation{
@@ -338,7 +340,7 @@ int main() {
     const auto receiptTime = std::chrono::steady_clock::time_point{
         std::chrono::steady_clock::duration{1234}};
     auto receivedResult = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>{
+        FeedbackEnvelope<SelectorFeedback>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -355,7 +357,7 @@ int main() {
                 ObservationSource::DeviceEvent,
                 std::uint64_t{92},
                 DeviceTimestamp::create(1500, 1000, std::string("device-clock-A")).value()).value(),
-            SelectorFeedback{true}},
+            SelectorFeedback{true}),
         receiptTime,
         FeedbackIngressSequence::create(microscopeId, runtimeId, generation, 17).value());
     check(static_cast<bool>(receivedResult),
@@ -364,15 +366,15 @@ int main() {
         const auto& received = receivedResult.value();
         check(received.receipt().receivedAt == receiptTime,
               "Core receipt time uses a separate monotonic-clock field");
-        check(received.feedback().metadata.deviceTimestamp().has_value() &&
-              received.feedback().metadata.deviceTimestamp()->ticks() == 1500,
+        check(received.feedback().metadata().deviceTimestamp().has_value() &&
+              received.feedback().metadata().deviceTimestamp()->ticks() == 1500,
               "device timestamp remains separate from Core receipt time");
         check(received.receipt().ingressSequence.value() == 17,
               "Core ingress sequence is independent of adapter source sequence");
     }
 
     auto mismatchedReceipt = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>{
+        FeedbackEnvelope<SelectorFeedback>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -386,7 +388,7 @@ int main() {
                 ObservationSource::SdkStatus,
                 std::nullopt,
                 std::nullopt).value(),
-            SelectorFeedback{false}},
+            SelectorFeedback{false}),
         receiptTime,
         FeedbackIngressSequence::create(microscopeId, otherRuntimeId, generation, 20).value());
     check(!mismatchedReceipt &&
@@ -394,7 +396,7 @@ int main() {
           "rejects a receipt whose ingress sequence belongs to another runtime");
 
     auto mismatchedMicroscopeReceipt = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>{
+        FeedbackEnvelope<SelectorFeedback>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -408,7 +410,7 @@ int main() {
                 ObservationSource::SdkStatus,
                 std::nullopt,
                 std::nullopt).value(),
-            SelectorFeedback{false}},
+            SelectorFeedback{false}),
         receiptTime,
         FeedbackIngressSequence::create(
             otherMicroscopeId, runtimeId, generation, 21).value());
@@ -418,7 +420,7 @@ int main() {
           "rejects a receipt whose ingress sequence belongs to another microscope");
 
     auto mismatchedGenerationReceipt = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>{
+        FeedbackEnvelope<SelectorFeedback>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -432,7 +434,7 @@ int main() {
                 ObservationSource::SdkStatus,
                 std::nullopt,
                 std::nullopt).value(),
-            SelectorFeedback{false}},
+            SelectorFeedback{false}),
         receiptTime,
         FeedbackIngressSequence::create(
             microscopeId, runtimeId, nextRuntimeGeneration, 22).value());

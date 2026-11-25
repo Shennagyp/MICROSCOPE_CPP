@@ -2,6 +2,7 @@
 #include "microscope/core/motion/StageMotionPort.h"
 
 #include <atomic>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <thread>

@@ -269,7 +269,7 @@ int main() {
     take(overflowRuntime->startOperation(overflowOperation));
     take(overflowRuntime->createStep(overflowOperation,overflowStep));
     auto firstTelemetry=staleSessionFeedback(deviceSession(4,8));
-    auto droppedTelemetry=staleSessionFeedback(deviceSession(4));
+    auto droppedTelemetry=staleSessionFeedback(deviceSession(4,8));
     check(overflowRuntime->feedbackIngress().submit(std::move(firstTelemetry))==
           FeedbackSubmitStatus::Enqueued,
           "overflow fixture fills the bounded feedback queue");

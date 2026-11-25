@@ -215,7 +215,7 @@ void testSharedComponentsAndBranching() {
     check(definition.value().components().size() == 7,
           "stores each physical component exactly once");
     check(definition.value().connections().size() == 6,
-          "stores each directed physical connection exactly once");
+          "stores each undirected physical adjacency exactly once");
     check(definition.value().opticalPaths().size() == 2,
           "retains both camera output paths");
     check(definition.value().opticalPaths()[0].steps()[1].componentId() ==

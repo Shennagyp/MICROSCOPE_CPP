@@ -87,6 +87,9 @@ jobs:
           test -f build/camera-install/include/camera/CameraFrames.h
           test -f build/camera-install/include/camera/FrameStreamMailbox.h
           test ! -e build/camera-install/include/amscope/QtAmcamCamera.h
+          clang++ -std=c++17 -fsyntax-only \
+            -I build/camera-install/include \
+            Camera/Amscope/tests/AmcamPublicApiTests.cpp
 
       - name: Verify SDK, driver, diagnostics, and architectures
         run: |

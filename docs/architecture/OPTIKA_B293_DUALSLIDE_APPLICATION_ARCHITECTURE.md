@@ -364,11 +364,13 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
     monotonic successful SDK-pull counter. It publishes the same scalar value to
     both slide panes. Each "FPS" label is arranged inline beside its slide title
     in the existing header row; it does not create another row, plate, or reserve
-    additional preview space. The workspace dock rail is a window-edge overlay,
-    not a layout sibling or permanent preview inset. With the dock closed, the
-    preview continues beneath the rail; with the dock open, preview and dock
-    content are laid out to the rail's leading edge so the rail does not obscure
-    dock controls. The value is acquisition throughput, not a displayed-frame
+    additional preview space. Camera Controls and Smart Gallery are presented
+    in a floating tool surface over the preview, not as a docked HStack region.
+    Opening or closing that surface does not change the preview's frame or
+    dimensions. The existing launcher rail remains a separate, permanent
+    trailing HStack child; the floating tool surface is inset from it so both
+    controls remain available without overlap. The value is acquisition
+    throughput, not a displayed-frame
     rate or a sensor-reported FPS value. Pane labels update only when the shared
     rate changes. One periodic coordinator timer only expires a stale rate value;
     it never calls the SDK.

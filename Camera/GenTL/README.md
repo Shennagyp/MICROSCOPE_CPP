@@ -10,7 +10,7 @@ This directory implements the Camera Module's optional GenTL provider path. It i
 
 The C++ adapter does not load CTI files itself and does not implement a second GenTL function table. The existing Swift Consumer owns CTI loading and GenTL function dispatch. The C++ adapter calls that Consumer through the versioned C ABI.
 
-The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0`. Its actual dylib build/load and C++ interoperability are still a separate validation gate; C++ CI currently uses a mock C ABI bridge.
+The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0` at `2f8f82d1e4b645a1191bf68021f9803ac6843121`. Its packages currently declare macOS 13.0 as the minimum deployment target. The C ABI tests cover typed pointers, port buffers, event registration/read/unregister and buffer-info forwarding, and the workflow now builds separate x86_64/arm64 products for a universal dylib. However, workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before any build/test steps. The real dylib and C++ interoperability remain unvalidated; C++ CI currently uses a mock C ABI bridge.
 
 ## Build
 
@@ -100,7 +100,7 @@ Implemented:
 Mock CI: [workflow #45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203), commit `549433466098c5daeb63d72609776d958a35c2fe`. Both Intel x86_64 and Apple Silicon arm64 passed 2/2 CTest tests and architecture checks. The tests cover the mock bridge, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, and quarantine retention.
 
 Not yet validated:
-- the real Swift `libGenTLConsumerCAPI.dylib` (its latest workflow attempt was cancelled before build/test steps);
+- the real universal Swift `libGenTLConsumerCAPI.dylib` (latest workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before build/test steps);
 - a vendor CTI Producer;
 - a physical GenTL camera;
 - actual GenTL payload/metadata behavior under acquisition;

@@ -49,6 +49,10 @@ public:
         std::uint64_t observedGeneration,
         std::chrono::milliseconds timeout);
 
+    // Blocking owner-thread wait. The generation predicate also observes an
+    // earlier notification, so callers snapshot before draining their queues.
+    RuntimeWakeSnapshot waitForChange(std::uint64_t observedGeneration);
+
 private:
     void publish(RuntimeWakeReason reason) noexcept;
     bool changedFrom(std::uint64_t observedGeneration) const noexcept;

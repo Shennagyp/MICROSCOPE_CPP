@@ -88,6 +88,13 @@ int main(int argc, char** argv) {
         fail("Integer editor exposed a writable/default value before readback.");
         return EXIT_FAILURE;
     }
+    auto* integerPlaceholder = integerEditor.findChild<QLabel*>(
+        QStringLiteral("cameraFeatureEditorPlaceholder"));
+    if (!integerPlaceholder ||
+        !integerPlaceholder->text().contains(QStringLiteral("readback"))) {
+        fail("Readable feature did not explain why its editor is unavailable.");
+        return EXIT_FAILURE;
+    }
     if (!integerEditor.setCurrentValue(CameraFeatureValue{std::int64_t{20}}) ||
         !integerEditor.canWrite() ||
         integerInput->text() != QStringLiteral("20")) {
@@ -317,9 +324,72 @@ int main(int argc, char** argv) {
 
     auto writeOnly = descriptor("WriteOnlySetting", CameraFeatureKind::Integer);
     writeOnly.isReadable = false;
+    writeOnly.discreteIntegerValues = {1, 2, 4};
     CameraFeatureEditor writeOnlyEditor(writeOnly);
-    if (writeOnlyEditor.editorWidget() || writeOnlyEditor.canWrite()) {
-        fail("Write-only setting incorrectly received a normal feature editor.");
+    std::optional<std::int64_t> writeOnlyValue;
+    writeOnlyEditor.setWriteRequestedHandler(
+        [&](const std::string&, const CameraFeatureValue& value) {
+            writeOnlyValue = std::get<std::int64_t>(value);
+        });
+    auto* writeOnlyInput = writeOnlyEditor.findChild<QComboBox*>(
+        QStringLiteral("cameraFeatureEditorInput"));
+    if (!writeOnlyInput || !writeOnlyEditor.canWrite() ||
+        writeOnlyInput->currentIndex() != -1) {
+        fail("Write-only discrete feature did not expose an unset selectable input.");
+        return EXIT_FAILURE;
+    }
+    writeOnlyInput->setCurrentIndex(2);
+    if (!writeOnlyValue || *writeOnlyValue != 4) {
+        fail("Write-only discrete feature did not submit its selected value.");
+        return EXIT_FAILURE;
+    }
+
+    auto writeOnlyBoolean =
+        descriptor("WriteOnlyBoolean", CameraFeatureKind::Boolean);
+    writeOnlyBoolean.isReadable = false;
+    CameraFeatureEditor writeOnlyBooleanEditor(writeOnlyBoolean);
+    std::optional<bool> writeOnlyBooleanValue;
+    writeOnlyBooleanEditor.setWriteRequestedHandler(
+        [&](const std::string&, const CameraFeatureValue& value) {
+            writeOnlyBooleanValue = std::get<bool>(value);
+        });
+    auto* writeOnlyBooleanInput = writeOnlyBooleanEditor.findChild<QCheckBox*>(
+        QStringLiteral("cameraFeatureEditorInput"));
+    if (!writeOnlyBooleanInput ||
+        writeOnlyBooleanInput->checkState() != Qt::PartiallyChecked ||
+        !writeOnlyBooleanEditor.canWrite()) {
+        fail("Write-only boolean did not represent its current value as unset.");
+        return EXIT_FAILURE;
+    }
+    writeOnlyBooleanInput->setCheckState(Qt::Checked);
+    if (!writeOnlyBooleanValue || !*writeOnlyBooleanValue) {
+        fail("Write-only boolean did not submit an explicit selected state.");
+        return EXIT_FAILURE;
+    }
+
+    auto writeOnlyFloat =
+        descriptor("WriteOnlyGain", CameraFeatureKind::FloatingPoint);
+    writeOnlyFloat.isReadable = false;
+    writeOnlyFloat.numericRange = CameraFloatingPointRange{1.0, 8.0, 0.5};
+    CameraFeatureEditor writeOnlyFloatEditor(writeOnlyFloat);
+    std::optional<double> writeOnlyFloatValue;
+    writeOnlyFloatEditor.setWriteRequestedHandler(
+        [&](const std::string&, const CameraFeatureValue& value) {
+            writeOnlyFloatValue = std::get<double>(value);
+        });
+    auto* writeOnlyFloatInput = writeOnlyFloatEditor.findChild<QLineEdit*>(
+        QStringLiteral("cameraFeatureEditorInput"));
+    if (!writeOnlyFloatInput ||
+        !writeOnlyFloatInput->text().isEmpty() ||
+        !writeOnlyFloatInput->placeholderText().contains(QStringLiteral("1")) ||
+        !writeOnlyFloatEditor.canWrite()) {
+        fail("Write-only floating-point editor presented a fabricated numeric value.");
+        return EXIT_FAILURE;
+    }
+    writeOnlyFloatInput->setText(QStringLiteral("3.5"));
+    if (!finishEdit(writeOnlyFloatInput) ||
+        !writeOnlyFloatValue || std::abs(*writeOnlyFloatValue - 3.5) > 1e-12) {
+        fail("Write-only floating-point editor did not submit its typed value.");
         return EXIT_FAILURE;
     }
 

@@ -204,12 +204,13 @@ bool CameraFeatureEditor::hasCurrentValue() const noexcept {
 }
 
 bool CameraFeatureEditor::canWrite() const noexcept {
+    const bool currentStateKnown =
+        !descriptor_.isReadable ||
+        (currentValue_.has_value() && currentValueValid_);
     return editor_ != nullptr &&
         descriptor_.isAvailable &&
-        descriptor_.isReadable &&
         descriptor_.isWritable &&
-        currentValue_.has_value() &&
-        currentValueValid_ &&
+        currentStateKnown &&
         !pending_ &&
         static_cast<bool>(writeRequestedHandler_);
 }
@@ -228,9 +229,7 @@ void CameraFeatureEditor::rebuildEditor() {
     // A missing readable value is not represented by a fabricated editor
     // value. In particular, no checkbox false or numeric zero is presented as
     // camera state before the host supplies a current readback.
-    if (!descriptor_.isAvailable ||
-        !descriptor_.isReadable ||
-        !descriptor_.isWritable) {
+    if (!descriptor_.isAvailable || !descriptor_.isWritable) {
         return;
     }
 
@@ -238,6 +237,12 @@ void CameraFeatureEditor::rebuildEditor() {
     case CameraFeatureKind::Boolean: {
         auto* control = new QCheckBox(this);
         control->setObjectName(QStringLiteral("cameraFeatureEditorInput"));
+        if (!descriptor_.isReadable) {
+            // PartiallyChecked means "no readback/current value". It is not
+            // displayed as a false device state; the operator chooses a value.
+            control->setTristate(true);
+            control->setCheckState(Qt::PartiallyChecked);
+        }
         connect(control, &QCheckBox::toggled, this, [this](bool) {
             submitEditedValue();
         });
@@ -254,6 +259,7 @@ void CameraFeatureEditor::rebuildEditor() {
                     QVariant::fromValue<qlonglong>(
                         static_cast<qlonglong>(number)));
             }
+            control->setCurrentIndex(-1);
             connect(control, qOverload<int>(&QComboBox::currentIndexChanged),
                     this, [this](int index) {
                 if (index >= 0) {
@@ -285,10 +291,13 @@ void CameraFeatureEditor::rebuildEditor() {
         break;
     }
     case CameraFeatureKind::FloatingPoint: {
-        if (!descriptor_.numericRange) {
+        if (!descriptor_.numericRange || !descriptor_.isReadable) {
+            // QDoubleSpinBox starts at a numeric value (normally zero). For a
+            // write-only feature that would visually invent a current value.
             auto* control = new QLineEdit(this);
             control->setObjectName(QStringLiteral("cameraFeatureEditorInput"));
-            control->setPlaceholderText(QStringLiteral("Numeric value"));
+            control->setPlaceholderText(
+                floatingRangePlaceholder(descriptor_));
             connect(control, &QLineEdit::editingFinished,
                     this, [this]() { submitEditedValue(); });
             editor_ = control;
@@ -341,6 +350,7 @@ void CameraFeatureEditor::rebuildEditor() {
             const QString value = QString::fromStdString(symbol);
             control->addItem(value, value);
         }
+        control->setCurrentIndex(-1);
         connect(control, qOverload<int>(&QComboBox::currentIndexChanged),
                 this, [this](int index) {
             if (index >= 0) {
@@ -364,29 +374,39 @@ void CameraFeatureEditor::rebuildEditor() {
 void CameraFeatureEditor::updateControls() {
     const bool hasUsableValue =
         currentValue_.has_value() && currentValueValid_;
+    const bool editorHasRequiredState =
+        !descriptor_.isReadable || hasUsableValue;
+    const bool canPresentEditor =
+        editor_ && descriptor_.isAvailable && descriptor_.isWritable &&
+        editorHasRequiredState;
 
-    if (editor_ && hasUsableValue &&
-        descriptor_.isAvailable && descriptor_.isReadable &&
-        descriptor_.isWritable) {
-        valueStack_->setCurrentWidget(editor_);
+    // Hidden editors are disabled too. This prevents callers/tests from
+    // treating a not-yet-populated input as an actionable control.
+    if (editor_) {
         editor_->setEnabled(canWrite());
+    }
+
+    if (canPresentEditor) {
+        valueStack_->setCurrentWidget(editor_);
     } else {
         QString message;
         if (!descriptor_.isAvailable) {
             message = descriptor_.disabledReason
                 ? QString::fromStdString(*descriptor_.disabledReason)
                 : QStringLiteral("Feature is unavailable.");
+        } else if (!descriptor_.isWritable && hasUsableValue) {
+            message = featureValueText(*currentValue_);
         } else if (!descriptor_.isReadable) {
-            message = QStringLiteral(
-                "Feature has no readable current value; editing is disabled.");
+            message = editor_
+                ? QStringLiteral("Choose a value to submit; current value is not readable.")
+                : QStringLiteral(
+                      "No writable editor can be created from the reported descriptor.");
         } else if (!currentValue_) {
             message = QStringLiteral(
                 "Waiting for the current camera readback.");
         } else if (!currentValueValid_) {
             message = QStringLiteral(
                 "Current readback is invalid for this feature descriptor.");
-        } else if (!descriptor_.isWritable) {
-            message = featureValueText(*currentValue_);
         } else if (!editor_) {
             message = QStringLiteral(
                 "No editor can be created from the reported feature descriptor.");
@@ -482,6 +502,10 @@ CameraFeatureEditor::parseEditorValue(std::string& error) const {
     }
 
     if (auto* control = qobject_cast<QCheckBox*>(editor_)) {
+        if (control->checkState() == Qt::PartiallyChecked) {
+            error = "Choose On or Off before submitting the feature.";
+            return std::nullopt;
+        }
         return CameraFeatureValue{control->isChecked()};
     }
 

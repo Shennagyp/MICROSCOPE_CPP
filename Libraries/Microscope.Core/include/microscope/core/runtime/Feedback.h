@@ -248,8 +248,9 @@ enum class FeedbackIngressSequenceError {
     DifferentScope
 };
 
-// Positive Core-assigned receive sequence scoped to one runtime incarnation.
-// Values from different runtime generations are never ordered against each other.
+// Positive Core-assigned sequence scoped to one microscope/runtime incarnation.
+// The runtime assigns it atomically with successful FIFO enqueue. Values from
+// different scopes are never ordered against each other; values never wrap.
 class FeedbackIngressSequence final {
 public:
     [[nodiscard]] static Result<
@@ -332,8 +333,8 @@ private:
     std::uint64_t value_;
 };
 
-// Core-owned, runtime-local receipt metadata. receivedAt is a monotonic
-// ordering/deadline value and is not a durable wall-clock timestamp.
+// Core-owned, runtime-local receipt metadata for a successfully enqueued
+// feedback item. receivedAt is monotonic and not a durable wall-clock value.
 struct FeedbackReceiptMetadata final {
     std::chrono::steady_clock::time_point receivedAt;
     FeedbackIngressSequence ingressSequence;

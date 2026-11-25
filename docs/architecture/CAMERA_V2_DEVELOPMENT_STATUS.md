@@ -2,8 +2,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest implementation checkpoint:** `10f53f077f00e8b4a17f1e37aa5714f766246f51`  
-**Latest CI-validated code checkpoint:** `549433466098c5daeb63d72609776d958a35c2fe` (earlier GenTL bridge/stream baseline; latest frame/command changes pending CI)  
+**Latest implementation checkpoint:** `89369b2402dd79c169c665764c5ae9e7e9f7ff2a`  
+**Latest CI-validated code checkpoint:** `03f674aa7c39ac5b80d6f4a2329b930cb5d81e8c` (9/9 CTest tests on both architectures; latest official GenApi SDK compile is pending) (earlier GenTL bridge/stream baseline; latest frame/command changes pending CI)  
 **CI:** GenTL C++ workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64. Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs at the CMake common-target checkpoint.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
@@ -69,12 +69,12 @@ Still capture has a separate event waiter and pull path. Settings, one-shot comm
 - `ConsumerBridge` loads a separately built `libGenTLConsumerCAPI.dylib` and validates bridge ABI version 1 plus GenTL header version 1.6. The C++ target does not implement a second CTI loader or GenTL function table.
 - `Producer` initializes the Consumer and TL module, discovers interfaces/devices, retains interface handles, and opens a device session. `DeviceSession` owns the device handle and remote port access; producer state remains alive while device sessions retain it.
 - Data streams now open through the retained device session, register `EVENT_NEW_BUFFER`, allocate/announce and queue a bounded buffer set, start acquisition, wait for completed-buffer events, copy payload and metadata, and requeue buffers. Stop unregisters the event and drains active reads before queue flush, buffer revocation and stream close.
-- `DataStreamFrame` preserves copied payload bytes, frame ID, nanosecond timestamp, pixel-format value and namespace (including PFNC namespace), dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete, image-only, zero-offset/zero-padding buffers with explicit layout metadata into `camera::Frame`; PFNC Mono8 is the first typed mapping. Unknown formats retain their opaque identifier and payload without fabricated stride.
+- `DataStreamFrame` preserves copied payload bytes, frame ID, nanosecond timestamp, pixel-format value and namespace (including PFNC namespace), dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete, image-only, zero-offset/zero-padding buffers with explicit layout metadata into `camera::Frame`; PFNC Mono8 is the first typed mapping. Unknown formats retain their opaque identifier and payload without fabricated stride. The Mono8 byte-count calculation is overflow-checked.
 - Discovery and frame-wait APIs accept milliseconds and convert to GenTL nanosecond timeouts. Only one frame waiter is allowed per stream.
 - Device and stream sessions retain the required parent state. A stream can outlive its `DeviceSession` wrapper; the device handle closes only after the last stream/session reference is released.
 - Failed native cleanup quarantines and process-retains the Consumer context and dynamically loaded C ABI bridge. The bridge is not unloaded while CTI handles may remain.
 - GenApi XML retrieval uses `GCGetNumPortURLs` / `GCGetPortURLInfo`; `LOCAL` register-map XML is read in bounded chunks and `FILE` XML is read from the advertised file. HTTP and custom URL schemes are not implemented.
-- `Camera::GenTLGenApi` is optional and requires the official GenApi 3.5.1 Mac64_Universal SDK. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`. `GenApiCommandAccess` now maps `ICommand` nodes to a separate `ICameraCommandAccess`, separating command issue from completion polling. The build option is off by default; neither adapter has yet been compiled against the official SDK.
+- `Camera::GenTLGenApi` is optional and requires the official GenApi 3.5.1 Mac64_Universal SDK. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`. `GenApiCommandAccess` maps `ICommand` nodes to a separate `ICameraCommandAccess`, separating command issue from completion polling. `GenApiDeviceAccess` owns one DeviceSession and shares one GenApi node map/serialization boundary across both adapters. The build option is off by default; the official-SDK compile workflow is now configured and under validation.
 - See [Camera/GenTL README](../../Camera/GenTL/README.md) for the current API and explicit limitations.
 ### Optional Qt streaming and reusable UI layers
 

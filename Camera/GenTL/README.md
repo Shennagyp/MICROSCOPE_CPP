@@ -38,6 +38,7 @@ The GenApi target is off by default. It requires GenApi and GCBase headers/libra
 
 ```cpp
 #include "camera/gentl/Producer.h"
+#include "camera/gentl/GenApiDeviceAccess.h"
 
 auto bridge = camera::gentl::ConsumerBridge::load(
     "/path/to/libGenTLConsumerCAPI.dylib");
@@ -87,7 +88,23 @@ The adapter exposes remote-port read/write and retrieves GenApi XML using:
 
 HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
 
-`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess` and `GenApiCommandAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. Both adapters retain the device session through their node map. IntegerVector and IRegister nodes are not yet exposed. These sources have not yet been compiled against the official SDK.
+`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi SDK build is now included in the macOS CI workflow and is being validated.
+
+
+
+For a GenApi-capable device, construct the combined adapter after opening the device:
+
+```cpp
+auto genApi = camera::gentl::GenApiDeviceAccess(std::move(device));
+auto featureList = genApi.features().featureDescriptors();
+auto commandList = genApi.commands().commandDescriptors();
+
+// Command issue is distinct from completion polling.
+auto issued = genApi.commands().executeCommand("AcquisitionStart");
+auto done = genApi.commands().isCommandDone("AcquisitionStart");
+```
+
+Use the combined owner when both surfaces are required. Do not open a second device session merely to separate feature and command access.
 
 ## Current implementation and evidence
 

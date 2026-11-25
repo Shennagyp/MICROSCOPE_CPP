@@ -1,4 +1,5 @@
 #include "microscope/application/motion/StageNavigationRuntime.h"
+#include "microscope/application/motion/StageNavigationControlQueue.h"
 #include "microscope/application/runtime/RuntimeWakeSignal.h"
 
 #include <cmath>
@@ -382,6 +383,62 @@ void testControllerPositionObservationsVerifyNavigation() {
           "the owner retains measured position rather than replacing it with the command target");
 }
 
+void testControlQueueDrainsOnRuntimeOwnerThread() {
+    RuntimeFixture fixture;
+    const auto installedCarrier = carrier();
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageNavigationRuntime::create(
+        installedCarrier,
+        referencedPosition(installedCarrier.specification()),
+        homingPolicy(),
+        errorBudget(),
+        verificationPolicy(
+            application::motion::StageNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    auto queue = take(application::motion::StageNavigationControlQueue::create(
+        1, fixture.wake));
+
+    const application::motion::StageNavigationControlRequest request{
+        id<core::SlideId>("slide-left"), {20000.0, 10000.0},
+        navigationIds("queued-operation", "queued-step", "queued-command",
+                      "queued-restored-step", "queued-restored-command")};
+    check(queue->submit(request) ==
+              application::motion::StageNavigationControlSubmitStatus::Enqueued,
+          "front-end request is accepted by the bounded stage-specific queue");
+
+    const application::motion::StageNavigationControlRequest overflowRequest{
+        id<core::SlideId>("slide-right"), {20000.0, 10000.0},
+        navigationIds("overflow-operation", "overflow-step", "overflow-command",
+                      "overflow-restored-step", "overflow-restored-command")};
+    check(queue->submit(overflowRequest) ==
+              application::motion::StageNavigationControlSubmitStatus::QueueFull,
+          "full control queue rejects a request without silently replacing queued work");
+
+    auto drained = take(queue->drain(navigation));
+    check(drained.outcomes.size() == 1 &&
+          drained.outcomes.front().update &&
+          drained.outcomes.front().update->disposition ==
+              application::motion::StageNavigationRuntimeDisposition::MoveDispatched &&
+          navigation.navigationActive(),
+          "owner-thread drain creates the operation and dispatches one navigation");
+
+    auto completion = fixture.process(actionCompleted(
+        fixture.device, id<core::OperationId>("queued-operation"),
+        id<core::StepId>("queued-step"),
+        id<core::CommandId>("queued-command")));
+    auto completed = take(navigation.processFeedback(completion));
+    check(completed.disposition ==
+              application::motion::StageNavigationRuntimeDisposition::NavigationCompleted &&
+          completed.operation &&
+          completed.operation->status() == core::OperationStatus::Succeeded,
+          "feedback completes the active request through the same owner");
+
+    queue->close();
+    check(queue->submit(overflowRequest) ==
+              application::motion::StageNavigationControlSubmitStatus::Closed,
+          "closed stage queue rejects further requests");
+}
+
 void testHomingRestoresSlideLocalTarget() {
     RuntimeFixture fixture;
     const auto installedCarrier = carrier();
@@ -438,6 +495,7 @@ void testHomingRestoresSlideLocalTarget() {
 int main() {
     testOpenLoopBoundedEstimateCompletesNavigation();
     testControllerPositionObservationsVerifyNavigation();
+    testControlQueueDrainsOnRuntimeOwnerThread();
     testHomingRestoresSlideLocalTarget();
 
     if (failures != 0) {

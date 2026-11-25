@@ -70,7 +70,7 @@ This closes the initial library/build/API foundation only. It does not claim a m
 
 ### Phase 2 — Core equipment and optical model
 
-**In progress — 2A, 2B and 2C source slices validated**
+**In progress — 2A–2D source slices validated**
 
 **Modeling sequence**
 1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; directed port connections; ordered light paths; shared components represented once and referenced by multiple paths; topology validation.
@@ -95,6 +95,15 @@ This closes the initial library/build/API foundation only. It does not claim a m
 - Equipment aggregate validation rejects condenser/illumination specifications for unknown components or components of the wrong kind, and rejects duplicate specializations.
 - Added tests for spectral ranges, intensity units/ranges/control semantics, multichannel source identity, condenser aperture bounds, invalid enums, duplicate records and aggregate reference/kind validation.
 - Cross-platform CI passed for Core standalone, Application standalone and root platform-only builds/tests on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 46](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45590795457).
+
+**Phase 2D committed source progress**
+- Added StageAxisId and AxisSpecification with linear/rotary/other/unknown motion types and explicit coordinate units (µm, mm, degrees, radians, device-defined, unknown).
+- Added signed finite operating range and positive nominal resolution. Range units must match the axis declaration and known linear/rotary motion types reject incompatible units.
+- Added independent optional accuracy, repeatability/precision and measurement-uncertainty specifications. Accuracy and repeatability retain test-condition descriptions; repeatability records its metric. No performance value is inferred from resolution.
+- Added explicit position-feedback capability and measurement-location values. A no-feedback axis cannot claim a measurement location; these are capability declarations, not live position states.
+- Added StageSpecification with one or more uniquely identified axes and aggregate binding to an installed MechanicalAssembly component.
+- Added tests for typed linear/rotary units, signed ranges, unit mismatch, independent performance values, measurement conditions, feedback capability/location, duplicate axes, empty stage and stage/component binding.
+- Cross-platform CI passed for Core standalone, Application standalone and root platform-only builds/tests on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 58](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45592166839).
 
 **Implementation constraints**### Phase 3 — Declarative configuration
 - Define profile selection and applicability.

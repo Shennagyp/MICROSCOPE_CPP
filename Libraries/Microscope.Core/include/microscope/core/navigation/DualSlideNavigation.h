@@ -32,7 +32,8 @@ public:
     CarrierHorizontalDirection horizontalDirection() const noexcept;
     Result<MoveAxesTo, SlideNavigationCommandError> moveTo(const StagePlanePoint&) const;
 private:
-    DualSlideCarrierSpecification(EquipmentComponentId,StageAxisId,StageAxisId,CarrierHorizontalDirection);
+    DualSlideCarrierSpecification(EquipmentComponentId,StageAxisId,StageAxisId,CarrierHorizontalDirection,
+        AxisCoordinateUnit,AxisCoordinateUnit,AxisOperatingRange,AxisOperatingRange);
     EquipmentComponentId stageComponentId_;
     StageAxisId horizontalAxisId_;
     StageAxisId transverseAxisId_;
@@ -128,7 +129,7 @@ private:
     std::optional<SlideId> slideId_;
     std::optional<SlideRegistration> registration_;
 };
-enum class DualSlideCarrierStateError { WrongLeftSlot,WrongRightSlot,DuplicateSlideId };
+enum class DualSlideCarrierStateError { WrongLeftSlot,WrongRightSlot,DuplicateSlideId,SlideSlotOrderMismatch };
 class DualSlideCarrierState final {
 public:
     static Result<DualSlideCarrierState,DualSlideCarrierStateError> create(

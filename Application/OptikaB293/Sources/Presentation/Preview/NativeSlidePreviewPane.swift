@@ -13,10 +13,9 @@ private struct NativeSlidePreviewToolbarState: Equatable {
 final class NativeSlidePreviewPane: NSView {
     private let slide: NativeSlideID
     private let imageView: NativeSlideImageView
-    private var showsPullRate: Bool { slide == .slide1 }
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
-    private let pullFrameRateLabel = NSTextField(labelWithString: "PULL FPS 0.0")
+    private let pullFrameRateLabel = NSTextField(labelWithString: "FPS 0.0")
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "", target: nil, action: nil)
@@ -30,7 +29,6 @@ final class NativeSlidePreviewPane: NSView {
     private let actionStack = NSStackView()
     private let toolStack = NSStackView()
     private let annotationPlate = NSView()
-    private let pullFrameRatePlate = NSView()
     private let actionPlate = NSView()
     private let toolPlate = NSView()
     private let microscopeControlsPlate = NSView()
@@ -80,7 +78,7 @@ final class NativeSlidePreviewPane: NSView {
         pullFrameRateLabel.textColor = OptikaPalette.nsSecondaryText
         pullFrameRateLabel.lineBreakMode = .byTruncatingTail
         pullFrameRateLabel.toolTip =
-            "PULL FPS: successful Amcam_PullImageV4 calls per second, derived from the driver's monotonic pull counter. This measures acquisition pull throughput, not displayed-frame rate or a sensor-reported FPS value."
+            "FPS: successful Amcam_PullImageV4 calls per second, derived from the driver's monotonic pull counter. Both slide panes show the same acquisition rate; it is not a sensor-reported FPS value."
         pullFrameRateLabel.setContentHuggingPriority(.required, for: .horizontal)
         pullFrameRateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         pullFrameRateLabel.setAccessibilityLabel("Camera pull rate")
@@ -189,11 +187,6 @@ final class NativeSlidePreviewPane: NSView {
         // presented as compact corner annotations over the image viewport;
         // actions remain available in a separate floating control cluster.
         configureAnnotationPlate(annotationPlate)
-        if showsPullRate {
-            configureAnnotationPlate(pullFrameRatePlate)
-            pullFrameRateLabel.translatesAutoresizingMaskIntoConstraints = false
-            pullFrameRatePlate.addSubview(pullFrameRateLabel)
-        }
         configureAnnotationPlate(actionPlate)
         configureAnnotationPlate(toolPlate)
         configureAnnotationPlate(microscopeControlsPlate)
@@ -204,6 +197,7 @@ final class NativeSlidePreviewPane: NSView {
         annotationStack.spacing = 9
         annotationStack.translatesAutoresizingMaskIntoConstraints = false
         annotationStack.addArrangedSubview(titleLabel)
+        annotationStack.addArrangedSubview(pullFrameRateLabel)
         annotationStack.addArrangedSubview(statusLabel)
 
         actionStack.orientation = .horizontal
@@ -239,9 +233,6 @@ final class NativeSlidePreviewPane: NSView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
         addSubview(annotationPlate)
-        if showsPullRate {
-            addSubview(pullFrameRatePlate)
-        }
         addSubview(actionPlate)
         addSubview(toolPlate)
         addSubview(microscopeControlsPlate)
@@ -282,38 +273,8 @@ final class NativeSlidePreviewPane: NSView {
                 constant: -10
             )
         ])
-        if showsPullRate {
-            NSLayoutConstraint.activate([
-                pullFrameRateLabel.leadingAnchor.constraint(
-                    equalTo: pullFrameRatePlate.leadingAnchor,
-                    constant: 9
-                ),
-                pullFrameRateLabel.trailingAnchor.constraint(
-                    equalTo: pullFrameRatePlate.trailingAnchor,
-                    constant: -9
-                ),
-                pullFrameRateLabel.topAnchor.constraint(
-                    equalTo: pullFrameRatePlate.topAnchor,
-                    constant: 5
-                ),
-                pullFrameRateLabel.bottomAnchor.constraint(
-                    equalTo: pullFrameRatePlate.bottomAnchor,
-                    constant: -5
-                ),
-                pullFrameRatePlate.leadingAnchor.constraint(
-                    equalTo: leadingAnchor,
-                    constant: 10
-                ),
-                pullFrameRatePlate.topAnchor.constraint(
-                    equalTo: annotationPlate.bottomAnchor,
-                    constant: 6
-                )
-            ])
-        }
         synchronizeToolbarState()
-        if showsPullRate {
-            startFrameRateRefreshTimer()
-        }
+        startFrameRateRefreshTimer()
     }
 
     private func configureIconButton(
@@ -479,7 +440,6 @@ final class NativeSlidePreviewPane: NSView {
     }
 
     func updatePullRate(pulledFrames: UInt64) {
-        guard showsPullRate else { return }
         let previousPullRate = pullFrameRateMeter.framesPerSecond
         pullFrameRateMeter.record(
             pulledFrames,
@@ -498,12 +458,12 @@ final class NativeSlidePreviewPane: NSView {
 
     func updateMicroscopeControls(_ model: NativeCameraModel, workspace: NativeWorkspaceModel, microscope: MicroscopeConfigurationModel, resolutionCoordinator: MicroscopeResolutionCoordinator) {
         if let host = microscopeControlsHost {
-            host.rootView = NativeMicroscopePaneControls(model: model, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator, slide: slide)
+            host.rootView = NativeMicroscopePaneControls(model: model, features: model.features, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator, slide: slide)
             return
         }
 
         let host = NSHostingView(
-            rootView: NativeMicroscopePaneControls(model: model, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator, slide: slide)
+            rootView: NativeMicroscopePaneControls(model: model, features: model.features, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator, slide: slide)
         )
         host.translatesAutoresizingMaskIntoConstraints = false
         host.setContentHuggingPriority(.required, for: .horizontal)
@@ -565,7 +525,7 @@ final class NativeSlidePreviewPane: NSView {
 
     private func updatePullFrameRateLabel() {
         let pullFPS = String(format: "%.1f", pullFrameRateMeter.framesPerSecond)
-        let value = "PULL FPS \(pullFPS)"
+        let value = "FPS \(pullFPS)"
         guard pullFrameRateLabel.stringValue != value else { return }
         pullFrameRateLabel.stringValue = value
     }

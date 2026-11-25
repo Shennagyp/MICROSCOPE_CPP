@@ -106,16 +106,83 @@ struct FeedbackCorrelation final {
     std::optional<OperationCorrelation> operation;
 };
 
-struct FeedbackMetadata final {
-    FeedbackCorrelation correlation;
-    FeedbackKind kind;
-    ObservationSource source = ObservationSource::Unknown;
-    // Adapter/device sequence, scoped to DeviceSessionGeneration. Zero may
-    // be a valid first sequence; absence means the source does not report one.
-    // When supplied, the adapter preserves ordering for that session; it
-    // starts a new session generation rather than reusing ambiguous values.
-    std::optional<std::uint64_t> sourceSequence;
-    std::optional<DeviceTimestamp> deviceTimestamp;
+enum class FeedbackMetadataError {
+    MissingOperationCorrelation,
+    MissingCommandCorrelation
+};
+
+// Metadata is created through a validator so fact categories cannot omit
+// correlation that their semantics require.
+class FeedbackMetadata final {
+public:
+    [[nodiscard]] static Result<FeedbackMetadata, FeedbackMetadataError> create(
+        FeedbackCorrelation correlation,
+        FeedbackKind kind,
+        ObservationSource source = ObservationSource::Unknown,
+        std::optional<std::uint64_t> sourceSequence = std::nullopt,
+        std::optional<DeviceTimestamp> deviceTimestamp = std::nullopt) {
+        const bool requiresOperation =
+            kind == FeedbackKind::DeviceAcknowledged ||
+            kind == FeedbackKind::DeviceActionCompleted;
+
+        if (requiresOperation && !correlation.operation) {
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::MissingOperationCorrelation);
+        }
+
+        if (kind == FeedbackKind::DeviceAcknowledged &&
+            !correlation.operation->commandId) {
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::MissingCommandCorrelation);
+        }
+
+        return Result<FeedbackMetadata, FeedbackMetadataError>::success(
+            FeedbackMetadata(
+                std::move(correlation),
+                kind,
+                source,
+                sourceSequence,
+                std::move(deviceTimestamp)));
+    }
+
+    [[nodiscard]] const FeedbackCorrelation& correlation() const noexcept {
+        return correlation_;
+    }
+
+    [[nodiscard]] FeedbackKind kind() const noexcept {
+        return kind_;
+    }
+
+    [[nodiscard]] ObservationSource source() const noexcept {
+        return source_;
+    }
+
+    [[nodiscard]] const std::optional<std::uint64_t>& sourceSequence() const noexcept {
+        return sourceSequence_;
+    }
+
+    [[nodiscard]] const std::optional<DeviceTimestamp>& deviceTimestamp() const noexcept {
+        return deviceTimestamp_;
+    }
+
+private:
+    FeedbackMetadata(
+        FeedbackCorrelation correlation,
+        FeedbackKind kind,
+        ObservationSource source,
+        std::optional<std::uint64_t> sourceSequence,
+        std::optional<DeviceTimestamp> deviceTimestamp)
+        : correlation_(std::move(correlation)),
+          kind_(kind),
+          source_(source),
+          sourceSequence_(sourceSequence),
+          deviceTimestamp_(std::move(deviceTimestamp)) {}
+
+    FeedbackCorrelation correlation_;
+    FeedbackKind kind_;
+    ObservationSource source_;
+    std::optional<std::uint64_t> sourceSequence_;
+    std::optional<DeviceTimestamp> deviceTimestamp_;
 };
 
 // The payload is a capability-specific Core value. This envelope deliberately
@@ -239,7 +306,7 @@ public:
         FeedbackEnvelope<TPayload> feedback,
         std::chrono::steady_clock::time_point receivedAt,
         FeedbackIngressSequence ingressSequence) {
-        const auto& runtime = feedback.metadata.correlation.runtimeDevice;
+        const auto& runtime = feedback.metadata.correlation().runtimeDevice;
         if (!ingressSequence.belongsTo(
                 runtime.microscopeId,
                 runtime.runtimeId,

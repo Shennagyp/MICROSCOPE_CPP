@@ -24,7 +24,7 @@ public:
     microscope::core::FeedbackSubmitStatus submit(
         microscope::core::FeedbackEnvelope<TPayload> feedback) override {
         lastFeedback = std::move(feedback);
-        return microscope::core::FeedbackSubmitStatus::Accepted;
+        return microscope::core::FeedbackSubmitStatus::Enqueued;
     }
 
     std::optional<microscope::core::FeedbackEnvelope<TPayload>> lastFeedback;
@@ -68,8 +68,8 @@ int main() {
     CapturingIngress<SelectorFeedback> ingress;
     const auto result = ingress.submit(std::move(feedback));
 
-    check(result == FeedbackSubmitStatus::Accepted,
-          "ingress reports accepted ownership transfer");
+    check(result == FeedbackSubmitStatus::Enqueued,
+          "ingress reports that feedback was enqueued");
     check(ingress.lastFeedback.has_value(),
           "ingress retains the submitted typed feedback");
 
@@ -117,8 +117,8 @@ int main() {
         SelectorFeedback{false}};
     CapturingIngress<SelectorFeedback> telemetryIngress;
     const auto telemetryResult = telemetryIngress.submit(std::move(telemetry));
-    check(telemetryResult == FeedbackSubmitStatus::Accepted,
-          "ingress accepts unsolicited device telemetry without operation IDs");
+    check(telemetryResult == FeedbackSubmitStatus::Enqueued,
+          "ingress enqueues unsolicited device telemetry without operation IDs");
     check(telemetryIngress.lastFeedback.has_value() &&
           !telemetryIngress.lastFeedback->metadata.correlation.operation.has_value(),
           "telemetry does not fabricate operation or step identities");

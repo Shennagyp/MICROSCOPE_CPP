@@ -234,6 +234,21 @@ Result<DualSlideCarrierState,DualSlideCarrierStateError> DualSlideCarrierState::
     if(r.slot()!=DualSlideSlot::Right)return Result<DualSlideCarrierState,DualSlideCarrierStateError>::failure(DualSlideCarrierStateError::WrongRightSlot);
     if(l.slideId()&&r.slideId()&&*l.slideId()==*r.slideId())
         return Result<DualSlideCarrierState,DualSlideCarrierStateError>::failure(DualSlideCarrierStateError::DuplicateSlideId);
+    if(l.registration()&&r.registration()) {
+        const auto centerX=[](const SlideRegistration& registration) {
+            double sum=0.0;
+            for(const auto& corner:registration.cornerMeasurements())
+                sum+=corner.stagePosition().horizontalMicrometers/4.0;
+            return sum;
+        };
+        const double leftX=centerX(*l.registration());
+        const double rightX=centerX(*r.registration());
+        const bool ordered=s.horizontalDirection()==CarrierHorizontalDirection::PositiveStageXFromLeftToRight
+            ? rightX>leftX : rightX<leftX;
+        if(!ordered)
+            return Result<DualSlideCarrierState,DualSlideCarrierStateError>::failure(
+                DualSlideCarrierStateError::SlideSlotOrderMismatch);
+    }
     return Result<DualSlideCarrierState,DualSlideCarrierStateError>::success(
         DualSlideCarrierState(std::move(s),std::move(l),std::move(r)));
 }

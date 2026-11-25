@@ -280,8 +280,10 @@ int32_t gentl_consumer_invoke(
             INFO_DATATYPE_SIZET, &value, sizeof(value));
     }
     case 43: // DSClose
-        return argument_count == 1 && arguments[0] == 0x5555
-            ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+        if (argument_count != 1 || arguments[0] != 0x5555)
+            return GC_ERR_INVALID_PARAMETER;
+        return getenv("MOCK_GENTL_FAIL_DS_CLOSE")
+            ? GC_ERR_INVALID_PARAMETER : GC_ERR_SUCCESS;
     case 44: { // DSRevokeBuffer
         if (argument_count != 4 || arguments[0] != 0x5555)
             return GC_ERR_INVALID_PARAMETER;

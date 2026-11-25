@@ -76,6 +76,13 @@ Result<StageNavigationPlan,StageNavigationPlanningError> StageNavigationPlanner:
     if(!axes)
         return Result<StageNavigationPlan,StageNavigationPlanningError>::failure(axes.error());
 
+    // Validate slide identity, registration revision, physical slide bounds and
+    // installed stage travel before deciding whether any home command is needed.
+    auto destination=carrier.commandFor(target);
+    if(!destination)
+        return Result<StageNavigationPlan,StageNavigationPlanningError>::failure(
+            mapCommandError(destination.error()));
+
     const bool homeRequired=
         horizontal.requiresHoming(thresholdInAxisUnit(
             policy.maximumHorizontalErrorMicrometers(),horizontal.unit()))||
@@ -94,12 +101,8 @@ Result<StageNavigationPlan,StageNavigationPlanningError> StageNavigationPlanner:
                 target,HomeAxes::create(std::move(axisSet).value())}});
     }
 
-    auto command=carrier.commandFor(target);
-    if(!command)
-        return Result<StageNavigationPlan,StageNavigationPlanningError>::failure(
-            mapCommandError(command.error()));
     return Result<StageNavigationPlan,StageNavigationPlanningError>::success(
-        StageNavigationPlan{StageDirectMovePlan{target,std::move(command).value()}});
+        StageNavigationPlan{StageDirectMovePlan{target,std::move(destination).value()}});
 }
 
 Result<MoveAxesTo,StageNavigationPlanningError>

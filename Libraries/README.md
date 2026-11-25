@@ -57,7 +57,7 @@ These commands are instructions only; no build or test result is implied by this
 
 The initial source slice includes:
 
-- Core: strong opaque identities, distinct runtime/device-session generations, Result/Status, diagnostics, operation/step status values, typed feedback correlation/fact kinds with factory-enforced correlation/provenance requirements, validated device timestamps, runtime-scoped FeedbackIngressSequence and factory-validated feedback receipts. The feedback ingress contract specifies fail-safe overflow latching; the queue/runtime implementation belongs to Phase 4.
+- Core: strong opaque identities, distinct runtime/device-session generations, [[nodiscard]] Result/Status, factory-validated diagnostics, operation/step status values, typed feedback correlation/fact kinds with factory-enforced enum/correlation/provenance requirements, validated device timestamps, runtime-scoped FeedbackIngressSequence and factory-validated feedback receipts. The feedback ingress contract specifies fail-safe overflow latching; the queue/runtime implementation belongs to Phase 4.
 - Application: runtime/operation handles and value projections scoped to runtime identity/generation. Core OperationSnapshot carries the microscope/runtime/runtime-generation/operation composite identity; OperationView's factory rejects a mismatched handle/snapshot pair with a typed error.
 
 This is not a completed microscope platform. Equipment/configuration semantics, operation execution, JSON definition loading, concrete adapter composition, persistence, calibration and acquisition are implemented in their planned phases. No runtime/build/test result is implied by the existence of these targets.

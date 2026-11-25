@@ -317,8 +317,14 @@ public:
 
         auto failedStep=applyStepLifecycleEvent(
             step->status,StepLifecycleEvent::AdapterRejected);
+        bool hasVerifiedStep=false;
+        for(const auto& candidate:operation->steps)
+            if(candidate.status==StepStatus::Verified)hasVerifiedStep=true;
+        const bool partial=hasVerifiedStep&&operation->status!=OperationStatus::Accepted;
         auto failedOperation=applyOperationLifecycleEvent(
-            operation->status,OperationLifecycleEvent::Failed);
+            operation->status,
+            partial?OperationLifecycleEvent::PartiallyCompleted:
+                    OperationLifecycleEvent::Failed);
         if(!failedStep||!failedOperation)
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::InvalidTransition);
@@ -546,8 +552,14 @@ public:
 
         std::optional<OperationStatus> nextOperationStatus;
         if(metadata.kind()==FeedbackKind::AdapterFailure) {
+            bool hasVerifiedStep=false;
+            for(const auto& candidate:operation->steps)
+                if(candidate.status==StepStatus::Verified)hasVerifiedStep=true;
+            const bool partial=hasVerifiedStep&&operation->status!=OperationStatus::Accepted;
             auto failed=applyOperationLifecycleEvent(
-                operation->status,OperationLifecycleEvent::Failed);
+                operation->status,
+                partial?OperationLifecycleEvent::PartiallyCompleted:
+                        OperationLifecycleEvent::Failed);
             if(failed)
                 nextOperationStatus=failed.value();
         }

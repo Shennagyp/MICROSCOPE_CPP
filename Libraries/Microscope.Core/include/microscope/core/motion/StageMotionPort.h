@@ -2,6 +2,7 @@
 #include "microscope/core/equipment/StageSpecifications.h"
 #include "microscope/core/runtime/Feedback.h"
 #include <optional>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -178,6 +179,67 @@ private:
     StageMotionAction action_; StageAxisSet axes_;
 };
 
+enum class StageHomeReferenceObservationError {
+    EmptyPositions,
+    DuplicateAxisId
+};
+
+// A normalized fact emitted only after the adapter's configured reference
+// procedure has established the machine reference for every listed axis.
+// The fact carries coordinates at the established references but prescribes
+// no switch, hard-stop, encoder-index or controller-specific homing method.
+class StageHomeReferenceObservation final {
+public:
+    static Result<StageHomeReferenceObservation,StageHomeReferenceObservationError> create(
+        std::vector<AxisPositionObservation> positions) {
+        if (positions.empty()) {
+            return Result<StageHomeReferenceObservation,StageHomeReferenceObservationError>::failure(
+                StageHomeReferenceObservationError::EmptyPositions);
+        }
+        for (std::size_t i = 0; i < positions.size(); ++i) {
+            for (std::size_t j = i + 1; j < positions.size(); ++j) {
+                if (positions[i].position().axisId() == positions[j].position().axisId()) {
+                    return Result<StageHomeReferenceObservation,StageHomeReferenceObservationError>::failure(
+                        StageHomeReferenceObservationError::DuplicateAxisId);
+                }
+            }
+        }
+        return Result<StageHomeReferenceObservation,StageHomeReferenceObservationError>::success(
+            StageHomeReferenceObservation(std::move(positions)));
+    }
+
+    const std::vector<AxisPositionObservation>& positions() const noexcept {
+        return positions_;
+    }
+
+    // Host verifies that the complete evidence set matches its HomeAxes request.
+    bool matchesAxes(const StageAxisSet& expected) const noexcept {
+        if (positions_.size() != expected.axes().size()) {
+            return false;
+        }
+        for (const auto& position : positions_) {
+            bool found = false;
+            for (const auto& axis : expected.axes()) {
+                if (position.position().axisId() == axis) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+private:
+    explicit StageHomeReferenceObservation(
+        std::vector<AxisPositionObservation> positions)
+        : positions_(std::move(positions)) {}
+
+    std::vector<AxisPositionObservation> positions_;
+};
+
 enum class StageMotionFaultKind {
     LimitReached, FollowingError, ControllerFault, CommunicationLost, EmergencyStop, Unknown
 };
@@ -196,7 +258,8 @@ private:
 
 using StageMotionFeedbackPayload = std::variant<
     AxisPositionObservation, AxisMotionStateObservation, AxisLimitObservation,
-    StageMotionAcknowledgement, StageMotionActionCompletion, StageMotionFaultObservation>;
+    StageMotionAcknowledgement, StageMotionActionCompletion,
+    StageHomeReferenceObservation, StageMotionFaultObservation>;
 
 // Driver libraries implement this port. STEP/DIR drivers own calibrated
 // physical-unit-to-step conversion and pulse generation. Intelligent-controller

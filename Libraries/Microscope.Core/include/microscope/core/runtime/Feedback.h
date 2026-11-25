@@ -19,6 +19,7 @@ enum class FeedbackKind {
     DeviceProgress,
     DeviceActionCompleted,
     DeviceStateObserved,
+    HomeReferenceEstablished,
     AdapterFailure
 };
 
@@ -117,6 +118,7 @@ enum class FeedbackMetadataError {
     InvalidObservationSource,
     MissingOperationCorrelation,
     MissingCommandCorrelation,
+    InvalidHomeReferenceSource,
     InvalidAdapterFailureSource
 };
 
@@ -135,6 +137,7 @@ public:
         case FeedbackKind::DeviceProgress:
         case FeedbackKind::DeviceActionCompleted:
         case FeedbackKind::DeviceStateObserved:
+        case FeedbackKind::HomeReferenceEstablished:
         case FeedbackKind::AdapterFailure:
             break;
         default:
@@ -158,15 +161,18 @@ public:
 
         const bool requiresOperation =
             kind == FeedbackKind::DeviceAcknowledged ||
-            kind == FeedbackKind::DeviceActionCompleted;
+            kind == FeedbackKind::DeviceActionCompleted ||
+            kind == FeedbackKind::HomeReferenceEstablished;
 
         if (requiresOperation && !correlation.operation) {
             return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
                 FeedbackMetadataError::MissingOperationCorrelation);
         }
 
-        if (kind == FeedbackKind::DeviceAcknowledged &&
-            !correlation.operation->commandId) {
+        const bool requiresCommand =
+            kind == FeedbackKind::DeviceAcknowledged ||
+            kind == FeedbackKind::HomeReferenceEstablished;
+        if (requiresCommand && !correlation.operation->commandId) {
             return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
                 FeedbackMetadataError::MissingCommandCorrelation);
         }
@@ -186,6 +192,16 @@ public:
         if (kind == FeedbackKind::DeviceActionCompleted && !actionCompletionSource) {
             return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
                 FeedbackMetadataError::InvalidObservationSource);
+        }
+
+        const bool homeReferenceSource =
+            source == ObservationSource::HardwareReadback ||
+            source == ObservationSource::DeviceEvent ||
+            source == ObservationSource::SdkStatus;
+        if (kind == FeedbackKind::HomeReferenceEstablished &&
+            !homeReferenceSource) {
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::InvalidHomeReferenceSource);
         }
 
         if (kind == FeedbackKind::AdapterFailure &&

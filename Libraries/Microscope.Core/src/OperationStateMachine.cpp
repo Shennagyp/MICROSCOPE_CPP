@@ -64,6 +64,7 @@ namespace {
     case StepLifecycleEvent::DeviceProgress:
     case StepLifecycleEvent::DeviceActionCompleted:
     case StepLifecycleEvent::DeviceStateObserved:
+    case StepLifecycleEvent::HomeReferenceEstablished:
     case StepLifecycleEvent::AdapterFailure:
     case StepLifecycleEvent::OperatorActionRequested:
     case StepLifecycleEvent::OperatorConfirmed:
@@ -325,6 +326,10 @@ Result<
         break;
 
     case StepStatus::AdapterAccepted:
+        if (event == StepLifecycleEvent::HomeReferenceEstablished) {
+            return Result<StepStatus, StepLifecycleError>::success(
+                StepStatus::Verifying);
+        }
         if (event == StepLifecycleEvent::DeviceAcknowledged) {
             return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::DeviceAcknowledged);
@@ -357,6 +362,10 @@ Result<
 
     case StepStatus::DeviceAcknowledged:
     case StepStatus::Executing:
+        if (event == StepLifecycleEvent::HomeReferenceEstablished) {
+            return Result<StepStatus, StepLifecycleError>::success(
+                StepStatus::Verifying);
+        }
         if (event == StepLifecycleEvent::DeviceProgress) {
             return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::Executing);
@@ -401,6 +410,7 @@ Result<
 
     case StepStatus::AwaitingObservation:
         if (event == StepLifecycleEvent::DeviceStateObserved ||
+            event == StepLifecycleEvent::HomeReferenceEstablished ||
             event == StepLifecycleEvent::OperatorConfirmed) {
             return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::Verifying);

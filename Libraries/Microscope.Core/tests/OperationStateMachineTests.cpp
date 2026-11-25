@@ -130,6 +130,26 @@ void testDeviceActionCompletionDoesNotVerifyStep() {
         StepLifecycleEvent::DeviceActionCompleted);
     check(!directSuccessAfterDispatch,
           "does not accept device completion before adapter acceptance");
+
+    auto homeReferenceFromAccepted = applyStepLifecycleEvent(
+        StepStatus::AdapterAccepted,
+        StepLifecycleEvent::HomeReferenceEstablished);
+    check(homeReferenceFromAccepted &&
+          homeReferenceFromAccepted.value() == StepStatus::Verifying,
+          "explicit home-reference evidence moves the home step into verification");
+
+    auto homeReferenceFromAwaiting = applyStepLifecycleEvent(
+        StepStatus::AwaitingObservation,
+        StepLifecycleEvent::HomeReferenceEstablished);
+    check(homeReferenceFromAwaiting &&
+          homeReferenceFromAwaiting.value() == StepStatus::Verifying,
+          "explicit home-reference evidence can advance a step awaiting observation");
+
+    auto homeReferenceWithoutDispatch = applyStepLifecycleEvent(
+        StepStatus::Pending,
+        StepLifecycleEvent::HomeReferenceEstablished);
+    check(!homeReferenceWithoutDispatch,
+          "home-reference evidence cannot satisfy an undispatched step");
 }
 
 void testManualAndFailurePathsRemainExplicit() {

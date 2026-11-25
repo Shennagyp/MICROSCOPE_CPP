@@ -32,9 +32,27 @@ int main(){
  check(bool(context),"complete command correlation");
  auto positionObservation=take(AxisPositionObservation::create(
      x,0.25,StagePositionEvidence::EncoderMeasured));
+ auto homeX=take(AxisPositionObservation::create(
+     x,0.2,StagePositionEvidence::ControllerReported));
+ auto homeY=take(AxisPositionObservation::create(
+     take(AxisPosition::create(id<StageAxisId>("y"),0,AxisCoordinateUnit::Millimeters)),
+     0.1,StagePositionEvidence::EncoderMeasured));
+ auto homeReference=take(StageHomeReferenceObservation::create({homeX,homeY}));
+ check(homeReference.matchesAxes(axes)&&homeReference.positions().size()==2,
+       "home reference evidence covers the complete requested axis set");
+ check(!StageHomeReferenceObservation::create({}),
+       "empty home reference evidence is rejected");
+ check(!StageHomeReferenceObservation::create({homeX,homeX}),
+       "duplicate axis references are rejected");
+ auto partialHomeReference=take(StageHomeReferenceObservation::create({homeX}));
+ check(!partialHomeReference.matchesAxes(axes),
+       "partial reference evidence cannot satisfy a two-axis home request");
  StageMotionFeedbackPayload positionFeedback=positionObservation;
+ StageMotionFeedbackPayload homeFeedback=homeReference;
  check(std::holds_alternative<AxisPositionObservation>(positionFeedback),
        "position feedback carries measurement class and uncertainty");
+ check(std::holds_alternative<StageHomeReferenceObservation>(homeFeedback),
+       "machine-reference establishment is a distinct typed motion fact");
  check(!AxisPositionObservation::create(
      x,-0.1,StagePositionEvidence::EncoderMeasured),
        "negative position uncertainty rejected");

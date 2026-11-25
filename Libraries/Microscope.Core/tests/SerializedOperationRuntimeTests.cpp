@@ -75,6 +75,26 @@ FeedbackEnvelope<StageMotionFeedbackPayload> observedState(
         metadata,StageMotionFeedbackPayload{payload});
 }
 
+FeedbackEnvelope<StageMotionFeedbackPayload> homeReference(
+    const RuntimeDeviceCorrelation& device,
+    const OperationId& operation,const StepId& step,const CommandId& command) {
+    auto x=take(AxisPosition::create(
+        id<StageAxisId>("x"),0.25,AxisCoordinateUnit::Millimeters));
+    auto y=take(AxisPosition::create(
+        id<StageAxisId>("y"),-0.5,AxisCoordinateUnit::Millimeters));
+    auto xObservation=take(AxisPositionObservation::create(
+        x,0.002,StagePositionEvidence::ControllerReported));
+    auto yObservation=take(AxisPositionObservation::create(
+        y,0.001,StagePositionEvidence::EncoderMeasured));
+    auto payload=take(StageHomeReferenceObservation::create(
+        {xObservation,yObservation}));
+    auto metadata=take(FeedbackMetadata::create(
+        FeedbackCorrelation{device,OperationCorrelation{operation,step,command}},
+        FeedbackKind::HomeReferenceEstablished,ObservationSource::HardwareReadback));
+    return FeedbackEnvelope<StageMotionFeedbackPayload>::create(
+        metadata,StageMotionFeedbackPayload{payload});
+}
+
 FeedbackEnvelope<StageMotionFeedbackPayload> staleSessionFeedback(
     RuntimeDeviceCorrelation device) {
     const auto payload=take(AxisMotionStateObservation::create(
@@ -214,6 +234,30 @@ int main() {
     check(bool(runtime->closeDeviceSession(
         id<DeviceId>("camera"),take(DeviceSessionGeneration::create(4)))),
         "unrelated device session can close without altering stage-bound work");
+
+    const auto homeOperation=id<OperationId>("operation-home-reference");
+    const auto homeStep=id<StepId>("step-home-reference");
+    const auto homeCommand=id<CommandId>("command-home-reference");
+    take(runtime->createOperation(homeOperation));
+    take(runtime->startOperation(homeOperation));
+    take(runtime->createStep(homeOperation,homeStep));
+    take(runtime->dispatchCommand(homeOperation,homeStep,homeCommand,session));
+    take(runtime->recordAdapterAccepted(homeOperation,homeStep));
+    auto homeReceipt=homeReference(session,homeOperation,homeStep,homeCommand);
+    check(runtime->feedbackIngress().submit(std::move(homeReceipt))==
+          FeedbackSubmitStatus::Enqueued,
+          "driver submits a complete set of command-correlated home-reference observations");
+    auto homeResult=take(runtime->processNextFeedback());
+    check(homeResult&&
+          homeResult->disposition==FeedbackProcessingDisposition::AppliedToOperation&&
+          homeResult->stepStatus==StepStatus::Verifying&&
+          homeResult->receipt&&
+          std::holds_alternative<StageHomeReferenceObservation>(
+              homeResult->receipt->feedback().payload()),
+          "explicit home-reference fact enters Core verification; generic Idle or action-completed facts do not substitute for it");
+    check(runtime->recordStepVerification(homeOperation,homeStep,true).value()==
+          StepStatus::Verified,
+          "host evidence policy can verify the correlated home-reference step");
 
     const auto failureOperation=id<OperationId>("operation-failure");
     const auto failureStep=id<StepId>("step-failure");

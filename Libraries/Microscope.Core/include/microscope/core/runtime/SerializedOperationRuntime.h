@@ -786,6 +786,7 @@ private:
         case FeedbackKind::DeviceProgress:return StepLifecycleEvent::DeviceProgress;
         case FeedbackKind::DeviceActionCompleted:return StepLifecycleEvent::DeviceActionCompleted;
         case FeedbackKind::DeviceStateObserved:return StepLifecycleEvent::DeviceStateObserved;
+        case FeedbackKind::HomeReferenceEstablished:return StepLifecycleEvent::HomeReferenceEstablished;
         case FeedbackKind::AdapterFailure:return StepLifecycleEvent::AdapterFailure;
         }
         return StepLifecycleEvent::AdapterFailure;

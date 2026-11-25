@@ -26,6 +26,7 @@ enum class StepLifecycleEvent {
     DeviceProgress,
     DeviceActionCompleted,
     DeviceStateObserved,
+    HomeReferenceEstablished,
     AdapterFailure,
     OperatorActionRequested,
     OperatorConfirmed,

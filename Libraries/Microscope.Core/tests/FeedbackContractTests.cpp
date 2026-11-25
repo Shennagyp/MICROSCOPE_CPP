@@ -282,6 +282,50 @@ int main() {
               FeedbackMetadataError::InvalidObservationSource,
           "calibrated estimate cannot be represented as device action completion");
 
+    const auto missingHomeReferenceCorrelation = FeedbackMetadata::create(
+        telemetryCorrelation,
+        FeedbackKind::HomeReferenceEstablished,
+        ObservationSource::HardwareReadback);
+    check(!missingHomeReferenceCorrelation &&
+          missingHomeReferenceCorrelation.error() ==
+              FeedbackMetadataError::MissingOperationCorrelation,
+          "requires an operation correlation for machine-reference establishment");
+
+    const auto homeCorrelationWithoutCommand = FeedbackCorrelation{
+        RuntimeDeviceCorrelation{
+            microscopeId,runtimeId,generation,deviceSessionGeneration,deviceId},
+        OperationCorrelation{operationId,stepId,std::nullopt}};
+    const auto homeReferenceWithoutCommand = FeedbackMetadata::create(
+        homeCorrelationWithoutCommand,
+        FeedbackKind::HomeReferenceEstablished,
+        ObservationSource::HardwareReadback);
+    check(!homeReferenceWithoutCommand &&
+          homeReferenceWithoutCommand.error() ==
+              FeedbackMetadataError::MissingCommandCorrelation,
+          "requires the exact home command correlation for reference establishment");
+
+    const auto validHomeReference = FeedbackMetadata::create(
+        FeedbackCorrelation{
+            RuntimeDeviceCorrelation{
+                microscopeId,runtimeId,generation,deviceSessionGeneration,deviceId},
+            OperationCorrelation{operationId,stepId,commandId}},
+        FeedbackKind::HomeReferenceEstablished,
+        ObservationSource::HardwareReadback);
+    check(static_cast<bool>(validHomeReference),
+          "accepts command-correlated hardware evidence of an established reference");
+
+    const auto estimatedHomeReference = FeedbackMetadata::create(
+        FeedbackCorrelation{
+            RuntimeDeviceCorrelation{
+                microscopeId,runtimeId,generation,deviceSessionGeneration,deviceId},
+            OperationCorrelation{operationId,stepId,commandId}},
+        FeedbackKind::HomeReferenceEstablished,
+        ObservationSource::CalibratedEstimate);
+    check(!estimatedHomeReference &&
+          estimatedHomeReference.error() ==
+              FeedbackMetadataError::InvalidHomeReferenceSource,
+          "a calibrated estimate cannot assert that a machine reference was established");
+
     const auto manualObservation = FeedbackMetadata::create(
         telemetryCorrelation,
         FeedbackKind::DeviceStateObserved,

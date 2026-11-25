@@ -2,10 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest implementation checkpoint:** `caa0e8afc8f31278152cc4d7e7bc2ecb1243ce05` — adds `EventKill` fallback when a Producer rejects event unregistration, with deterministic failure-injection coverage.  
-**Latest fully CI-validated checkpoint:** `67212487f579513782bf7b12f5d7cb293f57c25c` — stream-close cancellation regression and full GenTL/GenApi suite passed on both architectures in [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670).  
-**Current validation:** [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523) passed Intel x86_64, including official GenApi 3.5.1 SDK build/tests; Apple Silicon arm64 is queued. This run validates the `EventKill` fallback change.  
-**CI:** GenTL/GenApi workflow [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670) passed both architectures. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed its four jobs; Qt/UI is now excluded from active scope.  
+**Latest implementation checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7` — recursively traverses nested GenApi Root categories, preserves the public-feature boundary, and includes event-wait cancellation plus `EventKill` fallback coverage.  
+**Latest fully CI-validated checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7` — GenTL/GenApi workflow [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and XML-backed runtime tests.  
+**CI:** GenTL/GenApi workflow [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261) passed both architectures. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed its four jobs; Qt/UI is now excluded from active scope.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -75,7 +74,7 @@ Still capture has a separate event waiter and pull path. Settings, one-shot comm
 - Device and stream sessions retain the required parent state. A stream can outlive its `DeviceSession` wrapper; the device handle closes only after the last stream/session reference is released.
 - Failed native cleanup quarantines and process-retains the Consumer context and dynamically loaded C ABI bridge. The bridge is not unloaded while CTI handles may remain.
 - GenApi XML retrieval uses `GCGetNumPortURLs` / `GCGetPortURLInfo`; `LOCAL` register-map XML is read in bounded chunks and `FILE` XML is read from the advertised file. HTTP and custom URL schemes are not implemented.
-- `Camera::GenTLGenApi` is optional and requires the official GenApi 3.5.1 Mac64_Universal SDK. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`. `GenApiCommandAccess` maps `ICommand` nodes to a separate `ICameraCommandAccess`, separating command issue from completion polling. `GenApiDeviceAccess` owns one DeviceSession and shares one GenApi node map/serialization boundary across both adapters. Descriptor enumeration and direct feature/command lookup are restricted to nodes reachable from the GenApi `Root` category; internal `IntReg` and `Port` nodes are not public features. The build option is off by default; official GenApi 3.5.1 SDK compilation and XML-backed integration tests pass on both architectures.
+- `Camera::GenTLGenApi` is optional and requires the official GenApi 3.5.1 Mac64_Universal SDK. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`. `GenApiCommandAccess` maps `ICommand` nodes to a separate `ICameraCommandAccess`, separating command issue from completion polling. `GenApiDeviceAccess` owns one DeviceSession and shares one GenApi node map/serialization boundary across both adapters. Descriptor enumeration and direct feature/command lookup recursively traverse categories reachable from the GenApi `Root`, deduplicating nodes while keeping internal `IntReg` and `Port` nodes private. The build option is off by default; official GenApi 3.5.1 SDK compilation and nested-category XML-backed integration tests pass on both architectures.
 - See [Camera/GenTL README](../../Camera/GenTL/README.md) for the current API and explicit limitations.
 ### Excluded presentation layer — Qt and UI
 
@@ -123,7 +122,8 @@ Active dependency order: 0 → 1 → 2 → 5 → 6 → 7 → 8. Original Phases 
 | `78b3e43`–`31278e2` | Add XML-backed GenApi runtime coverage | Official GenApi parses a synthetic XML map and tests Root-category-only access, internal-register rejection, dynamic availability, Boolean/Integer/Enumeration read/write, command issue/completion and GenTL read-only access on both architectures. |
 | `2d851fc` | Preserve pixel endianness and map verified PFNC layouts | Added GenTL `BUFFER_INFO_PIXEL_ENDIANNESS` capture and safe Mono8, unpacked Mono10/12/14/16 and RGB8 projections with exact payload-size/stride checks. |
 | `5fa61e7`–`6721248` | Verify stream-close cancellation | Added a deterministic pending `EventGetData` test and expanded mock buffer capacity; the full GenTL/GenApi workflow passed both architectures in [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670). |
-| `caa0e8a` | Add event-unregistration failure fallback | On failed `GCUnregisterEvent`, attempt `EventKill` for the single allowed waiter and quarantine the context. Intel passed the full workflow in [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523); Apple arm64 is queued. |
+| `caa0e8a` | Add event-unregistration failure fallback | On failed `GCUnregisterEvent`, attempt `EventKill` for the single allowed waiter and quarantine the context. This is validated on both architectures by the later workflow #45701059261. |
+| `9043f82` | Traverse nested GenApi categories | Recursively enumerate features and commands reachable through Root category descendants, deduplicate node references, and test nested feature reads plus nested command execution. |
 
 ### CI evidence
 
@@ -177,8 +177,8 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 1. Validate the real Swift `libGenTLConsumerCAPI.dylib`: pointer marshalling, complete operation mapping, dynamic loading and Swift runtime packaging. The current C++ workflow validates only a mock bridge.
 2. Expand GenApi runtime coverage for malformed XML, unsupported/unknown node types, command completion transitions and failure/recovery paths; keep public access restricted to Root-category features.
-3. Finish cross-architecture validation of the `EventKill` fallback and retain deterministic cancellation/failure-path coverage.
-4. Qualify discovery, device access, stream lifecycle, frame payload/metadata, verified PFNC layouts and GenApi behavior against a vendor CTI Producer and physical CTI camera.
+3. Extend the verified PFNC projection only when component order, packing, row stride and byte order are explicit; keep unsupported layouts opaque.
+4. Qualify discovery, device access, stream lifecycle, frame payload/metadata, PFNC layouts and GenApi behavior against a vendor CTI Producer and physical CTI camera.
 5. Complete Phase 2 physical common-frame/RAW evidence.
 6. Complete Phase 1 callback-quiescence and failure-injection hardening only after satisfying its documented hardware entry condition; test callback drain and establish the SDK no-new-callback guarantee.
 7. Reconcile AmScope feature/model coverage against physical evidence.

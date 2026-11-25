@@ -77,6 +77,16 @@ void testRuntimeGeneration() {
         check(generation.value().value() == 7,
               "preserves runtime generation value");
     }
+
+    auto zeroDeviceSession = DeviceSessionGeneration::create(0);
+    check(!zeroDeviceSession, "rejects device session generation zero");
+    auto deviceSession = DeviceSessionGeneration::create(5);
+    check(static_cast<bool>(deviceSession),
+          "creates a positive device session generation");
+    if (deviceSession) {
+        check(deviceSession.value().value() == 5,
+              "preserves device session generation value");
+    }
 }
 
 void testResultAndStatus() {

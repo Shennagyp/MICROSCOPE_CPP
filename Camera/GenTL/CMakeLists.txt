@@ -6,7 +6,10 @@ include(CTest)
 
 add_library(camera_gentl_consumer_bridge STATIC
     src/ConsumerBridge.cpp
-    include/camera/gentl/ConsumerBridge.h)
+    src/Producer.cpp
+    include/camera/gentl/ConsumerBridge.h
+    include/camera/gentl/Producer.h
+    include/camera/gentl/GenTL_v1_6.h)
 add_library(Camera::GenTLConsumerBridge ALIAS camera_gentl_consumer_bridge)
 
 target_compile_features(camera_gentl_consumer_bridge PUBLIC cxx_std_17)
@@ -24,6 +27,8 @@ set_target_properties(camera_gentl_consumer_bridge PROPERTIES
 if(BUILD_TESTING)
     add_library(gentl_consumer_bridge_fixture SHARED
         tests/MockConsumerBridge.c)
+    target_include_directories(gentl_consumer_bridge_fixture PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/include")
     set_target_properties(gentl_consumer_bridge_fixture PROPERTIES
         C_STANDARD 11
         C_STANDARD_REQUIRED YES
@@ -38,5 +43,14 @@ if(BUILD_TESTING)
         PRIVATE Camera::GenTLConsumerBridge)
     add_test(NAME camera_gentl_consumer_bridge_tests
         COMMAND camera_gentl_consumer_bridge_tests
+            "$<TARGET_FILE:gentl_consumer_bridge_fixture>")
+
+    add_executable(camera_gentl_producer_tests
+        tests/ProducerTests.cpp)
+    target_compile_features(camera_gentl_producer_tests PRIVATE cxx_std_17)
+    target_link_libraries(camera_gentl_producer_tests
+        PRIVATE Camera::GenTLConsumerBridge)
+    add_test(NAME camera_gentl_producer_tests
+        COMMAND camera_gentl_producer_tests
             "$<TARGET_FILE:gentl_consumer_bridge_fixture>")
 endif()

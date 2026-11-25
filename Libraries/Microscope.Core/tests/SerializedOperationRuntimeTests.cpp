@@ -197,6 +197,35 @@ int main() {
           runtime->operationSnapshot(operation).value().status()==OperationStatus::Succeeded,
           "only the owner can commit operation success after operation-level verification");
 
+    const auto estimatedOperation=id<OperationId>("operation-estimated-position");
+    const auto estimatedStep=id<StepId>("step-estimated-position");
+    const auto estimatedCommand=id<CommandId>("command-estimated-position");
+    take(runtime->createOperation(estimatedOperation));
+    take(runtime->startOperation(estimatedOperation));
+    take(runtime->createStep(estimatedOperation,estimatedStep));
+    take(runtime->dispatchCommand(
+        estimatedOperation,estimatedStep,estimatedCommand,session));
+    take(runtime->recordAdapterAccepted(estimatedOperation,estimatedStep));
+    auto estimatedCompletion=actionCompleted(
+        session,estimatedOperation,estimatedStep,estimatedCommand);
+    check(runtime->feedbackIngress().submit(std::move(estimatedCompletion))==
+              FeedbackSubmitStatus::Enqueued,
+          "open-loop driver completion enters the same correlated feedback path");
+    auto estimatedCompletionResult=take(runtime->processNextFeedback());
+    check(estimatedCompletionResult &&
+          estimatedCompletionResult->stepStatus==StepStatus::AwaitingObservation,
+          "action completion does not fabricate a position observation");
+    check(runtime->beginStepVerification(estimatedOperation,estimatedStep).value()==
+              StepStatus::Verifying,
+          "owner can begin verification after its calibrated command-derived estimate satisfies policy");
+    check(runtime->recordStepVerification(estimatedOperation,estimatedStep,true).value()==
+              StepStatus::Verified,
+          "bounded estimate verification uses the same explicit Verified transition");
+    take(runtime->beginOperationVerification(estimatedOperation));
+    check(runtime->recordOperationVerification(estimatedOperation,true).value().status()==
+              OperationStatus::Succeeded,
+          "an accepted command-derived verification can complete the operation without inventing sensor feedback");
+
     auto oldSession=staleSessionFeedback(deviceSession(3));
     check(runtime->feedbackIngress().submit(std::move(oldSession))==FeedbackSubmitStatus::Enqueued,
           "old-session callback is retained for freshness evaluation");
@@ -360,6 +389,11 @@ int main() {
     check(overflowRuntime->feedbackIngress().submit(std::move(droppedTelemetry))==
           FeedbackSubmitStatus::QueueFull&&overflowRuntime->feedbackLossLatched(),
           "dropped feedback latches runtime reconciliation state");
+    auto blockedVerification=overflowRuntime->beginStepVerification(
+        overflowOperation,overflowStep);
+    check(!blockedVerification && blockedVerification.error()==
+          SerializedOperationRuntimeError::FeedbackLossUnresolved,
+          "Core cannot begin estimate-based verification while feedback loss is unresolved");
     auto blockedDispatch=overflowRuntime->dispatchCommand(
         overflowOperation,overflowStep,overflowCommand,deviceSession(4,8));
     check(!blockedDispatch&&blockedDispatch.error()==

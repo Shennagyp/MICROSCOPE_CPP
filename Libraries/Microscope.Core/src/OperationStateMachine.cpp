@@ -426,6 +426,12 @@ Result<
         break;
 
     case StepStatus::Verifying:
+        // A generic state observation may already have started verification.
+        // A later, command-correlated home-reference fact remains admissible.
+        if (event == StepLifecycleEvent::HomeReferenceEstablished) {
+            return Result<StepStatus, StepLifecycleError>::success(
+                StepStatus::Verifying);
+        }
         if (event == StepLifecycleEvent::VerificationSucceeded) {
             return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::Verified);

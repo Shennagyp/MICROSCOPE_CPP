@@ -150,6 +150,18 @@ void testDeviceActionCompletionDoesNotVerifyStep() {
         StepLifecycleEvent::HomeReferenceEstablished);
     check(!homeReferenceWithoutDispatch,
           "home-reference evidence cannot satisfy an undispatched step");
+
+    auto genericStateFirst = applyStepLifecycleEvent(
+        StepStatus::AdapterAccepted,
+        StepLifecycleEvent::DeviceStateObserved);
+    auto homeReferenceAfterIdle = applyStepLifecycleEvent(
+        genericStateFirst.value(),
+        StepLifecycleEvent::HomeReferenceEstablished);
+    check(genericStateFirst &&
+          genericStateFirst.value() == StepStatus::Verifying &&
+          homeReferenceAfterIdle &&
+          homeReferenceAfterIdle.value() == StepStatus::Verifying,
+          "a later explicit home-reference fact remains admissible after generic Idle feedback began verification");
 }
 
 void testManualAndFailurePathsRemainExplicit() {

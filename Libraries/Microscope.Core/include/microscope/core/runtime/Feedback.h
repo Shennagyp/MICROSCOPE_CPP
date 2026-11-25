@@ -105,6 +105,8 @@ struct FeedbackMetadata final {
     FeedbackCorrelation correlation;
     FeedbackKind kind;
     ObservationSource source = ObservationSource::Unknown;
+    // Adapter/device sequence, scoped to DeviceSessionGeneration. Zero may
+    // be a valid first sequence; absence means the source does not report one.
     std::optional<std::uint64_t> sourceSequence;
     std::optional<DeviceTimestamp> deviceTimestamp;
 };

@@ -412,6 +412,7 @@ const std::string& DeviceSession::deviceId() const noexcept {
 std::vector<std::string> DeviceSession::dataStreamIds() const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
     std::lock_guard<std::mutex> guard(context_->mutex);
+    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
     std::uint32_t count = 0;
     check(context_->consumer.invoke(
         Operation::devGetNumDataStreams, device_, &count),
@@ -438,6 +439,8 @@ std::vector<std::uint8_t> DeviceSession::readPort(
     std::uint64_t address, std::size_t size) const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
     std::lock_guard<std::mutex> guard(context_->mutex);
+    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
+    if (size == 0) return {};
     std::vector<std::uint8_t> bytes(size);
     std::size_t actual = bytes.size();
     check(context_->consumer.invoke(
@@ -455,6 +458,8 @@ void DeviceSession::writePort(
     std::uint64_t address, const std::vector<std::uint8_t>& bytes) const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
     std::lock_guard<std::mutex> guard(context_->mutex);
+    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
+    if (bytes.empty()) return;
     std::size_t actual = bytes.size();
     const void* data = bytes.empty() ? nullptr : bytes.data();
     check(context_->consumer.invoke(
@@ -469,6 +474,7 @@ void DeviceSession::writePort(
 std::string DeviceSession::portUrl() const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
     std::lock_guard<std::mutex> guard(context_->mutex);
+    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
     return readString(
         [&](char* buffer, std::size_t* size) {
             return context_->consumer.invoke(
@@ -493,6 +499,12 @@ void DeviceSession::close() {
     GenTL::GC_ERROR status = GenTL::GC_ERR_SUCCESS;
     {
         std::lock_guard<std::mutex> guard(context->mutex);
+        if (context->quarantined) {
+            device_ = nullptr;
+            remotePort_ = nullptr;
+            context_.reset();
+            return;
+        }
         status = context->consumer.invoke(Operation::devClose, device_);
         if (status != GenTL::GC_ERR_SUCCESS) {
             context->quarantined = true;

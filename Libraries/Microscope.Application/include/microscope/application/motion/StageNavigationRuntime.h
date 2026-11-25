@@ -465,6 +465,16 @@ public:
         return carrier_;
     }
 
+    // Returns the selected physical slide's current local coordinates through
+    // its own registration. Unknown position/error or an out-of-slide mapping
+    // remains an explicit error.
+    [[nodiscard]] core::Result<
+        core::SlidePositionEstimate,
+        core::CurrentSlidePositionError> currentSlidePosition(
+            const core::SlideId& slideId) const {
+        return position_.currentSlidePosition(carrier_, slideId);
+    }
+
     [[nodiscard]] bool navigationActive() const noexcept {
         return active_.has_value();
     }

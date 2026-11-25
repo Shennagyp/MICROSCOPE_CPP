@@ -2,9 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest source checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`  
-**Latest CI-validated checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`  
-**CI:** run [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed all four Intel/Apple Silicon non-Qt and Qt jobs; 12/12 non-Qt and 18/18 Qt tests per architecture.  
+**Latest source checkpoint:** `3212b4b4d555b650ef7a4d6a97a4576a3c9b14c5`  
+**Latest CI-validated checkpoint:** `3212b4b4d555b650ef7a4d6a97a4576a3c9b14c5`  
+**CI:** original core/Qt matrix [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed; GenTL C++ bridge matrix [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -64,12 +64,20 @@ Live acquisition remains SDK callback → bounded event FIFO → one acquisition
 
 Still capture has a separate event waiter and pull path. Settings, one-shot commands, telemetry and accessory/motion operations remain separate categories. Model profiles may narrow probed capabilities but must not invent support.
 
+### GenTL integration — `Camera/GenTL`
+
+- `ConsumerBridge` loads a separately built `libGenTLConsumerCAPI.dylib` and validates bridge ABI version 1 plus GenTL header version 1.6. The C++ target does not implement a second CTI loader or GenTL function table.
+- `Producer` initializes the Consumer and TL module, discovers interfaces/devices, retains interface handles, and opens a device session. `DeviceSession` owns the device handle and remote port access; producer state remains alive while device sessions retain it.
+- Data-stream identifiers are discoverable, but stream opening, event registration, buffer announcement/queueing, acquisition and frame delivery are not yet implemented in this C++ adapter.
+- GenApi XML retrieval uses `GCGetNumPortURLs` / `GCGetPortURLInfo`; `LOCAL` register-map XML is read in bounded chunks and `FILE` XML is read from the advertised file. HTTP and custom URL schemes are not implemented yet.
+- `Camera::GenTLGenApi` is optional and requires the official GenApi 3.5.1 Mac64_Universal SDK. Its `GenApiPort` / `GenApiNodeMap` source is present but has not been compiled against that SDK. The build option is off by default.
 ### Optional Qt streaming and reusable UI layers
 
 - `Camera/Qt` provides Qt-specific frame notification/thread-handoff support without changing the native acquisition owner.
 - `QtAmcamCamera` currently composes one `AmcamCamera` and adds a serialized Qt request worker, queued completions and frame notifications. This is existing implementation, but Phase 3 still needs to reconcile its combined responsibilities against the separate non-Qt control and Qt streaming boundaries.
 - `Camera/QtWidgets` contains reusable `FrameView`, `CameraControlPanel` and `ImageInfoBar` components. These are partial Phase 4 deliverables, not a complete reusable camera UI library.
 - `amscope_preview` is a composition/example application. It is not the owner of the driver or the reusable UI library's application-independent contracts.
+- The Optika application already has its camera preview on the Optika application branch. Do not restart preview implementation as a Camera v2.0 priority; Phase 4 concerns reusable UI components and their consumer boundary.
 
 Qt is optional for consumers that only need the core driver/common contracts. The Qt targets remain in scope as optional Camera Module deliverables and must retain their own build/test coverage. The vendor SDK's original Qt samples are vendor material, not Camera Module targets.
 
@@ -83,8 +91,8 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 1 | Stabilize and qualify native AmScope driver | **Accepted by owner historically; post-acceptance hardening remains.** Single-session ownership, callback/queue/worker/pull path, frame pool and lifecycle primitives exist. Full injected SDK lifecycle tests and proof of callback quiescence around terminal Close remain open. |
 | 2 | Finalize backend-neutral camera models | **Partially implemented.** Slice 2.1 discovery/capability models and 2.2 frame/layout models exist with automated tests and prior cross-architecture CI. The 2.3 semantic ownership audit is documented: common feature-access errors remain common, while AmScope lifecycle/command errors remain provider-specific. Physical common-frame/RAW validation remains open, so Phase 2 is not accepted. |
 | 3 | Separate driver, programmatic control and Qt streaming libraries | **In progress.** `AmcamCamera` is the non-Qt programmatic control/session API and sole native handle owner. `Camera::Qt` is now a concrete Qt Core library with backend-neutral `camera::qt::FrameStream`, wrapping the Common latest-frame mailbox and owning QObject-thread notification. `QtAmcamCamera` composes one driver session and one FrameStream; its provider-specific serialized operation/lifecycle queue and generation semantics remain. CI passes on both architectures; same-session physical regression and final boundary acceptance remain open. |
-| 4 | Extract reusable Qt camera UI library | **Partially implemented.** `Camera/QtWidgets` contains `FrameView`, `CameraControlPanel` and `ImageInfoBar`; the Qt preview composes them. Descriptor-driven editors, commands, telemetry, capability/availability presentation, full consumer independence and phase-wide physical UI regression are not yet accepted. |
-| 5 | Integrate existing GenTL/GenApi implementation | **Blocked.** The existing Swift GenTL Consumer has no established C++/C ABI in the reviewed source; a real target CTI Producer and physical CTI camera are required. No reimplementation or synthetic AmScope Producer. |
+| 4 | Extract reusable Qt camera UI library | **Partially implemented; not the current priority.** `Camera/QtWidgets` contains reusable components. The Optika application already has its camera preview; do not rebuild that preview in this workstream. Remaining Phase 4 scope is reusable feature/command/telemetry/capability presentation and consumer validation. |
+| 5 | Integrate existing GenTL/GenApi implementation | **In progress.** `Camera/GenTL` now has a C++ runtime bridge adapter, a GenTL 1.6 ABI header, CTI/TL/interface/device discovery, device sessions, stream-ID enumeration, remote-port read/write and XML retrieval for `LOCAL`/`FILE` port URL schemes. A versioned Swift C ABI wrapper exists on `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, but its binary has not yet been validated in CI. The optional `Camera::GenTLGenApi` adapter targets the official GenApi 3.5.1 SDK and is not yet compiled. No real CTI Producer or physical CTI camera has been qualified. |
 | 6 | Complete capability, feature, command and model coverage | **Open.** Broad AmScope implementation exists. Reconcile every exposed claim to provider/model support, units, preconditions, readback, asynchronous completion and physical evidence. |
 | 7 | Release packaging and external-consumer integration | **Open.** Initial install rules exist and the non-Qt public headers install/compile. An exported CMake package/config/version flow and clean installed external consumers remain; both non-Qt and optional Qt consumer configurations must be considered. |
 | 8 | Final hardware qualification and release | **Not started/accepted.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer tests, release CI and owner acceptance. |
@@ -108,6 +116,7 @@ The original phase dependency order remains: 0 → 1 → 2 → 3 → 4; Phase 5 
 | `61e1523` | Add separate Qt CI job | Builds/tests optional Qt streaming, reusable widgets and preview composition on Intel and Apple Silicon. |
 | `64ca8da` | Restore original Phase 0–8 ledger | Re-established original canonical numbering, Qt Phase 3/4 and GenTL Phase 5. |
 | `e12d765` | Extract backend-neutral Qt frame streaming | Added concrete `Camera::Qt` Core library and `camera::qt::FrameStream`; moved latest-frame Qt notification/handoff out of `QtAmcamCamera`; added standalone stream tests; corrected Qt workflow path filters and optional-target CMake description. |
+| `ef58bf6`–`3212b4b` | Begin Phase 5 GenTL integration | Pinned the GenTL 1.6 header; added a version-checked dynamic C ABI bridge adapter, CTI/TL/interface/device discovery, retained device sessions, register-port access, GenApi XML retrieval and an optional GenApi 3.5.1 target. The Swift C ABI package is on the separate private `AMSCOPE_DRIVER` branch `gentl-c-api-v.1.0`. |
 
 ### CI evidence
 
@@ -120,9 +129,19 @@ Workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs
 
 The two new Qt tests cover the generic frame-stream publication/handoff path: latest-frame retention/coalescing, notification re-arming, QObject affinity, and clearing. The successful CI run proves build/test/install-surface behavior on the two hosted architectures. It does not prove physical camera behavior, Phase 3 same-session operation, callback quiescence, RAW sensor correctness, or the Phase 4 physical UI regression.
 
+### GenTL C++ bridge CI
+
+Workflow [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) passed at exact checkpoint `3212b4b4d555b650ef7a4d6a97a4576a3c9b14c5`:
+
+- **Apple Silicon arm64:** 2/2 CTest tests passed; static library architecture check passed.
+- **Intel x86_64:** 2/2 CTest tests passed; static library architecture check passed.
+
+The tests use a mock C ABI bridge. They verify dynamic-library symbol resolution, bridge/header version checks, context/library lifetime, CTI registration, TL/interface/device enumeration, device-session lifetime after the Producer wrapper is released, stream-ID enumeration, remote-port read/write and GenApi XML retrieval from a mock `LOCAL` URL. They do **not** validate the actual Swift C ABI dylib, a vendor CTI Producer, GenTL acquisition, GenApi parsing, or physical hardware.
+
+The Swift C ABI implementation is on private repository branch `Shennagyp/AMSCOPE_DRIVER:gentl-c-api-v.1.0` at `7355158b1e174670d76ddd6c787873bb9d262f8c`. Its latest workflow attempt did not execute build/test steps, so the C ABI dylib remains unvalidated. The C++ bridge's mock tests are not evidence that the real Swift dylib loads or that its operation mapping is correct.
 Earlier non-Qt run [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) remains historical evidence for checkpoint `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`; the newer four-job matrix supersedes it for the `e12d765` checkpoint.
 
-No local build or physical-camera test is claimed in this status update.
+No local build or physical-camera test is claimed in this status update. The GenApi 3.5.1 target is source-only until the official Mac64_Universal SDK is installed and used in a CI build.
 
 ## 6. Highest-priority unresolved risks
 
@@ -142,21 +161,23 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 7. Next development sequence
 
-1. Preserve `e12d765` as the first fully CI-validated checkpoint for the concrete Qt streaming component.
-2. Complete Phase 3 same-session physical regression: use the non-Qt `AmcamCamera` API for supported setting read/write/readback while `Camera::Qt::FrameStream` delivers frames from that same opened session; verify FIFO writes/lifecycle, retained immutable leases, stale-generation rejection, and stream disposal without an unexpected session close/reopen.
-3. Review whether the provider-specific `QtAmcamCamera` request/lifecycle coordinator is only a composition adapter over the separate control and stream responsibilities; retain its current FIFO/generation semantics unless evidence supports a safe refactor.
-4. Complete Phase 4 reusable widgets for descriptors, commands, telemetry, capability/availability and still/frame presentation; keep app shell/workspace ownership in consuming apps.
-4. Complete Phase 2 physical common-frame/RAW evidence and regression; retain the documented common/provider-specific error/value decisions.
-5. Satisfy the original Phase 1 test-seam hardware entry condition before implementing behavior-changing lifecycle injection; then test callback drain and investigate the actual SDK no-new-callback guarantee.
-6. Reconcile AmScope feature/model coverage against physical evidence.
-7. Continue original Phase 5 GenTL only after choosing the existing Consumer interface and obtaining a real CTI Producer/camera.
-8. Export non-Qt and optional Qt CMake packages/targets and verify clean consumers under Phase 7.
-9. Complete Phase 8 physical qualification for every declared provider/model combination.
+1. Validate the real Swift C ABI dylib from `AMSCOPE_DRIVER:gentl-c-api-v.1.0` and resolve its private-repository CI/runtime packaging boundary. The current C++ workflow validates only a mock bridge.
+2. Add GenTL stream opening, event registration, buffer announcement/queueing, acquisition start/stop, buffer requeue/drain and frame metadata delivery. Preserve the existing Consumer as the only CTI loader/function dispatcher.
+3. Install the official GenApi 3.5.1 Mac64_Universal SDK, build `Camera::GenTLGenApi`, validate the GenTL port adapter, load actual device XML, and map GenApi nodes to the Common feature model.
+4. Qualify discovery, device access, stream acquisition, XML/GenApi features and error/lifecycle behavior against a real CTI Producer and physical camera.
+5. Complete Phase 3 same-session AmScope control/stream physical regression and Phase 2 physical common-frame/RAW evidence.
+6. Satisfy the original Phase 1 test-seam hardware entry condition before behavior-changing lifecycle injection; then test callback drain and investigate the SDK no-new-callback guarantee.
+7. Reconcile AmScope feature/model coverage against physical evidence.
+8. Complete remaining Phase 4 reusable UI component work; the Optika preview already exists and is not to be reimplemented.
+9. Export non-Qt and optional Qt/GenTL CMake packages and verify clean external consumers under Phase 7.
+10. Complete Phase 8 physical qualification for every declared provider/model combination.
+
+
 
 ## 8. Continuation rules
 
 - Continue Camera source work on `camera-v.2.0`; do not develop the library on the Optika application branch.
-- Use Optika as an application integration/reference line only. Do not merge its GUI/workspace changes into Camera.
+- Use Optika as an application integration/reference line only. Its camera preview already exists; do not restart preview development or merge its GUI/workspace changes into Camera.
 - Keep Controller/Stage, Slide Scanning and ImageProcessing as separate workstreams.
 - Keep Qt optional to the core driver/common targets; preserve optional Phase 3 streaming and Phase 4 reusable UI targets and their tests.
 - Verify branch HEAD and commits at each continuation.

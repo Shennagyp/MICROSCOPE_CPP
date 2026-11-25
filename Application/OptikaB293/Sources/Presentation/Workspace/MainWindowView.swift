@@ -46,40 +46,55 @@ struct MainWindowView: View {
                 )
                 .clipped()
 
-                if workspace.isWorkspaceDockVisible {
-                    NativeWorkspaceDockResizeDivider(
-                        dockWidth: dockWidth,
-                        maximumWidth: maximumDockWidth,
-                        onResize: {
-                            workspace.updateWorkspaceDockWidth(
-                                $0,
-                                maximum: maximumDockWidth
-                            )
-                        },
-                        onResizeEnded: {
-                            workspace.persistWorkspaceDockWidth()
-                        }
-                    )
-                    .frame(width: dockDividerWidth)
-                    .frame(maxHeight: .infinity)
-
-                    NativeWorkspaceDock(
-                        model: model,
-                        workspace: workspace,
-                        microscope: microscope,
-                        resolutionCoordinator: resolutionCoordinator,
-                        gallery: gallery,
-                        onClose: { workspace.closeWorkspaceDock() }
-                    )
-                    .frame(width: dockWidth)
-                    .frame(maxHeight: .infinity)
-                }
-
                 NativeWorkspaceDockTabRail(workspace: workspace)
                     .frame(width: railWidth)
                     .frame(maxHeight: .infinity)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .overlay(alignment: .trailing) {
+                if workspace.isWorkspaceDockVisible {
+                    HStack(spacing: 0) {
+                        NativeWorkspaceDockResizeDivider(
+                            dockWidth: dockWidth,
+                            maximumWidth: maximumDockWidth,
+                            onResize: {
+                                workspace.updateWorkspaceDockWidth(
+                                    $0,
+                                    maximum: maximumDockWidth
+                                )
+                            },
+                            onResizeEnded: {
+                                workspace.persistWorkspaceDockWidth()
+                            }
+                        )
+                        .frame(width: dockDividerWidth)
+                        .frame(maxHeight: .infinity)
+
+                        NativeWorkspaceDock(
+                            model: model,
+                            workspace: workspace,
+                            microscope: microscope,
+                            resolutionCoordinator: resolutionCoordinator,
+                            gallery: gallery,
+                            onClose: { workspace.closeWorkspaceDock() }
+                        )
+                        .frame(width: dockWidth)
+                        .frame(maxHeight: .infinity)
+                        .shadow(
+                            color: Color.black.opacity(0.28),
+                            radius: 16,
+                            x: -5,
+                            y: 0
+                        )
+                    }
+                    // The tool surface floats over the preview and ends before
+                    // the permanent launcher rail. It does not participate in
+                    // the workspace HStack or change the preview's frame.
+                    .padding(.trailing, railWidth)
+                    .padding(.vertical, 12)
+                    .zIndex(1)
+                }
+            }
             .clipped()
         }
         .frame(

@@ -54,12 +54,38 @@ bool OperationHandle::belongsTo(const RuntimeHandle& runtime) const noexcept {
     return runtime_.identifiesSameRuntime(runtime);
 }
 
-bool OperationView::isConsistent() const noexcept {
+OperationView::OperationView(
+    OperationHandle handle,
+    core::OperationSnapshot snapshot)
+    : handle_(std::move(handle)),
+      snapshot_(std::move(snapshot)) {}
+
+core::Result<OperationView, OperationViewError> OperationView::create(
+    OperationHandle handle,
+    core::OperationSnapshot snapshot) {
     const auto& runtime = handle.runtime();
-    return runtime.microscopeId() == snapshot.microscopeId &&
-           runtime.runtimeId() == snapshot.runtimeId &&
-           runtime.generation() == snapshot.runtimeGeneration &&
-           handle.operationId() == snapshot.operationId;
+    if (runtime.microscopeId() != snapshot.microscopeId ||
+        runtime.runtimeId() != snapshot.runtimeId ||
+        runtime.generation() != snapshot.runtimeGeneration) {
+        return core::Result<OperationView, OperationViewError>::failure(
+            OperationViewError::RuntimeIdentityMismatch);
+    }
+
+    if (handle.operationId() != snapshot.operationId) {
+        return core::Result<OperationView, OperationViewError>::failure(
+            OperationViewError::OperationIdentityMismatch);
+    }
+
+    return core::Result<OperationView, OperationViewError>::success(
+        OperationView(std::move(handle), std::move(snapshot)));
+}
+
+const OperationHandle& OperationView::handle() const noexcept {
+    return handle_;
+}
+
+const core::OperationSnapshot& OperationView::snapshot() const noexcept {
+    return snapshot_;
 }
 
 } // namespace microscope::application

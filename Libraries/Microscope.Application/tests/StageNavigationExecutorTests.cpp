@@ -12,6 +12,7 @@
 
 namespace {
 using namespace microscope;
+int failures = 0;
 
 template <typename T, typename E>
 T take(core::Result<T, E> result) {
@@ -400,7 +401,6 @@ void testHomeContinuationRequiresVerifiedStep() {
 } // namespace
 
 int main() {
-    int failures = 0;
     testDirectNavigation();
     testHomeThenRestoredMove();
     testHomeContinuationRequiresVerifiedStep();

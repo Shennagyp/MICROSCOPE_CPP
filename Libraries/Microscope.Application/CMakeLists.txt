@@ -94,6 +94,18 @@ if(BUILD_TESTING)
         NAME microscope_application_stage_motion_dispatcher_tests
         COMMAND microscope_application_stage_motion_dispatcher_tests)
 
+    add_executable(microscope_application_stage_navigation_executor_tests
+        tests/StageNavigationExecutorTests.cpp)
+    target_link_libraries(microscope_application_stage_navigation_executor_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_stage_navigation_executor_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_stage_navigation_executor_tests
+        COMMAND microscope_application_stage_navigation_executor_tests)
+
     add_executable(microscope_application_stage_navigation_plan_dispatcher_tests
         tests/StageNavigationPlanDispatcherTests.cpp)
     target_link_libraries(microscope_application_stage_navigation_plan_dispatcher_tests

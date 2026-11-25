@@ -5,12 +5,14 @@ struct NativeWorkspaceDockResizeDivider: NSViewRepresentable {
     let dockWidth: CGFloat
     let maximumWidth: CGFloat
     let onResize: (CGFloat) -> Void
+    let onResizeEnded: () -> Void
 
     func makeNSView(context: Context) -> NativeWorkspaceDockResizeDividerView {
         NativeWorkspaceDockResizeDividerView(
             dockWidth: dockWidth,
             maximumWidth: maximumWidth,
-            onResize: onResize
+            onResize: onResize,
+            onResizeEnded: onResizeEnded
         )
     }
 
@@ -21,7 +23,8 @@ struct NativeWorkspaceDockResizeDivider: NSViewRepresentable {
         nsView.update(
             dockWidth: dockWidth,
             maximumWidth: maximumWidth,
-            onResize: onResize
+            onResize: onResize,
+            onResizeEnded: onResizeEnded
         )
     }
 }
@@ -31,21 +34,25 @@ final class NativeWorkspaceDockResizeDividerView: NSView {
     private var dockWidth: CGFloat
     private var maximumWidth: CGFloat
     private var onResize: ((CGFloat) -> Void)?
+    private var onResizeEnded: (() -> Void)?
 
     private var dragStartWindowX: CGFloat?
     private var dragStartWidth: CGFloat?
     private var isHovering = false
     private var isDragging = false
+    private var didResizeDuringDrag = false
     private var resizeTrackingArea: NSTrackingArea?
 
     init(
         dockWidth: CGFloat,
         maximumWidth: CGFloat,
-        onResize: @escaping (CGFloat) -> Void
+        onResize: @escaping (CGFloat) -> Void,
+        onResizeEnded: @escaping () -> Void
     ) {
         self.dockWidth = dockWidth
         self.maximumWidth = maximumWidth
         self.onResize = onResize
+        self.onResizeEnded = onResizeEnded
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = OptikaPalette.nsClear.cgColor
@@ -91,6 +98,7 @@ final class NativeWorkspaceDockResizeDividerView: NSView {
     override func mouseDown(with event: NSEvent) {
         dragStartWindowX = event.locationInWindow.x
         dragStartWidth = dockWidth
+        didResizeDuringDrag = false
         isDragging = true
         needsDisplay = true
     }
@@ -103,16 +111,27 @@ final class NativeWorkspaceDockResizeDividerView: NSView {
 
         let horizontalDelta = event.locationInWindow.x - dragStartWindowX
         let upperBound = max(OptikaLayout.workspaceDockMinimumWidth, maximumWidth)
-        let nextWidth = min(max(dragStartWidth - horizontalDelta, OptikaLayout.workspaceDockMinimumWidth), upperBound)
+        let nextWidth = min(
+            max(dragStartWidth - horizontalDelta, OptikaLayout.workspaceDockMinimumWidth),
+            upperBound
+        )
+        if abs(horizontalDelta) >= 0.5 {
+            didResizeDuringDrag = true
+        }
         onResize?(nextWidth)
     }
 
     override func mouseUp(with event: NSEvent) {
         mouseDragged(with: event)
+        let shouldCommit = didResizeDuringDrag
         dragStartWindowX = nil
         dragStartWidth = nil
+        didResizeDuringDrag = false
         isDragging = false
         needsDisplay = true
+        if shouldCommit {
+            onResizeEnded?()
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -138,11 +157,13 @@ final class NativeWorkspaceDockResizeDividerView: NSView {
     func update(
         dockWidth: CGFloat,
         maximumWidth: CGFloat,
-        onResize: @escaping (CGFloat) -> Void
+        onResize: @escaping (CGFloat) -> Void,
+        onResizeEnded: @escaping () -> Void
     ) {
         self.dockWidth = dockWidth
         self.maximumWidth = maximumWidth
         self.onResize = onResize
+        self.onResizeEnded = onResizeEnded
     }
 }
 

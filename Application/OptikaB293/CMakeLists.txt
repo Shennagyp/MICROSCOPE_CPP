@@ -136,4 +136,21 @@ if(BUILD_TESTING)
         "${OPTIKA_FOUNDATION_FRAMEWORK}")
     add_test(NAME optika_preview_frame_rate_meter_tests
         COMMAND optika_preview_frame_rate_meter_tests)
+
+    find_library(OPTIKA_COMBINE_FRAMEWORK Combine REQUIRED)
+    add_executable(optika_workspace_model_tests
+        Sources/Features/Workspace/NativeSlideID.swift
+        Sources/Features/Workspace/NativeWorkspaceDockTab.swift
+        Sources/Features/Workspace/NativeWorkspaceModel.swift
+        Sources/Presentation/Theme/OptikaLayout.swift
+        Tests/NativeWorkspaceModelTests.swift)
+    target_compile_options(optika_workspace_model_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
+        "$<$<COMPILE_LANGUAGE:Swift>:5>")
+    target_link_libraries(optika_workspace_model_tests PRIVATE
+        "${OPTIKA_FOUNDATION_FRAMEWORK}"
+        "${OPTIKA_COMBINE_FRAMEWORK}"
+        "${OPTIKA_COREGRAPHICS_FRAMEWORK}")
+    add_test(NAME optika_workspace_model_tests
+        COMMAND optika_workspace_model_tests)
 endif()

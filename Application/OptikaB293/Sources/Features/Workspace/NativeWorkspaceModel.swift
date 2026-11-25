@@ -31,23 +31,40 @@ final class NativeWorkspaceModel: ObservableObject {
 
     func selectActiveSlide(_ slide: NativeSlideID) { activeSlide = slide }
 
-    func toggleWorkspaceDock(_ tab: NativeWorkspaceDockTab) {
+    /// Activates a tab using conventional sidebar behavior.
+    /// Selecting another tab changes content without hiding the dock.
+    /// Selecting the already-open tab hides it.
+    func activateWorkspaceDockTab(_ tab: NativeWorkspaceDockTab) {
+        if isWorkspaceDockVisible && selectedWorkspaceDockTab == tab {
+            isWorkspaceDockVisible = false
+            return
+        }
         selectedWorkspaceDockTab = tab
-        isWorkspaceDockVisible.toggle()
+        isWorkspaceDockVisible = true
     }
 
     func closeWorkspaceDock() { isWorkspaceDockVisible = false }
 
-    func setWorkspaceDockWidth(
+    /// Updates live width during a drag. Persistence is deferred until the
+    /// gesture ends; pointer-move events must not write UserDefaults.
+    func updateWorkspaceDockWidth(
         _ width: CGFloat,
         maximum: CGFloat = OptikaLayout.workspaceDockMaximumWidth
     ) {
         guard width.isFinite && maximum.isFinite else { return }
-        let upper = max(OptikaLayout.workspaceDockMinimumWidth,
-                        min(OptikaLayout.workspaceDockMaximumWidth, maximum))
+        let upper = max(
+            OptikaLayout.workspaceDockMinimumWidth,
+            min(OptikaLayout.workspaceDockMaximumWidth, maximum)
+        )
         let bounded = min(max(width, OptikaLayout.workspaceDockMinimumWidth), upper)
         guard abs(bounded - workspaceDockWidth) >= 0.5 else { return }
         workspaceDockWidth = bounded
-        UserDefaults.standard.set(Double(bounded), forKey: Self.widthDefaultsKey)
+    }
+
+    func persistWorkspaceDockWidth() {
+        UserDefaults.standard.set(
+            Double(workspaceDockWidth),
+            forKey: Self.widthDefaultsKey
+        )
     }
 }

@@ -9,73 +9,83 @@ struct MainWindowView: View {
     @ObservedObject var gallery: NativeCaptureGalleryStore
 
     private let dockDividerWidth = OptikaLayout.workspaceDockResizeDividerWidth
-    private let maximumDockWidth = OptikaLayout.workspaceDockMaximumWidth
 
     var body: some View {
         GeometryReader { geometry in
-            let dockWidth = min(workspace.workspaceDockWidth, OptikaLayout.workspaceDockMaximumWidth)
-
-            NativeDualPreviewSurface(
-                frameFeed: model.frameFeed,
-                model: model,
-                microscope: microscope,
-                resolutionCoordinator: resolutionCoordinator,
-                workspace: workspace,
-                activeSlide: workspace.activeSlide,
-                measurementCalibration: microscope.measurementCalibration,
-                onCapture: { slide, image in
-                    gallery.capture(image, for: slide)
-                }
+            let previewMinimumWidth = OptikaLayout.dualPreviewMinimumWidth
+            let railWidth = NativeWorkspaceDockTabRail.width
+            let maximumDockWidth = min(
+                OptikaLayout.workspaceDockMaximumWidth,
+                max(
+                    OptikaLayout.workspaceDockMinimumWidth,
+                    geometry.size.width - previewMinimumWidth - dockDividerWidth - railWidth
+                )
             )
+            let dockWidth = min(
+                max(workspace.workspaceDockWidth, OptikaLayout.workspaceDockMinimumWidth),
+                maximumDockWidth
+            )
+
+            HStack(spacing: 0) {
+                NativeDualPreviewSurface(
+                    frameFeed: model.frameFeed,
+                    model: model,
+                    microscope: microscope,
+                    resolutionCoordinator: resolutionCoordinator,
+                    workspace: workspace,
+                    activeSlide: workspace.activeSlide,
+                    measurementCalibration: microscope.measurementCalibration,
+                    onCapture: { slide, image in
+                        gallery.capture(image, for: slide)
+                    }
+                )
+                .frame(
+                    minWidth: previewMinimumWidth,
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+                .clipped()
+
+                if workspace.isWorkspaceDockVisible {
+                    NativeWorkspaceDockResizeDivider(
+                        dockWidth: dockWidth,
+                        maximumWidth: maximumDockWidth,
+                        onResize: {
+                            workspace.updateWorkspaceDockWidth(
+                                $0,
+                                maximum: maximumDockWidth
+                            )
+                        },
+                        onResizeEnded: {
+                            workspace.persistWorkspaceDockWidth()
+                        }
+                    )
+                    .frame(width: dockDividerWidth)
+                    .frame(maxHeight: .infinity)
+
+                    NativeWorkspaceDock(
+                        model: model,
+                        workspace: workspace,
+                        microscope: microscope,
+                        resolutionCoordinator: resolutionCoordinator,
+                        gallery: gallery,
+                        onClose: { workspace.closeWorkspaceDock() }
+                    )
+                    .frame(width: dockWidth)
+                    .frame(maxHeight: .infinity)
+                }
+
+                NativeWorkspaceDockTabRail(workspace: workspace)
+                    .frame(width: railWidth)
+                    .frame(maxHeight: .infinity)
+            }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
-            .overlay(alignment: .trailing) {
-                if workspace.isWorkspaceDockVisible {
-                    HStack(spacing: 0) {
-                        NativeWorkspaceDockResizeDivider(
-                            dockWidth: dockWidth,
-                            maximumWidth: maximumDockWidth,
-                            onResize: {
-                                workspace.setWorkspaceDockWidth($0, maximum: OptikaLayout.workspaceDockMaximumWidth)
-                            }
-                        )
-                        .frame(width: dockDividerWidth)
-                        .frame(maxHeight: .infinity)
-
-                        NativeWorkspaceDock(
-                            model: model,
-                            workspace: workspace,
-                            microscope: microscope,
-                            resolutionCoordinator: resolutionCoordinator,
-                            gallery: gallery,
-                            onClose: { workspace.closeWorkspaceDock() }
-                        )
-                        .frame(width: dockWidth)
-                        .frame(maxHeight: .infinity)
-                    }
-                    .frame(maxHeight: .infinity)
-                    // The panel floats above the preview and stops before the
-                    // permanent title rail. It never participates in preview layout.
-                    .padding(.trailing, NativeWorkspaceDockTabRail.width)
-                    .shadow(
-                        color: OptikaPalette.shadow.opacity(OptikaPalette.shadowAlpha),
-                        radius: 14,
-                        x: -6,
-                        y: 0
-                    )
-                    .zIndex(50)
-                }
-            }
-            .overlay(alignment: .trailing) {
-                NativeWorkspaceDockTabRail(workspace: workspace)
-                    .frame(width: NativeWorkspaceDockTabRail.width)
-                    .frame(maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .allowsHitTesting(true)
-                    .zIndex(100)
-            }
         }
-        .frame(minWidth: OptikaLayout.minimumWindowWidth, minHeight: OptikaLayout.minimumWindowHeight)
+        .frame(
+            minWidth: OptikaLayout.minimumWindowWidth,
+            minHeight: OptikaLayout.minimumWindowHeight
+        )
         .background(OptikaPalette.clear)
         .onAppear {
             if model.cameras.isEmpty {

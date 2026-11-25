@@ -11,33 +11,32 @@ struct NativeWorkspaceDock: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                // Keep the close hit target on the leading edge. The permanent
-                // title rail sits immediately outside the floating panel.
+            HStack(spacing: 10) {
+                Image(systemName: workspace.selectedWorkspaceDockTab.symbolName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(OptikaPalette.secondaryText)
+
+                Text(workspace.selectedWorkspaceDockTab.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(OptikaPalette.primaryText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 24, height: 24)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
                 .foregroundColor(OptikaPalette.secondaryText)
-                .help("Close dock")
-                .accessibilityLabel("Close \(workspace.selectedWorkspaceDockTab.title) dock")
-
-                Image(systemName: workspace.selectedWorkspaceDockTab.symbolName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(OptikaPalette.secondaryText)
-
-                Text(workspace.selectedWorkspaceDockTab.title.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(OptikaPalette.primaryText)
-
-                Spacer(minLength: 8)
+                .help("Hide dock")
+                .accessibilityLabel("Hide \(workspace.selectedWorkspaceDockTab.title) dock")
             }
-            .padding(.horizontal, 10)
-            .frame(height: 36)
-            .background(OptikaPalette.controlSurface.opacity(OptikaPalette.floatingPanelAlpha))
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(OptikaPalette.controlSurface)
 
             Divider()
 
@@ -51,7 +50,7 @@ struct NativeWorkspaceDock: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(OptikaPalette.controlSurface.opacity(OptikaPalette.floatingPanelAlpha))
+        .background(OptikaPalette.controlSurface)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -70,77 +69,77 @@ struct NativeWorkspaceDockTabRail: View {
     private let tabHeight: CGFloat = OptikaLayout.dockTabHeight
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 5) {
             Spacer(minLength: 0)
-
-            VStack(spacing: 0) {
-                dockTabButton(.cameraControls)
-                dockTabButton(.smartGallery)
-            }
-
+            dockTabButton(.cameraControls)
+            dockTabButton(.smartGallery)
             Spacer(minLength: 0)
         }
+        .padding(.vertical, 8)
         .frame(width: Self.width)
         .frame(maxHeight: .infinity)
+        .background(OptikaPalette.controlSurface)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(OptikaPalette.separator)
+                .frame(width: 1)
+        }
     }
 
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
         let isSelected = workspace.selectedWorkspaceDockTab == tab
         let isOpen = workspace.isWorkspaceDockVisible && isSelected
-        let accent = OptikaPalette.accent
+        let title = tab.title
+        let actionTitle = isOpen ? "Hide \(title)" : "Show \(title)"
 
         return Button {
-            workspace.toggleWorkspaceDock(tab)
+            workspace.activateWorkspaceDockTab(tab)
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Image(systemName: tab.symbolName)
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 11, height: 11)
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 16, height: 16)
 
-                Text(tab.title)
+                Text(title)
                     .font(.system(size: 9, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .frame(width: 82, height: 12)
+                    .frame(width: 88, height: 13)
                     .rotationEffect(.degrees(90))
-                    .frame(width: 12, height: 82)
+                    .frame(width: 13, height: 88)
             }
-            .frame(width: Self.width, height: tabHeight)
-            .contentShape(Rectangle())
+            .frame(width: Self.width - 8, height: tabHeight)
+            .contentShape(RoundedRectangle(cornerRadius: 7))
             .background(
-                Rectangle().fill(
-                    isOpen
-                        ? accent
-                        : OptikaPalette.windowSurface
-                )
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(
+                        isOpen
+                            ? OptikaPalette.accentSelectionFill
+                            : (isSelected
+                                ? OptikaPalette.inactiveSelectionFill
+                                : OptikaPalette.clear)
+                    )
             )
             .overlay(
-                Rectangle().stroke(
-                    isOpen
-                        ? accent
-                        : OptikaPalette.separator,
-                    lineWidth: isOpen ? 1 : 0.7
-                )
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(
+                        isOpen ? OptikaPalette.accent.opacity(0.65) : OptikaPalette.clear,
+                        lineWidth: 1
+                    )
             )
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(isOpen ? OptikaPalette.dockSelectedTabFill : OptikaPalette.clear)
-                    .frame(width: 1.5)
-            }
-            .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
-        .frame(width: Self.width, height: tabHeight)
+        .frame(width: Self.width - 8, height: tabHeight)
         .contentShape(Rectangle())
-        .foregroundColor(isOpen ? OptikaPalette.onAccentText : OptikaPalette.primaryText)
-        .help(isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock")
-        .accessibilityLabel(
-            isOpen ? "Close \(tab.title) dock" : "Open \(tab.title) dock"
-        )
+        .foregroundColor(isSelected ? OptikaPalette.accent : OptikaPalette.primaryText)
+        .help(actionTitle)
+        .accessibilityLabel(actionTitle)
         .accessibilityHint(
             isOpen
-                ? "Hides the floating dock without resizing the viewer."
-                : "Shows the \(tab.title) dock over the viewer."
+                ? "Hides the dock and gives the preview area more width."
+                : (workspace.isWorkspaceDockVisible
+                    ? "Switches the open dock to \(title)."
+                    : "Opens the \(title) dock.")
         )
     }
 }

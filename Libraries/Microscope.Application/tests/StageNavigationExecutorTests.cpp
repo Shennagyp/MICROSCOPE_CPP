@@ -14,6 +14,13 @@ namespace {
 using namespace microscope;
 int failures = 0;
 
+void check(bool condition, const char* message) {
+    if (!condition) {
+        ++failures;
+        std::cerr << "FAIL: " << message << '\\n';
+    }
+}
+
 template <typename T, typename E>
 T take(core::Result<T, E> result) {
     if (!result) {

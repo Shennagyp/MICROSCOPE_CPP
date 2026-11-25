@@ -107,6 +107,8 @@ struct FeedbackMetadata final {
     ObservationSource source = ObservationSource::Unknown;
     // Adapter/device sequence, scoped to DeviceSessionGeneration. Zero may
     // be a valid first sequence; absence means the source does not report one.
+    // When supplied, the adapter preserves ordering for that session; it
+    // starts a new session generation rather than reusing ambiguous values.
     std::optional<std::uint64_t> sourceSequence;
     std::optional<DeviceTimestamp> deviceTimestamp;
 };

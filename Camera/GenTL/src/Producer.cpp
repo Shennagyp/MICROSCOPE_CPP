@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <condition_variable>
 #include <fstream>
 #include <limits>
 #include <mutex>
@@ -139,6 +140,40 @@ T readPortUrlValue(Invoke&& invoke, GenTL::PORT_HANDLE port,
 constexpr std::uint64_t maximumGenApiXmlBytes = 64ULL * 1024ULL * 1024ULL;
 constexpr std::size_t genApiXmlReadChunkBytes = 1024 * 1024;
 
+
+std::uint64_t timeoutMillisecondsToNanoseconds(std::uint64_t milliseconds) {
+    if (milliseconds == std::numeric_limits<std::uint64_t>::max()) {
+        return GenTL::GENTL_INFINITE;
+    }
+    constexpr std::uint64_t nanosecondsPerMillisecond = 1000000ULL;
+    if (milliseconds >
+        (GenTL::GENTL_INFINITE - 1) / nanosecondsPerMillisecond) {
+        throw std::overflow_error("GenTL timeout exceeds the representable nanosecond range.");
+    }
+    return milliseconds * nanosecondsPerMillisecond;
+}
+
+template <typename T, typename ReadOperation>
+std::optional<T> readTypedInfo(
+    ReadOperation&& operation,
+    GenTL::INFO_DATATYPE expectedType,
+    const char* operationName) {
+    GenTL::INFO_DATATYPE actualType = GenTL::INFO_DATATYPE_UNKNOWN;
+    T value{};
+    std::size_t size = sizeof(T);
+    const auto status = operation(&actualType, &value, &size);
+    if (status == GenTL::GC_ERR_NOT_AVAILABLE ||
+        status == GenTL::GC_ERR_NOT_IMPLEMENTED) {
+        return std::nullopt;
+    }
+    check(status, operationName);
+    if (actualType != expectedType || size != sizeof(T)) {
+        throw std::runtime_error(
+            std::string(operationName) + " returned a mismatched type or size.");
+    }
+    return value;
+}
+
 } // namespace
 
 class ProducerContext final {
@@ -234,7 +269,8 @@ std::vector<DeviceDescriptor> Producer::discover(
     bool8_t changed = false;
     check(context_->consumer.invoke(
         Operation::tlUpdateInterfaceList,
-        context_->system, &changed, timeoutMilliseconds),
+        context_->system, &changed,
+        timeoutMillisecondsToNanoseconds(timeoutMilliseconds)),
         "TLUpdateInterfaceList");
 
     std::uint32_t interfaceCount = 0;
@@ -293,7 +329,8 @@ std::vector<DeviceDescriptor> Producer::discover(
         changed = false;
         check(context_->consumer.invoke(
             Operation::ifUpdateDeviceList,
-            interfaceHandle, &changed, timeoutMilliseconds),
+            interfaceHandle, &changed,
+            timeoutMillisecondsToNanoseconds(timeoutMilliseconds)),
             "IFUpdateDeviceList");
 
         std::uint32_t deviceCount = 0;

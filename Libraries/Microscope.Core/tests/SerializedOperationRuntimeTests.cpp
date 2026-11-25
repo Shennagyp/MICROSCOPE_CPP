@@ -262,6 +262,14 @@ int main() {
           overflowOperation,overflowStep,overflowCommand).value()==StepStatus::Dispatched,
           "command dispatch resumes after feedback loss reconciliation");
 
+    overflowRuntime->closeFeedbackIngress();
+    check(overflowRuntime->feedbackIngressClosed()&&overflowSignal.closed.load()==1,
+          "host shutdown closes ingress and signals the serialized owner");
+    auto lateFeedback=staleSessionFeedback(deviceSession(4,8));
+    check(overflowRuntime->feedbackIngress().submit(std::move(lateFeedback))==
+          FeedbackSubmitStatus::Closed,
+          "late driver callback cannot reopen a closed microscope runtime");
+
     if(failures) {
         std::cerr<<failures<<" serialized operation runtime test(s) failed\n";
         return 1;

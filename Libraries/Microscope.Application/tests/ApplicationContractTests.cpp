@@ -55,13 +55,16 @@ int main() {
     check(operation.operationId() == operationId,
           "operation handle preserves the stable operation ID");
 
-    const auto coreSnapshot = core::OperationSnapshot{
+    const auto coreSnapshotResult = core::OperationSnapshot::create(
         microscopeId,
         runtimeId,
         generation1,
         operationId,
         core::OperationStatus::Running,
-        4};
+        4);
+    check(static_cast<bool>(coreSnapshotResult),
+          "creates an immutable Core operation snapshot");
+    const auto coreSnapshot = std::move(coreSnapshotResult).value();
     auto applicationViewResult = application::OperationView::create(
         operation, coreSnapshot);
     check(static_cast<bool>(applicationViewResult),
@@ -70,35 +73,35 @@ int main() {
         const auto& applicationView = applicationViewResult.value();
         check(applicationView.handle().belongsTo(first),
               "application operation projection retains the runtime-scoped handle");
-        check(applicationView.snapshot().operationId == operationId &&
-              applicationView.snapshot().status == core::OperationStatus::Running &&
-              applicationView.snapshot().revision == 4,
+        check(applicationView.snapshot().operationId() == operationId &&
+              applicationView.snapshot().status() == core::OperationStatus::Running &&
+              applicationView.snapshot().revision() == 4,
               "application projection carries Core's snapshot without duplicating state fields");
     }
 
     const auto differentOperationId =
         core::OperationId::create("operation-002").value();
+    auto mismatchedSnapshot = core::OperationSnapshot::create(
+        microscopeId,
+        runtimeId,
+        generation1,
+        differentOperationId,
+        core::OperationStatus::Running,
+        5);
     auto mismatchedView = application::OperationView::create(
-        operation,
-        core::OperationSnapshot{
-            microscopeId,
-            runtimeId,
-            generation1,
-            differentOperationId,
-            core::OperationStatus::Running,
-            5});
+        operation, std::move(mismatchedSnapshot).value());
     check(!mismatchedView &&
           mismatchedView.error() ==
               application::OperationViewError::OperationIdentityMismatch,
           "rejects a snapshot with a different operation identity");
 
-    const auto staleGenerationSnapshot = core::OperationSnapshot{
+    const auto staleGenerationSnapshot = core::OperationSnapshot::create(
         microscopeId,
         runtimeId,
         generation2,
         operationId,
         core::OperationStatus::Running,
-        6};
+        6).value();
     auto staleGenerationView = application::OperationView::create(
         operation, staleGenerationSnapshot);
     check(!staleGenerationView &&
@@ -108,13 +111,13 @@ int main() {
 
     const auto secondRuntimeId =
         core::RuntimeId::create("runtime-002").value();
-    const auto foreignRuntimeSnapshot = core::OperationSnapshot{
+    const auto foreignRuntimeSnapshot = core::OperationSnapshot::create(
         microscopeId,
         secondRuntimeId,
         generation1,
         operationId,
         core::OperationStatus::Running,
-        6};
+        6).value();
     auto foreignRuntimeView = application::OperationView::create(
         operation, foreignRuntimeSnapshot);
     check(!foreignRuntimeView &&

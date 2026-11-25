@@ -19,6 +19,7 @@ enum class OperationLifecycleEvent {
 };
 
 enum class StepLifecycleEvent {
+    DispatchPreconditionFailed,
     CommandDispatched,
     AdapterAccepted,
     AdapterRejected,

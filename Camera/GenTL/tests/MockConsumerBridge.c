@@ -61,13 +61,13 @@ static const char mock_xml[] =
     "    <Endianess>BigEndian</Endianess>\n" \
     "  </IntReg>\n" \
     "  <Enumeration Name=\"TriggerMode\">\n" \
-    "    <pValue>TriggerModeReg</pValue>\n" \
     "    <EnumEntry Name=\"Off\">\n" \
     "      <Value>0</Value>\n" \
     "    </EnumEntry>\n" \
     "    <EnumEntry Name=\"On\">\n" \
     "      <Value>1</Value>\n" \
     "    </EnumEntry>\n" \
+    "    <pValue>TriggerModeReg</pValue>\n" \
     "  </Enumeration>\n" \
     "  <IntReg Name=\"TriggerModeReg\">\n" \
     "    <Address>0x1004</Address>\n" \

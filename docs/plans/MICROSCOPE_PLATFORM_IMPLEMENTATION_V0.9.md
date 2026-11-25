@@ -70,7 +70,7 @@ This closes the initial library/build/API foundation only. It does not claim a m
 
 ### Phase 2 — Core equipment and optical model
 
-**In progress — 2A–2D source slices validated**
+**In progress — 2A–2D validated; 2E cross-definition validation in progress**
 
 **Modeling sequence**
 1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; undirected physical port connections; ordered directional light paths; shared components represented once and referenced by multiple paths; topology validation.
@@ -104,6 +104,13 @@ This closes the initial library/build/API foundation only. It does not claim a m
 - Added StageSpecification with one or more uniquely identified axes and aggregate binding to an installed MechanicalAssembly component.
 - Added tests for typed linear/rotary units, signed ranges, unit mismatch, independent performance values, measurement conditions, feedback capability/location, duplicate axes, empty stage and stage/component binding.
 - Cross-platform CI passed for Core standalone, Application standalone and root platform-only builds/tests on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 58](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45592166839).
+
+**Phase 2E committed source progress — validation pending**
+- OpticalConnection now represents undirected physical port adjacency. Ordered OpticalPathStep values define propagation direction; the same physical adjacency is indexed in both endpoint orders.
+- Added a contract case with two bidirectional optical components and one physical connection reused by forward and reverse paths.
+- Added aggregate rejection when one physical OpticalElement is declared simultaneously as an objective and a condenser; those are mutually exclusive installed component roles.
+- The aggregate already validates component/port/connection/path identity uniqueness, references, port ownership/direction, single connection per physical port, route continuity, component-kind bindings for objective/camera/condenser/illumination/stage specs, and stage-axis uniqueness.
+- The opposite-direction path and objective/condenser conflict cases are included in the current CI matrix; do not close Phase 2E until that current-head run is green on all three platforms.
 
 **Implementation constraints**### Phase 3 — Declarative configuration
 - Define profile selection and applicability.

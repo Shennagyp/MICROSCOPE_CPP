@@ -37,10 +37,12 @@ SlideRegistration registration(
         id<SlideId>(slideId),id<CalibrationRevisionId>(revision),slot,geometry,{tl,tr,br,bl},0.5));
 }
 StageAxisPositionState homed(const char* axisId,double position,double error,const char* stageId="stage") {
+    auto positionValue=take(AxisPosition::create(
+        id<StageAxisId>(axisId),position,AxisCoordinateUnit::Micrometers));
+    auto observation=take(AxisPositionObservation::create(
+        positionValue,error,StagePositionEvidence::EncoderMeasured));
     return take(StageAxisPositionState::homed(
-        id<EquipmentComponentId>(stageId),
-        take(AxisPosition::create(id<StageAxisId>(axisId),position,AxisCoordinateUnit::Micrometers)),
-        error,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+        id<EquipmentComponentId>(stageId),observation,ObservationSource::HardwareReadback));
 }
 }
 

@@ -43,11 +43,15 @@ int main(int argc, char** argv) {
         const auto streams = device.dataStreamIds();
         if (streams.size() != 1 || streams.front() != "stream0") return 7;
 
+        const auto xmlBytes = device.genApiXml();
+        const std::string xml(xmlBytes.begin(), xmlBytes.end());
+        if (xml != "<RegisterDescription ModelName=\\"Mock\\"/>") return 8;
+
         const auto bytes = device.readPort(0x10203040, 4);
-        if (bytes != std::vector<std::uint8_t>{0xA0, 0xA1, 0xA2, 0xA3}) return 8;
+        if (bytes != std::vector<std::uint8_t>{0xA0, 0xA1, 0xA2, 0xA3}) return 9;
 
         device.writePort(0x10203040, {0x10, 0x20, 0x30, 0x40});
-        if (device.portUrl() != "Mock://DevicePort") return 9;
+        if (device.portUrl() != "Mock://DevicePort") return 10;
 
         auto foreignDescriptor = descriptor;
         foreignDescriptor.producerPath += ".foreign";
@@ -58,12 +62,12 @@ int main(int argc, char** argv) {
         } catch (const std::invalid_argument&) {
             rejectedForeign = true;
         }
-        if (!rejectedForeign) return 10;
+        if (!rejectedForeign) return 11;
 
         device.close();
-        if (device) return 11;
+        if (device) return 12;
     } catch (...) {
-        result = 12;
+        result = 13;
     }
 
     std::filesystem::remove_all(directory);

@@ -153,6 +153,19 @@ private:
 };
 
 enum class StageMotionAction { MoveAxesTo, MoveAxesBy, HomeAxes, StopAxes };
+enum class StageMotionAcknowledgementError { InvalidAction };
+class StageMotionAcknowledgement final {
+public:
+    static Result<StageMotionAcknowledgement,StageMotionAcknowledgementError> create(
+        StageMotionAction,StageAxisSet);
+    StageMotionAction action() const noexcept;
+    const StageAxisSet& axes() const noexcept;
+private:
+    StageMotionAcknowledgement(StageMotionAction,StageAxisSet);
+    StageMotionAction action_;
+    StageAxisSet axes_;
+};
+
 enum class StageMotionActionCompletionError { InvalidAction };
 class StageMotionActionCompletion final {
 public:
@@ -183,7 +196,7 @@ private:
 
 using StageMotionFeedbackPayload = std::variant<
     AxisPositionObservation, AxisMotionStateObservation, AxisLimitObservation,
-    StageMotionActionCompletion, StageMotionFaultObservation>;
+    StageMotionAcknowledgement, StageMotionActionCompletion, StageMotionFaultObservation>;
 
 // Driver libraries implement this port. STEP/DIR drivers own calibrated
 // physical-unit-to-step conversion and pulse generation. Intelligent-controller

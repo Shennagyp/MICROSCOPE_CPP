@@ -327,7 +327,7 @@ An OpticalPath has a stable OpticalPathId and an ordered sequence of OpticalPath
 
 ### 11.4 Aggregate validation
 
-MicroscopeEquipmentDefinition is the immutable validation boundary for one microscope's component/connection/path collections. Its factory rejects an empty component collection, duplicate component/port/connection/path identities, foreign connection/path references, invalid port ownership/direction, a port connected more than once, same-component physical connections, incomplete interior path steps and missing route connections.
+MicroscopeEquipmentDefinition is the immutable validation boundary for one microscope's installed component, connection, path and specialized-specification collections. Its factory rejects an empty component collection, duplicate component/port/connection/path identities, foreign connection/path references, invalid port ownership/direction, a port connected more than once, same-component physical connections, incomplete interior path steps and missing route connections. It also validates all Objective/Camera/Condenser/Illumination/Stage specification references and component kinds, rejects duplicate specialization records, and rejects one OpticalElement being declared as both an objective and a condenser.
 
 JSON parsing/schema migration remains in Microscope.Application (Phase 5). The Core aggregate accepts typed values and validates domain relationships; it does not parse JSON, access storage or discover hardware.
 
@@ -377,7 +377,7 @@ MicroscopeEquipmentDefinition optionally owns objective and camera specification
 - ObjectiveSpecification → an installed OpticalElement.
 - CameraSpecification → an installed ImagingDevice.
 
-At most one objective specification and one camera specification may be attached to one physical component. A camera or objective specification referencing an uninstalled component is rejected. This is data association, not an executable component subclass hierarchy.
+At most one objective specification, camera specification, condenser specification, illumination specification and stage specification may be attached to a physical component in the corresponding role. An objective and condenser are mutually exclusive roles for one OpticalElement. A specification referencing an uninstalled component or a component of the wrong broad kind is rejected. This is data association, not an executable component subclass hierarchy.
 
 These are equipment-definition facts only. Actual camera capabilities, active output mode, current exposure, gain, online/offline status and readback observations remain runtime/adapter data. JSON loading remains an Application responsibility in Phase 5.
 

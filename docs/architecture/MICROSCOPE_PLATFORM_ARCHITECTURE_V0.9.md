@@ -697,6 +697,9 @@ The public Core motion contract uses the physical coordinate unit declared by th
 - An intelligent-controller driver sends engineering coordinates and leaves configured steps-per-unit conversion and trajectory execution to the controller.
 - Exactly one component in the active driver/controller chain owns physical-unit-to-controller-unit conversion. Core must not apply a second controller scaling factor.
 
+A driver position payload is an AxisPositionObservation: physical position, StagePositionEvidence (ControllerReported, EncoderMeasured or ExternalMeasured), and uncertainty in the declared axis unit. FeedbackEnvelope separately carries ObservationSource and runtime/device/operation correlation. CommandDerivedEstimate is not accepted as driver measurement feedback; Core derives it from completed movement and the motion error contribution. The same typed observation supplies the final position evidence for verified homing.
+
+
 Core motion calibration retains physical measurement evidence: observed displacement, fitted physical-axis behavior, residuals, accuracy, repeatability/precision and uncertainty. Controller steps-per-unit settings and command-derived counts are not proof of physical accuracy.
 
 If position feedback is absent, Core records command-derived position as an estimate, not a measured position. Uncertainty remains explicit and may trigger a homing/recovery policy; homing does not correct scale error, backlash or slide movement.

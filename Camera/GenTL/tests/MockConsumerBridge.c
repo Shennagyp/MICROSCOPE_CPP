@@ -356,6 +356,10 @@ int32_t gentl_consumer_invoke(
             const size_t value = 4;
             return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
         }
+        case BUFFER_INFO_DELIVERED_IMAGEHEIGHT: {
+            const size_t value = 4;
+            return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
+        }
         case BUFFER_INFO_IMAGEOFFSET:
         case BUFFER_INFO_XPADDING:
         case BUFFER_INFO_YPADDING: {
@@ -367,6 +371,11 @@ int32_t gentl_consumer_invoke(
             return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
         }
         case BUFFER_INFO_CONTAINS_CHUNKDATA: {
+            const bool8_t value = 0;
+            return write_scalar(type, output, size, INFO_DATATYPE_BOOL8, &value, sizeof(value));
+        }
+        case BUFFER_INFO_DATA_LARGER_THAN_BUFFER:
+        case BUFFER_INFO_IS_COMPOSITE: {
             const bool8_t value = 0;
             return write_scalar(type, output, size, INFO_DATATYPE_BOOL8, &value, sizeof(value));
         }

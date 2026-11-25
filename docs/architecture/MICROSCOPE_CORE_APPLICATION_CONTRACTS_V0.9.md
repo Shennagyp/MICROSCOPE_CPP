@@ -155,7 +155,7 @@ Feedback from an old runtime generation, old device-session generation, or a dif
 
 ### 5.3 Typed feedback and provenance
 
-The common correlation/metadata envelope is separate from the payload. Each TPayload is a concrete Core value defined for the capability and fact semantics that produce it; its fields preserve the actual observation/result rather than a generic success flag.
+The common correlation/metadata envelope is separate from the payload. Each TPayload is a concrete Core value defined for the capability and fact semantics that produce it; its fields preserve the actual observation/result rather than a generic success flag. FeedbackEnvelope is created through a factory and exposes read-only metadata/payload accessors; validated metadata cannot be replaced and payload data cannot be mutated after construction.
 
 Do not use bare bool/string values, std::any, JSON objects, arbitrary string maps or vendor SDK structures as the feedback contract. Do not invent a universal device-state value bag. Add payload types only with a real capability port and preserve their provenance and units.
 

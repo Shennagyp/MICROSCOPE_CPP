@@ -9,6 +9,17 @@
 
 namespace microscope::core {
 
+// The fact category is independent from how the adapter obtained it.
+// CommandDispatched and TimeoutElapsed are Core runtime facts, not adapter
+// feedback kinds.
+enum class FeedbackKind {
+    DeviceAcknowledged,
+    DeviceProgress,
+    DeviceActionCompleted,
+    DeviceStateObserved,
+    AdapterFailure
+};
+
 enum class ObservationSource {
     HardwareReadback,
     DeviceEvent,
@@ -46,6 +57,7 @@ struct FeedbackCorrelation final {
 
 struct FeedbackMetadata final {
     FeedbackCorrelation correlation;
+    FeedbackKind kind = FeedbackKind::DeviceStateObserved;
     ObservationSource source = ObservationSource::Unknown;
     std::optional<std::uint64_t> sourceSequence;
     std::optional<DeviceTimestamp> deviceTimestamp;

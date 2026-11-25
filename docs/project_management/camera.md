@@ -3,10 +3,10 @@
 **Canonical project:** the reusable Camera Module in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Camera development branch:** `camera-v.2.0`  
-**Latest Camera status checkpoint:** `c82c91bed359ca152ea754e39033882cdb63585b` (`docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md`).  
-**Latest fully CI-validated code checkpoint:** `67212487f579513782bf7b12f5d7cb293f57c25c` — GenTL/GenApi, PFNC and deterministic pending-`EventGetData` shutdown regression passed Intel x86_64 and Apple Silicon arm64 in [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670).  
-**Latest implementation checkpoint:** `caa0e8afc8f31278152cc4d7e7bc2ecb1243ce05` adds `EventKill` fallback when `GCUnregisterEvent` fails, while quarantining the native context because normal teardown did not complete. Intel x86_64 passed the full GenTL/GenApi workflow [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523); Apple Silicon arm64 is queued.  
-**CI:** Official GenApi 3.5.1 SDK build and XML-backed feature/command tests, PFNC mapping, event-unregister cancellation and native architecture checks are green on both architectures at #45700046670. The newer fallback change has passed Intel; Apple arm64 validation is pending.  
+**Latest Camera status checkpoint:** `433e66850ee4dd49003d6e1a7599354fa5fe5466` (`docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md`).  
+**Latest fully CI-validated code checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7` — GenTL/GenApi workflow [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build/runtime tests, PFNC mapping, pending-event shutdown, `EventKill` fallback and recursive nested-category feature/command access.  
+**Latest implementation checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7` adds recursive GenApi Root-category traversal, deduplicated feature/command discovery, nested feature direct lookup and nested command execution.  
+**CI:** Full GenTL/GenApi and official SDK validation is green on both architectures in [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261).  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
 **Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
 **Roadmap authority:** original Camera Module Phases 0–8, preserved for v2.0.
@@ -154,19 +154,21 @@ Current implementation on `camera-v.2.0` under `Camera/GenTL`:
 - data-stream opening, `EVENT_NEW_BUFFER` registration, bounded buffer allocation/announcement/queueing, acquisition start/stop, event wait, payload/metadata copy, buffer requeue and ordered cleanup;
 - discovery/frame timeout conversion from public milliseconds to GenTL nanoseconds;
 - frame ID, timestamp, dimensions, PFNC namespace/value and `BUFFER_INFO_PIXEL_ENDIANNESS` preservation;
+- safe Common frame projection for PFNC Mono8, unpacked Mono10/12/14/16 and RGB8, with exact payload-size/stride checks and unknown formats kept opaque;
+- pending `EventGetData` cancellation by event unregistration, with `EventKill` fallback and context quarantine if unregistration fails;
 - device and stream shared ownership, including stream lifetime beyond the public DeviceSession wrapper;
 - process-lifetime quarantine retention of the Consumer context and dynamic C ABI bridge after native cleanup failure;
 - remote-port read/write and GenApi XML retrieval from `LOCAL` register-map and `FILE` URL schemes;
-- optional `Camera::GenTLGenApi` target using official GenApi 3.5.1. The official EMVA GenICam 2026.07 SDK/runtime are downloaded, hash-verified and the target compiles on Intel x86_64 and Apple Silicon arm64. XML-backed runtime tests exercise Root-category feature/command enumeration, register-backed Gain read/write, command issue and completion polling in [#45691419091](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45691419091).
+- optional `Camera::GenTLGenApi` target using official GenApi 3.5.1. The official EMVA GenICam 2026.07 SDK/runtime are downloaded, hash-verified and the target compiles on Intel x86_64 and Apple Silicon arm64. XML-backed runtime tests exercise recursive Root-category traversal, nested feature lookup/read, nested command enumeration/execution, register-backed Gain read/write, dynamic availability, all supported scalar feature types and command completion in [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261).
 
-C++ mock CI [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed on Intel x86_64 and Apple Silicon arm64. The official GenApi SDK build and expanded XML-backed integration suite [#45694159857](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45694159857) also passed both architectures. The test includes an injected `DSClose` failure and verifies that the Consumer bridge remains retained after public wrappers are released.
+C++ mock CI [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261) passed on Intel x86_64 and Apple Silicon arm64, including the official GenApi SDK/runtime. The suite covers pending event-wait cancellation, injected event-unregistration failure with `EventKill` fallback, context quarantine, PFNC mapping and nested GenApi categories. Earlier test [#45694159857](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45694159857) established all five scalar feature types and command semantics.
 
-The Swift C ABI source/tests/workflow are on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, latest commit `e913a436d31cc3e73233311cef810ff95e1e8704`. Tests cover typed pointer/buffer marshalling, event registration/read/unregister, buffer-info forwarding and invalid invocation-shape rejection; the bridge bounds argument vectors to the maximum GenTL operation arity. The workflow was moved from `macos-14` to `macos-15`, but [#45695610813](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45695610813) failed before any job steps and has no logs; Swift compilation/test evidence remains unavailable. The real dylib and operation mapping remain unvalidated. The Swift GenTL packages declare macOS 13.0 as their minimum deployment target.
+The Swift C ABI source/tests/workflow are on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, latest commit `e913a436d31cc3e73233311cef810ff95e1e8704`. Tests cover typed pointer/buffer marshalling, event registration/read/unregister, buffer-info forwarding and invalid invocation-shape rejection; the bridge bounds argument vectors to the maximum GenTL operation arity. The workflow was moved from `macos-14` to `macos-15`, but [#45695610813](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45695610813) failed before any job steps, including a rerun, and has no logs; Swift compilation/test evidence remains unavailable. The real dylib and operation mapping remain unvalidated. The Swift GenTL packages declare macOS 13.0 as their minimum deployment target.
 
 Still required:
 - validate the actual Swift C ABI dylib and its runtime packaging;
 - expand GenApi runtime coverage for malformed XML, unsupported node types, command failure/recovery and producer-specific feature metadata;
-- map verified GenTL pixel layouts/stride into the Common immutable `camera::Frame` contract without guessing unsupported layouts;
+- expand verified PFNC layouts only when component order, packing, stride and byte order are explicit; keep unsupported layouts opaque;
 - acquire the actual camera-vendor CTI Producer and qualify on physical CTI hardware.
 
 Keep AmScope on the native Amcam SDK path. Do not fabricate an AmScope CTI Producer or GenApi nodes/registers. Phase 5 is **IN PROGRESS, not accepted**. See [Camera/GenTL README](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/camera-v.2.0/Camera/GenTL/README.md).
@@ -301,7 +303,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** to be updated after the pixel-endianness/PFNC validation. **Latest implementation checkpoint:** `2d851fc21ebf1d38bc0ea7c7745d2502d224d1df`. Intel x86_64 passed the full GenTL/GenApi build and tests in [#45695088350](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45695088350); Apple Silicon arm64 remains queued. The earlier bridge/stream baseline `549433466098c5daeb63d72609776d958a35c2fe` passed both architectures in [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
+**Latest Camera status checkpoint:** `433e66850ee4dd49003d6e1a7599354fa5fe5466`. **Latest implementation checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7`. GenTL/GenApi, PFNC mapping, event cancellation/fallback and recursive GenApi categories passed Intel x86_64 and Apple Silicon arm64 in [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

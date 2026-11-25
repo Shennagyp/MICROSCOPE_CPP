@@ -7,8 +7,24 @@ integration and does not modify vendor sample code.
 
 ## Development roadmap
 
-The current AmScope-native release scope, revised implementation phases, and release acceptance criteria are maintained in [AMSCOPE_NATIVE_RELEASE_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md). The previous [AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md) is retained as a historical technical reference; its original phase sequence is superseded. Common/backend-specific public type ownership and Phase 2 semantic decisions are recorded in [CAMERA_COMMON_TYPE_OWNERSHIP.md](../../docs/architecture/CAMERA_COMMON_TYPE_OWNERSHIP.md).
-The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/architecture/DEVELOPMENT_HANDOFF.md), the source/test mapping is in [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md), the GenTL/GenApi dependency assessment is in [AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md), and the per-phase hardware record template is in [PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md](../../docs/testing/hardware/PHASE_HARDWARE_TEST_RECORD_TEMPLATE.md).
+The governing Camera Module v2.0 roadmap and current implementation status are in
+[CAMERA_V2_DEVELOPMENT_STATUS.md](../../docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md).
+Development continues on `camera-v.2.0`. The reusable camera library is a
+**non-Qt programmatic capability**; application GUI and presentation belong to
+consuming applications such as Optika.
+
+The original [AmScope Native Driver and Camera Module Completion Plan](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
+is retained as the historical Phase 0–8 baseline. The later
+[AmScope Native Release Plan](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md)
+describes the former Qt-preview delivery and is no longer the governing v2.0
+plan. Common/provider-specific type ownership is documented in
+[CAMERA_COMMON_TYPE_OWNERSHIP.md](../../docs/architecture/CAMERA_COMMON_TYPE_OWNERSHIP.md).
+The detailed implementation inventory is in
+[AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md);
+the private SDK test-seam design is in
+[AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md);
+and the GenTL/GenApi dependency assessment is in
+[AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md](../../docs/architecture/AMSCOPE_GENTL_GENAPI_CPP_INTEGRATION_ASSESSMENT.md).
 
 ## Implemented
 
@@ -110,7 +126,7 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   auto white balance, and SDK frame-rate statistics are implemented. ExposureAuto
   maps Off/Continuous/Once to native SDK values 0/1/2; Once is not emulated as
   Continuous. The mode setter verifies immediate SDK readback.
-- The Qt application boundary exposes camera settings only through
+- The programmatic camera API exposes settings only through
   ICameraFeatureAccess; vendor-specific setters/readers are private backend
   primitives. The initial generic control surface includes ExposureAuto,
   ExposureTime, AmcamAnalogGainPercent, AmcamColorMatrixEnabled,
@@ -146,7 +162,7 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   model default speed.
 - An injectable exact-model allow/deny registry narrows the probed feature
   capabilities; a missing profile leaves SDK-probed capabilities unchanged.
-  Profiles are available through AmcamCamera and QtAmcamCamera constructors.
+  Profiles are available through the AmcamCamera constructor.
   The registry covers implemented settings and read-only model capability
   facts. Model facts include sensor class, monochrome/global-shutter flags,
   frame buffers, hardware trigger support, focus hardware, ST4, filter wheel,
@@ -173,7 +189,7 @@ The current continuation state is in [DEVELOPMENT_HANDOFF.md](../../docs/archite
   until its working-distance parameters are documented. These command
   surfaces do not alter preview
   acquisition or trigger mode and are not ordinary camera feature settings.
-- The preview application exposes trigger configuration separately from camera
+- The former Qt preview application exposes trigger configuration separately from camera
   feature settings: mode/source/heartbeat changes are available while stopped,
   and finite software-trigger bursts are available only when the applied mode
   and model/profile permit them. Trigger configuration is a separate

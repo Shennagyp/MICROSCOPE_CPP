@@ -22,6 +22,7 @@ enum class SerializedOperationRuntimeError {
     WrongRuntimeScope,
     DeviceSessionNotOpen,
     StaleDeviceSession,
+    WrongDeviceSessionForStep,
     DuplicateOperation,
     UnknownOperation,
     OperationTerminal,
@@ -133,6 +134,13 @@ public:
 
         for(auto& binding:deviceSessions_) {
             if(binding.identity().deviceId==session.deviceId) {
+                if(binding.matches(session))
+                    return Result<bool,SerializedOperationRuntimeError>::success(false);
+                auto retired=retireSession(
+                    binding.identity().deviceId,
+                    binding.identity().deviceSessionGeneration);
+                if(!retired)
+                    return Result<bool,SerializedOperationRuntimeError>::failure(retired.error());
                 binding=RuntimeDeviceSessionBinding::create(std::move(session));
                 return Result<bool,SerializedOperationRuntimeError>::success(true);
             }
@@ -153,6 +161,9 @@ public:
                 if(it->identity().deviceSessionGeneration!=generation)
                     return Result<bool,SerializedOperationRuntimeError>::failure(
                         SerializedOperationRuntimeError::StaleDeviceSession);
+                auto retired=retireSession(deviceId,generation);
+                if(!retired)
+                    return Result<bool,SerializedOperationRuntimeError>::failure(retired.error());
                 deviceSessions_.erase(it);
                 return Result<bool,SerializedOperationRuntimeError>::success(true);
             }
@@ -222,13 +233,15 @@ public:
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::SnapshotRevisionExhausted);
 
-        operation->steps.push_back(StepRecord{std::move(stepId),StepStatus::Pending,std::nullopt});
+        operation->steps.push_back(StepRecord{
+            std::move(stepId),StepStatus::Pending,std::nullopt,std::nullopt,std::nullopt});
         ++operation->revision;
         return Result<StepStatus,SerializedOperationRuntimeError>::success(StepStatus::Pending);
     }
 
     Result<StepStatus,SerializedOperationRuntimeError> dispatchCommand(
-        const OperationId& operationId,const StepId& stepId,CommandId commandId) {
+        const OperationId& operationId,const StepId& stepId,CommandId commandId,
+        const RuntimeDeviceCorrelation& device) {
         auto owner=requireOwnerThread();
         if(!owner)
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(owner.error());
@@ -242,6 +255,18 @@ public:
         if(operation->status!=OperationStatus::Running)
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::InvalidTransition);
+        if(device.microscopeId!=microscopeId_||
+           device.runtimeId!=runtimeId_||
+           device.runtimeGeneration!=runtimeGeneration_)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::WrongRuntimeScope);
+        const auto* activeSession=findDeviceSession(device.deviceId);
+        if(!activeSession)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::DeviceSessionNotOpen);
+        if(!activeSession->matches(device))
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::StaleDeviceSession);
         if(feedbackInbox_->feedbackLossLatched())
             return Result<StepStatus,SerializedOperationRuntimeError>::failure(
                 SerializedOperationRuntimeError::FeedbackLossUnresolved);
@@ -259,6 +284,8 @@ public:
                 SerializedOperationRuntimeError::InvalidTransition);
         step->status=next.value();
         step->commandId=std::move(commandId);
+        step->deviceId=device.deviceId;
+        step->deviceSessionGeneration=device.deviceSessionGeneration;
         ++operation->revision;
         return Result<StepStatus,SerializedOperationRuntimeError>::success(step->status);
     }
@@ -486,6 +513,16 @@ public:
             return Result<std::optional<FeedbackProcessingResult<TPayload>>,
                           SerializedOperationRuntimeError>::success(std::move(result));
         }
+        if(!step->deviceId||!step->deviceSessionGeneration||
+           *step->deviceId!=device.deviceId||
+           *step->deviceSessionGeneration!=device.deviceSessionGeneration) {
+            result.disposition=FeedbackProcessingDisposition::WrongDeviceSessionForStep;
+            result.stepStatus=step->status;
+            result.operationSnapshot=snapshotFor(*operation).value();
+            result.receipt=std::move(receipt);
+            return Result<std::optional<FeedbackProcessingResult<TPayload>>,
+                          SerializedOperationRuntimeError>::success(std::move(result));
+        }
         if(!ActiveOperationStepBinding::create(
                 OperationCorrelation{operation->id,step->id,step->commandId}).matches(*correlation)) {
             result.disposition=FeedbackProcessingDisposition::StaleCommand;
@@ -556,6 +593,8 @@ private:
         StepId id;
         StepStatus status;
         std::optional<CommandId> commandId;
+        std::optional<DeviceId> deviceId;
+        std::optional<DeviceSessionGeneration> deviceSessionGeneration;
     };
     struct OperationRecord final {
         OperationId id;
@@ -630,6 +669,67 @@ private:
         for(const auto& session:deviceSessions_)
             if(session.identity().deviceId==id)return &session;
         return nullptr;
+    }
+
+    Result<bool,SerializedOperationRuntimeError> retireSession(
+        const DeviceId& deviceId,DeviceSessionGeneration generation) {
+        // Preflight every affected operation so session retirement cannot
+        // partially mutate several operation records before a revision error.
+        for(const auto& operation:operations_) {
+            if(isTerminal(operation.status))
+                continue;
+            bool affected=false;
+            for(const auto& step:operation.steps) {
+                if(step.deviceId&&step.deviceSessionGeneration&&
+                   *step.deviceId==deviceId&&
+                   *step.deviceSessionGeneration==generation&&
+                   !isTerminal(step.status)) {
+                    affected=true;
+                    break;
+                }
+            }
+            if(affected&&!canIncrementRevision(operation))
+                return Result<bool,SerializedOperationRuntimeError>::failure(
+                    SerializedOperationRuntimeError::SnapshotRevisionExhausted);
+        }
+
+        for(auto& operation:operations_) {
+            if(isTerminal(operation.status))
+                continue;
+            bool changed=false;
+            bool alreadyVerified=false;
+            for(const auto& step:operation.steps)
+                if(step.status==StepStatus::Verified)alreadyVerified=true;
+
+            for(auto& step:operation.steps) {
+                if(!step.deviceId||!step.deviceSessionGeneration||
+                   *step.deviceId!=deviceId||
+                   *step.deviceSessionGeneration!=generation||
+                   isTerminal(step.status))
+                    continue;
+                auto failed=applyStepLifecycleEvent(
+                    step.status,StepLifecycleEvent::AdapterFailure);
+                if(failed) {
+                    step.status=failed.value();
+                    changed=true;
+                }
+            }
+
+            if(changed) {
+                const bool partial=alreadyVerified&&
+                    operation.status!=OperationStatus::Accepted;
+                auto failed=applyOperationLifecycleEvent(
+                    operation.status,
+                    partial?OperationLifecycleEvent::PartiallyCompleted:
+                            OperationLifecycleEvent::Failed);
+                if(!failed)
+                    return Result<bool,SerializedOperationRuntimeError>::failure(
+                        SerializedOperationRuntimeError::InvalidTransition);
+                operation.status=failed.value();
+                ++operation.revision;
+            }
+        }
+        return Result<bool,SerializedOperationRuntimeError>::success(true);
     }
 
     Result<StepStatus,SerializedOperationRuntimeError> applyControlStepEvent(

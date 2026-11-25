@@ -50,6 +50,10 @@ struct NativeCameraControlsDock: View {
                             Text("Open a camera to load its controls.")
                                 .font(.system(size: 12))
                                 .foregroundColor(OptikaPalette.secondaryText)
+                        } else if features.isFeatureSnapshotLoading {
+                            Text("Loading camera features…")
+                                .font(.system(size: 12))
+                                .foregroundColor(OptikaPalette.secondaryText)
                         } else if additionalFeatureDescriptors.isEmpty {
                             Text(features.previewResolutionDescriptor == nil
                                  ? "The camera reported no feature controls."

@@ -201,7 +201,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer implemented and cross-platform validated; 4B command/port contracts next**
+**In progress — 4A lifecycle reducer validated; initial 4B stage-motion and dual-slide navigation contracts implemented; 4C runtime remains next**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
@@ -220,6 +220,15 @@ The equipment definition now describes installed topology and static capabilitie
 - Manual steps have an AwaitingOperator path. OperatorConfirmed enters Verifying and is not itself proof of completion.
 - Timeout, adapter failure/rejection, partial completion and terminal-state behavior have focused tests.
 - Core standalone, Application standalone and root platform-only build/tests passed on Ubuntu GCC, Windows MSVC and macOS Clang: [run 124](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45639182251).
+
+**4B source progress — initial stage/navigation contracts**
+- Added IStageMotionPort with absolute/relative multi-axis movement, homing and controlled stop. Multi-axis intent must be preserved or rejected; the adapter cannot silently serialize it.
+- Added typed motion values, operation/device/command correlation, immediate adapter submission result and normalized position/state/limit/action/fault feedback payloads.
+- Added DualSlideCarrierSpecification to the installed equipment definition. The OPTIKA arrangement is two horizontal side-by-side slots on one X/Y plane, not a vertical rack.
+- Added independent SlideGeometry/SlideRegistration values. Four measured corners are fitted to an affine mapping; individual residuals and maximum/RMS fit residuals are retained and an acceptance threshold gates registration.
+- Added DualSlideCarrierState with left/right occupancy and separate SlideId registrations. A requested SlideId/local point resolves through its own registration to a common stage-plane target, converts micrometers into the declared X/Y axis units and rejects targets outside installed stage travel.
+- Added StageAxisPositionState. Command-derived movement accumulates a conservative error bound; controller-reported coordinates do not reset open-loop uncertainty; encoder/external measurements may reset it to their measurement uncertainty; invalid reference or unknown/exceeded error requires homing.
+- Added focused Core tests and CMake targets for the motion port, dual-slide mapping and position-state model. Hardware drivers and runtime execution are not part of this slice.
 
 **Implementation constraints**
 - Per-runtime state transitions have one logical owner. Adapter callbacks enqueue immutable feedback and never call the reducer directly from device/SDK threads.
@@ -323,6 +332,8 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 ## Immediate next implementation task
 
-Phase 4A is implemented and cross-platform validated. The initial Phase 4B source now defines the controller-independent stage-motion port and the OPTIKA dual-slide carrier/four-corner registration model. The next implementation slice is runtime stage-position ownership: current position per axis, reference validity, evidence provenance, accumulated uncertainty, homing/recovery decisions and restoration of a preserved (SlideId, slide-local X, slide-local Y) target.
+The initial Phase 4B stage-motion and dual-slide navigation contracts are implemented. StageAxisPositionState also provides the pure per-axis reference/evidence/error model.
 
-STEP/DIR pulse generation and vendor-controller protocols remain in separate driver libraries, never in Microscope.Core.
+Proceed with Phase 4C: one serialized runtime owner per microscope, feedback ingress and reconciliation that updates these position values only from correlated feedback. Then Phase 4D/4E should execute MoveAxesTo/HomeAxes and verify arrival. Recovery must preserve the requested (SlideId, slide-local X, slide-local Y), home the common stage, re-resolve through the still-valid slide registration and return to that target.
+
+Controller-specific STEP/DIR generation and vendor protocols remain in external driver libraries.

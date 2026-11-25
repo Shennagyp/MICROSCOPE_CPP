@@ -59,6 +59,12 @@ option(CAMERA_GENTL_ENABLE_GENAPI
     "Build the optional GenApi 3.5.1 node-map integration" OFF)
 
 if(CAMERA_GENTL_ENABLE_GENAPI)
+    if(NOT TARGET Camera::Common)
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../Common"
+            "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
+    endif()
+
     set(GENAPI_ROOT "" CACHE PATH
         "Root of the EMVA GenApi 3.5.1 Mac64_Universal SDK")
 

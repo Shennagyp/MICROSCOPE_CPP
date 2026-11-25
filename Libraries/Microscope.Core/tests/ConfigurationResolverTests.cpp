@@ -578,18 +578,40 @@ void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
               "configuration.optical_function.requirement_not_satisfied"),
           "rejects phase contrast when the selected phase components do not match the required compatibility identity");
 
-    const auto unrelatedOpticalComponentRequest = makeRequest(
+}
+
+void testAdditionalOpticalComponentMustSatisfyProfileRequirement() {
+    const auto fixture = makeConfigurationFixture();
+    const auto phaseCompatibilityId =
+        makeId<OpticalCompatibilityId>("phase-compatibility-1");
+    const auto phaseProfile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-phase-additional-component"),
+        ContrastMethod::PhaseContrast,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhasePlate, phaseCompatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhaseAnnulus, phaseCompatibilityId))}));
+    const auto phaseCatalog =
+        take(ConfigurationProfileCatalog::create({phaseProfile}));
+    const auto unrelatedRequest = makeRequest(
         fixture,
         {fixture.fullPathId},
         fixture.cameraModeId,
         ContrastMethod::PhaseContrast,
         phaseProfile.id(),
         {makeId<EquipmentComponentId>("polarizer")});
-    const unrelatedSelection = ConfigurationResolver::resolve(
-        fixture.equipment, phaseCatalog, unrelatedOpticalComponentRequest);
-    check(!unrelatedSelection.isResolved() &&
+    const auto unrelatedResolution = ConfigurationResolver::resolve(
+        fixture.equipment, phaseCatalog, unrelatedRequest);
+
+    check(!unrelatedResolution.isResolved() &&
           hasDiagnosticCode(
-              unrelatedSelection,
+              unrelatedResolution,
               "configuration.additional_optical_component.not_allowed_by_profile"),
           "rejects an additional optical component that does not satisfy any selected profile requirement");
 }
@@ -1036,6 +1058,7 @@ int main() {
     testResolverAcceptsOneCompleteBrightfieldPath();
     testResolverAcceptsSeparateIlluminationAndImagingPaths();
     testPhaseContrastRequiresMatchedPhasePlateAndAnnulus();
+    testAdditionalOpticalComponentMustSatisfyProfileRequirement();
     testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms();
     testOpticalFunctionRequirementFactoriesAndSelections();
     testProfileTargetsAreRetainedAndValidatedAgainstInstalledRanges();

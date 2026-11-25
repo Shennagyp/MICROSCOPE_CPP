@@ -14,6 +14,7 @@
 
 #include <cmath>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -197,9 +198,8 @@ camera::CameraFeatureResult<Value> readNode(
                      "GenApi node does not expose its declared feature interface.");
 }
 
-void writeEnumeration(GenApi::IEnumeration& enumeration,
-                      const std::string& name,
-                      const camera::FeatureEnumeration& requested) {
+bool writeEnumeration(GenApi::IEnumeration& enumeration,
+                       const camera::FeatureEnumeration& requested) {
     GenApi::NodeList_t entries;
     enumeration.GetEntries(entries);
     for (auto* entryNode : entries) {
@@ -210,11 +210,10 @@ void writeEnumeration(GenApi::IEnumeration& enumeration,
         }
         if (requested.symbol == entry->GetSymbolic().c_str()) {
             enumeration.SetIntValue(entry->GetValue(), true);
-            return;
+            return true;
         }
     }
-    throw std::invalid_argument(
-        "Requested enumeration symbol is not available on this device: " + name);
+    return false;
 }
 
 } // namespace
@@ -300,38 +299,53 @@ GenApiFeatureAccess::writeFeature(
             }
 
             switch (node->GetPrincipalInterfaceType()) {
-            case GenApi::intfIBoolean:
-                dynamic_cast<GenApi::IBoolean*>(node)->SetValue(
-                    std::get<bool>(value), true);
-                break;
+            case GenApi::intfIBoolean: {
+                auto* feature = dynamic_cast<GenApi::IBoolean*>(node);
+                if (!feature) break;
+                feature->SetValue(std::get<bool>(value), true);
+                return std::monostate{};
+            }
 
-            case GenApi::intfIInteger:
-                dynamic_cast<GenApi::IInteger*>(node)->SetValue(
-                    std::get<std::int64_t>(value), true);
-                break;
+            case GenApi::intfIInteger: {
+                auto* feature = dynamic_cast<GenApi::IInteger*>(node);
+                if (!feature) break;
+                feature->SetValue(std::get<std::int64_t>(value), true);
+                return std::monostate{};
+            }
 
-            case GenApi::intfIFloat:
-                dynamic_cast<GenApi::IFloat*>(node)->SetValue(
-                    std::get<double>(value), true);
-                break;
+            case GenApi::intfIFloat: {
+                auto* feature = dynamic_cast<GenApi::IFloat*>(node);
+                if (!feature) break;
+                feature->SetValue(std::get<double>(value), true);
+                return std::monostate{};
+            }
 
-            case GenApi::intfIString:
-                dynamic_cast<GenApi::IString*>(node)->SetValue(
+            case GenApi::intfIString: {
+                auto* feature = dynamic_cast<GenApi::IString*>(node);
+                if (!feature) break;
+                feature->SetValue(
                     GenICam::gcstring(std::get<std::string>(value).c_str()), true);
-                break;
+                return std::monostate{};
+            }
 
-            case GenApi::intfIEnumeration:
-                writeEnumeration(
-                    *dynamic_cast<GenApi::IEnumeration*>(node),
-                    featureName,
-                    std::get<camera::FeatureEnumeration>(value));
-                break;
+            case GenApi::intfIEnumeration: {
+                auto* feature = dynamic_cast<GenApi::IEnumeration*>(node);
+                if (!feature) break;
+                if (!writeEnumeration(
+                        *feature,
+                        std::get<camera::FeatureEnumeration>(value))) {
+                    return makeError(ErrorCode::InvalidValue, featureName,
+                                     "Enumeration symbol is no longer available.");
+                }
+                return std::monostate{};
+            }
 
             default:
                 return makeError(ErrorCode::Unsupported, featureName,
                                  "GenApi node type is not a supported camera feature.");
             }
-            return std::monostate{};
+            return makeError(ErrorCode::BackendFailure, featureName,
+                             "GenApi node does not expose its declared feature interface.");
         });
     } catch (const GenICam::GenericException& error) {
         return makeError(ErrorCode::BackendFailure, featureName,

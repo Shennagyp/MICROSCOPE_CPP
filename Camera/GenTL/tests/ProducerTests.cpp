@@ -37,22 +37,6 @@ int main(int argc, char** argv) {
         // A second discovery reuses the retained Interface handle.
         if (producer.discover().size() != 1) return 5;
 
-        auto device = producer.openDevice(descriptor);
-        if (!device || device.deviceId() != "device0") return 6;
-
-        const auto streams = device.dataStreamIds();
-        if (streams.size() != 1 || streams.front() != "stream0") return 7;
-
-        const auto xmlBytes = device.genApiXml();
-        const std::string xml(xmlBytes.begin(), xmlBytes.end());
-        if (xml != "<RegisterDescription/>") return 8;
-
-        const auto bytes = device.readPort(0x10203040, 4);
-        if (bytes != std::vector<std::uint8_t>{0xA0, 0xA1, 0xA2, 0xA3}) return 9;
-
-        device.writePort(0x10203040, {0x10, 0x20, 0x30, 0x40});
-        if (device.portUrl() != "Mock://DevicePort") return 10;
-
         auto foreignDescriptor = descriptor;
         foreignDescriptor.producerPath += ".foreign";
         bool rejectedForeign = false;
@@ -62,7 +46,24 @@ int main(int argc, char** argv) {
         } catch (const std::invalid_argument&) {
             rejectedForeign = true;
         }
-        if (!rejectedForeign) return 11;
+        if (!rejectedForeign) return 6;
+
+        auto device = producer.openDevice(descriptor);
+        if (!device || device.deviceId() != "device0") return 7;
+        producer = camera::gentl::Producer{}; // The session retains producer state.
+
+        const auto streams = device.dataStreamIds();
+        if (streams.size() != 1 || streams.front() != "stream0") return 8;
+
+        const auto xmlBytes = device.genApiXml();
+        const std::string xml(xmlBytes.begin(), xmlBytes.end());
+        if (xml != "<RegisterDescription/>") return 9;
+
+        const auto bytes = device.readPort(0x10203040, 4);
+        if (bytes != std::vector<std::uint8_t>{0xA0, 0xA1, 0xA2, 0xA3}) return 10;
+
+        device.writePort(0x10203040, {0x10, 0x20, 0x30, 0x40});
+        if (device.portUrl() != "Mock://DevicePort") return 11;
 
         device.close();
         if (device) return 12;

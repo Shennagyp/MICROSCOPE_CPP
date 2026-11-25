@@ -18,6 +18,11 @@ if(OPTIKA_BUILD_NATIVE_APP)
     enable_language(OBJCXX)
 endif()
 
+# The microscope platform libraries are backend-neutral. They are added
+# independently from the existing AmScope camera capability.
+add_subdirectory(Libraries/Microscope.Core)
+add_subdirectory(Libraries/Microscope.Application)
+
 add_subdirectory(Camera/Amscope)
 
 if(OPTIKA_BUILD_NATIVE_APP)

@@ -11,15 +11,18 @@ session. Vendor sample code is not modified.
 
 The governing Camera Module v2.0 roadmap and current implementation status are in
 [CAMERA_V2_DEVELOPMENT_STATUS.md](../../docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md).
-Development continues on `camera-v.2.0`. The reusable camera library is a
-**non-Qt programmatic capability**; application GUI and presentation belong to
-consuming applications such as Optika.
+Development continues on `camera-v.2.0`. The **core driver and programmatic API
+are non-Qt**. The original roadmap also requires an optional Qt streaming
+library (Phase 3) and reusable Qt camera UI library (Phase 4). These must remain
+separate from the core driver and common contracts. Consuming applications own
+their application shell, workspace, presentation state and composition.
 
 The original [AmScope Native Driver and Camera Module Completion Plan](../../docs/architecture/AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
-is retained as the historical Phase 0–8 baseline. The later
+is the governing Phase 0–8 roadmap. The later
 [AmScope Native Release Plan](../../docs/architecture/AMSCOPE_NATIVE_RELEASE_PLAN.md)
-describes the former Qt-preview delivery and is no longer the governing v2.0
-plan. Common/provider-specific type ownership is documented in
+is a narrower AmScope-native execution plan and is subordinate to the original
+roadmap; it does not replace its phase numbering or GenTL/UI obligations.
+Common/provider-specific type ownership is documented in
 [CAMERA_COMMON_TYPE_OWNERSHIP.md](../../docs/architecture/CAMERA_COMMON_TYPE_OWNERSHIP.md).
 The detailed implementation inventory is in
 [AMSCOPE_IMPLEMENTATION_INVENTORY.md](../../docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md);
@@ -366,13 +369,21 @@ Neither probe is a replacement production backend; production acquisition
 remains SDK callback → bounded event queue → one acquisition worker →
 `Amcam_PullImageV4`.
 
-### Legacy Qt preview and hardware-rate utility
+### Optional Qt streaming, reusable UI and preview composition
 
-The Qt adapter, Widgets preview, and Qt-based hardware-rate presentation remain
-in source temporarily for historical comparison. They are not Camera v2.0
-deliverables and are disabled by default. The legacy launcher
-`scripts/run-amscope.sh` explicitly opts into them and requires Qt 6. Do not
-use that launcher as the Camera v2.0 build or acceptance path.
+The Qt streaming adapter and reusable `Camera::QtWidgets` components remain
+part of the original Camera Module roadmap. They are optional targets: a
+non-Qt consumer must be able to build and link only `Amscope::Driver` and
+`Camera::Common`, without Qt being discovered or linked.
+
+The reusable widget library is distinct from an application window/workspace.
+A consuming application may compose the widgets into its own shell, or use a
+different native UI. The preview executable is a reference composition and
+diagnostic application, not the owner of the driver/session.
+
+The non-Qt workflow validates the core-only configuration. A separate Qt
+workflow validates the optional streaming/UI targets and their tests. Neither
+workflow substitutes for the phase-specific physical-camera acceptance gates.
 
 
 ## Acquisition-isolation diagnostics
@@ -450,14 +461,16 @@ different `WaitImageV3` path to provide an independent SDK/device comparison.
 ## CMake target policy
 
 The default `Camera/Amscope` configure builds the native AmScope driver and
-common camera contracts without Qt. The legacy targets are opt-in only:
+common camera contracts without Qt. The Qt targets are separately opt-in:
 
-- `AMSCOPE_BUILD_QT_ADAPTER=ON`: legacy Qt Core adapter.
-- `AMSCOPE_BUILD_PREVIEW_APP=ON`: legacy Qt Widgets preview; this also
-  requires the Qt adapter.
+- `AMSCOPE_BUILD_QT_ADAPTER=ON`: optional Qt Core streaming/operation adapter.
+- `AMSCOPE_BUILD_PREVIEW_APP=ON`: Qt Widgets reusable UI and preview composition;
+  this also requires the Qt adapter.
 
-These options are disabled by default and are not part of the Camera v2.0
-package or external-consumer contract. New camera code must not depend on them.
+OFF-by-default is a dependency-boundary guarantee, not a decision to remove
+Qt from the Camera Module roadmap. A consumer that needs only the programmatic
+API must not inherit Qt. The Phase 3/4 Qt targets remain independently buildable
+and testable.
 
 
 ## macOS SDK selection
@@ -472,18 +485,23 @@ CMake selects based on the requested/native architecture. Override with
 The selected libamcam.dylib is copied beside libcamera_amscope_driver.dylib and the driver
 uses @loader_path for runtime resolution.
 
-## Legacy Qt frame handoff — reference only
+## Optional Qt frame handoff
 
-`QtAmcamCamera`, `Camera::Qt` and their QObject notification mechanism are
-legacy optional integration code. They are excluded from the Camera v2.0
-programmatic API and are not required to consume frames.
+`QtAmcamCamera` and `Camera::Qt` provide the current optional Qt integration
+path. Their target/header boundary is kept out of `Amscope::Driver` and
+`Camera::Common`, so non-Qt consumers do not inherit Qt dependencies.
 
-The supported camera-facing contract is the non-Qt `AmcamCamera` API:
-its `FrameCallback` receives an immutable `FramePtr` lease on the acquisition
-worker. Consumers must retain the lease for the complete period in which they
-read its pixel memory. They must not synchronously call start, stop, close or
-destroy the camera from the acquisition callback. The application owns
-notification scheduling and presentation.
+The v2.0 Phase 3 target architecture still requires a clear separation between
+the non-Qt programmatic control API and Qt-specific streaming/thread handoff.
+The current facade is an existing implementation to reconcile against that
+boundary, not proof that the separation phase is complete.
+
+The non-Qt `AmcamCamera::FrameCallback` and the Qt adapter both consume the
+same driver's immutable `FramePtr` lease model. Consumers must retain the
+lease while reading its pixel memory. They must not synchronously call start,
+stop, close or destroy the camera from the acquisition callback. The adapter
+owns Qt notification scheduling; the consuming application owns composition
+and presentation state.
 
 
 ## Lifecycle
@@ -498,8 +516,8 @@ notification scheduling and presentation.
 Frame and error callbacks execute on the native acquisition worker. Do not call
 start, stop, close, or destroy AmcamCamera synchronously from either callback.
 Queue lifecycle changes and native camera destruction to the owning application/
-control thread. The application must serialize these transitions and ensure
-the acquisition callback has returned before destroying the camera.
+control thread. The application/adapter must serialize these transitions and
+ensure the acquisition callback has returned before destroying the camera.
 
 ## Not included yet
 

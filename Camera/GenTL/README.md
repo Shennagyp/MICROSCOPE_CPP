@@ -40,6 +40,8 @@ The GenApi target is off by default. It requires GenApi and GCBase headers/libra
 #include "camera/gentl/Producer.h"
 #include "camera/gentl/GenApiDeviceAccess.h"
 
+#include <utility>
+
 auto bridge = camera::gentl::ConsumerBridge::load(
     "/path/to/libGenTLConsumerCAPI.dylib");
 

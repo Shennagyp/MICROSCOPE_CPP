@@ -11,6 +11,7 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 int runProducerTests(int argc, char** argv) {
@@ -103,7 +104,10 @@ int runProducerTests(int argc, char** argv) {
             frame->dataLargerThanBuffer != false || frame->isComposite != false ||
             frame->incomplete) return 14;
 
-        const auto commonFrame = camera::gentl::makeCommonFrame(*frame);
+        const auto expectedCommonPixels = frame->payload;
+        auto commonInput = *frame;
+        const auto commonFrame =
+            camera::gentl::makeCommonFrame(std::move(commonInput));
         if (!commonFrame ||
             (*commonFrame)->pixelFormat != camera::PixelFormat::Raw8 ||
             (*commonFrame)->pixelByteOrder != camera::PixelByteOrder::NotApplicable ||
@@ -111,7 +115,7 @@ int runProducerTests(int argc, char** argv) {
             (*commonFrame)->strideBytes != 4 ||
             (*commonFrame)->significantBitsPerPixel != 8 ||
             (*commonFrame)->storageBitsPerPixel != 8 ||
-            (*commonFrame)->pixels != frame->payload ||
+            (*commonFrame)->pixels != expectedCommonPixels ||
             !(*commonFrame)->pixelFormatIdentifier ||
             (*commonFrame)->pixelFormatIdentifier->scheme != "pfnc" ||
             (*commonFrame)->pixelFormatIdentifier->value != UINT64_C(0x01080001) ||

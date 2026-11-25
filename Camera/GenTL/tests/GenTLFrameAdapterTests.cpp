@@ -168,6 +168,16 @@ void testPfnc16NamespaceMappings() {
             "PFNC 16-bit namespace RGB8 was not mapped.");
 }
 
+
+void testRvalueProjectionTransfersPayload() {
+    auto source = validMono8Frame();
+    const auto expectedPayload = source.payload;
+    const auto result = camera::gentl::makeCommonFrame(std::move(source));
+    require(result.has_value(), "Rvalue Mono8 projection was rejected.");
+    require((*result)->pixels == expectedPayload,
+            "Rvalue projection did not transfer the original payload.");
+}
+
 void testUnknownPixelFormatPreservesIdentity() {
     auto source = validMono8Frame();
     source.pixelFormat = UINT64_C(0xDEADBEEF);
@@ -293,6 +303,7 @@ void testNonImageAndIncompleteBuffersAreRejected() {
 int main() {
     try {
         testMono8Projection();
+        testRvalueProjectionTransfersPayload();
         testMono16ProjectionUsesReportedByteOrder();
         testUnpackedMono10Mono12Mono14Projection();
         testMono16WithoutKnownByteOrderRemainsOpaque();

@@ -13,6 +13,6 @@ namespace camera::gentl {
 // are preserved. Non-image, incomplete, chunked, or offset/padded buffers are
 // not projected into the simpler Common frame type.
 std::optional<camera::FramePtr>
-makeCommonFrame(const DataStreamFrame& source);
+makeCommonFrame(DataStreamFrame source);
 
 } // namespace camera::gentl

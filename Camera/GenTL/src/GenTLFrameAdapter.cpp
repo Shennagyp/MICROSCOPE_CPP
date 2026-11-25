@@ -71,7 +71,7 @@ bool strideFits(std::uint32_t width, std::size_t bytesPerPixel) noexcept {
 } // namespace
 
 std::optional<camera::FramePtr>
-makeCommonFrame(const DataStreamFrame& source) {
+makeCommonFrame(DataStreamFrame source) {
     if (source.payload.empty() ||
         !source.imagePresent.value_or(false) ||
         source.incomplete ||
@@ -102,7 +102,7 @@ makeCommonFrame(const DataStreamFrame& source) {
     auto frame = std::make_shared<camera::Frame>();
     frame->width = static_cast<std::uint32_t>(*source.width);
     frame->height = static_cast<std::uint32_t>(*source.height);
-    frame->pixels = source.payload;
+    frame->pixels = std::move(source.payload);
     frame->sequenceNumber = source.frameId;
     frame->pixelByteOrder = pixelByteOrder(source.pixelEndianness);
     if (source.timestampNanoseconds) {

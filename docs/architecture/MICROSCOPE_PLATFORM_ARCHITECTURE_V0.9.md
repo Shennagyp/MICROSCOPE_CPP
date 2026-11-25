@@ -4,7 +4,7 @@
 **Date:** 2026-11-25  
 **Scope:** Microscope domain model, C++ libraries, adapter integration, operation lifecycle, calibration, slides, persistence and frontend independence.
 
-This document supersedes earlier application-level architecture descriptions wherever they conflict with the platform boundaries defined here. The existing native application and camera pipeline remain the implementation baseline during migration; this document does not claim that the target C++ libraries already exist.
+This document supersedes earlier application-level architecture descriptions wherever they conflict with the platform boundaries defined here. The initial C++17 Microscope.Core and Microscope.Application static-library targets and foundational contracts now exist in the repository. They are only the Phase 1 foundation: the microscope equipment model, configuration engine, operation executor, JSON loading, adapter composition, persistence and hardware integration are not yet implemented. The existing native application and camera pipeline remain the implementation baseline during migration.
 
 ## 1. Architectural decisions
 
@@ -978,18 +978,24 @@ The C++ baseline remains C++17 for the initial migration, matching the current a
 
 ## 16. Existing implementation preservation and migration
 
-The current branch contains a working native macOS application structure:
-- Application/OptikaB293 currently contains SwiftUI/AppKit presentation and Swift application state/coordinators.
-- AmscopeNativeCameraBridge and NativeCameraController connect the current application to the reusable AmScope camera driver.
-- Current Swift microscope configuration and resolution policy code is transitional implementation, not the final ownership boundary.
-- The camera acquisition worker, frame pool, lease-based zero-copy presentation path, latest-frame mailbox and two-slide preview performance constraints are existing implementation invariants.
+The current branch contains:
+- Application/OptikaB293 with the existing SwiftUI/AppKit presentation and Swift application state/coordinators.
+- AmscopeNativeCameraBridge and NativeCameraController connecting the current application to the reusable AmScope camera driver.
+- Libraries/Microscope.Core and Libraries/Microscope.Application as separate C++17 static-library targets with standalone CMake configuration.
+- Initial Core strong-ID, Result/Status, diagnostic, operation-state and feedback metadata contracts.
+- Initial Application runtime/operation handle and projection contracts.
+- Focused Core/Application contract-test sources registered with CTest; they are not evidence of successful compilation or execution until validated.
+- Current Swift microscope configuration and resolution policy code, which remains transitional rather than the final ownership boundary.
+- The camera acquisition worker, frame pool, lease-based zero-copy presentation path, latest-frame mailbox and two-slide preview performance constraints, which remain implementation invariants.
+
+The two C++ libraries are not yet the complete microscope engine or application runtime. No equipment/configuration model, full operation executor, JSON definition loader, adapter factory registry, storage implementation or device workflow migration is claimed here.
 
 Migration rules:
 
 1. Preserve the current camera acquisition and preview path.
 2. Do not rewrite the camera driver to make it aware of Microscope.Application.
 3. Move microscope-domain policy and behavior into Core in focused vertical slices.
-4. Introduce Microscope.Application as a C++ library and migrate composition/use-case ownership there.
+4. Continue migrating composition/use-case ownership into the existing Microscope.Application C++ library.
 5. Keep the current macOS target as one frontend. Do not make SwiftUI/AppKit dependencies part of either principal C++ library.
 6. Replace transitional Swift microscope logic only after equivalent Core behavior and tests exist.
 7. Keep the application usable during migration; do not create duplicate competing sources of truth.

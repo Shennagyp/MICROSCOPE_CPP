@@ -432,22 +432,34 @@ Result<
                 }
             }
 
-            if (!isLast) {
-                const auto& nextStep = steps[index + 1];
-                if (!nextStep.entryPortId()) {
-                    return Result<
-                        MicroscopeEquipmentDefinition,
-                        EquipmentDefinitionError>::failure(
-                            EquipmentDefinitionError::MissingPathEntryPort);
-                }
-                const auto routeConnection = connectionIndex.find(
-                    std::make_pair(*step.exitPortId(), *nextStep.entryPortId()));
-                if (routeConnection == connectionIndex.end()) {
-                    return Result<
-                        MicroscopeEquipmentDefinition,
-                        EquipmentDefinitionError>::failure(
-                            EquipmentDefinitionError::MissingRouteConnection);
-                }
+        }
+
+        // Validate continuity only after every step has passed its own
+        // component, port-ownership and direction checks. This keeps a
+        // malformed next step from being reported merely as a missing edge.
+        for (std::size_t index = 0; index + 1 < steps.size(); ++index) {
+            const auto& currentStep = steps[index];
+            const auto& nextStep = steps[index + 1];
+            if (!currentStep.exitPortId()) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::MissingPathExitPort);
+            }
+            if (!nextStep.entryPortId()) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::MissingPathEntryPort);
+            }
+
+            const auto routeConnection = connectionIndex.find(
+                std::make_pair(*currentStep.exitPortId(), *nextStep.entryPortId()));
+            if (routeConnection == connectionIndex.end()) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::MissingRouteConnection);
             }
         }
     }

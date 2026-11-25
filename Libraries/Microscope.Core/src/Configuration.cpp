@@ -1,6 +1,7 @@
 #include "microscope/core/configuration/Configuration.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <optional>
 #include <set>
 #include <string>
@@ -77,6 +78,18 @@ template <typename TValue>
                     return step.componentId() == componentId;
                 });
         });
+}
+
+[[nodiscard]] const EquipmentComponent* findEquipmentComponent(
+    const MicroscopeEquipmentDefinition& equipment,
+    const EquipmentComponentId& componentId) {
+    const auto it = std::find_if(
+        equipment.components().begin(),
+        equipment.components().end(),
+        [&componentId](const EquipmentComponent& value) {
+            return value.id() == componentId;
+        });
+    return it == equipment.components().end() ? nullptr : &*it;
 }
 
 [[nodiscard]] const ObjectiveSpecification* findObjective(
@@ -789,7 +802,113 @@ ConfigurationResolution ConfigurationResolver::resolve(
                 "configuration.profile.required_component_missing",
                 "A required optical component is not present on the selected optical paths.");
         }
+
+        for (const auto& additionalComponentId :
+             request.selectedAdditionalOpticalComponentIds()) {
+            const auto* component = findEquipmentComponent(
+                equipment, additionalComponentId);
+            if (component == nullptr) {
+                appendError(
+                    diagnostics,
+                    "configuration.additional_optical_component.not_installed",
+                    "A selected additional optical component is not installed.",
+                    "EquipmentComponent",
+                    additionalComponentId.value());
+                continue;
+            }
+            if (component->kind() != EquipmentComponentKind::OpticalElement) {
+                appendError(
+                    diagnostics,
+                    "configuration.additional_optical_component.wrong_kind",
+                    "A selected additional optical component is not an optical element.",
+                    "EquipmentComponent",
+                    additionalComponentId.value());
+            }
+            requireOnSelectedPaths(
+                additionalComponentId,
+                "configuration.additional_optical_component.not_on_selected_paths",
+                "A selected additional optical component is not traversed by any selected optical path.");
+        }
+    } else if (!request.selectedAdditionalOpticalComponentIds().empty()) {
+        for (const auto& additionalComponentId :
+             request.selectedAdditionalOpticalComponentIds()) {
+            appendError(
+                diagnostics,
+                "configuration.additional_optical_component.path_unavailable",
+                "An additional optical component cannot be validated because no selected optical path is installed.",
+                "EquipmentComponent",
+                additionalComponentId.value());
+        }
     }
+
+    std::vector<EquipmentComponentId> selectedOpticalComponentIds{
+        request.objectiveComponentId(),
+        request.condenserComponentId()};
+    selectedOpticalComponentIds.insert(
+        selectedOpticalComponentIds.end(),
+        request.selectedAdditionalOpticalComponentIds().begin(),
+        request.selectedAdditionalOpticalComponentIds().end());
+
+    std::set<EquipmentComponentId> distinctSelectedOpticalComponentIds;
+    for (const auto& selectedComponentId : selectedOpticalComponentIds) {
+        if (!distinctSelectedOpticalComponentIds.insert(selectedComponentId).second) {
+            continue;
+        }
+
+        const auto* component = findEquipmentComponent(
+            equipment, selectedComponentId);
+        if (component == nullptr ||
+            component->kind() != EquipmentComponentKind::OpticalElement) {
+            continue;
+        }
+
+        if (!selectedPaths.empty() &&
+            !containsOpticalPathComponent(selectedPaths, selectedComponentId)) {
+            continue;
+        }
+    }
+
+    for (const auto& requirement : profile->requiredOpticalFunctions()) {
+        std::uint32_t matchingComponentCount = 0;
+        for (const auto& selectedComponentId :
+             distinctSelectedOpticalComponentIds) {
+            const auto* component = findEquipmentComponent(
+                equipment, selectedComponentId);
+            if (component == nullptr ||
+                component->kind() != EquipmentComponentKind::OpticalElement) {
+                continue;
+            }
+            if (!selectedPaths.empty() &&
+                !containsOpticalPathComponent(selectedPaths, selectedComponentId)) {
+                continue;
+            }
+
+            const bool componentMatches = std::any_of(
+                component->opticalFunctions().begin(),
+                component->opticalFunctions().end(),
+                [&requirement](const OpticalFunctionCapability& capability) {
+                    return capability.function() == requirement.function() &&
+                           (!requirement.compatibilityId() ||
+                            capability.compatibilityId() ==
+                                requirement.compatibilityId());
+                });
+            if (componentMatches) {
+                ++matchingComponentCount;
+            }
+        }
+
+        if (matchingComponentCount < requirement.minimumComponentCount()) {
+            appendError(
+                diagnostics,
+                "configuration.optical_function.requirement_not_satisfied",
+                "The selected components do not satisfy a required optical function and compatibility count.",
+                "OpticalElementFunction",
+                requirement.compatibilityId()
+                    ? std::optional<std::string>(requirement.compatibilityId()->value())
+                    : std::nullopt);
+        }
+    }
+
     const bool hasErrors = std::any_of(
         diagnostics.begin(),
         diagnostics.end(),

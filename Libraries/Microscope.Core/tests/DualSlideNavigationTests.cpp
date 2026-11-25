@@ -39,6 +39,13 @@ int main(){
  auto rslot=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right"),right));
  auto carrier=take(DualSlideCarrierState::create(spec.value(),std::move(lslot),std::move(rslot)));
  check(carrier.registrationFor(id<SlideId>("left"))&&carrier.registrationFor(id<SlideId>("right")),"two slides retain separate simultaneous registrations");
+ auto wrongRight=registration("wrong-right",DualSlideSlot::Right,-95000);
+ auto wrongRightState=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("wrong-right"),wrongRight));
+ auto wrongOrder=DualSlideCarrierState::create(spec.value(),
+     take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("left-order"),registration("left-order",DualSlideSlot::Left,5000))),
+     std::move(wrongRightState));
+ check(!wrongOrder&&wrongOrder.error()==DualSlideCarrierStateError::SlideSlotOrderMismatch,
+       "validates left/right physical order against configured stage X direction");
  auto leftCommand=carrier.commandFor(id<SlideId>("left"),{10000,10000});
  auto rightCommand=carrier.commandFor(id<SlideId>("right"),{10000,10000});
  check(leftCommand&&rightCommand&&leftCommand.value().targets()[0].value()!=rightCommand.value().targets()[0].value(),"navigation resolves the selected SlideId through its own registration");

@@ -6,6 +6,7 @@ on:
       - amscope-native-driver
       - amscope-native-driver-0.5
       - amscope-native-driver-0.6
+      - camera-v.2.0
     paths:
       - "Camera/Amscope/**"
       - "Camera/Common/**"

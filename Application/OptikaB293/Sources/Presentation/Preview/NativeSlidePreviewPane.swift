@@ -30,6 +30,7 @@ final class NativeSlidePreviewPane: NSView {
     private let actionStack = NSStackView()
     private let toolStack = NSStackView()
     private let annotationPlate = NSView()
+    private let pullFrameRatePlate = NSView()
     private let actionPlate = NSView()
     private let toolPlate = NSView()
     private let microscopeControlsPlate = NSView()
@@ -80,7 +81,9 @@ final class NativeSlidePreviewPane: NSView {
         pullFrameRateLabel.lineBreakMode = .byTruncatingTail
         pullFrameRateLabel.toolTip =
             "PULL FPS: successful Amcam_PullImageV4 calls per second, derived from the driver's monotonic pull counter. This measures acquisition pull throughput, not displayed-frame rate or a sensor-reported FPS value."
-        pullFrameRateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        pullFrameRateLabel.setContentHuggingPriority(.required, for: .horizontal)
+        pullFrameRateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        pullFrameRateLabel.setAccessibilityLabel("Camera pull rate")
 
         imageSizingButton.bezelStyle = .texturedRounded
         imageSizingButton.controlSize = .small
@@ -186,6 +189,11 @@ final class NativeSlidePreviewPane: NSView {
         // presented as compact corner annotations over the image viewport;
         // actions remain available in a separate floating control cluster.
         configureAnnotationPlate(annotationPlate)
+        if showsPullRate {
+            configureAnnotationPlate(pullFrameRatePlate)
+            pullFrameRateLabel.translatesAutoresizingMaskIntoConstraints = false
+            pullFrameRatePlate.addSubview(pullFrameRateLabel)
+        }
         configureAnnotationPlate(actionPlate)
         configureAnnotationPlate(toolPlate)
         configureAnnotationPlate(microscopeControlsPlate)
@@ -197,9 +205,6 @@ final class NativeSlidePreviewPane: NSView {
         annotationStack.translatesAutoresizingMaskIntoConstraints = false
         annotationStack.addArrangedSubview(titleLabel)
         annotationStack.addArrangedSubview(statusLabel)
-        if showsPullRate {
-            annotationStack.addArrangedSubview(pullFrameRateLabel)
-        }
 
         actionStack.orientation = .horizontal
         actionStack.alignment = .centerY
@@ -234,6 +239,9 @@ final class NativeSlidePreviewPane: NSView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
         addSubview(annotationPlate)
+        if showsPullRate {
+            addSubview(pullFrameRatePlate)
+        }
         addSubview(actionPlate)
         addSubview(toolPlate)
         addSubview(microscopeControlsPlate)
@@ -274,6 +282,34 @@ final class NativeSlidePreviewPane: NSView {
                 constant: -10
             )
         ])
+        if showsPullRate {
+            NSLayoutConstraint.activate([
+                pullFrameRateLabel.leadingAnchor.constraint(
+                    equalTo: pullFrameRatePlate.leadingAnchor,
+                    constant: 9
+                ),
+                pullFrameRateLabel.trailingAnchor.constraint(
+                    equalTo: pullFrameRatePlate.trailingAnchor,
+                    constant: -9
+                ),
+                pullFrameRateLabel.topAnchor.constraint(
+                    equalTo: pullFrameRatePlate.topAnchor,
+                    constant: 5
+                ),
+                pullFrameRateLabel.bottomAnchor.constraint(
+                    equalTo: pullFrameRatePlate.bottomAnchor,
+                    constant: -5
+                ),
+                pullFrameRatePlate.leadingAnchor.constraint(
+                    equalTo: leadingAnchor,
+                    constant: 10
+                ),
+                pullFrameRatePlate.topAnchor.constraint(
+                    equalTo: annotationPlate.bottomAnchor,
+                    constant: 6
+                )
+            ])
+        }
         synchronizeToolbarState()
         if showsPullRate {
             startFrameRateRefreshTimer()

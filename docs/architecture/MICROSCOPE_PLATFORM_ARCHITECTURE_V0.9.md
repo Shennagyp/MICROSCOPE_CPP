@@ -306,27 +306,35 @@ Configuration request + equipment definition + profile catalog
                Pure configuration resolver
                          |
                          v
-              Compatibility / target validation
+      Microscope-scoped ResolvedConfiguration + diagnostics
                          |
                          v
-     Microscope-scoped desired configuration + diagnostics
+            Pure transition requirement planner
                          |
                          v
-    Optional verified effective configuration snapshot
+   Full desired-state dependency DAG / execution layers
                          |
                          v
-                Pure transition planner
-                         |
-                         v
-        Typed dependency plan (no device commands)
-                         |
-                         v
-                 Core runtime execution
+          Phase 4 runtime reconciliation against
+          verified effective state + execution
 ~~~
 
-The resolver is independent of current runtime state. It validates static compatibility and profile targets only. The transition planner may compare the resolved desired configuration with an explicitly supplied verified effective-configuration snapshot; unknown or unverified observed values must not be treated as the current effective state.
+The resolver is independent of current runtime state. It validates static compatibility and profile targets only. Phase 3D's transition planner conservatively emits the full desired requirement set from ResolvedConfiguration; it does not diff against current observations. Phase 4 runtime may reconcile this plan against a verified effective-configuration snapshot. Unknown or unverified observed values must not be treated as effective state.
 
 Composition must be conflict-aware. Unrestricted last-write-wins merging is prohibited. Contradictory profile contributions produce explicit validation diagnostics.
+
+The implemented Phase 3D plan uses typed requirement nodes for:
+- Acquisition must be inactive.
+- Selected optical path set, objective, condenser and additional optical components.
+- Camera output mode and illumination channel.
+- Optional condenser aperture and illumination intensity targets.
+- Exposure policy and optional initial exposure preset.
+- Final desired-configuration verification.
+
+Edges mean prerequisite → dependent. Acquisition inactivity is a root prerequisite for every requirement; final verification is downstream of all requirements. Objective/path/component constraints order dependent camera and illumination requirements; independent selections remain in the same topological layer. The planner returns deterministic execution layers and rejects duplicate identities/edges, unknown references and cycles.
+
+These nodes remain desired-state facts, not commands. The plan does not assume selectors are motorized, does not define vendor operations, retries or execution state, and does not claim any step has completed. Those concerns belong to Phase 4.
+
 
 ## 7. Operations, actions, feedback and completion
 

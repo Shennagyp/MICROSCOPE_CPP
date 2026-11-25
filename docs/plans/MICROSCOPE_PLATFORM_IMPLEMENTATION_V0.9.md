@@ -128,7 +128,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 3 — Declarative configuration
 
-**In progress — 3A–3C implemented and cross-platform validated; 3D transition description next**
+**In progress — 3A–3C validated; 3D source implemented, CI pending**
 
 **Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
 
@@ -136,7 +136,7 @@ The equipment definition now describes installed topology and static capabilitie
 1. **3A — Configuration vocabulary:** objective selection, optical path, contrast method, camera output mode, illumination channel/preset, condenser configuration, phase/DIC/polarization components, exposure preset and exposure policy.
 2. **3B — Profile applicability:** declarative profile requirements, selectors and compatibility constraints over installed component identity/capability data. Profiles must not contain C++ class names, SDK calls or executable callbacks.
 3. **3C — Pure resolution:** request + equipment definition + profile catalog → resolved desired configuration + typed diagnostics. Current/effective state comparison is not part of this pure target-compatibility step.
-4. **3D — Transition description:** derive required component selections/settings and dependency ordering, including conflicts and safe preconditions. This is a value plan only; Phase 4 executes it.
+4. **3D — Transition description:** emit the full desired requirement set and dependency DAG from ResolvedConfiguration, including safety preconditions and final verification. The current planner does not diff unverified current state; Phase 4 reconciles against verified effective state and executes.
 5. **3E — Representative data-driven profiles:** brightfield, phase contrast, DIC and polarization cases, including unavailable/mismatched installed equipment.
 
 
@@ -178,14 +178,17 @@ The equipment definition now describes installed topology and static capabilitie
 - Resolver output must not claim hardware state was changed or verified. Transition execution and device feedback remain Phase 4.
 - Keep JSON schema/loading in Application Phase 5. Phase 3 operates on typed Core values.
 
-**Phase 3D next vertical slice — transition description**
-- Add immutable transition-plan, transition-step and dependency-edge values with stable identities.
-- Generate target requirements for selected objective/condenser/additional optics, optical path set, camera mode, illumination channel and optional profile settings.
-- Express safe preconditions and dependency ordering as a DAG; do not invent fixed hardware command sequences or vendor operations.
-- If a verified effective-configuration snapshot is supplied, omit only requirements already known to match. Unknown/unverified state must not be treated as a match.
-- Keep the plan declarative and adapter-neutral. No device commands, retries, operation state machine or persistence are introduced in Phase 3D; those remain Phase 4.
+**Phase 3D committed source progress — cross-platform CI pending**
+- Added ConfigurationTransitionStepId, typed ConfigurationTransitionRequirement variants, immutable ConfigurationTransitionStep and prerequisite-to-dependent ConfigurationTransitionDependency values.
+- Added microscope-scoped ConfigurationTransitionPlan with step/edge identity validation, reference validation, duplicate/self-edge rejection and cycle detection.
+- The plan requires one AcquisitionMustBeInactive root and one DesiredConfigurationMustBeVerified sink. Every requirement is directly gated by acquisition inactivity and directly precedes final verification.
+- Added deterministic Kahn topological execution layers; independent path/objective/condenser selections can share a layer while dependent camera/illumination/target requirements follow their declared prerequisites.
+- Added ConfigurationTransitionPlanner to emit the complete desired requirement set from ResolvedConfiguration: optical paths, objective/condenser/additional optics, camera mode, illumination channel, optional aperture/intensity/exposure targets and explicit exposure policy.
+- The planner does not diff current observations, issue commands or claim completion. Phase 4 owns verified-effective-state reconciliation and hardware execution.
+- Added tests for required typed nodes, root/sink ordering, parallel selection layers, optional-target omission, malformed path requirements, self-dependencies and cycles.
+- Current-head CI: [run 118](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45633483942). Ubuntu GCC and Windows MSVC have passed all three build/test configurations; macOS Clang is queued.
 
-**Phase 3A–3C exit:** satisfied. Pure target resolution and profile target validation are deterministic and cross-platform validated. **Phase 3D exit:** transition requirements and dependencies are represented as a deterministic adapter-neutral plan; execution remains Phase 4.
+**Phase 3A–3C exit:** satisfied. Pure target resolution and profile target validation are deterministic and cross-platform validated. **Phase 3D exit:** transition requirements and dependencies are represented as a deterministic adapter-neutral DAG with validated root/sink, no cycles and deterministic execution layers. Current-head three-platform validation is pending; verified-state reconciliation and execution remain Phase 4.
 
 ### Phase 4 — Core operation runtime
 - Implement operation and step lifecycle.
@@ -286,4 +289,4 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 The public contract review is recorded in ../architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
 
-Phases 1 and 2 are closed. Phase 3A–3C are implemented and cross-platform validated. The current task is Phase 3D: define a small adapter-neutral transition-plan value model and deterministic dependency planner over ResolvedConfiguration, optionally compared with verified effective state. Do not introduce commands, executors or a universal workflow engine; those belong to Phase 4.
+Phases 1 and 2 are closed. Phase 3A–3C are implemented and cross-platform validated. Phase 3D source is committed and awaiting its current-head macOS CI result. After Phase 3D acceptance, proceed to Phase 3E representative profile coverage. Do not introduce commands, executors or a universal workflow engine; those belong to Phase 4.

@@ -2,7 +2,7 @@
 
 #include "amscope/AmcamCamera.h"
 #include "amscope/detail/AcquisitionFrameGate.h"
-#include "camera/FrameStreamMailbox.h"
+#include "camera/qt/FrameStream.h"
 
 #include <QMetaType>
 #include <QObject>
@@ -305,7 +305,6 @@ private:
     void publishLatestFrame(
         FramePtr frame,
         const std::shared_ptr<detail::AcquisitionFrameGate>& frameGate);
-    void queueFrameNotification();
     void clearFrameMailbox();
     void emitError(const CameraError& error);
 
@@ -332,8 +331,8 @@ private:
     FeatureRequestId nextFeatureRequestId_ = 1;
     bool stoppingFeatureWorker_ = false;
 
-    // Preserve the original mailbox-at-tail placement in this facade.
-    camera::FrameStreamMailbox frameStreamMailbox_;
+    // Backend-neutral Qt notification/handoff component; it owns no camera or SDK session.
+    camera::qt::FrameStream frameStream_;
 
 };
 } // namespace amscope

@@ -96,10 +96,11 @@ add_custom_command(TARGET amscope_driver POST_BUILD
         "$<TARGET_FILE_DIR:amscope_driver>/libamcam.dylib"
     VERBATIM)
 
-# Legacy Qt integration targets. Camera v2.0 is a non-Qt library; these
-# optional targets are retained temporarily for historical consumers only.
-option(AMSCOPE_BUILD_QT_ADAPTER "Build the legacy Qt 6 Core adapter" OFF)
-option(AMSCOPE_BUILD_PREVIEW_APP "Build the legacy Qt Widgets preview application" OFF)
+# Optional Phase 3/4 integration targets. The core driver and common
+# contracts remain Qt-free; Qt streaming and reusable camera UI remain supported
+# Camera Module deliverables for consumers that choose the Qt stack.
+option(AMSCOPE_BUILD_QT_ADAPTER "Build the optional AmScope Qt control/streaming adapter" OFF)
+option(AMSCOPE_BUILD_PREVIEW_APP "Build the optional Qt Widgets preview composition app" OFF)
 # Standalone diagnostics. These tools intentionally use different acquisition
 # paths and are never part of the production camera session or Qt preview.
 option(AMSCOPE_BUILD_NATIVE_PROBE

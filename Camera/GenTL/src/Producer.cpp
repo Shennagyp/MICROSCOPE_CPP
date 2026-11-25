@@ -231,6 +231,54 @@ public:
     std::vector<InterfaceState> interfaces;
 };
 
+
+class DeviceSessionState final {
+public:
+    DeviceSessionState(
+        std::shared_ptr<ProducerContext> context,
+        GenTL::DEV_HANDLE device,
+        GenTL::PORT_HANDLE remotePort,
+        GenTL::DEVICE_ACCESS_FLAGS access,
+        std::string deviceId) noexcept
+        : context(std::move(context)),
+          device(device),
+          remotePort(remotePort),
+          access(access),
+          deviceId(std::move(deviceId)) {}
+
+    ~DeviceSessionState() {
+        close();
+    }
+
+    void close() noexcept {
+        if (!device) {
+            context.reset();
+            remotePort = nullptr;
+            return;
+        }
+        auto owner = context;
+        if (owner) {
+            std::lock_guard<std::mutex> guard(owner->mutex);
+            if (!owner->quarantined) {
+                const auto status =
+                    owner->consumer.invoke(Operation::devClose, device);
+                if (status != GenTL::GC_ERR_SUCCESS) {
+                    owner->quarantined = true;
+                }
+            }
+        }
+        device = nullptr;
+        remotePort = nullptr;
+        context.reset();
+    }
+
+    std::shared_ptr<ProducerContext> context;
+    GenTL::DEV_HANDLE device = nullptr;
+    GenTL::PORT_HANDLE remotePort = nullptr;
+    GenTL::DEVICE_ACCESS_FLAGS access = GenTL::DEVICE_ACCESS_UNKNOWN;
+    std::string deviceId;
+};
+
 Producer::Producer(std::shared_ptr<ProducerContext> context) noexcept
     : context_(std::move(context)) {}
 
@@ -445,8 +493,8 @@ DeviceSession Producer::openDevice(
         throw std::runtime_error("DevGetPort succeeded without returning a PORT_HANDLE.");
     }
 
-    return DeviceSession(
-        context_, device, remotePort, access, descriptor.deviceId);
+    return DeviceSession(std::make_shared<DeviceSessionState>(
+        context_, device, remotePort, access, descriptor.deviceId));
 }
 
 const std::string& Producer::ctiPath() const noexcept {
@@ -458,56 +506,44 @@ Producer::operator bool() const noexcept {
     return context_ != nullptr;
 }
 
-DeviceSession::DeviceSession(
-    std::shared_ptr<ProducerContext> context,
-    GenTL::DEV_HANDLE device,
-    GenTL::PORT_HANDLE remotePort,
-    GenTL::DEVICE_ACCESS_FLAGS access,
-    std::string deviceId) noexcept
-    : context_(std::move(context)),
-      device_(device),
-      remotePort_(remotePort),
-      access_(access),
-      deviceId_(std::move(deviceId)) {}
+
+DeviceSession::DeviceSession(std::shared_ptr<DeviceSessionState> state) noexcept
+    : state_(std::move(state)) {}
 
 DeviceSession::~DeviceSession() {
-    reset();
+    close();
 }
 
 DeviceSession::DeviceSession(DeviceSession&& other) noexcept
-    : context_(std::move(other.context_)),
-      device_(std::exchange(other.device_, nullptr)),
-      remotePort_(std::exchange(other.remotePort_, nullptr)),
-      access_(std::exchange(other.access_, GenTL::DEVICE_ACCESS_UNKNOWN)),
-      deviceId_(std::move(other.deviceId_)) {}
+    : state_(std::move(other.state_)) {}
 
 DeviceSession& DeviceSession::operator=(DeviceSession&& other) noexcept {
     if (this != &other) {
-        reset();
-        context_ = std::move(other.context_);
-        device_ = std::exchange(other.device_, nullptr);
-        remotePort_ = std::exchange(other.remotePort_, nullptr);
-        access_ = std::exchange(other.access_, GenTL::DEVICE_ACCESS_UNKNOWN);
-        deviceId_ = std::move(other.deviceId_);
+        close();
+        state_ = std::move(other.state_);
     }
     return *this;
 }
 
 DeviceSession::operator bool() const noexcept {
-    return context_ != nullptr && device_ != nullptr;
+    return state_ != nullptr && state_->device != nullptr;
 }
 
 const std::string& DeviceSession::deviceId() const noexcept {
-    return deviceId_;
+    static const std::string empty;
+    return state_ ? state_->deviceId : empty;
 }
 
 std::vector<std::string> DeviceSession::dataStreamIds() const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
-    std::lock_guard<std::mutex> guard(context_->mutex);
-    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
+    const auto context = state_->context;
+    std::lock_guard<std::mutex> guard(context->mutex);
+    if (context->quarantined)
+        throw std::runtime_error("The GenTL Producer context is quarantined.");
+
     std::uint32_t count = 0;
-    check(context_->consumer.invoke(
-        Operation::devGetNumDataStreams, device_, &count),
+    check(context->consumer.invoke(
+        Operation::devGetNumDataStreams, state_->device, &count),
         "DevGetNumDataStreams");
     if (count > maximumDataStreams) {
         throw std::runtime_error("The Producer reported an unreasonable data-stream count.");
@@ -518,9 +554,9 @@ std::vector<std::string> DeviceSession::dataStreamIds() const {
     for (std::uint32_t index = 0; index < count; ++index) {
         result.push_back(readString(
             [&](char* buffer, std::size_t* size) {
-                return context_->consumer.invoke(
+                return context->consumer.invoke(
                     Operation::devGetDataStreamID,
-                    device_, index, buffer, size);
+                    state_->device, index, buffer, size);
             },
             "DevGetDataStreamID"));
     }
@@ -543,60 +579,71 @@ void DeviceSession::readPortInto(
     std::uint64_t address, void* destination, std::size_t size) const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
     if (size == 0) return;
-    if (!destination) throw std::invalid_argument("A non-empty port read requires a destination.");
-    std::lock_guard<std::mutex> guard(context_->mutex);
-    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
+    if (!destination)
+        throw std::invalid_argument("A non-empty port read requires a destination.");
+
+    const auto context = state_->context;
+    std::lock_guard<std::mutex> guard(context->mutex);
+    if (context->quarantined)
+        throw std::runtime_error("The GenTL Producer context is quarantined.");
     std::size_t actual = size;
-    check(context_->consumer.invoke(Operation::gcReadPort,
-        remotePort_, address, destination, &actual), "GCReadPort");
-    if (actual != size) throw std::runtime_error("GCReadPort returned a partial read.");
+    check(context->consumer.invoke(Operation::gcReadPort,
+        state_->remotePort, address, destination, &actual), "GCReadPort");
+    if (actual != size)
+        throw std::runtime_error("GCReadPort returned a partial read.");
 }
 
 void DeviceSession::writePortFrom(
     std::uint64_t address, const void* source, std::size_t size) const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
     if (size == 0) return;
-    if (!source) throw std::invalid_argument("A non-empty port write requires a source.");
-    if (access_ == GenTL::DEVICE_ACCESS_READONLY)
+    if (!source)
+        throw std::invalid_argument("A non-empty port write requires a source.");
+    if (state_->access == GenTL::DEVICE_ACCESS_READONLY)
         throw std::runtime_error("The GenTL device was opened read-only.");
-    std::lock_guard<std::mutex> guard(context_->mutex);
-    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
+
+    const auto context = state_->context;
+    std::lock_guard<std::mutex> guard(context->mutex);
+    if (context->quarantined)
+        throw std::runtime_error("The GenTL Producer context is quarantined.");
     std::size_t actual = size;
-    check(context_->consumer.invoke(Operation::gcWritePort,
-        remotePort_, address, source, &actual), "GCWritePort");
-    if (actual != size) throw std::runtime_error("GCWritePort reported a partial write.");
+    check(context->consumer.invoke(Operation::gcWritePort,
+        state_->remotePort, address, source, &actual), "GCWritePort");
+    if (actual != size)
+        throw std::runtime_error("GCWritePort reported a partial write.");
 }
 
 GenTL::DEVICE_ACCESS_FLAGS DeviceSession::accessFlags() const noexcept {
-    return access_;
+    return state_ ? state_->access : GenTL::DEVICE_ACCESS_UNKNOWN;
 }
 
 std::vector<std::uint8_t> DeviceSession::genApiXml() const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
-    const auto invoke = [this](Operation operation, auto... arguments) {
-        std::lock_guard<std::mutex> guard(context_->mutex);
-        if (context_->quarantined)
+    const auto context = state_->context;
+    const auto invoke = [context](Operation operation, auto... arguments) {
+        std::lock_guard<std::mutex> guard(context->mutex);
+        if (context->quarantined)
             throw std::runtime_error("The GenTL Producer context is quarantined.");
-        return context_->consumer.invoke(operation, arguments...);
+        return context->consumer.invoke(operation, arguments...);
     };
 
     std::uint32_t urlCount = 0;
-    check(invoke(Operation::gcGetNumPortURLs, remotePort_, &urlCount),
+    check(invoke(Operation::gcGetNumPortURLs, state_->remotePort, &urlCount),
           "GCGetNumPortURLs");
     if (urlCount > 64)
         throw std::runtime_error("The Producer returned an unreasonable GenApi URL count.");
 
     for (std::uint32_t index = 0; index < urlCount; ++index) {
         const auto scheme = readPortUrlValue<GenTL::URL_SCHEME_ID>(
-            invoke, remotePort_, index, GenTL::URL_INFO_SCHEME,
+            invoke, state_->remotePort, index, GenTL::URL_INFO_SCHEME,
             GenTL::INFO_DATATYPE_INT32);
 
         if (scheme == GenTL::URL_SCHEME_LOCAL) {
             const auto address = readPortUrlValue<std::uint64_t>(
-                invoke, remotePort_, index, GenTL::URL_INFO_FILE_REGISTER_ADDRESS,
+                invoke, state_->remotePort, index, GenTL::URL_INFO_FILE_REGISTER_ADDRESS,
                 GenTL::INFO_DATATYPE_UINT64);
             const auto fileSize = readPortUrlValue<std::uint64_t>(
-                invoke, remotePort_, index, GenTL::URL_INFO_FILE_SIZE,
+                invoke, state_->remotePort, index, GenTL::URL_INFO_FILE_SIZE,
                 GenTL::INFO_DATATYPE_UINT64);
             if (fileSize == 0 || fileSize > maximumGenApiXmlBytes ||
                 fileSize > std::numeric_limits<std::size_t>::max())
@@ -618,7 +665,7 @@ std::vector<std::uint8_t> DeviceSession::genApiXml() const {
 
         if (scheme == GenTL::URL_SCHEME_FILE) {
             const auto filename = readPortUrlString(
-                invoke, remotePort_, index, GenTL::URL_INFO_FILENAME);
+                invoke, state_->remotePort, index, GenTL::URL_INFO_FILENAME);
             const auto filePath = std::filesystem::canonical(filename);
             const auto fileSize = std::filesystem::file_size(filePath);
             if (fileSize == 0 || fileSize > maximumGenApiXmlBytes ||
@@ -638,63 +685,476 @@ std::vector<std::uint8_t> DeviceSession::genApiXml() const {
 
 std::string DeviceSession::portUrl() const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
-    std::lock_guard<std::mutex> guard(context_->mutex);
-    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
+    const auto context = state_->context;
+    std::lock_guard<std::mutex> guard(context->mutex);
+    if (context->quarantined)
+        throw std::runtime_error("The GenTL Producer context is quarantined.");
     return readString(
         [&](char* buffer, std::size_t* size) {
-            return context_->consumer.invoke(
-                Operation::gcGetPortURL, remotePort_, buffer, size);
+            return context->consumer.invoke(
+                Operation::gcGetPortURL, state_->remotePort, buffer, size);
         },
         "GCGetPortURL");
 }
 
 void DeviceSession::close() {
-    if (!device_) {
-        context_.reset();
-        remotePort_ = nullptr;
-        return;
-    }
-    auto context = context_;
-    if (!context) {
-        device_ = nullptr;
-        remotePort_ = nullptr;
-        return;
-    }
-
-    GenTL::GC_ERROR status = GenTL::GC_ERR_SUCCESS;
-    {
-        std::lock_guard<std::mutex> guard(context->mutex);
-        if (context->quarantined) {
-            device_ = nullptr;
-            remotePort_ = nullptr;
-            context_.reset();
-            return;
-        }
-        status = context->consumer.invoke(Operation::devClose, device_);
-        if (status != GenTL::GC_ERR_SUCCESS) {
-            context->quarantined = true;
-        }
-        device_ = nullptr;
-        remotePort_ = nullptr;
-    }
-    if (status != GenTL::GC_ERR_SUCCESS) {
-        check(status, "DevClose");
-    }
-    context_.reset();
+    state_.reset();
 }
 
-void DeviceSession::reset() noexcept {
-    try {
+struct DataStreamSession::Impl {
+    struct Buffer {
+        GenTL::BUFFER_HANDLE handle = nullptr;
+    };
+
+    explicit Impl(std::shared_ptr<DeviceSessionState> owner)
+        : device(std::move(owner)) {}
+
+    ~Impl() {
         close();
-    } catch (...) {
-        if (context_) {
-            std::lock_guard<std::mutex> guard(context_->mutex);
-            context_->quarantined = true;
-        }
-        device_ = nullptr;
-        remotePort_ = nullptr;
-        context_.reset();
     }
+
+    void initialize(const std::string& streamId, std::size_t bufferCount) {
+        if (!device || !device->device)
+            throw std::logic_error("The GenTL device session is closed.");
+        if (streamId.empty())
+            throw std::invalid_argument("A GenTL data-stream ID is required.");
+        if (bufferCount == 0 || bufferCount > 64)
+            throw std::invalid_argument("GenTL buffer count must be between 1 and 64.");
+
+        const auto context = device->context;
+        std::lock_guard<std::mutex> guard(context->mutex);
+        if (context->quarantined)
+            throw std::runtime_error("The GenTL Producer context is quarantined.");
+
+        check(context->consumer.invoke(
+            Operation::devOpenDataStream, device->device,
+            streamId.c_str(), &stream), "DevOpenDataStream");
+        if (!stream)
+            throw std::runtime_error(
+                "DevOpenDataStream succeeded without returning a DS_HANDLE.");
+
+        const auto payloadSize = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetInfo, stream, GenTL::STREAM_INFO_PAYLOAD_SIZE,
+                    type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetInfo(PAYLOAD_SIZE)");
+        if (!payloadSize || *payloadSize == 0 ||
+            *payloadSize > maximumGenApiXmlBytes * 8 ||
+            *payloadSize > std::numeric_limits<std::size_t>::max()) {
+            throw std::runtime_error("The GenTL stream reported an invalid payload size.");
+        }
+        payloadBytes = *payloadSize;
+
+        const auto minimumCount = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetInfo, stream, GenTL::STREAM_INFO_BUF_ANNOUNCE_MIN,
+                    type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetInfo(BUF_ANNOUNCE_MIN)");
+        if (minimumCount && bufferCount < *minimumCount) {
+            throw std::invalid_argument(
+                "The requested GenTL buffer count is below the Producer's announced minimum.");
+        }
+
+        check(context->consumer.invoke(
+            Operation::gcRegisterEvent, stream, GenTL::EVENT_NEW_BUFFER, &event),
+            "GCRegisterEvent(NEW_BUFFER)");
+        if (!event)
+            throw std::runtime_error(
+                "GCRegisterEvent succeeded without returning an EVENT_HANDLE.");
+        eventRegistered = true;
+
+        buffers.reserve(bufferCount);
+        for (std::size_t index = 0; index < bufferCount; ++index) {
+            GenTL::BUFFER_HANDLE handle = nullptr;
+            check(context->consumer.invoke(
+                Operation::dsAllocAndAnnounceBuffer,
+                stream, payloadBytes, nullptr, &handle),
+                "DSAllocAndAnnounceBuffer");
+            if (!handle)
+                throw std::runtime_error(
+                    "DSAllocAndAnnounceBuffer succeeded without returning a BUFFER_HANDLE.");
+            buffers.push_back(Buffer{handle});
+        }
+
+        for (const auto& buffer : buffers) {
+            check(context->consumer.invoke(
+                Operation::dsQueueBuffer, stream, buffer.handle),
+                "DSQueueBuffer");
+        }
+    }
+
+    void close() noexcept {
+        std::shared_ptr<DeviceSessionState> owner;
+        GenTL::DS_HANDLE streamHandle = nullptr;
+        GenTL::EVENT_HANDLE eventHandle = nullptr;
+        bool wasStarted = false;
+        bool wasRegistered = false;
+
+        {
+            std::unique_lock<std::mutex> guard(mutex);
+            if (closed) return;
+            if (closing) {
+                condition.wait(guard, [&] { return closed; });
+                return;
+            }
+            closing = true;
+            stopping = true;
+            owner = device;
+            streamHandle = stream;
+            eventHandle = event;
+            wasStarted = started;
+            wasRegistered = eventRegistered;
+        }
+
+        bool safeToRelease = true;
+        auto context = owner ? owner->context : nullptr;
+        if (context && streamHandle) {
+            if (wasStarted) {
+                std::lock_guard<std::mutex> guard(context->mutex);
+                const auto status = context->consumer.invoke(
+                    Operation::dsStopAcquisition,
+                    streamHandle, GenTL::ACQ_STOP_FLAGS_DEFAULT);
+                if (status != GenTL::GC_ERR_SUCCESS) {
+                    context->quarantined = true;
+                    safeToRelease = false;
+                }
+            }
+
+            if (wasRegistered) {
+                std::lock_guard<std::mutex> guard(context->mutex);
+                const auto status = context->consumer.invoke(
+                    Operation::gcUnregisterEvent,
+                    streamHandle, GenTL::EVENT_NEW_BUFFER);
+                if (status != GenTL::GC_ERR_SUCCESS) {
+                    context->quarantined = true;
+                    safeToRelease = false;
+                }
+            }
+
+            {
+                std::unique_lock<std::mutex> guard(mutex);
+                condition.wait(guard, [&] { return activeCalls == 0; });
+            }
+
+            if (safeToRelease) {
+                std::lock_guard<std::mutex> guard(context->mutex);
+                auto status = context->consumer.invoke(
+                    Operation::dsFlushQueue,
+                    streamHandle, GenTL::ACQ_QUEUE_ALL_DISCARD);
+                if (status != GenTL::GC_ERR_SUCCESS) {
+                    context->quarantined = true;
+                    safeToRelease = false;
+                }
+
+                if (safeToRelease) {
+                    for (const auto& buffer : buffers) {
+                        void* memory = nullptr;
+                        void* privateData = nullptr;
+                        status = context->consumer.invoke(
+                            Operation::dsRevokeBuffer,
+                            streamHandle, buffer.handle, &memory, &privateData);
+                        if (status != GenTL::GC_ERR_SUCCESS) {
+                            context->quarantined = true;
+                            safeToRelease = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (safeToRelease) {
+                    status = context->consumer.invoke(
+                        Operation::dsClose, streamHandle);
+                    if (status != GenTL::GC_ERR_SUCCESS) {
+                        context->quarantined = true;
+                        safeToRelease = false;
+                    }
+                }
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> guard(mutex);
+            stream = nullptr;
+            event = nullptr;
+            eventRegistered = false;
+            started = false;
+            buffers.clear();
+            closed = true;
+            closing = false;
+            condition.notify_all();
+        }
+        device.reset();
+    }
+
+    std::shared_ptr<DeviceSessionState> device;
+    GenTL::DS_HANDLE stream = nullptr;
+    GenTL::EVENT_HANDLE event = nullptr;
+    std::size_t payloadBytes = 0;
+    std::vector<Buffer> buffers;
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool eventRegistered = false;
+    bool started = false;
+    bool stopping = false;
+    bool waiting = false;
+    bool closing = false;
+    bool closed = false;
+    std::size_t activeCalls = 0;
+};
+
+DataStreamSession::DataStreamSession(
+    std::shared_ptr<DeviceSessionState> device,
+    const std::string& streamId,
+    std::size_t bufferCount)
+    : impl_(std::make_unique<Impl>(std::move(device))) {
+    try {
+        impl_->initialize(streamId, bufferCount);
+    } catch (...) {
+        impl_->close();
+        throw;
+    }
+}
+
+DataStreamSession::~DataStreamSession() {
+    reset();
+}
+
+DataStreamSession::DataStreamSession(DataStreamSession&& other) noexcept
+    : impl_(std::move(other.impl_)) {}
+
+DataStreamSession& DataStreamSession::operator=(DataStreamSession&& other) noexcept {
+    if (this != &other) {
+        reset();
+        impl_ = std::move(other.impl_);
+    }
+    return *this;
+}
+
+DataStreamSession::operator bool() const noexcept {
+    if (!impl_) return false;
+    std::lock_guard<std::mutex> guard(impl_->mutex);
+    return !impl_->closed && impl_->stream != nullptr;
+}
+
+void DataStreamSession::start() {
+    if (!impl_) throw std::logic_error("The GenTL data stream is closed.");
+    std::lock_guard<std::mutex> stateGuard(impl_->mutex);
+    if (impl_->closed || impl_->stopping || !impl_->stream)
+        throw std::logic_error("The GenTL data stream is closed.");
+    if (impl_->started) return;
+
+    const auto context = impl_->device->context;
+    std::lock_guard<std::mutex> contextGuard(context->mutex);
+    if (context->quarantined)
+        throw std::runtime_error("The GenTL Producer context is quarantined.");
+    check(context->consumer.invoke(
+        Operation::dsStartAcquisition,
+        impl_->stream,
+        GenTL::ACQ_START_FLAGS_DEFAULT,
+        GenTL::GENTL_INFINITE),
+        "DSStartAcquisition");
+    impl_->started = true;
+}
+
+std::optional<DataStreamFrame> DataStreamSession::nextFrame(
+    std::uint64_t timeoutMilliseconds) {
+    if (!impl_) throw std::logic_error("The GenTL data stream is closed.");
+
+    auto* state = impl_.get();
+    GenTL::EVENT_HANDLE eventHandle = nullptr;
+    GenTL::DS_HANDLE streamHandle = nullptr;
+    std::shared_ptr<ProducerContext> context;
+    {
+        std::lock_guard<std::mutex> guard(state->mutex);
+        if (state->closed || state->stopping) return std::nullopt;
+        if (!state->started)
+            throw std::logic_error("Start the GenTL data stream before waiting for frames.");
+        if (state->waiting)
+            throw std::logic_error("Only one GenTL frame waiter is permitted per data stream.");
+        state->waiting = true;
+        ++state->activeCalls;
+        eventHandle = state->event;
+        streamHandle = state->stream;
+        context = state->device->context;
+    }
+
+    struct ActiveCallGuard {
+        Impl* state;
+        ~ActiveCallGuard() {
+            std::lock_guard<std::mutex> guard(state->mutex);
+            state->waiting = false;
+            if (state->activeCalls > 0) --state->activeCalls;
+            state->condition.notify_all();
+        }
+    } activeGuard{state};
+
+    GenTL::EVENT_NEW_BUFFER_DATA eventData{};
+    std::size_t eventSize = sizeof(eventData);
+    const auto status = context->consumer.invoke(
+        Operation::eventGetData,
+        eventHandle,
+        &eventData,
+        &eventSize,
+        timeoutMillisecondsToNanoseconds(timeoutMilliseconds));
+
+    if (status == GenTL::GC_ERR_TIMEOUT) return std::nullopt;
+    if (status == GenTL::GC_ERR_ABORT) {
+        std::lock_guard<std::mutex> guard(state->mutex);
+        if (state->stopping) return std::nullopt;
+    }
+    check(status, "EventGetData(NEW_BUFFER)");
+    if (eventSize != sizeof(eventData) || !eventData.BufferHandle)
+        throw std::runtime_error("EventGetData returned an invalid NEW_BUFFER payload.");
+
+    {
+        std::lock_guard<std::mutex> guard(state->mutex);
+        if (state->stopping || state->closed) return std::nullopt;
+    }
+
+    const auto knownBuffer = std::find_if(
+        state->buffers.begin(), state->buffers.end(),
+        [&](const auto& item) { return item.handle == eventData.BufferHandle; });
+    if (knownBuffer == state->buffers.end()) {
+        std::lock_guard<std::mutex> guard(context->mutex);
+        context->quarantined = true;
+        throw std::runtime_error(
+            "The Producer signaled a buffer handle that this stream did not announce.");
+    }
+
+    DataStreamFrame frame;
+    try {
+        std::lock_guard<std::mutex> guard(context->mutex);
+        if (context->quarantined)
+            throw std::runtime_error("The GenTL Producer context is quarantined.");
+
+        const auto readBufferInfo = [&](GenTL::BUFFER_INFO_CMD command,
+                                        GenTL::INFO_DATATYPE expected,
+                                        const char* name) {
+            return readTypedInfo<void*>(
+                [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                    return context->consumer.invoke(
+                        Operation::dsGetBufferInfo,
+                        streamHandle, eventData.BufferHandle,
+                        command, type, value, size);
+                },
+                expected, name);
+        };
+
+        const auto base = readBufferInfo(
+            GenTL::BUFFER_INFO_BASE, GenTL::INFO_DATATYPE_PTR,
+            "DSGetBufferInfo(BASE)");
+        const auto filled = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_SIZE_FILLED, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(SIZE_FILLED)");
+        if (!base || !*base || !filled || *filled > state->payloadBytes)
+            throw std::runtime_error("The Producer returned invalid buffer memory metadata.");
+
+        const auto incomplete = readTypedInfo<GenTL::bool8_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_IS_INCOMPLETE, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_BOOL8, "DSGetBufferInfo(IS_INCOMPLETE)");
+        const auto imagePresent = readTypedInfo<GenTL::bool8_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_IMAGEPRESENT, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_BOOL8, "DSGetBufferInfo(IMAGEPRESENT)");
+
+        frame.frameId = readTypedInfo<std::uint64_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_FRAMEID, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_UINT64, "DSGetBufferInfo(FRAMEID)");
+        frame.timestampNanoseconds = readTypedInfo<std::uint64_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_TIMESTAMP_NS, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_UINT64, "DSGetBufferInfo(TIMESTAMP_NS)");
+        frame.pixelFormat = readTypedInfo<std::uint64_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_PIXELFORMAT, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_UINT64, "DSGetBufferInfo(PIXELFORMAT)");
+        frame.width = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_WIDTH, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(WIDTH)");
+        frame.height = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_HEIGHT, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(HEIGHT)");
+
+        if (incomplete) frame.incomplete = *incomplete != 0;
+        if (imagePresent) frame.imagePresent = *imagePresent != 0;
+
+        frame.payload.resize(*filled);
+        if (*filled != 0)
+            std::memcpy(frame.payload.data(), *base, *filled);
+
+        check(context->consumer.invoke(
+            Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle),
+            "DSQueueBuffer(requeue)");
+    } catch (...) {
+        std::lock_guard<std::mutex> guard(context->mutex);
+        if (!context->quarantined) {
+            const auto requeueStatus = context->consumer.invoke(
+                Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle);
+            if (requeueStatus != GenTL::GC_ERR_SUCCESS)
+                context->quarantined = true;
+        }
+        throw;
+    }
+
+    return frame;
+}
+
+void DataStreamSession::stop() {
+    if (impl_) impl_->close();
+}
+
+void DataStreamSession::reset() noexcept {
+    if (impl_) {
+        impl_->close();
+        impl_.reset();
+    }
+}
+
+DataStreamSession DeviceSession::openDataStream(
+    const std::string& streamId, std::size_t bufferCount) const {
+    if (!*this) throw std::logic_error("The GenTL device session is closed.");
+    return DataStreamSession(state_, streamId, bufferCount);
 }
 
 } // namespace camera::gentl

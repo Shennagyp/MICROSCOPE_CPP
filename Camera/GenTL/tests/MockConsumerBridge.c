@@ -63,9 +63,11 @@ static const char mock_xml[] =
     "  <Enumeration Name=\"TriggerMode\">\n" \
     "    <EnumEntry Name=\"Off\">\n" \
     "      <Value>0</Value>\n" \
+    "      <Symbolic>Off</Symbolic>\n" \
     "    </EnumEntry>\n" \
     "    <EnumEntry Name=\"On\">\n" \
     "      <Value>1</Value>\n" \
+    "      <Symbolic>On</Symbolic>\n" \
     "    </EnumEntry>\n" \
     "    <pValue>TriggerModeReg</pValue>\n" \
     "  </Enumeration>\n" \

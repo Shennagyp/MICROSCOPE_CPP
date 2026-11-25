@@ -131,7 +131,7 @@ makeCommonFrame(DataStreamFrame source) {
         isPfnc32(source, pfnc32Mono8) ||
         isPfnc16(source, pfnc16Mono8);
     if (mono8 && payloadSizeMatches(frame->width, frame->height, 1,
-                                    source.payload.size()) &&
+                                    frame->pixels.size()) &&
         strideFits(frame->width, 1)) {
         frame->pixelFormat = camera::PixelFormat::Raw8;
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
@@ -144,7 +144,7 @@ makeCommonFrame(DataStreamFrame source) {
         isPfnc32(source, pfnc32Rgb8) ||
         isPfnc16(source, pfnc16Rgb8);
     if (rgb8 && payloadSizeMatches(frame->width, frame->height, 3,
-                                   source.payload.size()) &&
+                                   frame->pixels.size()) &&
         strideFits(frame->width, 3)) {
         frame->pixelFormat = camera::PixelFormat::RGB24;
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
@@ -164,7 +164,7 @@ makeCommonFrame(DataStreamFrame source) {
     if (monoSignificantBits != 0 &&
         byteOrder != camera::PixelByteOrder::Unknown &&
         payloadSizeMatches(frame->width, frame->height, 2,
-                           source.payload.size()) &&
+                           frame->pixels.size()) &&
         strideFits(frame->width, 2)) {
         frame->pixelFormat = camera::PixelFormat::Raw16;
         frame->pixelByteOrder = byteOrder;

@@ -209,7 +209,7 @@ int main() {
     const auto check = [&failures](bool condition, const char* message) {
         if (!condition) {
             ++failures;
-            std::cerr << "FAIL: " << message << '\\n';
+            std::cerr << "FAIL: " << message << '\n';
         }
     };
 
@@ -290,9 +290,9 @@ int main() {
           "home-first plan homes both physical stage-plane axes");
 
     if (failures != 0) {
-        std::cerr << failures << " navigation plan dispatcher test(s) failed\\n";
+        std::cerr << failures << " navigation plan dispatcher test(s) failed\n";
         return 1;
     }
-    std::cout << "All navigation plan dispatcher tests passed\\n";
+    std::cout << "All navigation plan dispatcher tests passed\n";
     return 0;
 }

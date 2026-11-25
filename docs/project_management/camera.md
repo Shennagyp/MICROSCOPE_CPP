@@ -3,9 +3,9 @@
 **Canonical project:** the reusable Camera Module in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Camera development branch:** `camera-v.2.0`  
-**Latest Camera status checkpoint:** `04a9802dd3ede95fc8ae431e6763bf7cbaf93ef8`  
-**Latest CI-validated code checkpoint:** `3212b4b4d555b650ef7a4d6a97a4576a3c9b14c5`  
-**CI:** original core/Qt matrix [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed; GenTL C++ bridge matrix [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64.  
+**Latest Camera status checkpoint:** `ff11799c1e7859aacc7aeef702cfb20237cedc8e`  
+**Latest CI-validated GenTL code checkpoint:** `549433466098c5daeb63d72609776d958a35c2fe`  
+**CI:** GenTL C++ workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed 2/2 tests on Intel x86_64 and 2/2 on Apple Silicon arm64. Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
 **Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
 **Roadmap authority:** original Camera Module Phases 0–8, preserved for v2.0.
@@ -192,7 +192,7 @@ Current implementation on `camera-v.2.0` under `Camera/GenTL`:
 
 C++ mock CI [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64. The test includes an injected `DSClose` failure and verifies that the Consumer bridge remains retained after public wrappers are released.
 
-The Swift C ABI source is on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0` at `b2e88874a75be260309db9f4d412d638bf928016`. Its C ABI test now covers pointer/buffer marshalling, but workflow [#45679386729](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45679386729) was cancelled before build/test steps. The real dylib, Swift runtime packaging and operation mapping therefore remain unvalidated.
+The Swift C ABI source/tests/workflow are on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0` at `2f8f82d1e4b645a1191bf68021f9803ac6843121`. Tests cover typed pointer/buffer marshalling, event registration/read/unregister and buffer-info forwarding. The workflow now attempts separate x86_64/arm64 builds and universal dylib assembly, but [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before build/test steps. The real dylib and operation mapping remain unvalidated. The Swift GenTL packages currently declare macOS 13.0 as their minimum deployment target.
 
 Still required:
 - validate the actual Swift C ABI dylib and its runtime packaging;
@@ -293,13 +293,11 @@ This ledger separates source presence, automated evidence, physical evidence and
 - Separate MU503 short diagnostic runs reported approximately 91 FPS at 640 × 480 with zero reported drops. Do not conflate those with the separate 835-frame/60.722-second run or infer long-duration qualification.
 - Source comparison found 307 files under `Camera/` identical between `OPTIKA-B293-DUALSLIDE-APP-v.0.9` and the initial `camera-v.2.0` baseline. No Camera subtree copy was missing.
 - Workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed at `e12d765f408c2b0be7100c64b2eb245de5a2aca4`: non-Qt 12/12 CTest tests on Intel and Apple Silicon; Qt 18/18 CTest tests on Intel and Apple Silicon. The Qt build includes the concrete `Camera::Qt` stream library, its handoff tests, reusable widgets, AmScope Qt request facade and preview composition. Installed non-Qt header checks and architecture/artifact verification also passed.
-- GenTL C++ workflow [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) passed at `3212b4b4d555b650ef7a4d6a97a4576a3c9b14c5`: 2/2 CTest tests on Apple Silicon arm64 and 2/2 on Intel x86_64, including architecture checks.
 - GenTL C++ workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed at `549433466098c5daeb63d72609776d958a35c2fe`: 2/2 CTest tests on Apple Silicon arm64 and 2/2 on Intel x86_64, with architecture checks. Coverage includes stream open/start/event wait, buffer announcement/queue/requeue, copied payload and frame metadata, PFNC namespace, timeout conversion, stream/device lifetime and cleanup-failure quarantine retention.
 - The GenTL workflow uses a mock C ABI bridge. It does not validate the Swift C ABI dylib, a vendor CTI Producer, actual camera acquisition, GenApi parsing/feature mapping or physical hardware.
-- Swift C ABI source is at `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, commit `b2e88874a75be260309db9f4d412d638bf928016`; its latest workflow [#45679386729](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45679386729) was cancelled before build/test steps. The C ABI remains unvalidated.
+- Swift C ABI source/tests/workflow are at `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, commit `2f8f82d1e4b645a1191bf68021f9803ac6843121`; latest workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before build/test steps. Its universal dylib and C ABI tests remain unvalidated. The package's declared minimum macOS version is 13.0.
 - Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four non-Qt/Qt Intel and Apple Silicon jobs after the Common CMake target was made independent of AmScope.
 
-- These tests use a mock C ABI bridge. They cover dynamic symbol/version checks, CTI/TL/interface/device discovery, retained session lifetime, stream-ID enumeration, remote-port read/write and mock `LOCAL` GenApi XML retrieval. They do not validate the real Swift C ABI dylib, a vendor CTI Producer, stream acquisition, GenApi parsing or physical hardware.
 - The optional `Camera::GenTLGenApi` target is gated by `OPTIKA_BUILD_GENTL_GENAPI=ON` and requires the official GenApi 3.5.1 Mac64_Universal SDK. Its source has not yet been compiled against that SDK.
 - No real CTI Producer or physical CTI camera has been qualified.
 - This is software evidence only. It does not constitute physical-camera regression, same-session control/stream verification, or phase acceptance.
@@ -340,7 +338,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** `04a9802dd3ede95fc8ae431e6763bf7cbaf93ef8`. **Latest CI-validated code checkpoint:** `3212b4b4d555b650ef7a4d6a97a4576a3c9b14c5`; GenTL C++ workflow [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) passed both architectures. The original core/Qt workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) remains green.  
+**Latest Camera status checkpoint:** `ff11799c1e7859aacc7aeef702cfb20237cedc8e`. **Latest CI-validated GenTL code checkpoint:** `549433466098c5daeb63d72609776d958a35c2fe`; workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed both architectures. Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

@@ -2,6 +2,7 @@
 
 #include <map>
 #include <set>
+#include <cmath>
 #include <utility>
 
 namespace microscope::core {
@@ -156,6 +157,101 @@ ObjectiveImmersionMedium ObjectiveSpecification::immersionMedium() const noexcep
 const std::optional<PositiveMicrometers>&
 ObjectiveSpecification::designCoverglassThickness() const noexcept {
     return designCoverglassThickness_;
+}
+
+CondenserSpecification::CondenserSpecification(
+    EquipmentComponentId componentId,
+    NonNegativeNumericalAperture minimumAperture,
+    NumericalAperture maximumAperture,
+    CondenserDesign design,
+    CondenserImmersionMedium immersionMedium,
+    std::optional<PositiveMicrometers> workingDistance)
+    : componentId_(std::move(componentId)),
+      minimumAperture_(minimumAperture),
+      maximumAperture_(maximumAperture),
+      design_(design),
+      immersionMedium_(immersionMedium),
+      workingDistance_(std::move(workingDistance)) {}
+
+Result<
+    CondenserSpecification,
+    CondenserSpecificationError> CondenserSpecification::create(
+        EquipmentComponentId componentId,
+        NonNegativeNumericalAperture minimumAperture,
+        NumericalAperture maximumAperture,
+        CondenserDesign design,
+        CondenserImmersionMedium immersionMedium,
+        std::optional<PositiveMicrometers> workingDistance) {
+    switch (design) {
+    case CondenserDesign::Abbe:
+    case CondenserDesign::Achromatic:
+    case CondenserDesign::AchromatAplanatic:
+    case CondenserDesign::Other:
+    case CondenserDesign::Unknown:
+        break;
+    default:
+        return Result<
+            CondenserSpecification,
+            CondenserSpecificationError>::failure(
+                CondenserSpecificationError::InvalidDesign);
+    }
+
+    switch (immersionMedium) {
+    case CondenserImmersionMedium::Air:
+    case CondenserImmersionMedium::Water:
+    case CondenserImmersionMedium::Oil:
+    case CondenserImmersionMedium::Other:
+    case CondenserImmersionMedium::Unknown:
+        break;
+    default:
+        return Result<
+            CondenserSpecification,
+            CondenserSpecificationError>::failure(
+                CondenserSpecificationError::InvalidImmersionMedium);
+    }
+
+    if (minimumAperture.value() > maximumAperture.value()) {
+        return Result<
+            CondenserSpecification,
+            CondenserSpecificationError>::failure(
+                CondenserSpecificationError::InvertedApertureRange);
+    }
+
+    return Result<
+        CondenserSpecification,
+        CondenserSpecificationError>::success(
+            CondenserSpecification(
+                std::move(componentId),
+                minimumAperture,
+                maximumAperture,
+                design,
+                immersionMedium,
+                std::move(workingDistance)));
+}
+
+const EquipmentComponentId& CondenserSpecification::componentId() const noexcept {
+    return componentId_;
+}
+
+double CondenserSpecification::minimumApertureNA() const noexcept {
+    return minimumAperture_.value();
+}
+
+double CondenserSpecification::maximumApertureNA() const noexcept {
+    return maximumAperture_.value();
+}
+
+CondenserDesign CondenserSpecification::design() const noexcept {
+    return design_;
+}
+
+CondenserImmersionMedium CondenserSpecification::immersionMedium() const noexcept {
+    return immersionMedium_;
+}
+
+const std::optional<PositiveMicrometers>&
+CondenserSpecification::workingDistance() const noexcept {
+    return workingDistance_;
 }
 
 PixelDimensions::PixelDimensions(

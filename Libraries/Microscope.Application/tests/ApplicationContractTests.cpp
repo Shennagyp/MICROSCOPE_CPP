@@ -60,6 +60,19 @@ int main() {
           applicationView.snapshot.status == core::OperationStatus::Running &&
           applicationView.snapshot.revision == 4,
           "application projection carries Core's snapshot without duplicating state fields");
+    check(applicationView.isConsistent(),
+          "application projection confirms handle and Core snapshot identity match");
+
+    const auto differentOperationId =
+        core::OperationId::create("operation-002").value();
+    const auto mismatchedView = application::OperationView{
+        operation,
+        core::OperationSnapshot{
+            differentOperationId,
+            core::OperationStatus::Running,
+            5}};
+    check(!mismatchedView.isConsistent(),
+          "application projection detects a mismatched Core snapshot identity");
 
     if (failures != 0) {
         std::cerr << failures << " Application contract test(s) failed.\n";

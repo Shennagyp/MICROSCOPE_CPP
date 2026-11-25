@@ -57,8 +57,9 @@ The first source slice is intentionally foundational: Core currently implements 
 
 **Committed source progress (not yet build/test validated):**
 - Root CMake includes the independent Core and Application targets.
-- Core static library contains strong opaque IDs, RuntimeGeneration, Result/Status, Diagnostic, operation/step status values, feedback correlation and typed ingress interface.
-- Application static library contains runtime/operation handles and immutable-by-value runtime/operation projections.
+- Core static library contains strong opaque IDs, RuntimeGeneration, Result/Status, Diagnostic, operation/step status values, runtime/device feedback scope, optional operation correlation and typed feedback ingress.
+- Feedback correlation supports unsolicited telemetry without fabricating OperationId/StepId, while operation feedback requires both and optionally carries CommandId.
+- Application static library contains runtime/operation handles and immutable-by-value runtime/operation projections; operation handles are scoped to RuntimeId and RuntimeGeneration.
 - Focused Core identity/result/diagnostic tests, feedback contract tests and Application runtime-handle tests are registered with CTest.
 - The current AmScope camera driver and Camera::Common targets remain separate and unchanged.
 

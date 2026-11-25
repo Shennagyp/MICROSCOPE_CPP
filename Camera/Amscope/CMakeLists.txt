@@ -177,6 +177,14 @@ if(BUILD_TESTING)
     target_include_directories(amscope_frame_stall_watchdog_tests PRIVATE include)
     add_test(NAME amscope_frame_stall_watchdog_tests
         COMMAND amscope_frame_stall_watchdog_tests)
+
+    # Compile and exercise the public non-Qt AmcamCamera API without
+    # enumerating devices or requiring a physical camera.
+    add_executable(amscope_public_api_tests
+        tests/AmcamPublicApiTests.cpp)
+    target_compile_features(amscope_public_api_tests PRIVATE cxx_std_17)
+    target_link_libraries(amscope_public_api_tests PRIVATE Amscope::Driver)
+    add_test(NAME amscope_public_api_tests COMMAND amscope_public_api_tests)
 endif()
 
 if(AMSCOPE_BUILD_QT_ADAPTER OR AMSCOPE_BUILD_PREVIEW_APP)

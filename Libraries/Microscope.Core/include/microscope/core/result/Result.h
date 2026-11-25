@@ -9,7 +9,7 @@ namespace microscope::core {
 // A value-or-error result for normal contract outcomes.
 // T and E are selected by the boundary; neither is converted to a string.
 template <typename T, typename E>
-class Result final {
+class [[nodiscard]] Result final {
 public:
     [[nodiscard]] static Result success(T value) {
         return Result(std::in_place_index<0>, std::move(value));
@@ -61,7 +61,7 @@ private:
 
 // Status is the no-value counterpart to Result<T, E>.
 template <typename E>
-class Status final {
+class [[nodiscard]] Status final {
 public:
     [[nodiscard]] static Status success() {
         return Status(std::in_place_index<0>);

@@ -38,6 +38,7 @@ int main() {
     const auto microscopeId = MicroscopeId::create("microscope-001").value();
     const auto runtimeId = RuntimeId::create("runtime-001").value();
     const auto generation = RuntimeGeneration::create(3).value();
+    const auto deviceSessionGeneration = DeviceSessionGeneration::create(8).value();
     const auto operationId = OperationId::create("operation-001").value();
     const auto stepId = StepId::create("step-001").value();
     const auto commandId = CommandId::create("command-001").value();
@@ -54,6 +55,7 @@ int main() {
                     microscopeId,
                     runtimeId,
                     generation,
+                    deviceSessionGeneration,
                     deviceId},
                 OperationCorrelation{
                     operationId,
@@ -91,6 +93,9 @@ int main() {
         check(captured.metadata.correlation.runtimeDevice.microscopeId == microscopeId &&
               captured.metadata.correlation.runtimeDevice.runtimeId == runtimeId,
               "feedback retains runtime and microscope scope");
+        check(captured.metadata.correlation.runtimeDevice.deviceSessionGeneration ==
+                  deviceSessionGeneration,
+              "feedback retains the current device session generation");
         check(captured.metadata.kind == FeedbackKind::DeviceStateObserved,
               "feedback preserves normalized fact kind");
         check(captured.metadata.source == ObservationSource::HardwareReadback,
@@ -108,6 +113,7 @@ int main() {
                     microscopeId,
                     runtimeId,
                     generation,
+                    deviceSessionGeneration,
                     deviceId},
                 std::nullopt},
             FeedbackKind::DeviceProgress,
@@ -143,6 +149,7 @@ int main() {
                         microscopeId,
                         runtimeId,
                         generation,
+                        deviceSessionGeneration,
                         deviceId},
                     OperationCorrelation{
                         operationId,

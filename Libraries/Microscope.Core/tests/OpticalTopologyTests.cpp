@@ -357,6 +357,63 @@ void testMissingIntermediateEntryIsRejected() {
           "requires every non-source path step to declare its entry port");
 }
 
+void testComponentKindConstrainsOpticalPortConfiguration() {
+    const auto invalidOpticalElement = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("invalid-optical-element"),
+        EquipmentComponentKind::OpticalElement,
+        {makePort("optical-out-a", OpticalPortDirection::Output),
+         makePort("optical-out-b", OpticalPortDirection::Output)});
+    check(!invalidOpticalElement &&
+          invalidOpticalElement.error() ==
+              EquipmentComponentError::InvalidPortConfiguration,
+          "requires an optical element to expose input and output capability");
+
+    const auto invalidImagingDevice = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("invalid-imaging-device"),
+        EquipmentComponentKind::ImagingDevice,
+        {makePort("imaging-output-only", OpticalPortDirection::Output)});
+    check(!invalidImagingDevice &&
+          invalidImagingDevice.error() ==
+              EquipmentComponentError::InvalidPortConfiguration,
+          "requires an imaging device to expose an optical input");
+
+    const auto invalidIlluminationDevice = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("invalid-illumination-device"),
+        EquipmentComponentKind::IlluminationDevice,
+        {makePort("illumination-input-only", OpticalPortDirection::Input)});
+    check(!invalidIlluminationDevice &&
+          invalidIlluminationDevice.error() ==
+              EquipmentComponentError::InvalidPortConfiguration,
+          "requires an illumination device to expose an optical output");
+
+    const auto invalidMechanicalAssembly = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("invalid-mechanical-assembly"),
+        EquipmentComponentKind::MechanicalAssembly,
+        {makePort("mechanical-optical-port", OpticalPortDirection::Bidirectional)});
+    check(!invalidMechanicalAssembly &&
+          invalidMechanicalAssembly.error() ==
+              EquipmentComponentError::InvalidPortConfiguration,
+          "does not treat a mechanical assembly as an optical endpoint");
+
+    const auto validMechanicalAssembly = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("valid-mechanical-assembly"),
+        EquipmentComponentKind::MechanicalAssembly,
+        {});
+    check(static_cast<bool>(validMechanicalAssembly),
+          "allows a mechanical assembly without optical ports");
+}
+
+void testEmptyEquipmentDefinitionIsRejected() {
+    auto definition = MicroscopeEquipmentDefinition::create(
+        makeId<MicroscopeId>("empty-equipment-microscope"),
+        {},
+        {},
+        {});
+    check(!definition &&
+          definition.error() == EquipmentDefinitionError::EmptyComponentSet,
+          "rejects an equipment definition with no installed components");
+}
+
 void testPathAndPortFactoryValidation() {
     auto oneStepPath = OpticalPath::create(
         makeId<OpticalPathId>("one-step-path"),
@@ -404,6 +461,8 @@ int main() {
     testDisconnectedPathIsRejected();
     testPathPortMustBelongToItsComponent();
     testMissingIntermediateEntryIsRejected();
+    testComponentKindConstrainsOpticalPortConfiguration();
+    testEmptyEquipmentDefinitionIsRejected();
     testPathAndPortFactoryValidation();
 
     if (failures != 0) {

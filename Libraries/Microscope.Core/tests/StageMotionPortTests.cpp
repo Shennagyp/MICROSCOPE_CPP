@@ -26,6 +26,17 @@ int main(){
  check(!missing,"command identity required");
  auto context=StageMotionCommandContext::create(device,{id<OperationId>("op"),id<StepId>("step"),id<CommandId>("cmd")});
  check(bool(context),"complete command correlation");
+ auto positionObservation=take(AxisPositionObservation::create(
+     x,0.25,StagePositionEvidence::EncoderMeasured));
+ StageMotionFeedbackPayload positionFeedback=positionObservation;
+ check(std::holds_alternative<AxisPositionObservation>(positionFeedback),
+       "position feedback carries measurement class and uncertainty");
+ check(!AxisPositionObservation::create(
+     x,-0.1,StagePositionEvidence::EncoderMeasured),
+       "negative position uncertainty rejected");
+ check(!AxisPositionObservation::create(
+     x,0.1,StagePositionEvidence::CommandDerivedEstimate),
+       "command-derived estimates are not mislabeled as device position observations");
  auto accepted=StageMotionSubmissionResult::accepted();
  auto rejected=StageMotionSubmissionResult::rejected(StageMotionSubmissionRejection::UnsupportedOperation);
  check(accepted.status()==StageMotionSubmissionStatus::Accepted&&!accepted.rejection()&&rejected.status()==StageMotionSubmissionStatus::Rejected,"submission acceptance differs from rejection");

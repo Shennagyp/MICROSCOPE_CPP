@@ -311,10 +311,12 @@ Its ownership is split deliberately:
   numerical aperture, stain wavelength bands or Rayleigh sampling.
 
 The coordinator is constructed at the application composition root and receives
-both state owners explicitly. The camera publishes a resolution-readback
-notification; the microscope model publishes configuration changes. The
-coordinator responds by evaluating the pure policy and requesting a generic
-camera resolution mutation only when the selected mode differs from the readback.
+both state owners explicitly. Automatic resolution is enabled by default on a
+first launch unless a persisted user choice exists. The camera publishes a
+resolution-readback notification; the microscope model publishes configuration
+changes. The coordinator responds by evaluating the pure policy and requesting
+a generic camera resolution mutation only when the selected mode differs from
+the readback.
 
 The current readout-mode-to-effective-pixel interpretation in the policy remains
 provisional until the selected camera's mode semantics are measured and
@@ -330,6 +332,9 @@ The UI will be refactored, not merely moved to another directory.
 - AppKit remains appropriate for the high-rate image presentation surface and native interaction where it provides a real advantage.
 - Views are small compositions of focused subviews.
 - A view receives the state it needs and emits intent through explicit actions.
+- A SwiftUI view that reads a nested observable owner must observe that owner
+  directly; observing its parent does not propagate the nested owner's published
+  changes.
 - Formatting and layout decisions are derived from state, not stored as duplicated mutable state.
 - Views do not discover hardware, implement optical formulas, choose camera readout modes or directly persist application configuration.
 - Reusable controls should be shared where behavior and semantics are actually the same, not merely because two controls look similar.
@@ -355,12 +360,12 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
 12. Frozen destinations still consume and release the newest frame lease, but do
     not create a `CGImage` that will be discarded. Empty overlay sets bypass
     overlay-coordinate calculations and graphics-state setup.
-13. The preview exposes one FPS metric: PULL FPS, derived from the monotonic
-    successful SDK-pull counter and rendered only in a dedicated, non-overlapping
-    annotation on Slide 1. It is acquisition pull throughput, not a displayed-frame
-    rate or sensor-reported FPS value. Its tooltip is configured once; the label
-    changes only when the derived pull rate changes. The periodic refresh only
-    expires stale rate values and never calls the SDK.
+13. The preview exposes one FPS metric derived from the monotonic successful
+    SDK-pull counter. The same acquisition FPS is rendered beside the Slide 1
+    and Slide 2 labels; the visible label text is simply "FPS". It is not a
+    displayed-frame rate or a sensor-reported FPS value. The tooltip is configured
+    once; each label changes only when its derived pull rate changes. The periodic
+    refresh only expires stale rate values and never calls the SDK.
 14. Immutable frame leases cross the mailbox and Core Graphics boundary without
     copying pixel bytes. Frame-specific providers retain the source lease for the
     lifetime of the image; only small immutable color-space objects are shared.

@@ -43,7 +43,7 @@ struct NativeWorkspaceDock: View {
             Group {
                 switch workspace.selectedWorkspaceDockTab {
                 case .cameraControls:
-                    NativeCameraControlsDock(model: model, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator)
+                    NativeCameraControlsDock(model: model, features: model.features, workspace: workspace, microscope: microscope, resolutionCoordinator: resolutionCoordinator)
                 case .smartGallery:
                     NativeSmartGalleryDock(gallery: gallery)
                 }

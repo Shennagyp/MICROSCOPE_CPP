@@ -5,6 +5,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace {
@@ -34,6 +35,10 @@ public:
 
 int main() {
     using namespace microscope::core;
+
+    static_assert(!std::is_convertible<
+        FeedbackIngressSequence, std::uint64_t>::value,
+        "Core ingress sequence must not convert to a device source sequence");
 
     const auto microscopeId = MicroscopeId::create("microscope-001").value();
     const auto runtimeId = RuntimeId::create("runtime-001").value();
@@ -139,6 +144,13 @@ int main() {
     check(static_cast<bool>(validDeviceTimestamp),
           "accepts a device timestamp with an explicit positive tick rate");
 
+    const auto zeroIngressSequence = FeedbackIngressSequence::create(0);
+    check(!zeroIngressSequence,
+          "rejects a zero Core feedback ingress sequence");
+    const auto validIngressSequence = FeedbackIngressSequence::create(17);
+    check(static_cast<bool>(validIngressSequence),
+          "accepts a positive Core feedback ingress sequence");
+
     const auto receiptTime = std::chrono::steady_clock::time_point{
         std::chrono::steady_clock::duration{1234}};
     FeedbackReceipt<SelectorFeedback> received{
@@ -160,13 +172,15 @@ int main() {
                 std::uint64_t{92},
                 DeviceTimestamp::create(1500, 1000, std::string("device-clock-A")).value()},
             SelectorFeedback{true}},
-        FeedbackReceiptMetadata{receiptTime, 17}};
+        FeedbackReceiptMetadata{
+            receiptTime,
+            FeedbackIngressSequence::create(17).value()}};
     check(received.receipt.receivedAt == receiptTime,
           "Core receipt time uses a separate monotonic-clock field");
     check(received.feedback.metadata.deviceTimestamp.has_value() &&
           received.feedback.metadata.deviceTimestamp->ticks() == 1500,
           "device timestamp remains separate from Core receipt time");
-    check(received.receipt.ingressSequence == 17,
+    check(received.receipt.ingressSequence.value() == 17,
           "Core ingress sequence is independent of adapter source sequence");
 
     if (failures != 0) {

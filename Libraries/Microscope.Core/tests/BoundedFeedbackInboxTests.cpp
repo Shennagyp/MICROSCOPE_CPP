@@ -4,6 +4,8 @@
 #include <atomic>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 #include <utility>
 
 namespace {
@@ -100,6 +102,35 @@ int main() {
     check(inbox->submit(std::move(afterClose))==FeedbackSubmitStatus::Closed,
           "closed ingress rejects later driver feedback");
     check(!inbox->waitAndPop(),"closed and drained ingress wakes a waiting consumer");
+
+    std::atomic<int> concurrentLossNotifications{0};
+    auto concurrentInbox=take(BoundedFeedbackInbox<StageMotionFeedbackPayload>::create(
+        id<MicroscopeId>("scope-concurrent"),id<RuntimeId>("runtime-concurrent"),
+        take(RuntimeGeneration::create(2)),100,
+        [&concurrentLossNotifications]{concurrentLossNotifications.fetch_add(1);}));
+    std::atomic<int> enqueueFailures{0};
+    std::vector<std::thread> producers;
+    for(int producer=0;producer<4;++producer) {
+        producers.emplace_back([&] {
+            for(int i=0;i<25;++i) {
+                auto event=feedbackFor(runtimeDevice("scope-concurrent","runtime-concurrent",2),"x");
+                if(concurrentInbox->submit(std::move(event))!=FeedbackSubmitStatus::Enqueued)
+                    enqueueFailures.fetch_add(1);
+            }
+        });
+    }
+    for(auto& producer:producers)
+        producer.join();
+    check(enqueueFailures.load()==0&&concurrentInbox->pendingCount()==100,
+          "concurrent producers enqueue all feedback into fixed-capacity storage");
+    std::uint64_t expectedSequence=1;
+    while(auto receipt=concurrentInbox->tryPop()) {
+        check(receipt->receipt().ingressSequence.value()==expectedSequence,
+              "Core ingress sequence follows FIFO insertion order across producers");
+        ++expectedSequence;
+    }
+    check(expectedSequence==101&&concurrentLossNotifications.load()==0,
+          "concurrent enqueue sequence is gap-free when no feedback is dropped");
 
     if(failures!=0) {
         std::cerr<<failures<<" feedback inbox test(s) failed\n";

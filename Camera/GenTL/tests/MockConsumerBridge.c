@@ -33,8 +33,29 @@ static const char mock_xml[] =
     "    <pFeature>TriggerMode</pFeature>\n" \
     "    <pFeature>Temperature</pFeature>\n" \
     "    <pFeature>DeviceLabel</pFeature>\n" \
-    "    <pFeature>AcquisitionStart</pFeature>\n" \
+    "    <pFeature>AcquisitionControl</pFeature>\n" \
     "  </Category>\n" \
+    "  <Category Name=\"AcquisitionControl\">\n" \
+    "    <pFeature>ExposureTime</pFeature>\n" \
+    "    <pFeature>TriggerControl</pFeature>\n" \
+    "    <pFeature>AcquisitionStart</pFeature>\n" \
+    "    <pFeature>AcquisitionStop</pFeature>\n" \
+    "  </Category>\n" \
+    "  <Category Name=\"TriggerControl\">\n" \
+    "    <pFeature>TriggerDelay</pFeature>\n" \
+    "  </Category>\n" \
+    "  <Float Name=\"ExposureTime\">\n" \
+    "    <Value>2500.0</Value>\n" \
+    "    <Min>10.0</Min>\n" \
+    "    <Max>1000000.0</Max>\n" \
+    "    <Unit>us</Unit>\n" \
+    "  </Float>\n" \
+    "  <Integer Name=\"TriggerDelay\">\n" \
+    "    <Value>7</Value>\n" \
+    "    <Min>0</Min>\n" \
+    "    <Max>100</Max>\n" \
+    "    <Inc>1</Inc>\n" \
+    "  </Integer>\n" \
     "  <Integer Name=\"Gain\">\n" \
     "    <pIsAvailable>FeatureEnabled</pIsAvailable>\n" \
     "    <pValue>GainReg</pValue>\n" \
@@ -97,6 +118,18 @@ static const char mock_xml[] =
     "    <pValue>CommandReg</pValue>\n" \
     "    <CommandValue>1</CommandValue>\n" \
     "  </Command>\n" \
+    "  <Command Name=\"AcquisitionStop\">\n" \
+    "    <pValue>StopCommandReg</pValue>\n" \
+    "    <CommandValue>0</CommandValue>\n" \
+    "  </Command>\n" \
+    "  <IntReg Name=\"StopCommandReg\">\n" \
+    "    <Address>0x1008</Address>\n" \
+    "    <Length>2</Length>\n" \
+    "    <AccessMode>RW</AccessMode>\n" \
+    "    <pPort>Device</pPort>\n" \
+    "    <Sign>Unsigned</Sign>\n" \
+    "    <Endianess>BigEndian</Endianess>\n" \
+    "  </IntReg>\n" \
     "  <IntReg Name=\"CommandReg\">\n" \
     "    <Address>0x1002</Address>\n" \
     "    <Length>2</Length>\n" \

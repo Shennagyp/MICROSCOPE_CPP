@@ -73,6 +73,23 @@ int main(int argc, char** argv) {
             require(!gain->isAvailable,
                     "Gain should be unavailable until FeatureEnabled is set.");
 
+            const auto* exposureTime = findFeature(*features, "ExposureTime");
+            require(exposureTime &&
+                        exposureTime->kind == camera::CameraFeatureKind::FloatingPoint &&
+                        exposureTime->unit == std::optional<std::string>{"us"},
+                    "Feature nested under AcquisitionControl was not exposed.");
+            const auto* triggerDelay = findFeature(*features, "TriggerDelay");
+            require(triggerDelay &&
+                        triggerDelay->kind == camera::CameraFeatureKind::Integer,
+                    "Feature nested two category levels below Root was not exposed.");
+            auto nestedDelayRead = access.features().readFeature("TriggerDelay");
+            auto* nestedDelayValue =
+                std::get_if<camera::CameraFeatureValue>(&nestedDelayRead);
+            require(nestedDelayValue &&
+                        std::get_if<std::int64_t>(nestedDelayValue) &&
+                        *std::get_if<std::int64_t>(nestedDelayValue) == 7,
+                    "Nested GenApi feature direct lookup failed.");
+
             const auto* temperature = findFeature(*features, "Temperature");
             require(temperature &&
                         temperature->kind == camera::CameraFeatureKind::FloatingPoint &&
@@ -211,6 +228,8 @@ int main(int argc, char** argv) {
             auto* commands =
                 std::get_if<std::vector<camera::CameraCommandDescriptor>>(&commandResult);
             require(commands != nullptr, "GenApi command enumeration failed.");
+            require(findCommand(*commands, "AcquisitionStop") != nullptr,
+                    "Command nested under AcquisitionControl was not exposed.");
             require(findCommand(*commands, "AcquisitionStart") != nullptr,
                     "Root command AcquisitionStart was not exposed.");
             require(findCommand(*commands, "CommandReg") == nullptr,
@@ -228,6 +247,11 @@ int main(int argc, char** argv) {
                 access.commands().executeCommand("AcquisitionStart");
             require(std::holds_alternative<std::monostate>(executeResult),
                     "GenApi command issue failed.");
+            auto nestedExecute =
+                access.commands().executeCommand("AcquisitionStop");
+            require(std::holds_alternative<std::monostate>(nestedExecute),
+                    "Nested GenApi command lookup/execution failed.");
+
             auto doneResult =
                 access.commands().isCommandDone("AcquisitionStart");
             auto* isDone = std::get_if<bool>(&doneResult);

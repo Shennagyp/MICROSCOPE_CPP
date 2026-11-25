@@ -443,6 +443,25 @@ void testEquipmentAggregateValidatesSpecializedComponentReferences() {
             roi(0, 0, 100, 100),
             binning(1, 1),
             dimensions(100, 100))});
+    auto conflictingObjectiveCondenser = MicroscopeEquipmentDefinition::create(
+        microscopeId,
+        components,
+        {},
+        {},
+        {objectiveSpecification(objectiveId)},
+        {},
+        {take(CondenserSpecification::create(
+            objectiveId,
+            take(NonNegativeNumericalAperture::create(0.0)),
+            numericalAperture(1.20),
+            CondenserDesign::Abbe,
+            CondenserImmersionMedium::Air))},
+        {});
+    check(!conflictingObjectiveCondenser &&
+          conflictingObjectiveCondenser.error() ==
+              EquipmentDefinitionError::ConflictingOpticalComponentSpecifications,
+          "rejects one installed optical component declared as both objective and condenser");
+
     auto wrongCameraKindDefinition = MicroscopeEquipmentDefinition::create(
         microscopeId,
         components,

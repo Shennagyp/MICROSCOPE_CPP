@@ -774,6 +774,34 @@ Z planes and exposure brackets are explicit relationships. HDR combines exposure
 
 Incomplete runs are recoverable and marked incomplete.
 
+### 11.8 Identity, ownership and cross-record invariants
+
+All persisted entities use distinct, stable, opaque identifiers: SampleId, SlideId, TileId, AcquisitionPlanId, AcquisitionRunId, ImageFrameId and DerivedImageId. MicroscopeId remains the identity of the physical instrument. Type identifiers such as SampleTypeId and SlideTypeId are separate from instance identifiers.
+
+Identifiers must not be derived from labels, folder names, array positions, dates or microscope identity. Renaming a sample, moving a package or changing a workspace index must not change its identity.
+
+The authoritative ownership and reference rules are:
+
+| Record | Authoritative relationship | Rule |
+|---|---|---|
+| Sample | SampleTypeId | Identifies collected source material; it does not own a persisted list of SlideIds |
+| Slide | SampleId and SlideTypeId | References exactly one source Sample in the baseline model |
+| Tile | SlideId | Belongs to exactly one Slide; its physical position is optional |
+| AcquisitionPlan | SlideId | Describes intended acquisition for one Slide and is immutable after execution begins |
+| AcquisitionRun | SlideId, AcquisitionPlanId, MicroscopeId | Records one actual run on one Slide, using one actual microscope |
+| ImageFrame | AcquisitionRunId and TileId | One captured frame belongs to one run and one tile on the same Slide |
+| DerivedImage | Source frame/derived-image IDs and processing provenance | Never replaces or mutates its source images |
+
+An AcquisitionRun can produce frames for multiple tiles. A Tile can receive frames from multiple runs, which supports reacquisition of an existing field without changing the Tile identity. Every referenced Tile must belong to the Slide referenced by its AcquisitionRun. A frame cannot link a run from one slide to a tile from another.
+
+A frame is an individual capture, not synonymous with a tile. Exposure brackets, Z planes, camera channels and repeat captures are represented as capture metadata and explicit relationships under the run/tile context; they must not be collapsed into a fabricated fixed-dimensional array.
+
+The run obtains its Sample context through its Slide.SampleId. Do not duplicate SampleId on AcquisitionRun as an independently editable relationship. A denormalized sample identity snapshot is permitted only as immutable audit/export metadata and must be validated against the slide relationship when created.
+
+The Slide.SampleId relationship is established when the Slide is created. Correcting a source association is an explicit audited domain operation, not a silent folder move or metadata rewrite. A Sample must not be physically deleted while Slides reference it. Archival/retention is distinct from destructive deletion; sample deletion must never cascade-delete slide packages or acquired image data.
+
+The Sample record does not maintain an authoritative SlideIds collection. Queries such as “slides for sample” are resolved from Slide.SampleId. Any reverse index or workspace collection is a rebuildable projection, not a second authority.
+
 ## 12. Image documents, annotations and measurements
 
 Live and saved-image viewers are separate front-end workflows.
@@ -799,29 +827,66 @@ DICOM serialization of annotations/measurements is handled through appropriate s
 
 ## 13. Persistence and DICOM
 
-Core defines semantic persistence ports for microscope calibration, slide records, acquisition plans/runs, image data and annotation documents. Infrastructure implements these contracts.
+Core defines semantic persistence contracts for sample records, slide records, tiles, acquisition plans/runs, calibration references, image payloads and annotation documents. Infrastructure implements these contracts. The contracts express domain operations and consistency requirements; they do not expose filesystem paths or vendor storage APIs to Core.
 
-Initial local-first slide folder concept:
+### 13.1 Persistence ownership
+
+- The Sample record is authoritative for sample identity, SampleTypeId and source metadata.
+- The Slide record is authoritative for SlideId, SampleId, SlideTypeId and the versioned preparation snapshot.
+- Tile metadata is owned by its Slide.
+- Acquisition plans and runs are persisted in the context of their Slide. The run records the actual MicroscopeId and the plan it executed.
+- ImageFrame metadata is associated with one AcquisitionRun and one Tile. The image payload itself is stored as an immutable object and referenced by a stable storage reference plus integrity metadata.
+- Derived image payloads and provenance are separate from original frames. Reprocessing creates new derived identities rather than overwriting originals.
+- Microscope calibration revisions remain in the microscope/configuration calibration store. Acquisitions reference the exact revisions used; slide folders do not become owners of calibration history.
+- Workspace catalogs, recent-item lists and Sample-to-Slide reverse lookups are rebuildable indexes. They are not authoritative domain records.
+
+The Sample and Slide packages are independently addressable. A Slide package retains its SampleId relationship even if moved to another workspace. If the Sample record is unavailable, the relationship is unresolved, not silently replaced with a new Sample. A slide can still be inspected as a package, but the application must report that its source Sample record is unavailable.
+
+### 13.2 Initial local-first workspace layout
 
 ~~~text
-SlideFolder/
-├── slide.json
-├── configuration/
-├── acquisition/
-│   ├── plans/
-│   ├── runs/
-│   └── recovery/
-├── images/
-│   ├── original/
-│   └── derived/
-├── annotations/
-├── thumbnails/
-└── history/
+Workspace/
+├── samples/
+│   └── {SampleId}/
+│       └── sample.json
+├── slides/
+│   └── {SlideId}/
+│       ├── slide.json
+│       ├── configuration/
+│       │   └── revisions/
+│       ├── tiles/
+│       │   └── {TileId}/
+│       │       └── tile.json
+│       ├── acquisition/
+│       │   ├── plans/
+│       │   ├── runs/
+│       │   └── recovery/
+│       ├── images/
+│       │   ├── original/
+│       │   └── derived/
+│       ├── annotations/
+│       ├── thumbnails/
+│       └── history/
+└── catalog/
+    └── indexes (rebuildable)
 ~~~
 
-The folder should remain portable. Stable IDs and relative references must survive moving the folder. A slide can be reopened without a connected microscope.
+This is a logical storage layout, not a Core API or a requirement that every adapter use directories. Image payload filenames/extensions and physical storage layout are adapter decisions. Metadata records use stable IDs and relative payload references so a Slide package can be moved without changing domain identity.
 
-DICOM is an interoperability/storage adapter, not the internal domain model. The Core must not force unpositioned fields into physical WSI coordinates. DICOM WSI representation is selected only when its spatial and pixel semantics can be represented truthfully. Exposure brackets must not be misrepresented as Z planes. Different optical scales may require distinct suitable image objects/series. Interoperability constraints are resolved by the DICOM adapter and documented, not hidden in the internal model.
+A Sample directory does not contain authoritative copies of its Slides. Slide packages are separate so that a slide can be moved, backed up or restored independently; Slide.SampleId preserves its source relationship. The catalog index can be rebuilt by scanning authoritative records or by an adapter-specific index rebuild.
+
+### 13.3 Persistence and recovery invariants
+
+- Validate that SampleId exists before committing a new Slide.
+- Validate that TileId belongs to the run's Slide before accepting a frame record.
+- Persist an AcquisitionRun identity and recoverable initial state before dispatching hardware commands.
+- Record a frame as available only after its immutable payload has been durably stored and its reference/integrity metadata has been committed.
+- Preserve incomplete runs, missing frames and recovery checkpoints. Never infer success from the existence of a folder or plan.
+- Make retries idempotent using stable run/frame identities; duplicate delivery must not create duplicate logical frames.
+- Do not cascade-delete slide packages, frames or derived data when a Sample is archived or its metadata is corrected.
+- Keep original image payloads immutable. Retention/deletion is an explicit policy operation with reference checks, not a side effect of editing Sample or Slide metadata.
+
+A slide remains portable and can be reopened without a connected microscope. DICOM is an interoperability/storage adapter, not the internal domain model. The Core must not force unpositioned fields into physical WSI coordinates. DICOM WSI representation is selected only when its spatial and pixel semantics can be represented truthfully. Exposure brackets must not be misrepresented as Z planes. Different optical scales may require distinct suitable image objects/series. Interoperability constraints are resolved by the DICOM adapter and documented, not hidden in the internal model.
 
 ## 14. Runtime, concurrency and resource ownership
 
@@ -1022,7 +1087,12 @@ Build, unit tests, integration tests, visual checks and hardware acceptance are 
 - **OpticalCalibration:** mapping from delivered image coordinates to specimen-space dimensions for a geometry-affecting optical configuration.
 - **MotionCalibration:** mapping from an axis command/feedback coordinate to physical axis displacement.
 - **Sample:** collected source specimen/material, independent of microscope and slide preparation.
+- **SampleType:** taxonomy for source material/category.
 - **Slide:** physical preparation made from one sample in the baseline model.
-- **Tile:** persistent slide-owned image-field identity; physical position is optional.
+- **SlideType:** taxonomy for preparation/mounting method or category.
+- **Tile:** persistent slide-owned image-field identity; physical position is optional and multiple acquisition runs may contribute frames to one tile.
+- **AcquisitionPlan:** immutable intended acquisition specification associated with one slide.
+- **AcquisitionRun:** actual execution record for one slide and one microscope.
+- **ImageFrame:** immutable original capture associated with one run and one tile.
 - **SlideSession:** Core-recognized active slide context required for acquisition.
 - **Frontend:** a client of Microscope.Application; it is not an owner of microscope behavior.

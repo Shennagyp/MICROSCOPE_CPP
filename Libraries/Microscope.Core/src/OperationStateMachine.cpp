@@ -435,10 +435,6 @@ Result<
         }
         if (event == StepLifecycleEvent::VerificationSucceeded) {
             return Result<StepStatus, StepLifecycleError>::success(
-                StepStatus::Verifying);
-        }
-        if (event == StepLifecycleEvent::VerificationSucceeded) {
-            return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::Verified);
         }
         if (event == StepLifecycleEvent::VerificationFailed ||

@@ -25,6 +25,8 @@ enum class SerializedOperationRuntimeError {
     DuplicateOperation,
     UnknownOperation,
     OperationTerminal,
+    OperationIncomplete,
+    StepNotVerifying,
     DuplicateStep,
     UnknownStep,
     InvalidTransition,
@@ -39,6 +41,7 @@ enum class FeedbackProcessingDisposition {
     StaleOperation,
     StaleStep,
     StaleCommand,
+    TerminalOperationFeedback,
     StepTransitionNotAllowed,
     SnapshotRevisionExhausted
 };
@@ -247,21 +250,121 @@ public:
 
     Result<StepStatus,SerializedOperationRuntimeError> recordAdapterRejected(
         const OperationId& operationId,const StepId& stepId) {
-        auto result=applyControlStepEvent(operationId,stepId,StepLifecycleEvent::AdapterRejected);
-        if(!result)
-            return result;
+        auto owner=requireOwnerThread();
+        if(!owner)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(owner.error());
         auto* operation=findOperation(operationId);
-        if(operation&&!isTerminal(operation->status)) {
-            if(!canIncrementRevision(*operation))
+        if(!operation)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownOperation);
+        if(isTerminal(operation->status))
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::OperationTerminal);
+        auto* step=findStep(*operation,stepId);
+        if(!step)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownStep);
+        if(!canIncrementRevision(*operation))
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::SnapshotRevisionExhausted);
+
+        auto failedStep=applyStepLifecycleEvent(
+            step->status,StepLifecycleEvent::AdapterRejected);
+        auto failedOperation=applyOperationLifecycleEvent(
+            operation->status,OperationLifecycleEvent::Failed);
+        if(!failedStep||!failedOperation)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::InvalidTransition);
+
+        step->status=failedStep.value();
+        operation->status=failedOperation.value();
+        ++operation->revision;
+        return Result<StepStatus,SerializedOperationRuntimeError>::success(step->status);
+    }
+
+    Result<StepStatus,SerializedOperationRuntimeError> recordStepVerification(
+        const OperationId& operationId,const StepId& stepId,bool succeeded) {
+        auto owner=requireOwnerThread();
+        if(!owner)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(owner.error());
+        auto* operation=findOperation(operationId);
+        if(!operation)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownOperation);
+        if(isTerminal(operation->status))
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::OperationTerminal);
+        auto* step=findStep(*operation,stepId);
+        if(!step)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownStep);
+        if(step->status!=StepStatus::Verifying)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::StepNotVerifying);
+        if(!canIncrementRevision(*operation))
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::SnapshotRevisionExhausted);
+
+        const auto event=succeeded
+            ?StepLifecycleEvent::VerificationSucceeded
+            :StepLifecycleEvent::VerificationFailed;
+        auto next=applyStepLifecycleEvent(step->status,event);
+        if(!next)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::InvalidTransition);
+
+        std::optional<OperationStatus> nextOperationStatus;
+        if(!succeeded) {
+            bool hasVerifiedStep=false;
+            for(const auto& candidate:operation->steps)
+                if(candidate.status==StepStatus::Verified)hasVerifiedStep=true;
+            auto terminal=applyOperationLifecycleEvent(
+                operation->status,
+                hasVerifiedStep?OperationLifecycleEvent::PartiallyCompleted:
+                                OperationLifecycleEvent::Failed);
+            if(!terminal)
                 return Result<StepStatus,SerializedOperationRuntimeError>::failure(
-                    SerializedOperationRuntimeError::SnapshotRevisionExhausted);
-            auto failed=applyOperationLifecycleEvent(operation->status,OperationLifecycleEvent::Failed);
-            if(failed) {
-                operation->status=failed.value();
-                ++operation->revision;
-            }
+                    SerializedOperationRuntimeError::InvalidTransition);
+            nextOperationStatus=terminal.value();
         }
-        return result;
+
+        step->status=next.value();
+        if(nextOperationStatus)
+            operation->status=*nextOperationStatus;
+        ++operation->revision;
+        return Result<StepStatus,SerializedOperationRuntimeError>::success(step->status);
+    }
+
+    Result<OperationSnapshot,SerializedOperationRuntimeError> beginOperationVerification(
+        const OperationId& operationId) {
+        auto owner=requireOwnerThread();
+        if(!owner)
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(owner.error());
+        auto* operation=findOperation(operationId);
+        if(!operation)
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownOperation);
+        if(isTerminal(operation->status))
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::OperationTerminal);
+        if(operation->steps.empty())
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::OperationIncomplete);
+        for(const auto& step:operation->steps)
+            if(step.status!=StepStatus::Verified)
+                return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                    SerializedOperationRuntimeError::OperationIncomplete);
+        if(!canIncrementRevision(*operation))
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::SnapshotRevisionExhausted);
+        auto verifying=applyOperationLifecycleEvent(
+            operation->status,OperationLifecycleEvent::VerificationStarted);
+        if(!verifying)
+            return Result<OperationSnapshot,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::InvalidTransition);
+        operation->status=verifying.value();
+        ++operation->revision;
+        return snapshotFor(*operation);
     }
 
     Result<OperationSnapshot,SerializedOperationRuntimeError> operationSnapshot(
@@ -342,6 +445,13 @@ public:
                           SerializedOperationRuntimeError>::success(std::move(result));
         }
         auto* step=findStep(*operation,correlation->stepId);
+        if(isTerminal(operation->status)) {
+            result.disposition=FeedbackProcessingDisposition::TerminalOperationFeedback;
+            result.operationSnapshot=snapshotFor(*operation).value();
+            result.receipt=std::move(receipt);
+            return Result<std::optional<FeedbackProcessingResult<TPayload>>,
+                          SerializedOperationRuntimeError>::success(std::move(result));
+        }
         if(!step) {
             result.disposition=FeedbackProcessingDisposition::StaleStep;
             result.operationSnapshot=snapshotFor(*operation).value();
@@ -360,14 +470,22 @@ public:
         }
 
         const auto lifecycleEvent=stepEvent(metadata.kind());
-        auto next=applyStepLifecycleEvent(step->status,lifecycleEvent);
-        if(!next) {
+        auto nextStep=applyStepLifecycleEvent(step->status,lifecycleEvent);
+        if(!nextStep) {
             result.disposition=FeedbackProcessingDisposition::StepTransitionNotAllowed;
             result.stepStatus=step->status;
             result.operationSnapshot=snapshotFor(*operation).value();
             result.receipt=std::move(receipt);
             return Result<std::optional<FeedbackProcessingResult<TPayload>>,
                           SerializedOperationRuntimeError>::success(std::move(result));
+        }
+
+        std::optional<OperationStatus> nextOperationStatus;
+        if(metadata.kind()==FeedbackKind::AdapterFailure) {
+            auto failed=applyOperationLifecycleEvent(
+                operation->status,OperationLifecycleEvent::Failed);
+            if(failed)
+                nextOperationStatus=failed.value();
         }
         if(!canIncrementRevision(*operation)) {
             result.disposition=FeedbackProcessingDisposition::SnapshotRevisionExhausted;
@@ -378,27 +496,10 @@ public:
                           SerializedOperationRuntimeError>::success(std::move(result));
         }
 
-        step->status=next.value();
+        step->status=nextStep.value();
+        if(nextOperationStatus)
+            operation->status=*nextOperationStatus;
         ++operation->revision;
-
-        if(metadata.kind()==FeedbackKind::DeviceStateObserved &&
-           (operation->status==OperationStatus::Running||
-            operation->status==OperationStatus::AwaitingOperator)) {
-            auto verifying=applyOperationLifecycleEvent(
-                operation->status,OperationLifecycleEvent::VerificationStarted);
-            if(verifying&&canIncrementRevision(*operation)) {
-                operation->status=verifying.value();
-                ++operation->revision;
-            }
-        } else if(metadata.kind()==FeedbackKind::AdapterFailure&&
-                  !isTerminal(operation->status)) {
-            auto failed=applyOperationLifecycleEvent(
-                operation->status,OperationLifecycleEvent::Failed);
-            if(failed&&canIncrementRevision(*operation)) {
-                operation->status=failed.value();
-                ++operation->revision;
-            }
-        }
 
         result.disposition=FeedbackProcessingDisposition::AppliedToOperation;
         result.stepStatus=step->status;

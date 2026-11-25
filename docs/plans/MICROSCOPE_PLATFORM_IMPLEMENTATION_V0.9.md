@@ -16,16 +16,19 @@ Keep the current macOS application as one frontend. Preserve the existing camera
 ## Current repository baseline
 
 The current branch contains:
-- Root CMake project using C++ and an optional native macOS application target.
+- Root CMake project using C++ and an optional native macOS application target; the new Core and Application targets are added before existing camera/application targets.
+- Microscope.Core and Microscope.Application are C++17 static libraries with standalone CMake entry support; configuring Application independently adds its required Core source dependency.
 - Camera/Amscope as the reusable camera driver capability.
 - Application/OptikaB293 containing the current SwiftUI/AppKit application, Objective-C++ camera bridge and current Swift microscope configuration/resolution models.
 - Libraries/Microscope.Core and Libraries/Microscope.Application as separate C++17 static-library targets integrated by the root CMake project.
-- Initial Core contracts for strong IDs, Result/Status, diagnostics, operation-state values and typed feedback metadata/ingress.
-- Initial Application contracts for runtime and operation handles/snapshots.
-- Focused Core and Application contract-test sources registered with CTest; they have not been executed here.
+- Initial Core contracts: strong IDs, RuntimeGeneration, Result/Status, diagnostics, operation/step status values and typed feedback metadata/ingress.
+- Initial Application contracts: runtime/operation handles and runtime/operation value projections.
+- Focused Core identity/result/diagnostic, feedback and Application runtime-handle test sources registered with CTest; they have not been built or executed here.
 - Existing architecture documentation describing the transitional native application and its preview invariants.
 
 The new libraries are an initial Phase 1 source slice, not a completed platform implementation. No equipment model, configuration resolver, operation executor, JSON loader, adapter factory registry, persistence implementation or hardware integration is claimed to exist yet.
+
+The first source slice is intentionally foundational: Core currently implements identifier-value validation, while the feedback ingress is a typed adapter-facing contract rather than a completed queue/executor. Application currently provides runtime/operation handle values rather than a runtime manager or adapter composition implementation.
 
 ## Migration rules
 

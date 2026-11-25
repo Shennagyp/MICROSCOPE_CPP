@@ -10,7 +10,7 @@ This directory implements the Camera Module's optional GenTL provider path. It i
 
 The C++ adapter does not load CTI files itself and does not implement a second GenTL function table. The existing Swift Consumer owns CTI loading and GenTL function dispatch. The C++ adapter calls that Consumer through the versioned C ABI.
 
-The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0` at `2f8f82d1e4b645a1191bf68021f9803ac6843121`. Its packages currently declare macOS 13.0 as the minimum deployment target. The C ABI tests cover typed pointers, port buffers, event registration/read/unregister and buffer-info forwarding, and the workflow now builds separate x86_64/arm64 products for a universal dylib. However, workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before any build/test steps. The real dylib and C++ interoperability remain unvalidated; C++ CI currently uses a mock C ABI bridge.
+The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0` at `92b7f28d3aab94d5d295a89a6436fe99df601c87`. Its packages declare macOS 13.0 as the minimum deployment target. Tests cover typed pointer/buffer marshalling, event registration/read/unregister, buffer-info forwarding and invalid invocation-shape rejection; the C ABI rejects argument vectors larger than the maximum GenTL operation arity. Workflow [#45692472539](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45692472539) was cancelled before any job steps. The real dylib and C++ interoperability remain unvalidated; C++ CI currently uses a mock C ABI bridge.
 
 ## Build
 
@@ -32,7 +32,7 @@ cmake -S Camera/GenTL -B build/gentl-genapi \
   -DGENAPI_ROOT=/path/to/GenApi-3.5.1-Mac64_Universal
 ```
 
-The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. The official EMVA GenICam Package 2026.07 (GenApi 3.5.1) SDK and runtime are downloaded, hash-verified and compiled in the macOS CI workflow for both Intel x86_64 and Apple Silicon arm64. This is compile and architecture evidence only; it does not yet validate XML parsing, feature/command behavior against a real CTI Producer or a physical camera. The current Swift Consumer packages also declare macOS 13.0 as the minimum runtime platform for the GenTL C ABI dylib.
+The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. The official EMVA GenICam Package 2026.07 (GenApi 3.5.1) SDK and runtime are downloaded, hash-verified and compiled in the macOS CI workflow for both Intel x86_64 and Apple Silicon arm64. XML-backed runtime tests use the official GenApi implementation and a mock GenTL port to exercise Root-category-only enumeration and lookup, internal-register rejection, dynamic availability, Boolean/Integer/Enumeration reads and writes, command issue/completion, and GenTL read-only access semantics. Workflow [#45693246924](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45693246924) passed on both architectures. This does not validate behavior against a vendor CTI Producer or physical camera.
 
 ## Current C++ API
 
@@ -88,7 +88,7 @@ The adapter exposes remote-port read/write and retrieves GenApi XML using:
 
 HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
 
-`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi SDK build is now included in the macOS CI workflow and compiles against the official GenApi 3.5.1 SDK on both supported macOS architectures. Runtime mapping tests and validation against a real Producer/device remain outstanding.
+`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. Both descriptor enumeration and direct feature/command lookup are restricted to nodes reachable from the GenApi `Root` category; implementation nodes such as `IntReg` and `Port` are not public features. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi 3.5.1 SDK and XML-backed integration tests pass on both macOS architectures in CI. Real CTI/physical-device validation remains outstanding.
 
 
 
@@ -120,15 +120,15 @@ Implemented:
 - remote-port read/write and `LOCAL`/`FILE` GenApi XML retrieval;
 - process-lifetime retention after cleanup failure.
 
-Mock CI: [workflow #45686459352](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45686459352), commit `03f674aa7c39ac5b80d6f4a2329b930cb5d81e8c`. Both Intel x86_64 and Apple Silicon arm64 passed 9/9 CTest tests and architecture checks. The tests cover the mock bridge, discovery, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, quarantine retention, Common frame projection/layout rejection and Common feature/command contracts.
+GenTL/GenApi CI: [workflow #45693246924](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45693246924), commit `31278e255ea3fc7c7a23e3fd3e2e1c734be6e896`. Both Intel x86_64 and Apple Silicon arm64 passed the C++ bridge suite, official GenApi 3.5.1 build, XML-backed GenApi integration tests and architecture checks. The tests cover the mock bridge, discovery, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, quarantine retention, Common frame projection/layout rejection, Root-category feature enumeration/lookup, internal register rejection, dynamic availability, Boolean/Integer/Enumeration access, command issue/completion and read-only access semantics.
 
 Not yet validated:
-- the latest frame-adapter and command-contract commits (CI run for the current branch is pending);
+- actual frame acquisition and metadata behavior with a vendor CTI Producer/device;
 - the real universal Swift `libGenTLConsumerCAPI.dylib` (latest workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before build/test steps);
 - a vendor CTI Producer;
 - a physical GenTL camera;
 - actual GenTL payload/metadata behavior under acquisition;
-- GenApi SDK compilation, XML parsing and feature/command mapping;
+- GenApi behavior with vendor-provided XML and a real device;
 - external consumer packaging and deployment of the C ABI dylib/Swift runtime.
 
 A passing mock workflow is software evidence only. It is not a real CTI or hardware qualification.

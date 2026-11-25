@@ -15,7 +15,7 @@ final class NativeSlidePreviewPane: NSView {
     private let imageView: NativeSlideImageView
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
-    private let frameStatisticsLabel = NSTextField(labelWithString: "VIEW 0.0 · INPUT 0.0 · DROPS 0")
+    private let pullFrameRateLabel = NSTextField(labelWithString: "PULL FPS 0.0")
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "", target: nil, action: nil)
@@ -40,9 +40,7 @@ final class NativeSlidePreviewPane: NSView {
     // The image view owns freeze state; expose it read-only to the frame router.
     var isImageFrozen: Bool { imageView.isImageFrozen }
 
-    private var droppedFrameCount: UInt64 = 0
-    private var inputFrameRateMeter = FrameRateCounterMeter()
-    private var previewFrameRateMeter = PreviewFrameRateMeter()
+    private var pullFrameRateMeter = FrameRateCounterMeter()
     private var frameRateRefreshTimer: Timer?
     private var currentIsActiveTarget = false
     private var currentIsMaximized = false
@@ -76,12 +74,12 @@ final class NativeSlidePreviewPane: NSView {
         statusLabel.font = NSFont.systemFont(ofSize: 9, weight: .bold)
         statusLabel.textColor = OptikaPalette.nsSecondaryText
         statusLabel.textColor = OptikaPalette.nsSecondaryText
-        frameStatisticsLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
-        frameStatisticsLabel.textColor = OptikaPalette.nsSecondaryText
-        frameStatisticsLabel.lineBreakMode = .byTruncatingTail
-        frameStatisticsLabel.toolTip =
-            "VIEW: images assigned to this slide preview per second. INPUT: successful SDK image pulls per second, sampled from the driver's monotonic pull counter. DROPS: cumulative driver frame-pool drops. Both rates use half-second windows and reset after one second without progress."
-        frameStatisticsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        pullFrameRateLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .medium)
+        pullFrameRateLabel.textColor = OptikaPalette.nsSecondaryText
+        pullFrameRateLabel.lineBreakMode = .byTruncatingTail
+        pullFrameRateLabel.toolTip =
+            "PULL FPS: successful Amcam_PullImageV4 calls per second, derived from the driver's monotonic pull counter. This measures acquisition pull throughput, not displayed-frame rate or a sensor-reported FPS value."
+        pullFrameRateLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         imageSizingButton.bezelStyle = .texturedRounded
         imageSizingButton.controlSize = .small
@@ -198,7 +196,7 @@ final class NativeSlidePreviewPane: NSView {
         annotationStack.translatesAutoresizingMaskIntoConstraints = false
         annotationStack.addArrangedSubview(titleLabel)
         annotationStack.addArrangedSubview(statusLabel)
-        annotationStack.addArrangedSubview(frameStatisticsLabel)
+        annotationStack.addArrangedSubview(pullFrameRateLabel)
 
         actionStack.orientation = .horizontal
         actionStack.alignment = .centerY
@@ -439,14 +437,14 @@ final class NativeSlidePreviewPane: NSView {
         plate.translatesAutoresizingMaskIntoConstraints = false
     }
 
-    func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
-        let previousInputRate = inputFrameRateMeter.framesPerSecond
-        let previousDroppedCount = droppedFrameCount
-        inputFrameRateMeter.record(pulled, at: ProcessInfo.processInfo.systemUptime)
-        droppedFrameCount = dropped
-        if previousInputRate != inputFrameRateMeter.framesPerSecond ||
-           previousDroppedCount != droppedFrameCount {
-            updateFrameStatisticsLabel()
+    func updatePullRate(pulledFrames: UInt64) {
+        let previousPullRate = pullFrameRateMeter.framesPerSecond
+        pullFrameRateMeter.record(
+            pulledFrames,
+            at: ProcessInfo.processInfo.systemUptime
+        )
+        if previousPullRate != pullFrameRateMeter.framesPerSecond {
+            updatePullFrameRateLabel()
         }
     }
 
@@ -501,19 +499,13 @@ final class NativeSlidePreviewPane: NSView {
     func display(_ image: CGImage) {
         let hadImage = imageView.hasImage
         let hadOverlays = imageView.hasOverlays
-        let previousPreviewRate = previewFrameRateMeter.framesPerSecond
 
-        previewFrameRateMeter.recordFrame(at: ProcessInfo.processInfo.systemUptime)
         imageView.display(image)
 
         // Update control availability only when the pane receives its first
         // image or a source-dimension change clears existing overlays.
         if !hadImage || (hadOverlays && !imageView.hasOverlays) {
             synchronizeToolbarState()
-        }
-
-        if previousPreviewRate != previewFrameRateMeter.framesPerSecond {
-            updateFrameStatisticsLabel()
         }
     }
 
@@ -522,20 +514,18 @@ final class NativeSlidePreviewPane: NSView {
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             let now = ProcessInfo.processInfo.systemUptime
-            self.inputFrameRateMeter.refresh(at: now)
-            self.previewFrameRateMeter.refresh(at: now)
-            self.updateFrameStatisticsLabel()
+            self.pullFrameRateMeter.refresh(at: now)
+            self.updatePullFrameRateLabel()
         }
         frameRateRefreshTimer = timer
         RunLoop.main.add(timer, forMode: .common)
     }
 
-    private func updateFrameStatisticsLabel() {
-        let previewFPS = String(format: "%.1f", previewFrameRateMeter.framesPerSecond)
-        let inputFPS = String(format: "%.1f", inputFrameRateMeter.framesPerSecond)
-        let value = "VIEW \(previewFPS) · INPUT \(inputFPS) · DROPS \(droppedFrameCount)"
-        guard frameStatisticsLabel.stringValue != value else { return }
-        frameStatisticsLabel.stringValue = value
+    private func updatePullFrameRateLabel() {
+        let pullFPS = String(format: "%.1f", pullFrameRateMeter.framesPerSecond)
+        let value = "PULL FPS \(pullFPS)"
+        guard pullFrameRateLabel.stringValue != value else { return }
+        pullFrameRateLabel.stringValue = value
     }
 
     func updatePresentationState(isActiveTarget: Bool, isMaximized: Bool) {

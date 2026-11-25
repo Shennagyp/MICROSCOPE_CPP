@@ -239,16 +239,10 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         // value snapshot does not copy image bytes or create another frame queue.
         let snapshot = frameFeed.takeLatestFrameSnapshot()
 
-        // Pull count deltas are converted to INPUT FPS by each pane. The UI
-        // does not display lifetime pull totals.
-        slideOnePane.updateAcquisitionCounters(
-            pulled: snapshot.framesPulled,
-            dropped: snapshot.droppedFrames
-        )
-        slideTwoPane.updateAcquisitionCounters(
-            pulled: snapshot.framesPulled,
-            dropped: snapshot.droppedFrames
-        )
+        // Both panes derive the same PULL FPS from the monotonic pull counter.
+        // The UI does not display lifetime pull totals or presentation FPS.
+        slideOnePane.updatePullRate(pulledFrames: snapshot.framesPulled)
+        slideTwoPane.updatePullRate(pulledFrames: snapshot.framesPulled)
 
         guard let lease = snapshot.lease else { return }
 
@@ -261,8 +255,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
                   let image = lease.createCGImage() else {
                 return
             }
-            // INPUT FPS is already updated above. This records only an image
-            // actually assigned to the visible preview.
+            // PULL FPS is updated above from the acquisition counter.
+            // Image presentation does not affect that measurement.
             slideOnePane.display(image)
         case .slide2:
             guard !slideTwoPane.isImageFrozen,

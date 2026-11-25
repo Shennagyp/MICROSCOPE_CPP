@@ -355,9 +355,11 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
 12. Frozen destinations still consume and release the newest frame lease, but do
     not create a `CGImage` that will be discarded. Empty overlay sets bypass
     overlay-coordinate calculations and graphics-state setup.
-13. Frame-statistics tooltips are configured once; pane labels update only when
-    counters actually change, and the active pane combines its displayed-frame
-    count with the incoming acquisition counters in one label update.
+13. The preview exposes one FPS metric: PULL FPS, derived from the monotonic
+    successful SDK-pull counter. It is acquisition pull throughput, not a
+    displayed-frame rate or sensor-reported FPS value. Its tooltip is configured
+    once; the label changes only when the derived pull rate changes. The periodic
+    refresh only expires stale rate values and never calls the SDK.
 14. Immutable frame leases cross the mailbox and Core Graphics boundary without
     copying pixel bytes. Frame-specific providers retain the source lease for the
     lifetime of the image; only small immutable color-space objects are shared.

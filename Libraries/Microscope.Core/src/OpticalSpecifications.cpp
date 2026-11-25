@@ -254,6 +254,31 @@ CondenserSpecification::workingDistance() const noexcept {
     return workingDistance_;
 }
 
+ExposureTimeRange::ExposureTimeRange(
+    PositiveMicroseconds minimum,
+    PositiveMicroseconds maximum)
+    : minimum_(minimum),
+      maximum_(maximum) {}
+
+Result<ExposureTimeRange, ExposureTimeRangeError> ExposureTimeRange::create(
+    PositiveMicroseconds minimum,
+    PositiveMicroseconds maximum) {
+    if (minimum.value() > maximum.value()) {
+        return Result<ExposureTimeRange, ExposureTimeRangeError>::failure(
+            ExposureTimeRangeError::InvertedRange);
+    }
+    return Result<ExposureTimeRange, ExposureTimeRangeError>::success(
+        ExposureTimeRange(minimum, maximum));
+}
+
+double ExposureTimeRange::minimumMicroseconds() const noexcept {
+    return minimum_.value();
+}
+
+double ExposureTimeRange::maximumMicroseconds() const noexcept {
+    return maximum_.value();
+}
+
 PixelDimensions::PixelDimensions(
     std::uint32_t width,
     std::uint32_t height)
@@ -447,12 +472,14 @@ CameraSpecification::CameraSpecification(
     PixelDimensions activeSensorDimensions,
     PositiveMicrometers pixelPitchX,
     PositiveMicrometers pixelPitchY,
-    std::vector<CameraOutputMode> outputModes)
+    std::vector<CameraOutputMode> outputModes,
+    std::optional<ExposureTimeRange> exposureTimeRange)
     : componentId_(std::move(componentId)),
       activeSensorDimensions_(activeSensorDimensions),
       pixelPitchX_(pixelPitchX),
       pixelPitchY_(pixelPitchY),
-      outputModes_(std::move(outputModes)) {}
+      outputModes_(std::move(outputModes)),
+      exposureTimeRange_(std::move(exposureTimeRange)) {}
 
 Result<
     CameraSpecification,
@@ -461,7 +488,8 @@ Result<
         PixelDimensions activeSensorDimensions,
         PositiveMicrometers pixelPitchX,
         PositiveMicrometers pixelPitchY,
-        std::vector<CameraOutputMode> outputModes) {
+        std::vector<CameraOutputMode> outputModes,
+        std::optional<ExposureTimeRange> exposureTimeRange) {
     if (outputModes.empty()) {
         return Result<
             CameraSpecification,
@@ -498,7 +526,8 @@ Result<
                 activeSensorDimensions,
                 pixelPitchX,
                 pixelPitchY,
-                std::move(outputModes)));
+                std::move(outputModes),
+                std::move(exposureTimeRange)));
 }
 
 const EquipmentComponentId& CameraSpecification::componentId() const noexcept {
@@ -519,6 +548,11 @@ double CameraSpecification::pixelPitchYMicrometers() const noexcept {
 
 const std::vector<CameraOutputMode>& CameraSpecification::outputModes() const noexcept {
     return outputModes_;
+}
+
+const std::optional<ExposureTimeRange>&
+CameraSpecification::exposureTimeRange() const noexcept {
+    return exposureTimeRange_;
 }
 
 } // namespace microscope::core

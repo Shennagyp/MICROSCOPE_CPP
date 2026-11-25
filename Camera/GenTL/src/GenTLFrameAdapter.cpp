@@ -3,6 +3,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace camera::gentl {
 namespace {

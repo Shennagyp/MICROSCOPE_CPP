@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <utility>
 using namespace microscope::core;
 template<class T,class E>T take(Result<T,E> r){if(!r)throw std::runtime_error("fixture rejected");return std::move(r).value();}
@@ -15,7 +16,7 @@ SlideRegistration registration(const char*s,DualSlideSlot slot,double x){
  auto tr=take(SlideCornerMeasurement::create(SlideCorner::TopRight,{x+75000,20000},src,0.5));
  auto br=take(SlideCornerMeasurement::create(SlideCorner::BottomRight,{x+75000,45000},src,0.5));
  auto bl=take(SlideCornerMeasurement::create(SlideCorner::BottomLeft,{x,45000},src,0.5));
- return take(SlideRegistration::create(id<SlideId>(s),slot,g,{tl,tr,br,bl},1.0));
+ return take(SlideRegistration::create(id<SlideId>(s),id<CalibrationRevisionId>(std::string(s)+"-registration-v1"),slot,g,{tl,tr,br,bl},1.0));
 }
 void equipmentDefinitionOwnsCarrier() {
  auto s=stage();
@@ -75,7 +76,7 @@ int main(){
  auto b=take(SlideCornerMeasurement::create(SlideCorner::TopRight,{75000,0},src,1));
  auto c=take(SlideCornerMeasurement::create(SlideCorner::BottomRight,{75500,25000},src,1));
  auto d=take(SlideCornerMeasurement::create(SlideCorner::BottomLeft,{0,25000},src,1));
- auto failFit=SlideRegistration::create(id<SlideId>("distorted"),DualSlideSlot::Left,g,{a,b,c,d},5);
+ auto failFit=SlideRegistration::create(id<SlideId>("distorted"),id<CalibrationRevisionId>("distorted-registration-v1"),DualSlideSlot::Left,g,{a,b,c,d},5);
  check(!failFit&&failFit.error()==SlideRegistrationError::FitResidualExceeded,"fourth-corner residual gate rejects affine mismatch");
  auto right=registration("right",DualSlideSlot::Right,95000);
  auto lslot=take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("left"),left));
@@ -106,9 +107,18 @@ int main(){
      std::move(wrongRightState));
  check(!wrongOrder&&wrongOrder.error()==DualSlideCarrierStateError::SlideSlotOrderMismatch,
        "validates left/right physical order against configured stage X direction");
- auto leftCommand=carrier.commandFor(id<SlideId>("left"),{10000,10000});
- auto rightCommand=carrier.commandFor(id<SlideId>("right"),{10000,10000});
+ auto leftTarget=take(carrier.createTarget(id<SlideId>("left"),{10000,10000}));
+ auto rightTarget=take(carrier.createTarget(id<SlideId>("right"),{10000,10000}));
+ auto leftCommand=carrier.commandFor(leftTarget);
+ auto rightCommand=carrier.commandFor(rightTarget);
  check(leftCommand&&rightCommand&&leftCommand.value().targets()[0].value()!=rightCommand.value().targets()[0].value(),"navigation resolves the selected SlideId through its own registration");
+ auto changedLeft=registration("left",DualSlideSlot::Left,6000);
+ auto changedCarrier=take(DualSlideCarrierState::create(spec,
+     take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("left"),changedLeft)),
+     take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right"),right))));
+ auto staleCommand=changedCarrier.commandFor(leftTarget);
+ check(!staleCommand&&staleCommand.error()==SlideNavigationCommandError::RegistrationChanged,
+       "saved navigation target rejects a changed slide registration");
  auto outsideTravel=carrier.commandFor(id<SlideId>("right"),{75000,12000});
  check(!outsideTravel&&outsideTravel.error()==SlideNavigationCommandError::OutsideStageTravel,
        "mapped slide target is rejected outside installed stage travel");

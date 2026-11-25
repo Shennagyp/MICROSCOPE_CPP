@@ -3,7 +3,7 @@
 **Canonical project:** the reusable camera subsystem in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Current Camera implementation branch:** `camera-v.2.0`  
-**Current Camera branch HEAD:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
+**Current Camera branch HEAD:** `2b208d01f70651633a3fc6682566670cf2b3b242`  
 **Camera library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
 **Current Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
 **Roadmap revision:** Camera Module v2.0 — non-Qt, no camera-UI deliverable
@@ -258,8 +258,8 @@ This ledger separates source presence, automated evidence, physical evidence and
 |---:|---|---|
 | 0 | Historically accepted by owner | Historical baseline and MU503 records exist. Reconcile exact current branch/commit before treating the baseline as current. |
 | 1 | Historically accepted by owner; hardening remains | Native single-session driver exists. Callback quiescence and deterministic full SDK lifecycle fault injection remain material safety concerns. |
-| 2 | Implemented in substantial part; closure requires reconciliation | `Camera::Common` contains model, frame, feature-validation and mailbox contracts. Verify all original slices and ensure provider-neutral semantics are complete. |
-| 3 | IN PROGRESS; non-Qt build gate passed | `Amscope::Driver` exposes a non-Qt C++ API and `Camera::Common` has a non-Qt mailbox. Qt adapter/preview options now default OFF. Workflow #45651928831 passed 11/11 non-Qt CTest on Intel and Apple Silicon. Public dependency audit and external-consumer validation remain. |
+| 2 | Partially implemented; shared type ownership decision documented | `Camera::Common` contains discovery/model, frame, feature-validation and mailbox contracts. Common feature-access errors stay common; AmScope lifecycle/command errors remain provider-specific. Physical common-frame/RAW verification remains outstanding. |
+| 3 | IN PROGRESS; non-Qt build/install CI passed | `Amscope::Driver` exposes a non-Qt C++ API and `Camera::Common` has a non-Qt mailbox. Qt options default OFF; legacy facade header lives under `Camera/Amscope/legacy/qt`. Workflow #45654331539 passed 12/12 CTest on Intel and Apple Silicon, installed the public headers, confirmed the Qt header was absent and compiled the public API test against installed headers. Exported package and clean external-consumer validation remain. |
 | 4 | Blocked follow-on | Existing GenTL/GenApi Consumer integration choice, target CTI Producer and physical CTI camera remain prerequisites. |
 | 5 | Open | Broad AmScope implementation exists; reconcile every claim to source, model evidence, tests and physical support. |
 | 6 | Open | Initial install rules exist; exported package and clean non-Qt external consumer qualification remain. |

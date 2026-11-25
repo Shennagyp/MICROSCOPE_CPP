@@ -27,9 +27,12 @@ static const char mock_xml[] =
     "  <Category Name=\"Root\">\n" \
     "    <ToolTip>Root feature category</ToolTip>\n" \
     "    <pFeature>Gain</pFeature>\n" \
+    "    <pFeature>FeatureEnabled</pFeature>\n" \
+    "    <pFeature>TriggerMode</pFeature>\n" \
     "    <pFeature>AcquisitionStart</pFeature>\n" \
     "  </Category>\n" \
     "  <Integer Name=\"Gain\">\n" \
+    "    <pIsAvailable>FeatureEnabled</pIsAvailable>\n" \
     "    <pValue>GainReg</pValue>\n" \
     "    <Min>0</Min>\n" \
     "    <Max>255</Max>\n" \
@@ -38,6 +41,36 @@ static const char mock_xml[] =
     "  </Integer>\n" \
     "  <IntReg Name=\"GainReg\">\n" \
     "    <Address>0x1000</Address>\n" \
+    "    <Length>2</Length>\n" \
+    "    <AccessMode>RW</AccessMode>\n" \
+    "    <pPort>Device</pPort>\n" \
+    "    <Sign>Unsigned</Sign>\n" \
+    "    <Endianess>BigEndian</Endianess>\n" \
+    "  </IntReg>\n" \
+    "  <Boolean Name=\"FeatureEnabled\">\n" \
+    "    <pValue>EnableReg</pValue>\n" \
+    "    <OnValue>1</OnValue>\n" \
+    "    <OffValue>0</OffValue>\n" \
+    "  </Boolean>\n" \
+    "  <IntReg Name=\"EnableReg\">\n" \
+    "    <Address>0x1006</Address>\n" \
+    "    <Length>2</Length>\n" \
+    "    <AccessMode>RW</AccessMode>\n" \
+    "    <pPort>Device</pPort>\n" \
+    "    <Sign>Unsigned</Sign>\n" \
+    "    <Endianess>BigEndian</Endianess>\n" \
+    "  </IntReg>\n" \
+    "  <Enumeration Name=\"TriggerMode\">\n" \
+    "    <pValue>TriggerModeReg</pValue>\n" \
+    "    <EnumEntry Name=\"Off\">\n" \
+    "      <Value>0</Value>\n" \
+    "    </EnumEntry>\n" \
+    "    <EnumEntry Name=\"On\">\n" \
+    "      <Value>1</Value>\n" \
+    "    </EnumEntry>\n" \
+    "  </Enumeration>\n" \
+    "  <IntReg Name=\"TriggerModeReg\">\n" \
+    "    <Address>0x1004</Address>\n" \
     "    <Length>2</Length>\n" \
     "    <AccessMode>RW</AccessMode>\n" \
     "    <pPort>Device</pPort>\n" \

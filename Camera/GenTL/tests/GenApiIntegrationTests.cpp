@@ -18,6 +18,22 @@ void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+const camera::CameraFeatureDescriptor* findFeature(
+    const std::vector<camera::CameraFeatureDescriptor>& features,
+    const std::string& name) {
+    const auto found = std::find_if(features.begin(), features.end(),
+        [&](const auto& item) { return item.name == name; });
+    return found == features.end() ? nullptr : &*found;
+}
+
+const camera::CameraCommandDescriptor* findCommand(
+    const std::vector<camera::CameraCommandDescriptor>& commands,
+    const std::string& name) {
+    const auto found = std::find_if(commands.begin(), commands.end(),
+        [&](const auto& item) { return item.name == name; });
+    return found == commands.end() ? nullptr : &*found;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -38,90 +54,201 @@ int main(int argc, char** argv) {
         const auto devices = producer.discover();
         require(devices.size() == 1, "GenApi fixture device was not discovered.");
 
-        auto device = producer.openDevice(devices.front());
-        camera::gentl::GenApiDeviceAccess access(std::move(device));
+        {
+            auto device = producer.openDevice(devices.front());
+            camera::gentl::GenApiDeviceAccess access(std::move(device));
 
-        auto featureResult = access.features().featureDescriptors();
-        auto* features =
-            std::get_if<std::vector<camera::CameraFeatureDescriptor>>(&featureResult);
-        require(features != nullptr, "GenApi feature enumeration failed.");
+            auto featureResult = access.features().featureDescriptors();
+            auto* features =
+                std::get_if<std::vector<camera::CameraFeatureDescriptor>>(&featureResult);
+            require(features != nullptr, "GenApi feature enumeration failed.");
 
-        const auto gain = std::find_if(features->begin(), features->end(),
-            [](const auto& item) { return item.name == "Gain"; });
-        require(gain != features->end(), "Root feature Gain was not exposed.");
-        require(gain->kind == camera::CameraFeatureKind::Integer,
-                "Gain was not mapped as an Integer feature.");
-        require(gain->unit == std::optional<std::string>{"dB"},
-                "Gain unit was not preserved.");
-        require(std::none_of(features->begin(), features->end(),
-            [](const auto& item) {
-                return item.name == "GainReg" || item.name == "CommandReg";
-            }), "Internal register nodes leaked into the public feature list.");
+            const auto* gain = findFeature(*features, "Gain");
+            require(gain != nullptr, "Root feature Gain was not exposed.");
+            require(gain->kind == camera::CameraFeatureKind::Integer,
+                    "Gain was not mapped as an Integer feature.");
+            require(gain->unit == std::optional<std::string>{"dB"},
+                    "Gain unit was not preserved.");
+            require(!gain->isAvailable,
+                    "Gain should be unavailable until FeatureEnabled is set.");
 
-        auto hiddenRegisterRead = access.features().readFeature("GainReg");
-        auto* hiddenReadError =
-            std::get_if<camera::CameraFeatureAccessError>(&hiddenRegisterRead);
-        require(hiddenReadError &&
-                    hiddenReadError->code ==
-                        camera::CameraFeatureAccessError::Code::FeatureNotFound,
-                "Internal GenApi register was directly readable as a feature.");
+            const auto* triggerMode = findFeature(*features, "TriggerMode");
+            require(triggerMode != nullptr &&
+                        triggerMode->kind == camera::CameraFeatureKind::Enumeration,
+                    "TriggerMode was not mapped as an Enumeration feature.");
+            require(triggerMode->enumerationValues ==
+                        std::vector<std::string>{"Off", "On"},
+                    "Available GenApi enumeration symbols were not preserved.");
 
-        const camera::CameraFeatureValue hiddenRegisterWriteValue{
-            std::int64_t{7}};
-        auto hiddenRegisterWrite =
-            access.features().writeFeature("GainReg", hiddenRegisterWriteValue);
-        auto* hiddenWriteError =
-            std::get_if<camera::CameraFeatureAccessError>(&hiddenRegisterWrite);
-        require(hiddenWriteError &&
-                    hiddenWriteError->code ==
-                        camera::CameraFeatureAccessError::Code::FeatureNotFound,
-                "Internal GenApi register was directly writable as a feature.");
+            require(std::none_of(features->begin(), features->end(),
+                [](const auto& item) {
+                    return item.name == "GainReg" ||
+                           item.name == "EnableReg" ||
+                           item.name == "TriggerModeReg" ||
+                           item.name == "CommandReg";
+                }), "Internal register nodes leaked into the public feature list.");
 
-        auto initialRead = access.features().readFeature("Gain");
-        auto* initialValue = std::get_if<camera::CameraFeatureValue>(&initialRead);
-        require(initialValue != nullptr, "GenApi Gain read failed.");
-        auto* initialGain = std::get_if<std::int64_t>(initialValue);
-        require(initialGain && *initialGain == 0,
-                "GenApi Gain initial register value was not zero.");
+            auto hiddenRegisterRead = access.features().readFeature("GainReg");
+            auto* hiddenReadError =
+                std::get_if<camera::CameraFeatureAccessError>(&hiddenRegisterRead);
+            require(hiddenReadError &&
+                        hiddenReadError->code ==
+                            camera::CameraFeatureAccessError::Code::FeatureNotFound,
+                    "Internal GenApi register was directly readable as a feature.");
 
-        const camera::CameraFeatureValue requestedGain{std::int64_t{42}};
-        auto writeResult = access.features().writeFeature("Gain", requestedGain);
-        require(std::holds_alternative<std::monostate>(writeResult),
-                "GenApi Gain write failed.");
+            const camera::CameraFeatureValue hiddenRegisterWriteValue{
+                std::int64_t{7}};
+            auto hiddenRegisterWrite =
+                access.features().writeFeature("GainReg", hiddenRegisterWriteValue);
+            auto* hiddenWriteError =
+                std::get_if<camera::CameraFeatureAccessError>(&hiddenRegisterWrite);
+            require(hiddenWriteError &&
+                        hiddenWriteError->code ==
+                            camera::CameraFeatureAccessError::Code::FeatureNotFound,
+                    "Internal GenApi register was directly writable as a feature.");
 
-        auto readBack = access.features().readFeature("Gain");
-        auto* readBackValue = std::get_if<camera::CameraFeatureValue>(&readBack);
-        require(readBackValue != nullptr, "GenApi Gain readback failed.");
-        auto* readBackGain = std::get_if<std::int64_t>(readBackValue);
-        require(readBackGain && *readBackGain == 42,
-                "GenApi Gain write/readback did not preserve the requested value.");
+            auto unavailableGain = access.features().readFeature("Gain");
+            auto* unavailableError =
+                std::get_if<camera::CameraFeatureAccessError>(&unavailableGain);
+            require(unavailableError &&
+                        unavailableError->code ==
+                            camera::CameraFeatureAccessError::Code::FeatureUnavailable,
+                    "GenApi pIsAvailable state was not enforced.");
 
-        auto commandResult = access.commands().commandDescriptors();
-        auto* commands =
-            std::get_if<std::vector<camera::CameraCommandDescriptor>>(&commandResult);
-        require(commands != nullptr, "GenApi command enumeration failed.");
-        require(std::any_of(commands->begin(), commands->end(),
-            [](const auto& item) { return item.name == "AcquisitionStart"; }),
-            "Root command AcquisitionStart was not exposed.");
-        require(std::none_of(commands->begin(), commands->end(),
-            [](const auto& item) { return item.name == "CommandReg"; }),
-            "Internal command register leaked into the command list.");
+            auto enabledRead = access.features().readFeature("FeatureEnabled");
+            auto* enabledValue = std::get_if<camera::CameraFeatureValue>(&enabledRead);
+            require(enabledValue != nullptr, "FeatureEnabled read failed.");
+            auto* initiallyEnabled = std::get_if<bool>(enabledValue);
+            require(initiallyEnabled && !*initiallyEnabled,
+                    "FeatureEnabled initial value was not false.");
 
-        auto hiddenCommand = access.commands().executeCommand("CommandReg");
-        auto* hiddenCommandError =
-            std::get_if<camera::CameraCommandAccessError>(&hiddenCommand);
-        require(hiddenCommandError &&
-                    hiddenCommandError->code ==
-                        camera::CameraCommandAccessError::Code::CommandNotFound,
-                "Internal GenApi register was directly executable as a command.");
+            const camera::CameraFeatureValue enableFeature{true};
+            auto enableResult =
+                access.features().writeFeature("FeatureEnabled", enableFeature);
+            require(std::holds_alternative<std::monostate>(enableResult),
+                    "FeatureEnabled write failed.");
 
-        auto executeResult = access.commands().executeCommand("AcquisitionStart");
-        require(std::holds_alternative<std::monostate>(executeResult),
-                "GenApi command issue failed.");
-        auto doneResult = access.commands().isCommandDone("AcquisitionStart");
-        auto* isDone = std::get_if<bool>(&doneResult);
-        require(isDone && !*isDone,
-                "GenApi command completion polling did not preserve the active state.");
+            featureResult = access.features().featureDescriptors();
+            features =
+                std::get_if<std::vector<camera::CameraFeatureDescriptor>>(&featureResult);
+            require(features != nullptr, "GenApi feature refresh failed.");
+            gain = findFeature(*features, "Gain");
+            require(gain && gain->isAvailable,
+                    "Gain did not become available after its selector condition changed.");
+
+            auto initialRead = access.features().readFeature("Gain");
+            auto* initialValue = std::get_if<camera::CameraFeatureValue>(&initialRead);
+            require(initialValue != nullptr, "GenApi Gain read failed.");
+            auto* initialGain = std::get_if<std::int64_t>(initialValue);
+            require(initialGain && *initialGain == 0,
+                    "GenApi Gain initial register value was not zero.");
+
+            const camera::CameraFeatureValue requestedGain{std::int64_t{42}};
+            auto writeResult = access.features().writeFeature("Gain", requestedGain);
+            require(std::holds_alternative<std::monostate>(writeResult),
+                    "GenApi Gain write failed.");
+
+            auto readBack = access.features().readFeature("Gain");
+            auto* readBackValue = std::get_if<camera::CameraFeatureValue>(&readBack);
+            require(readBackValue != nullptr, "GenApi Gain readback failed.");
+            auto* readBackGain = std::get_if<std::int64_t>(readBackValue);
+            require(readBackGain && *readBackGain == 42,
+                    "GenApi Gain write/readback did not preserve the requested value.");
+
+            auto initialEnum = access.features().readFeature("TriggerMode");
+            auto* initialEnumValue =
+                std::get_if<camera::CameraFeatureValue>(&initialEnum);
+            require(initialEnumValue != nullptr, "TriggerMode initial read failed.");
+            auto* initialSymbol =
+                std::get_if<camera::FeatureEnumeration>(initialEnumValue);
+            require(initialSymbol && initialSymbol->symbol == "Off",
+                    "TriggerMode initial enum symbol was not Off.");
+
+            const camera::CameraFeatureValue requestedMode{
+                camera::FeatureEnumeration{"On"}};
+            auto enumWrite =
+                access.features().writeFeature("TriggerMode", requestedMode);
+            require(std::holds_alternative<std::monostate>(enumWrite),
+                    "TriggerMode enum write failed.");
+            auto enumReadBack = access.features().readFeature("TriggerMode");
+            auto* enumReadBackValue =
+                std::get_if<camera::CameraFeatureValue>(&enumReadBack);
+            require(enumReadBackValue != nullptr, "TriggerMode readback failed.");
+            auto* enumReadBackSymbol =
+                std::get_if<camera::FeatureEnumeration>(enumReadBackValue);
+            require(enumReadBackSymbol && enumReadBackSymbol->symbol == "On",
+                    "TriggerMode enum write/readback did not preserve the symbol.");
+
+            auto commandResult = access.commands().commandDescriptors();
+            auto* commands =
+                std::get_if<std::vector<camera::CameraCommandDescriptor>>(&commandResult);
+            require(commands != nullptr, "GenApi command enumeration failed.");
+            require(findCommand(*commands, "AcquisitionStart") != nullptr,
+                    "Root command AcquisitionStart was not exposed.");
+            require(findCommand(*commands, "CommandReg") == nullptr,
+                    "Internal command register leaked into the command list.");
+
+            auto hiddenCommand = access.commands().executeCommand("CommandReg");
+            auto* hiddenCommandError =
+                std::get_if<camera::CameraCommandAccessError>(&hiddenCommand);
+            require(hiddenCommandError &&
+                        hiddenCommandError->code ==
+                            camera::CameraCommandAccessError::Code::CommandNotFound,
+                    "Internal GenApi register was directly executable as a command.");
+
+            auto executeResult =
+                access.commands().executeCommand("AcquisitionStart");
+            require(std::holds_alternative<std::monostate>(executeResult),
+                    "GenApi command issue failed.");
+            auto doneResult =
+                access.commands().isCommandDone("AcquisitionStart");
+            auto* isDone = std::get_if<bool>(&doneResult);
+            require(isDone && !*isDone,
+                    "GenApi command completion polling did not preserve the active state.");
+        }
+
+        {
+            auto readOnlyDevice = producer.openDevice(
+                devices.front(), GenTL::DEVICE_ACCESS_READONLY);
+            camera::gentl::GenApiDeviceAccess readOnly(std::move(readOnlyDevice));
+
+            auto featureResult = readOnly.features().featureDescriptors();
+            auto* features =
+                std::get_if<std::vector<camera::CameraFeatureDescriptor>>(&featureResult);
+            require(features != nullptr, "Read-only GenApi feature enumeration failed.");
+            const auto* gain = findFeature(*features, "Gain");
+            require(gain && gain->isAvailable && gain->isReadable &&
+                        !gain->isWritable,
+                    "GenTL READONLY access was not mapped to GenApi RO.");
+
+            const camera::CameraFeatureValue requestedGain{std::int64_t{7}};
+            auto writeResult =
+                readOnly.features().writeFeature("Gain", requestedGain);
+            auto* writeError =
+                std::get_if<camera::CameraFeatureAccessError>(&writeResult);
+            require(writeError &&
+                        writeError->code ==
+                            camera::CameraFeatureAccessError::Code::FeatureNotWritable,
+                    "Read-only GenApi port accepted a feature write.");
+
+            auto commandResult = readOnly.commands().commandDescriptors();
+            auto* commands =
+                std::get_if<std::vector<camera::CameraCommandDescriptor>>(&commandResult);
+            require(commands != nullptr, "Read-only GenApi command enumeration failed.");
+            const auto* acquisitionStart =
+                findCommand(*commands, "AcquisitionStart");
+            require(acquisitionStart && !acquisitionStart->isExecutable,
+                    "Read-only GenApi command was incorrectly marked executable.");
+
+            auto executeResult =
+                readOnly.commands().executeCommand("AcquisitionStart");
+            auto* commandError =
+                std::get_if<camera::CameraCommandAccessError>(&executeResult);
+            require(commandError &&
+                        commandError->code ==
+                            camera::CameraCommandAccessError::Code::CommandNotExecutable,
+                    "Read-only GenApi port accepted a command.");
+        }
 
         std::cout << "GenApi feature and command integration tests passed.\n";
         return EXIT_SUCCESS;

@@ -399,6 +399,12 @@ Result<
 
             if (!isLast) {
                 const auto& nextStep = steps[index + 1];
+                if (!nextStep.entryPortId()) {
+                    return Result<
+                        MicroscopeEquipmentDefinition,
+                        EquipmentDefinitionError>::failure(
+                            EquipmentDefinitionError::MissingPathEntryPort);
+                }
                 const auto routeConnection = connectionIndex.find(
                     std::make_pair(*step.exitPortId(), *nextStep.entryPortId()));
                 if (routeConnection == connectionIndex.end()) {

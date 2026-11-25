@@ -105,26 +105,34 @@ No Microscope.Core or Microscope.Application C++ library is claimed to exist yet
 **Exit:** calibration is reused by matching configuration; no unnecessary per-slide calibration duplication or stage-to-slide registration.
 
 ### Phase 7 — Sample, slides and persistence
+- Define distinct strong identity types for SampleId, SlideId and TileId; identifiers are opaque and independent of labels, paths and display order.
 - Define Sample and SampleType as source-specimen identity and taxonomy.
 - Define Slide and SlideType as physical preparation identity and taxonomy.
-- Enforce the baseline relationship Sample 1-to-many Slides; each Slide references one Sample.
-- Define SlideConfigurationSnapshot and Tile, with Tile owned by a Slide.
-- Implement sample/slide folder lifecycle through storage ports without making the microscope the specimen owner.
+- Enforce the baseline relationship: each Slide references exactly one existing Sample; one Sample may have many Slides.
+- Make Slide.SampleId the authoritative relationship. Do not persist an authoritative SlideIds collection on Sample; provide reverse lookup through a query/index.
+- Define the Sample and Slide record contracts, Tile metadata contract and versioned SlideConfigurationSnapshot.
+- Make Tile belong to one Slide; permit no physical position and do not interpret ordering/index as coordinates.
+- Define archive/deletion constraints: Sample archival does not cascade-delete slides or image data; a referenced Sample cannot be destructively deleted.
+- Define independent Sample and Slide package persistence. Slide packages retain SampleId and remain independently movable; the Sample record is not duplicated inside the Slide package as another authority.
+- Define portable relative payload references and a rebuildable workspace catalog/index.
 - Enforce mandatory active slide session in Core.
-- Define stable identities and portable relative references.
-- Support opening and browsing sample/slide records without a microscope connected.
+- Support opening/browsing Sample and Slide packages without a microscope connected.
 
-**Exit:** sample identity is distinct from preparation identity; one sample can have multiple slides; invalid/missing active slide session blocks acquisition; existing data remains portable and recoverable.
+**Exit:** identity and relationship invariants are enforced; one sample can have multiple slides; Slide-to-Sample ownership is unambiguous; folder moves do not change IDs; indexes can be rebuilt; invalid/missing active slide session blocks acquisition; archival cannot destroy referenced slide data.
 
 ### Phase 8 — Acquisition
-- Define AcquisitionPlan, AcquisitionRun, ImageFrame and DerivedImage identities.
-- Make each acquisition record identify the actual MicroscopeId and the Sample/Slide/Tile context relevant to that run.
-- Preserve requested plan separately from actual run results.
-- Add optional position evidence and explicit missing/failed frames.
-- Integrate existing camera frame delivery through its adapter.
-- Add Z-stack, exposure bracket and partial-run persistence semantics.
+- Define distinct AcquisitionPlanId, AcquisitionRunId and ImageFrameId identities.
+- Associate each AcquisitionPlan with exactly one Slide; freeze its intended settings when execution begins.
+- Associate each AcquisitionRun with exactly one Slide, one AcquisitionPlan and the actual MicroscopeId used.
+- Resolve the Sample context through Slide.SampleId rather than maintaining a second editable Sample relationship on the run.
+- Define Tile as a stable field identity: a run can produce multiple tiles, and a tile can receive frames from multiple runs.
+- Require each ImageFrame to reference exactly one AcquisitionRun and one Tile belonging to that run's Slide.
+- Preserve original frame payloads immutably and separate payload storage from capture metadata.
+- Commit a recoverable run identity before dispatch; persist payload/integrity metadata before publishing a frame as available.
+- Add optional position evidence, explicit missing/failed frames, Z planes, exposure brackets and partial-run persistence.
+- Integrate existing camera frame delivery through its adapter without changing the existing bounded frame/lease/preview pipeline.
 
-**Exit:** instrument history is represented through acquisition records rather than sample ownership; irregular acquisitions and recovery are represented without a fixed dense tensor; original frames are immutable.
+**Exit:** plans and actual runs remain distinct; every frame has valid run/tile provenance; repeated acquisitions can contribute to an existing tile; cross-slide frame references are rejected; incomplete runs recover correctly; original frames remain immutable; no additional preview queues or pixel copies are introduced.
 
 ### Phase 9 — Image documents and annotation
 - Define persistent annotation document and geometry types.
@@ -146,6 +154,8 @@ No Microscope.Core or Microscope.Application C++ library is claimed to exist yet
 ## Verification strategy
 
 - **Static/model validation:** identity integrity, graph/topology consistency, schema validation and dependency direction.
+- **Sample/slide contract tests:** unknown SampleId rejection, Sample-to-many-Slides cardinality, distinct SampleType/SlideType semantics, stable IDs after folder moves, non-authoritative reverse indexes and archive/deletion referential integrity.
+- **Acquisition contract tests:** plan/run distinction, actual MicroscopeId capture, one-slide run constraint, frame-to-run/tile consistency, cross-slide rejection, multi-tile runs, repeated tile acquisition, idempotent duplicate frame delivery and interrupted-run recovery.
 - **Pure unit tests:** configuration resolution, calibration fitting, unit conversion, transition planning and state reducers.
 - **Runtime contract tests:** simulated adapter responses, delayed callbacks, duplicates, stale/late events, timeout, failure and manual confirmation.
 - **Application integration tests:** definition loading, adapter registration, resource conflicts, runtime lifecycle and frontend projections.

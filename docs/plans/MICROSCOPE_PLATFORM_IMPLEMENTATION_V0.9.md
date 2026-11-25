@@ -104,23 +104,27 @@ No Microscope.Core or Microscope.Application C++ library is claimed to exist yet
 
 **Exit:** calibration is reused by matching configuration; no unnecessary per-slide calibration duplication or stage-to-slide registration.
 
-### Phase 7 — Slides and persistence
-- Define Slide, SlideType, SlideConfigurationSnapshot and Tile.
-- Implement slide folder lifecycle through storage ports.
+### Phase 7 — Sample, slides and persistence
+- Define Sample and SampleType as source-specimen identity and taxonomy.
+- Define Slide and SlideType as physical preparation identity and taxonomy.
+- Enforce the baseline relationship Sample 1-to-many Slides; each Slide references one Sample.
+- Define SlideConfigurationSnapshot and Tile, with Tile owned by a Slide.
+- Implement sample/slide folder lifecycle through storage ports without making the microscope the specimen owner.
 - Enforce mandatory active slide session in Core.
-- Define stable identity and portable relative references.
-- Support opening a slide without a microscope connected.
+- Define stable identities and portable relative references.
+- Support opening and browsing sample/slide records without a microscope connected.
 
-**Exit:** invalid/missing slide session blocks acquisition; existing slide data remains portable and recoverable.
+**Exit:** sample identity is distinct from preparation identity; one sample can have multiple slides; invalid/missing active slide session blocks acquisition; existing data remains portable and recoverable.
 
 ### Phase 8 — Acquisition
 - Define AcquisitionPlan, AcquisitionRun, ImageFrame and DerivedImage identities.
+- Make each acquisition record identify the actual MicroscopeId and the Sample/Slide/Tile context relevant to that run.
 - Preserve requested plan separately from actual run results.
 - Add optional position evidence and explicit missing/failed frames.
 - Integrate existing camera frame delivery through its adapter.
 - Add Z-stack, exposure bracket and partial-run persistence semantics.
 
-**Exit:** irregular acquisitions and recovery are represented without a fixed dense tensor; original frames are immutable.
+**Exit:** instrument history is represented through acquisition records rather than sample ownership; irregular acquisitions and recovery are represented without a fixed dense tensor; original frames are immutable.
 
 ### Phase 9 — Image documents and annotation
 - Define persistent annotation document and geometry types.

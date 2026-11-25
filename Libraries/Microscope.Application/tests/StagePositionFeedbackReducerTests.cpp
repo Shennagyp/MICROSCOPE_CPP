@@ -207,7 +207,7 @@ int main() {
     state = std::move(invalidated.position);
 
     check(bool(runtime->acknowledgeFeedbackLoss()),
-          "the owner can clear the loss latch after the queue is drained and reconciliation is performed");
+          "the owner can clear the loss latch only after draining the queue; host policy requires readback reconciliation first");
     auto freshAfterReconciliation = process(positionFeedback(
         currentSession, "x", 130.0, core::StagePositionEvidence::EncoderMeasured));
     auto reapplied = take(application::motion::StagePositionFeedbackReducer::reduce(

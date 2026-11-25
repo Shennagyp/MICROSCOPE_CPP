@@ -1058,7 +1058,12 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
         timeoutMillisecondsToNanoseconds(timeoutMilliseconds));
 
     if (status == GenTL::GC_ERR_TIMEOUT) return std::nullopt;
-    if (status == GenTL::GC_ERR_ABORT) {
+    if (status == GenTL::GC_ERR_ABORT ||
+        status == GenTL::GC_ERR_INVALID_HANDLE) {
+        // Close may unregister the event after this call has acquired its
+        // active-call lease but just before EventGetData enters the Consumer.
+        // In that race the Producer can report INVALID_HANDLE rather than
+        // ABORT; both are normal cancellation results once stopping begins.
         std::lock_guard<std::mutex> guard(state->mutex);
         if (state->stopping) return std::nullopt;
     }

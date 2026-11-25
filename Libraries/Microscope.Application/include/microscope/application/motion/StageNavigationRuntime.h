@@ -148,6 +148,7 @@ enum class StageNavigationRuntimeErrorCode {
     StageUnitMismatch,
     ErrorBudgetMismatch,
     VerificationPolicyMismatch,
+    OwnerThreadNotBound,
     WrongOwnerThread,
     NavigationAlreadyActive,
     OperationNotRunning,
@@ -245,6 +246,27 @@ public:
     StageNavigationRuntime& operator=(const StageNavigationRuntime&) = delete;
     StageNavigationRuntime(StageNavigationRuntime&&) = default;
     StageNavigationRuntime& operator=(StageNavigationRuntime&&) = default;
+
+    // Call from the same host-owned worker thread after
+    // SerializedRuntimeWorker has bound the Core operation runtime.
+    [[nodiscard]] core::Result<bool, StageNavigationRuntimeError> bindOwnerThread() {
+        const auto current = std::this_thread::get_id();
+        if (ownerThreadBound_ && ownerThread_ != current) {
+            return core::Result<bool, StageNavigationRuntimeError>::failure(
+                makeError(StageNavigationRuntimeErrorCode::WrongOwnerThread));
+        }
+        auto runtimeBinding = operationRuntime_->bindOwnerThread();
+        if (!runtimeBinding) {
+            auto error = makeError(StageNavigationRuntimeErrorCode::WrongOwnerThread);
+            error.runtimeError = runtimeBinding.error();
+            return core::Result<bool, StageNavigationRuntimeError>::failure(
+                std::move(error));
+        }
+        const bool newlyBound = !ownerThreadBound_;
+        ownerThread_ = current;
+        ownerThreadBound_ = true;
+        return core::Result<bool, StageNavigationRuntimeError>::success(newlyBound);
+    }
 
     // operationId must already be Running and initialStepId must already be
     // Pending in the supplied serialized operation runtime.
@@ -520,9 +542,8 @@ private:
     requireOwnerThread() {
         const auto current = std::this_thread::get_id();
         if (!ownerThreadBound_) {
-            ownerThread_ = current;
-            ownerThreadBound_ = true;
-            return core::Result<bool, StageNavigationRuntimeError>::success(true);
+            return core::Result<bool, StageNavigationRuntimeError>::failure(
+                makeError(StageNavigationRuntimeErrorCode::OwnerThreadNotBound));
         }
         if (ownerThread_ != current) {
             return core::Result<bool, StageNavigationRuntimeError>::failure(

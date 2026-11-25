@@ -107,9 +107,10 @@ struct FeedbackCorrelation final {
 };
 
 enum class FeedbackMetadataError {
+    InvalidFactKind,
+    InvalidObservationSource,
     MissingOperationCorrelation,
-    MissingCommandCorrelation,
-    InvalidObservationSource
+    MissingCommandCorrelation
 };
 
 // Metadata is created through a validator so fact categories cannot omit
@@ -122,6 +123,31 @@ public:
         ObservationSource source = ObservationSource::Unknown,
         std::optional<std::uint64_t> sourceSequence = std::nullopt,
         std::optional<DeviceTimestamp> deviceTimestamp = std::nullopt) {
+        switch (kind) {
+        case FeedbackKind::DeviceAcknowledged:
+        case FeedbackKind::DeviceProgress:
+        case FeedbackKind::DeviceActionCompleted:
+        case FeedbackKind::DeviceStateObserved:
+        case FeedbackKind::AdapterFailure:
+            break;
+        default:
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::InvalidFactKind);
+        }
+
+        switch (source) {
+        case ObservationSource::HardwareReadback:
+        case ObservationSource::DeviceEvent:
+        case ObservationSource::SdkStatus:
+        case ObservationSource::OperatorConfirmation:
+        case ObservationSource::CalibratedEstimate:
+        case ObservationSource::Unknown:
+            break;
+        default:
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::InvalidObservationSource);
+        }
+
         const bool requiresOperation =
             kind == FeedbackKind::DeviceAcknowledged ||
             kind == FeedbackKind::DeviceActionCompleted;

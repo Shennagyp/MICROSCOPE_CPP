@@ -79,31 +79,31 @@ enum class OpticalConnectionError {
     SamePort
 };
 
-// A directed physical connection from one component's output-capable port
-// to another component's input-capable port. Internal traversal through a
-// component is represented by OpticalPathStep, not by a self-connection.
+// An undirected physical adjacency between two component ports. Endpoint
+// order does not define light propagation; ordered OpticalPathStep values do.
+// Internal traversal through a component is not a self-connection.
 class OpticalConnection final {
 public:
     [[nodiscard]] static Result<
         OpticalConnection,
         OpticalConnectionError> create(
             OpticalConnectionId id,
-            OpticalPortId fromPortId,
-            OpticalPortId toPortId);
+            OpticalPortId firstPortId,
+            OpticalPortId secondPortId);
 
     [[nodiscard]] const OpticalConnectionId& id() const noexcept;
-    [[nodiscard]] const OpticalPortId& fromPortId() const noexcept;
-    [[nodiscard]] const OpticalPortId& toPortId() const noexcept;
+    [[nodiscard]] const OpticalPortId& firstPortId() const noexcept;
+    [[nodiscard]] const OpticalPortId& secondPortId() const noexcept;
 
 private:
     OpticalConnection(
         OpticalConnectionId id,
-        OpticalPortId fromPortId,
-        OpticalPortId toPortId);
+        OpticalPortId firstPortId,
+        OpticalPortId secondPortId);
 
     OpticalConnectionId id_;
-    OpticalPortId fromPortId_;
-    OpticalPortId toPortId_;
+    OpticalPortId firstPortId_;
+    OpticalPortId secondPortId_;
 };
 
 enum class OpticalPathStepError {
@@ -177,9 +177,8 @@ enum class EquipmentDefinitionError {
     StageComponentWrongKind,
     DuplicatePortId,
     DuplicateConnectionId,
-    UnknownConnectionFromPort,
-    UnknownConnectionToPort,
-    ConnectionPortDirectionMismatch,
+    UnknownConnectionFirstPort,
+    UnknownConnectionSecondPort,
     PortAlreadyConnected,
     ConnectionWithinSameComponent,
     DuplicateOpticalPathId,

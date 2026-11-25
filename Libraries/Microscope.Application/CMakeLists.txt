@@ -29,13 +29,16 @@ target_link_libraries(microscope_application
 set_target_properties(microscope_application PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     VERSION "0.9.0"
-    SOVERSION "0")
+    SOVERSION "0"
+    CXX_EXTENSIONS OFF)
 
 if(BUILD_TESTING)
     add_executable(microscope_application_contract_tests
         tests/ApplicationContractTests.cpp)
     target_link_libraries(microscope_application_contract_tests
         PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_contract_tests PROPERTIES
+        CXX_EXTENSIONS OFF)
     add_test(
         NAME microscope_application_contract_tests
         COMMAND microscope_application_contract_tests)

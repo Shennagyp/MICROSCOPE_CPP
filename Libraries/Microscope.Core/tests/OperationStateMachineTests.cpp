@@ -84,6 +84,12 @@ void testOperationCancellationAndPartialCompletionRemainDistinct() {
 }
 
 void testDeviceActionCompletionDoesNotVerifyStep() {
+    auto preDispatchFailure = applyStepLifecycleEvent(
+        StepStatus::Pending,
+        StepLifecycleEvent::DispatchPreconditionFailed);
+    check(preDispatchFailure && preDispatchFailure.value() == StepStatus::Failed,
+          "a dispatch precondition failure terminates a Pending step without pretending the adapter received a command");
+
     auto dispatched = applyStepLifecycleEvent(
         StepStatus::Pending, StepLifecycleEvent::CommandDispatched);
     check(dispatched && dispatched.value() == StepStatus::Dispatched,

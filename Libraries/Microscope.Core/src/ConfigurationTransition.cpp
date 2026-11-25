@@ -472,7 +472,8 @@ Result<
     }
 
     for (const auto& step : steps) {
-        if (step.id() != *acquisitionGate) {
+        if (step.id() != *acquisitionGate &&
+            step.id() != *finalVerification) {
             appendDependency(*acquisitionGate, step.id());
         }
     }

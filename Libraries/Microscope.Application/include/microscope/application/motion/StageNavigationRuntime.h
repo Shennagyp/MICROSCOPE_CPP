@@ -338,6 +338,7 @@ public:
         }
         if (operationRuntime_->feedbackLossLatched()) {
             position_ = position_.invalidateMachineReference();
+            feedbackLossObserved_ = true;
             return failure(StageNavigationRuntimeErrorCode::FeedbackLossUnresolved);
         }
         if (identities.initialStepId == identities.restoredMoveStepId ||

@@ -141,7 +141,9 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
 
     add_library(camera_gentl_genapi STATIC
         src/GenApiNodeMap.cpp
-        include/camera/gentl/GenApiNodeMap.h)
+        src/GenApiFeatureAccess.cpp
+        include/camera/gentl/GenApiNodeMap.h
+        include/camera/gentl/GenApiFeatureAccess.h)
     add_library(Camera::GenTLGenApi ALIAS camera_gentl_genapi)
 
     target_compile_features(camera_gentl_genapi PUBLIC cxx_std_17)

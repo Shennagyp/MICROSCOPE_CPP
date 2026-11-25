@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <set>
@@ -358,7 +360,7 @@ DeviceSession Producer::openDevice(
     }
 
     return DeviceSession(
-        context_, device, remotePort, descriptor.deviceId);
+        context_, device, remotePort, access, descriptor.deviceId);
 }
 
 const std::string& Producer::ctiPath() const noexcept {
@@ -374,10 +376,12 @@ DeviceSession::DeviceSession(
     std::shared_ptr<ProducerContext> context,
     GenTL::DEV_HANDLE device,
     GenTL::PORT_HANDLE remotePort,
+    GenTL::DEVICE_ACCESS_FLAGS access,
     std::string deviceId) noexcept
     : context_(std::move(context)),
       device_(device),
       remotePort_(remotePort),
+      access_(access),
       deviceId_(std::move(deviceId)) {}
 
 DeviceSession::~DeviceSession() {
@@ -388,6 +392,7 @@ DeviceSession::DeviceSession(DeviceSession&& other) noexcept
     : context_(std::move(other.context_)),
       device_(std::exchange(other.device_, nullptr)),
       remotePort_(std::exchange(other.remotePort_, nullptr)),
+      access_(std::exchange(other.access_, GenTL::DEVICE_ACCESS_UNKNOWN)),
       deviceId_(std::move(other.deviceId_)) {}
 
 DeviceSession& DeviceSession::operator=(DeviceSession&& other) noexcept {
@@ -396,6 +401,7 @@ DeviceSession& DeviceSession::operator=(DeviceSession&& other) noexcept {
         context_ = std::move(other.context_);
         device_ = std::exchange(other.device_, nullptr);
         remotePort_ = std::exchange(other.remotePort_, nullptr);
+        access_ = std::exchange(other.access_, GenTL::DEVICE_ACCESS_UNKNOWN);
         deviceId_ = std::move(other.deviceId_);
     }
     return *this;
@@ -437,38 +443,111 @@ std::vector<std::string> DeviceSession::dataStreamIds() const {
 
 std::vector<std::uint8_t> DeviceSession::readPort(
     std::uint64_t address, std::size_t size) const {
-    if (!*this) throw std::logic_error("The GenTL device session is closed.");
-    std::lock_guard<std::mutex> guard(context_->mutex);
-    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
-    if (size == 0) return {};
     std::vector<std::uint8_t> bytes(size);
-    std::size_t actual = bytes.size();
-    check(context_->consumer.invoke(
-        Operation::gcReadPort,
-        remotePort_, address, bytes.data(), &actual),
-        "GCReadPort");
-    if (actual > bytes.size()) {
-        throw std::runtime_error("GCReadPort returned a size larger than the destination.");
-    }
-    bytes.resize(actual);
+    if (size != 0) readPortInto(address, bytes.data(), size);
     return bytes;
 }
 
 void DeviceSession::writePort(
     std::uint64_t address, const std::vector<std::uint8_t>& bytes) const {
+    if (!bytes.empty()) writePortFrom(address, bytes.data(), bytes.size());
+}
+
+void DeviceSession::readPortInto(
+    std::uint64_t address, void* destination, std::size_t size) const {
     if (!*this) throw std::logic_error("The GenTL device session is closed.");
+    if (size == 0) return;
+    if (!destination) throw std::invalid_argument("A non-empty port read requires a destination.");
     std::lock_guard<std::mutex> guard(context_->mutex);
     if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
-    if (bytes.empty()) return;
-    std::size_t actual = bytes.size();
-    const void* data = bytes.empty() ? nullptr : bytes.data();
-    check(context_->consumer.invoke(
-        Operation::gcWritePort,
-        remotePort_, address, data, &actual),
-        "GCWritePort");
-    if (actual != bytes.size()) {
-        throw std::runtime_error("GCWritePort reported an unexpected byte count.");
+    std::size_t actual = size;
+    check(context_->consumer.invoke(Operation::gcReadPort,
+        remotePort_, address, destination, &actual), "GCReadPort");
+    if (actual != size) throw std::runtime_error("GCReadPort returned a partial read.");
+}
+
+void DeviceSession::writePortFrom(
+    std::uint64_t address, const void* source, std::size_t size) const {
+    if (!*this) throw std::logic_error("The GenTL device session is closed.");
+    if (size == 0) return;
+    if (!source) throw std::invalid_argument("A non-empty port write requires a source.");
+    if (access_ == GenTL::DEVICE_ACCESS_READONLY)
+        throw std::runtime_error("The GenTL device was opened read-only.");
+    std::lock_guard<std::mutex> guard(context_->mutex);
+    if (context_->quarantined) throw std::runtime_error("The GenTL Producer context is quarantined.");
+    std::size_t actual = size;
+    check(context_->consumer.invoke(Operation::gcWritePort,
+        remotePort_, address, source, &actual), "GCWritePort");
+    if (actual != size) throw std::runtime_error("GCWritePort reported a partial write.");
+}
+
+GenTL::DEVICE_ACCESS_FLAGS DeviceSession::accessFlags() const noexcept {
+    return access_;
+}
+
+std::vector<std::uint8_t> DeviceSession::genApiXml() const {
+    if (!*this) throw std::logic_error("The GenTL device session is closed.");
+    const auto invoke = [this](Operation operation, auto... arguments) {
+        std::lock_guard<std::mutex> guard(context_->mutex);
+        if (context_->quarantined)
+            throw std::runtime_error("The GenTL Producer context is quarantined.");
+        return context_->consumer.invoke(operation, arguments...);
+    };
+
+    std::uint32_t urlCount = 0;
+    check(invoke(Operation::gcGetNumPortURLs, remotePort_, &urlCount),
+          "GCGetNumPortURLs");
+    if (urlCount > 64)
+        throw std::runtime_error("The Producer returned an unreasonable GenApi URL count.");
+
+    for (std::uint32_t index = 0; index < urlCount; ++index) {
+        const auto scheme = readPortUrlValue<GenTL::URL_SCHEME_ID>(
+            invoke, remotePort_, index, GenTL::URL_INFO_SCHEME,
+            GenTL::INFO_DATATYPE_INT32);
+
+        if (scheme == GenTL::URL_SCHEME_LOCAL) {
+            const auto address = readPortUrlValue<std::uint64_t>(
+                invoke, remotePort_, index, GenTL::URL_INFO_FILE_REGISTER_ADDRESS,
+                GenTL::INFO_DATATYPE_UINT64);
+            const auto fileSize = readPortUrlValue<std::uint64_t>(
+                invoke, remotePort_, index, GenTL::URL_INFO_FILE_SIZE,
+                GenTL::INFO_DATATYPE_UINT64);
+            if (fileSize == 0 || fileSize > maximumGenApiXmlBytes ||
+                fileSize > std::numeric_limits<std::size_t>::max())
+                throw std::runtime_error("The GenApi XML register file has an invalid size.");
+
+            std::vector<std::uint8_t> xml(static_cast<std::size_t>(fileSize));
+            std::uint64_t offset = 0;
+            while (offset < fileSize) {
+                const auto chunk = static_cast<std::size_t>(
+                    std::min<std::uint64_t>(fileSize - offset, genApiXmlReadChunkBytes));
+                if (address > std::numeric_limits<std::uint64_t>::max() - offset)
+                    throw std::runtime_error("The GenApi XML register address overflows.");
+                readPortInto(address + offset,
+                    xml.data() + static_cast<std::size_t>(offset), chunk);
+                offset += chunk;
+            }
+            return xml;
+        }
+
+        if (scheme == GenTL::URL_SCHEME_FILE) {
+            const auto filename = readPortUrlString(
+                invoke, remotePort_, index, GenTL::URL_INFO_FILENAME);
+            const auto filePath = std::filesystem::canonical(filename);
+            const auto fileSize = std::filesystem::file_size(filePath);
+            if (fileSize == 0 || fileSize > maximumGenApiXmlBytes ||
+                fileSize > std::numeric_limits<std::size_t>::max())
+                throw std::runtime_error("The GenApi XML file has an invalid size.");
+            std::vector<std::uint8_t> xml(static_cast<std::size_t>(fileSize));
+            std::ifstream file(filePath, std::ios::binary);
+            if (!file || !file.read(reinterpret_cast<char*>(xml.data()),
+                                    static_cast<std::streamsize>(xml.size())))
+                throw std::runtime_error("The GenApi XML file could not be read.");
+            return xml;
+        }
     }
+    throw std::runtime_error(
+        "The Producer exposes no supported GenApi XML URL (LOCAL or FILE scheme).");
 }
 
 std::string DeviceSession::portUrl() const {

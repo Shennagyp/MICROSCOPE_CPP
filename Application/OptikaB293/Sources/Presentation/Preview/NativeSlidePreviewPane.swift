@@ -29,6 +29,7 @@ final class NativeSlidePreviewPane: NSView {
     private let actionStack = NSStackView()
     private let toolStack = NSStackView()
     private let annotationPlate = NSView()
+    private let pullFrameRatePlate = NSView()
     private let actionPlate = NSView()
     private let toolPlate = NSView()
     private let microscopeControlsPlate = NSView()
@@ -187,6 +188,9 @@ final class NativeSlidePreviewPane: NSView {
         // presented as compact corner annotations over the image viewport;
         // actions remain available in a separate floating control cluster.
         configureAnnotationPlate(annotationPlate)
+        configureAnnotationPlate(pullFrameRatePlate)
+        pullFrameRateLabel.translatesAutoresizingMaskIntoConstraints = false
+        pullFrameRatePlate.addSubview(pullFrameRateLabel)
         configureAnnotationPlate(actionPlate)
         configureAnnotationPlate(toolPlate)
         configureAnnotationPlate(microscopeControlsPlate)
@@ -197,7 +201,6 @@ final class NativeSlidePreviewPane: NSView {
         annotationStack.spacing = 9
         annotationStack.translatesAutoresizingMaskIntoConstraints = false
         annotationStack.addArrangedSubview(titleLabel)
-        annotationStack.addArrangedSubview(pullFrameRateLabel)
         annotationStack.addArrangedSubview(statusLabel)
 
         actionStack.orientation = .horizontal
@@ -233,6 +236,7 @@ final class NativeSlidePreviewPane: NSView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
         addSubview(annotationPlate)
+        addSubview(pullFrameRatePlate)
         addSubview(actionPlate)
         addSubview(toolPlate)
         addSubview(microscopeControlsPlate)
@@ -248,6 +252,30 @@ final class NativeSlidePreviewPane: NSView {
             annotationStack.bottomAnchor.constraint(equalTo: annotationPlate.bottomAnchor, constant: -6),
             annotationPlate.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             annotationPlate.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+
+            pullFrameRateLabel.leadingAnchor.constraint(
+                equalTo: pullFrameRatePlate.leadingAnchor,
+                constant: 9
+            ),
+            pullFrameRateLabel.trailingAnchor.constraint(
+                equalTo: pullFrameRatePlate.trailingAnchor,
+                constant: -9
+            ),
+            pullFrameRateLabel.topAnchor.constraint(
+                equalTo: pullFrameRatePlate.topAnchor,
+                constant: 5
+            ),
+            pullFrameRateLabel.bottomAnchor.constraint(
+                equalTo: pullFrameRatePlate.bottomAnchor,
+                constant: -5
+            ),
+            pullFrameRatePlate.leadingAnchor.constraint(
+                equalTo: annotationPlate.leadingAnchor
+            ),
+            pullFrameRatePlate.topAnchor.constraint(
+                equalTo: annotationPlate.bottomAnchor,
+                constant: 5
+            ),
 
             actionStack.leadingAnchor.constraint(equalTo: actionPlate.leadingAnchor, constant: 5),
             actionStack.trailingAnchor.constraint(equalTo: actionPlate.trailingAnchor, constant: -5),

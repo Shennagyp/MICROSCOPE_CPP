@@ -153,6 +153,24 @@ public:
         return value_;
     }
 
+    friend bool operator==(
+        FeedbackIngressSequence left,
+        FeedbackIngressSequence right) noexcept {
+        return left.value_ == right.value_;
+    }
+
+    friend bool operator!=(
+        FeedbackIngressSequence left,
+        FeedbackIngressSequence right) noexcept {
+        return !(left == right);
+    }
+
+    friend bool operator<(
+        FeedbackIngressSequence left,
+        FeedbackIngressSequence right) noexcept {
+        return left.value_ < right.value_;
+    }
+
 private:
     explicit FeedbackIngressSequence(std::uint64_t value) noexcept
         : value_(value) {}

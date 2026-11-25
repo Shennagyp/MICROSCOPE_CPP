@@ -129,7 +129,7 @@ enum class FeedbackSubmitStatus {
 
 enum class FeedbackIngressSequenceError {
     ZeroSequence,
-    DifferentRuntimeScope
+    DifferentScope
 };
 
 // Positive Core-assigned receive sequence scoped to one runtime incarnation.
@@ -192,7 +192,7 @@ public:
                 other.runtimeId_,
                 other.runtimeGeneration_)) {
             return Result<bool, FeedbackIngressSequenceError>::failure(
-                FeedbackIngressSequenceError::DifferentRuntimeScope);
+                FeedbackIngressSequenceError::DifferentScope);
         }
 
         return Result<bool, FeedbackIngressSequenceError>::success(
@@ -224,7 +224,7 @@ struct FeedbackReceiptMetadata final {
 };
 
 enum class FeedbackReceiptError {
-    RuntimeScopeMismatch
+    ScopeMismatch
 };
 
 template <typename TPayload>
@@ -240,7 +240,7 @@ public:
                 runtime.runtimeId,
                 runtime.runtimeGeneration)) {
             return Result<FeedbackReceipt, FeedbackReceiptError>::failure(
-                FeedbackReceiptError::RuntimeScopeMismatch);
+                FeedbackReceiptError::ScopeMismatch);
         }
 
         return Result<FeedbackReceipt, FeedbackReceiptError>::success(

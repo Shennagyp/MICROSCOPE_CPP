@@ -158,6 +158,8 @@ Ports accept capability-specific Core command types. Examples introduced in thei
 
 Each port receives a typed command with correlation IDs, returns a typed immediate submission result (accepted responsibility or rejected), and emits normalized asynchronous feedback through the runtime-provided ingress. It does not mutate Core state. Vendor-specific details remain inside the adapter unless a normalized domain fact exists.
 
+The feedback ingress has a different outcome: Enqueued means that Core accepted ownership of the feedback message; QueueFull and Closed mean it did not. Enqueued is not the AdapterAccepted command fact and must never be used to mark a hardware command as accepted.
+
 Do not create a universal IDevice.Execute(DeviceCommand) port merely to avoid defining real capabilities. Factor shared mechanics only when real ports have identical semantics and lifecycle requirements.
 
 ### 5.5 Runtime state and notifications

@@ -138,9 +138,9 @@ All adapter feedback also carries a normalized fact category and typed payload, 
 
 The initial fact categories are DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure. They describe the kind of fact, not its provenance. For example, DeviceStateObserved may be based on a hardware readback or SDK status. CommandDispatched and TimeoutElapsed remain Core runtime facts and are not adapter feedback kinds.
 
-A present device timestamp has an explicit positive ticks-per-second value. When the adapter cannot provide a valid timebase, it omits the timestamp rather than writing zero as an unknown sentinel.
+A present device timestamp is created with an explicit positive ticks-per-second value; zero is rejected. When the adapter cannot provide a valid timebase, it omits the timestamp rather than writing zero as an unknown sentinel.
 
-When feedback enters Core, the runtime wraps it in Core-owned receipt metadata containing a monotonic steady-clock receipt time and a Core ingress sequence. These are distinct from adapter source sequence and device timestamp. Device timestamps are never compared directly with the Core monotonic clock without a documented clock mapping.
+When feedback enters Core, the runtime wraps it in Core-owned FeedbackReceipt metadata containing a monotonic steady-clock receipt time and a Core ingress sequence that starts at one and increases within the runtime generation. These are distinct from adapter source sequence and device timestamp. Device timestamps are never compared directly with the Core monotonic clock without a documented clock mapping.
 
 Feedback from an old runtime generation or a different/superseded operation, step or command is stale for that work. It may be retained diagnostically but must not mutate current operation state.
 

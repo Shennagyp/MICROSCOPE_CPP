@@ -32,8 +32,7 @@ final class NativeSlidePreviewPane: NSView {
     var isImageFrozen: Bool { imageView.isImageFrozen }
 
     private var droppedFrameCount: UInt64 = 0
-    private var lastPulledFrameCount: UInt64?
-    private var inputFrameRateMeter = PreviewFrameRateMeter()
+    private var inputFrameRateMeter = FrameRateCounterMeter()
     private var previewFrameRateMeter = PreviewFrameRateMeter()
     private var frameRateRefreshTimer: Timer?
     private var currentIsActiveTarget = false
@@ -382,16 +381,7 @@ final class NativeSlidePreviewPane: NSView {
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
-        let now = ProcessInfo.processInfo.systemUptime
-        if let previous = lastPulledFrameCount {
-            if pulled >= previous {
-                inputFrameRateMeter.recordFrames(pulled - previous, at: now)
-            } else {
-                // The native cumulative counter resets at the start of a run.
-                inputFrameRateMeter.reset()
-            }
-        }
-        lastPulledFrameCount = pulled
+        inputFrameRateMeter.record(pulled, at: ProcessInfo.processInfo.systemUptime)
         droppedFrameCount = dropped
         updateFrameStatisticsLabel()
     }

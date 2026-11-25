@@ -4,12 +4,13 @@ import Foundation
 struct PreviewFrameRateMeterTests {
     static func main() {
         testMeasuresPresentedFramesPerSecond()
-        testMeasuresCoalescedInputFrameDeltas()
-        testResetClearsPreviousSession()
         testRateRemainsZeroUntilFirstMeasurementWindow()
         testRateResetsAfterAStall()
         testMeasurementRestartsAfterAStall()
         testNonMonotonicAndInvalidTimestampsAreIgnored()
+        testCounterMeterMeasuresCoalescedPullDeltas()
+        testCounterMeterResetsAfterCounterRestart()
+        testCounterMeterResetsAfterNoProgress()
         print("Preview frame-rate meter tests passed.")
     }
 
@@ -17,31 +18,6 @@ struct PreviewFrameRateMeterTests {
         var meter = PreviewFrameRateMeter()
         for frame in 0...5 {
             meter.recordFrame(at: Double(frame) * 0.1)
-        }
-        precondition(abs(meter.framesPerSecond - 10.0) < 0.000001)
-    }
-
-    private static func testMeasuresCoalescedInputFrameDeltas() {
-        var meter = PreviewFrameRateMeter()
-        meter.recordFrames(1, at: 0.0)
-        meter.recordFrames(2, at: 0.1)
-        meter.recordFrames(1, at: 0.2)
-        meter.recordFrames(1, at: 0.3)
-        meter.recordFrames(1, at: 0.5)
-        precondition(abs(meter.framesPerSecond - 10.0) < 0.000001)
-    }
-
-    private static func testResetClearsPreviousSession() {
-        var meter = PreviewFrameRateMeter()
-        for frame in 0...5 {
-            meter.recordFrame(at: Double(frame) * 0.1)
-        }
-        precondition(meter.framesPerSecond > 0)
-        meter.reset()
-        precondition(meter.framesPerSecond == 0)
-
-        for frame in 0...5 {
-            meter.recordFrame(at: 2.0 + Double(frame) * 0.1)
         }
         precondition(abs(meter.framesPerSecond - 10.0) < 0.000001)
     }
@@ -60,7 +36,6 @@ struct PreviewFrameRateMeterTests {
             meter.recordFrame(at: Double(frame) * 0.1)
         }
         precondition(meter.framesPerSecond > 0)
-
         meter.refresh(at: 1.51)
         precondition(meter.framesPerSecond == 0)
     }
@@ -71,7 +46,6 @@ struct PreviewFrameRateMeterTests {
             meter.recordFrame(at: Double(frame) * 0.1)
         }
         meter.refresh(at: 1.51)
-
         for frame in 0...5 {
             meter.recordFrame(at: 2.0 + Double(frame) * 0.1)
         }
@@ -91,5 +65,32 @@ struct PreviewFrameRateMeterTests {
             meter.recordFrame(at: 5.0 + Double(frame) * 0.1)
         }
         precondition(abs(meter.framesPerSecond - 10.0) < 0.000001)
+    }
+
+    private static func testCounterMeterMeasuresCoalescedPullDeltas() {
+        var meter = FrameRateCounterMeter()
+        meter.record(0, at: 0.0)
+        meter.record(12, at: 0.48)
+        precondition(abs(meter.framesPerSecond - 25.0) < 0.000001)
+    }
+
+    private static func testCounterMeterResetsAfterCounterRestart() {
+        var meter = FrameRateCounterMeter()
+        meter.record(100, at: 1.0)
+        meter.record(112, at: 1.48)
+        precondition(abs(meter.framesPerSecond - 25.0) < 0.000001)
+
+        meter.record(0, at: 1.6)
+        precondition(meter.framesPerSecond == 0)
+    }
+
+    private static func testCounterMeterResetsAfterNoProgress() {
+        var meter = FrameRateCounterMeter()
+        meter.record(0, at: 0.0)
+        meter.record(12, at: 0.48)
+        precondition(meter.framesPerSecond > 0)
+
+        meter.refresh(at: 1.49)
+        precondition(meter.framesPerSecond == 0)
     }
 }

@@ -6,7 +6,6 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -16,37 +15,30 @@
 
 namespace microscope::core {
 
-enum class BoundedFeedbackInboxCreationError {
-    ZeroCapacity,
-    MissingFeedbackLossCallback
-};
+enum class BoundedFeedbackInboxCreationError { ZeroCapacity };
 
-// Thread-safe, typed FIFO ingress for one runtime incarnation. The callback
-// is an independent control path: it must wake the serialized runtime and
-// latch the affected device/operations as unknown. It must not enqueue another
-// feedback item into this inbox.
+// Thread-safe fixed-capacity FIFO for one runtime incarnation. The runtime
+// signal is non-owning and must outlive this inbox. It is the independent,
+// noexcept control path used to wake the serialized owner on enqueue, loss,
+// and closure.
 template <typename TPayload>
 class BoundedFeedbackInbox final : public IFeedbackIngress<TPayload> {
 public:
     using Pointer = std::unique_ptr<BoundedFeedbackInbox>;
-    using FeedbackLossCallback = std::function<void()>;
 
     static Result<Pointer,BoundedFeedbackInboxCreationError> create(
         MicroscopeId microscopeId,
         RuntimeId runtimeId,
         RuntimeGeneration runtimeGeneration,
         std::size_t capacity,
-        FeedbackLossCallback onFeedbackLoss) {
+        IFeedbackRuntimeSignal& runtimeSignal) {
         if(capacity==0)
             return Result<Pointer,BoundedFeedbackInboxCreationError>::failure(
                 BoundedFeedbackInboxCreationError::ZeroCapacity);
-        if(!onFeedbackLoss)
-            return Result<Pointer,BoundedFeedbackInboxCreationError>::failure(
-                BoundedFeedbackInboxCreationError::MissingFeedbackLossCallback);
         return Result<Pointer,BoundedFeedbackInboxCreationError>::success(
             Pointer(new BoundedFeedbackInbox(
                 std::move(microscopeId),std::move(runtimeId),runtimeGeneration,
-                capacity,std::move(onFeedbackLoss))));
+                capacity,runtimeSignal)));
     }
 
     FeedbackSubmitStatus submit(FeedbackEnvelope<TPayload> feedback) override {
@@ -107,23 +99,25 @@ public:
                         tail_=(tail_+1)%capacity_;
                         ++count_;
                         nextSequence_=
-                            nextSequence_==std::numeric_limits<std::uint64_t>::max()?0:nextSequence_+1;
+                            nextSequence_==std::numeric_limits<std::uint64_t>::max()
+                                ? 0 : nextSequence_+1;
                         status=FeedbackSubmitStatus::Enqueued;
                     }
                 }
             }
         }
 
-        if(status==FeedbackSubmitStatus::Enqueued)
+        if(status==FeedbackSubmitStatus::Enqueued) {
             available_.notify_one();
-        else if(notifyClosed)
+            runtimeSignal_->feedbackAvailable();
+        } else if(notifyClosed) {
             available_.notify_all();
-
-        if(notifyFeedbackLoss) {
-            // Do not let adapter callback exceptions escape a native driver
-            // thread. The loss remains latched and observable by the runtime.
-            try { onFeedbackLoss_(); } catch(...) {}
+            runtimeSignal_->feedbackIngressClosed();
         }
+
+        if(notifyFeedbackLoss)
+            runtimeSignal_->feedbackLossDetected();
+
         return status;
     }
 
@@ -153,11 +147,16 @@ public:
     }
 
     void close() {
+        bool notify=false;
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            notify=!closed_;
             closed_=true;
         }
-        available_.notify_all();
+        if(notify) {
+            available_.notify_all();
+            runtimeSignal_->feedbackIngressClosed();
+        }
     }
 
     [[nodiscard]] bool isClosed() const {
@@ -170,8 +169,8 @@ public:
         return feedbackLossLatched_;
     }
 
-    // Only the serialized runtime may acknowledge loss, and only after it
-    // has reconciled all operations/device state affected by the dropped fact.
+    // Only the serialized runtime may acknowledge loss, after reconciling
+    // every operation/device state affected by the rejected feedback.
     void acknowledgeFeedbackLoss() {
         std::lock_guard<std::mutex> lock(mutex_);
         feedbackLossLatched_=false;
@@ -186,19 +185,19 @@ private:
     BoundedFeedbackInbox(
         MicroscopeId microscopeId,RuntimeId runtimeId,
         RuntimeGeneration runtimeGeneration,std::size_t capacity,
-        FeedbackLossCallback onFeedbackLoss)
+        IFeedbackRuntimeSignal& runtimeSignal)
         :microscopeId_(std::move(microscopeId)),
          runtimeId_(std::move(runtimeId)),
          runtimeGeneration_(runtimeGeneration),
          capacity_(capacity),
-         onFeedbackLoss_(std::move(onFeedbackLoss)),
+         runtimeSignal_(&runtimeSignal),
          slots_(capacity) {}
 
     MicroscopeId microscopeId_;
     RuntimeId runtimeId_;
     RuntimeGeneration runtimeGeneration_;
     const std::size_t capacity_;
-    FeedbackLossCallback onFeedbackLoss_;
+    IFeedbackRuntimeSignal* runtimeSignal_;
 
     mutable std::mutex mutex_;
     std::condition_variable available_;

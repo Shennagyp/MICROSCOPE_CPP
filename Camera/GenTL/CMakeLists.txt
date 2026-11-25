@@ -4,11 +4,19 @@ project(CameraGenTL VERSION 0.1.0 LANGUAGES C CXX)
 
 include(CTest)
 
+if(NOT TARGET Camera::Common)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../Common"
+        "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
+endif()
+
 add_library(camera_gentl_consumer_bridge STATIC
     src/ConsumerBridge.cpp
     src/Producer.cpp
+    src/GenTLFrameAdapter.cpp
     include/camera/gentl/ConsumerBridge.h
     include/camera/gentl/Producer.h
+    include/camera/gentl/GenTLFrameAdapter.h
     include/camera/gentl/GenTL_v1_6.h)
 add_library(Camera::GenTLConsumerBridge ALIAS camera_gentl_consumer_bridge)
 
@@ -17,7 +25,9 @@ target_include_directories(camera_gentl_consumer_bridge
     PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
         "$<INSTALL_INTERFACE:include>")
-target_link_libraries(camera_gentl_consumer_bridge PRIVATE ${CMAKE_DL_LIBS})
+target_link_libraries(camera_gentl_consumer_bridge
+    PUBLIC Camera::Common
+    PRIVATE ${CMAKE_DL_LIBS})
 set_target_properties(camera_gentl_consumer_bridge PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     CXX_STANDARD 17
@@ -151,7 +161,7 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         PUBLIC
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
             "$<INSTALL_INTERFACE:include>"
-        PUBLIC ${_camera_genapi_include_dirs})
+        ${_camera_genapi_include_dirs})
     target_link_libraries(camera_gentl_genapi
         PUBLIC Camera::GenTLConsumerBridge Camera::Common ${_camera_genapi_libraries})
     set_target_properties(camera_gentl_genapi PROPERTIES

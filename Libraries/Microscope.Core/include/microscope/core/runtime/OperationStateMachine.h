@@ -30,6 +30,9 @@ enum class StepLifecycleEvent {
     AdapterFailure,
     OperatorActionRequested,
     OperatorConfirmed,
+    // Core starts evaluating an already available estimate/evidence after
+    // DeviceActionCompleted; this is not fabricated device feedback.
+    VerificationStarted,
     VerificationSucceeded,
     VerificationFailed,
     TimeoutElapsed,
@@ -56,9 +59,9 @@ enum class StepLifecycleError {
         OperationStatus current,
         OperationLifecycleEvent event);
 
-// DeviceActionCompleted and OperatorConfirmed are not verification. They move
-// a step to Verifying (possibly via AwaitingObservation); only a Core
-// VerificationSucceeded event can produce StepStatus::Verified.
+// DeviceActionCompleted is not verification. A device observation or an
+// explicit Core VerificationStarted decision moves a step to Verifying; only
+// a Core VerificationSucceeded event can produce StepStatus::Verified.
 [[nodiscard]] Result<
     StepStatus,
     StepLifecycleError> applyStepLifecycleEvent(

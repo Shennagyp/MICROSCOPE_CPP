@@ -2,6 +2,7 @@
 
 #include "microscope/core/equipment/IlluminationSpecifications.h"
 #include "microscope/core/equipment/StageSpecifications.h"
+#include "microscope/core/navigation/DualSlideNavigation.h"
 #include "microscope/core/equipment/OpticalSpecifications.h"
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
@@ -223,6 +224,8 @@ enum class EquipmentDefinitionError {
     DuplicateStageSpecification,
     StageReferencesUnknownComponent,
     StageComponentWrongKind,
+    DuplicateDualSlideCarrierSpecification,
+    DualSlideCarrierReferencesUnknownStage,
     DuplicatePortId,
     DuplicateConnectionId,
     UnknownConnectionFirstPort,
@@ -259,7 +262,8 @@ public:
             std::vector<CameraSpecification> cameraSpecifications = {},
             std::vector<CondenserSpecification> condenserSpecifications = {},
             std::vector<IlluminationSpecification> illuminationSpecifications = {},
-            std::vector<StageSpecification> stageSpecifications = {});
+            std::vector<StageSpecification> stageSpecifications = {},
+            std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications = {});
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponent>& components() const noexcept;
@@ -275,6 +279,8 @@ public:
     illuminationSpecifications() const noexcept;
     [[nodiscard]] const std::vector<StageSpecification>&
     stageSpecifications() const noexcept;
+    [[nodiscard]] const std::vector<DualSlideCarrierSpecification>&
+    dualSlideCarrierSpecifications() const noexcept;
 
 private:
     MicroscopeEquipmentDefinition(
@@ -286,7 +292,8 @@ private:
         std::vector<CameraSpecification> cameraSpecifications,
         std::vector<CondenserSpecification> condenserSpecifications,
         std::vector<IlluminationSpecification> illuminationSpecifications,
-        std::vector<StageSpecification> stageSpecifications);
+        std::vector<StageSpecification> stageSpecifications,
+        std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications);
 
     MicroscopeId microscopeId_;
     std::vector<EquipmentComponent> components_;
@@ -297,6 +304,7 @@ private:
     std::vector<CondenserSpecification> condenserSpecifications_;
     std::vector<IlluminationSpecification> illuminationSpecifications_;
     std::vector<StageSpecification> stageSpecifications_;
+    std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications_;
 };
 
 } // namespace microscope::core

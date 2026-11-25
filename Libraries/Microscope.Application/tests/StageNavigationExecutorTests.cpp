@@ -313,6 +313,25 @@ void testHomeThenRestoredMove() {
           referenced.position.transverse().positionIsUsable(),
           "verified home evidence establishes both stage-plane references");
 
+    auto ordinaryPositionPath = take(
+        application::motion::StagePositionFeedbackReducer::reduce(
+            unknownPosition, *homeResult, fixture.runtime->feedbackLossLatched()));
+    auto wrongHomeEvidence = application::motion::StageNavigationExecutor::
+        continueAfterVerifiedHoming(
+            homeExecution,
+            installedCarrier,
+            ordinaryPositionPath,
+            policy,
+            id<core::StepId>("unapproved-move-step"),
+            id<core::CommandId>("unapproved-move-command"),
+            port,
+            *fixture.runtime);
+    check(!wrongHomeEvidence &&
+          wrongHomeEvidence.error().code ==
+              application::motion::StageNavigationExecutionErrorCode::HomeReferenceNotApplied &&
+          port.moveToCalls == 0,
+          "ordinary position reduction cannot authorize continuation after a verified home step");
+
     take(fixture.runtime->createStep(
         id<core::OperationId>("home-operation"),
         id<core::StepId>("restored-move-step")));
@@ -320,7 +339,7 @@ void testHomeThenRestoredMove() {
         application::motion::StageNavigationExecutor::continueAfterVerifiedHoming(
             homeExecution,
             installedCarrier,
-            referenced.position,
+            referenced,
             policy,
             id<core::StepId>("restored-move-step"),
             id<core::CommandId>("restored-move-command"),
@@ -393,7 +412,9 @@ void testHomeContinuationRequiresVerifiedStep() {
         continueAfterVerifiedHoming(
             execution,
             installedCarrier,
-            unknownPosition,
+            application::motion::StagePositionFeedbackReduction{
+                unknownPosition,
+                application::motion::StagePositionFeedbackDisposition::InvalidatedAfterFeedbackLoss},
             policy,
             id<core::StepId>("guard-move-step"),
             id<core::CommandId>("guard-move-command"),

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "microscope/application/motion/StageMotionCommandDispatcher.h"
+#include "microscope/application/motion/StagePositionFeedbackReducer.h"
 #include "microscope/core/navigation/StageNavigationPlanner.h"
 
 #include <optional>
@@ -17,6 +18,8 @@ enum class StageNavigationExecutionErrorCode {
     CommandContextRejected,
     NotAwaitingHoming,
     HomeStepNotVerified,
+    HomeReferenceNotApplied,
+    FeedbackLossUnresolved,
     RestoredTargetRejected,
     MoveStepDispatchRejected,
     ActiveStepNotVerified,
@@ -100,7 +103,7 @@ public:
     [[nodiscard]] static Result continueAfterVerifiedHoming(
         const StageNavigationExecution& execution,
         const core::DualSlideCarrierState& carrier,
-        const core::StagePositionState& positionAfterHoming,
+        const StagePositionFeedbackReduction& verifiedHomeReduction,
         const core::StageHomingPolicy& homingPolicy,
         core::StepId restoredMoveStepId,
         core::CommandId restoredMoveCommandId,
@@ -126,9 +129,21 @@ public:
                 StageNavigationExecutionErrorCode::HomeStepNotVerified,
                 std::nullopt, std::nullopt, std::nullopt});
         }
+        if (runtime.feedbackLossLatched()) {
+            return Result::failure(StageNavigationExecutionError{
+                StageNavigationExecutionErrorCode::FeedbackLossUnresolved,
+                std::nullopt, std::nullopt,
+                core::SerializedOperationRuntimeError::FeedbackLossUnresolved});
+        }
+        if (verifiedHomeReduction.disposition !=
+            StagePositionFeedbackDisposition::HomeReferenceApplied) {
+            return Result::failure(StageNavigationExecutionError{
+                StageNavigationExecutionErrorCode::HomeReferenceNotApplied,
+                std::nullopt, std::nullopt, std::nullopt});
+        }
 
         auto restoredCommand = core::StageNavigationPlanner::resolveAfterHoming(
-            carrier, homePlan->target, positionAfterHoming, homingPolicy);
+            carrier, homePlan->target, verifiedHomeReduction.position, homingPolicy);
         if (!restoredCommand) {
             return Result::failure(StageNavigationExecutionError{
                 StageNavigationExecutionErrorCode::RestoredTargetRejected,

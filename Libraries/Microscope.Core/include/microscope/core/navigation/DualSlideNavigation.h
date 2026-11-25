@@ -122,6 +122,7 @@ public:
     const SlideGeometry& geometry() const noexcept;
     const std::array<SlideCornerMeasurement,4>& cornerMeasurements() const noexcept;
     double maximumFitResidualMicrometers() const noexcept;
+    double acceptedMaximumFitResidualMicrometers() const noexcept;
     double rmsFitResidualMicrometers() const noexcept;
     const std::array<double,4>& cornerFitResidualsMicrometers() const noexcept;
     Result<StagePlanePoint,SlideRegistrationError> toStage(SlideLocalPoint) const;
@@ -133,7 +134,7 @@ public:
         ObservationSource horizontalSource,ObservationSource transverseSource) const;
 private:
     SlideRegistration(SlideId,CalibrationRevisionId,DualSlideSlot,SlideGeometry,
-        std::array<SlideCornerMeasurement,4>,std::array<double,6>,std::array<double,4>,double,double,double);
+        std::array<SlideCornerMeasurement,4>,std::array<double,6>,std::array<double,4>,double,double,double,double);
     SlideId slideId_;
     CalibrationRevisionId revision_;
     DualSlideSlot slot_;
@@ -143,6 +144,7 @@ private:
     std::array<double,6> transform_;
     std::array<double,4> cornerResiduals_;
     double maximumCornerUncertainty_;
+    double acceptedMaximumFitResidualMicrometers_;
     double maxResidual_;
     double rmsResidual_;
 };

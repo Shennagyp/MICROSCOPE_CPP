@@ -77,6 +77,30 @@ core::FeedbackEnvelope<core::StageMotionFeedbackPayload> positionFeedback(
         metadata, core::StageMotionFeedbackPayload{std::move(observation)});
 }
 
+core::FeedbackEnvelope<core::StageMotionFeedbackPayload> homeReferenceFeedback(
+    const core::RuntimeDeviceCorrelation& device,
+    const core::OperationId& operation,
+    const core::StepId& step,
+    const core::CommandId& command) {
+    auto x = take(core::AxisPosition::create(
+        id<core::StageAxisId>("x"), 0.0, core::AxisCoordinateUnit::Micrometers));
+    auto y = take(core::AxisPosition::create(
+        id<core::StageAxisId>("y"), 0.0, core::AxisCoordinateUnit::Micrometers));
+    auto xObservation = take(core::AxisPositionObservation::create(
+        x, 0.5, core::StagePositionEvidence::ControllerReported));
+    auto yObservation = take(core::AxisPositionObservation::create(
+        y, 0.25, core::StagePositionEvidence::EncoderMeasured));
+    auto payload = take(core::StageHomeReferenceObservation::create(
+        {xObservation, yObservation}));
+    auto metadata = take(core::FeedbackMetadata::create(
+        core::FeedbackCorrelation{
+            device, core::OperationCorrelation{operation, step, command}},
+        core::FeedbackKind::HomeReferenceEstablished,
+        core::ObservationSource::HardwareReadback));
+    return core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
+        metadata, core::StageMotionFeedbackPayload{std::move(payload)});
+}
+
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> motionStateFeedback(
     const core::RuntimeDeviceCorrelation& device) {
     auto observation = take(core::AxisMotionStateObservation::create(
@@ -218,6 +242,51 @@ int main() {
           std::abs(reapplied.position.horizontal().position()->value() - 130.0) < 1e-9 &&
           !reapplied.position.horizontal().positionIsUsable(),
           "fresh readback updates the coordinate after reconciliation but does not silently re-home the stage");
+
+    const auto homeAxes = take(core::StageAxisSet::create({
+        id<core::StageAxisId>("x"), id<core::StageAxisId>("y")}));
+    const auto homeOperation = id<core::OperationId>("home-op");
+    const auto homeStep = id<core::StepId>("home-step");
+    const auto homeCommand = id<core::CommandId>("home-command");
+    take(runtime->createOperation(homeOperation));
+    take(runtime->startOperation(homeOperation));
+    take(runtime->createStep(homeOperation, homeStep));
+    take(runtime->dispatchCommand(homeOperation, homeStep, homeCommand, currentSession));
+    take(runtime->recordAdapterAccepted(homeOperation, homeStep));
+
+    auto homeResult = process(homeReferenceFeedback(
+        currentSession, homeOperation, homeStep, homeCommand));
+    auto prematureHome = application::motion::StagePositionFeedbackReducer::
+        applyVerifiedHomeReference(
+            state, homeResult, homeAxes, *runtime, homeOperation, homeStep);
+    check(!prematureHome &&
+          prematureHome.error().code ==
+              application::motion::StagePositionFeedbackReducerErrorCode::HomeStepNotVerified &&
+          !state.horizontal().positionIsUsable() &&
+          !state.transverse().positionIsUsable(),
+          "a home-reference fact cannot restore machine coordinates before the runtime verifies its step");
+
+    auto verifiedHomeStep = take(
+        runtime->recordStepVerification(homeOperation, homeStep, true));
+    auto referenced = take(
+        application::motion::StagePositionFeedbackReducer::applyVerifiedHomeReference(
+            state, homeResult, homeAxes, *runtime, homeOperation, homeStep));
+    check(verifiedHomeStep == core::StepStatus::Verified &&
+          referenced.disposition ==
+              application::motion::StagePositionFeedbackDisposition::HomeReferenceApplied &&
+          referenced.position.horizontal().positionIsUsable() &&
+          referenced.position.transverse().positionIsUsable() &&
+          referenced.position.horizontal().position()->value() == 0.0 &&
+          referenced.position.transverse().position()->value() == 0.0,
+          "only the verified complete X/Y home-reference fact restores the stage plane");
+
+    auto ignoredAsTelemetry = take(
+        application::motion::StagePositionFeedbackReducer::reduce(
+            state, homeResult, runtime->feedbackLossLatched()));
+    check(ignoredAsTelemetry.disposition ==
+              application::motion::StagePositionFeedbackDisposition::IgnoredNonPositionPayload &&
+          !ignoredAsTelemetry.position.horizontal().positionIsUsable(),
+          "home-reference evidence cannot be applied through the ordinary position-telemetry path");
 
     runtime->closeFeedbackIngress();
 

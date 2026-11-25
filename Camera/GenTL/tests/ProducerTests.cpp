@@ -221,7 +221,11 @@ int runProducerTests(int argc, char** argv) {
         }
         quarantineBridge.reset();
         if (retainedBridge.expired()) return 24;
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "ProducerTests exception: %s\\n", error.what());
+        result = 99;
     } catch (...) {
+        std::fprintf(stderr, "ProducerTests unknown exception\\n");
         result = 99;
     }
 

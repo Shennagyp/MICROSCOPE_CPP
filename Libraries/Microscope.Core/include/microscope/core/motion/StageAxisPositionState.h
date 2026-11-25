@@ -28,6 +28,9 @@ public:
     static Result<StageAxisPositionState,StageAxisPositionStateError> homed(
         EquipmentComponentId stageComponentId,AxisPosition homePosition,double positionErrorBound,
         StagePositionEvidence evidence,ObservationSource source);
+    static Result<StageAxisPositionState,StageAxisPositionStateError> homed(
+        EquipmentComponentId stageComponentId,const AxisPositionObservation& observation,
+        ObservationSource source);
 
     Result<StageAxisPositionState,StageAxisPositionStateError> afterCommandedDisplacement(
         const AxisDisplacement&,std::optional<double> additionalErrorBound) const;

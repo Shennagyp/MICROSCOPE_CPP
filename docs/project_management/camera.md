@@ -3,7 +3,7 @@
 **Canonical project:** the reusable camera subsystem in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Current Camera implementation branch:** `camera-v.2.0`  
-**Current Camera branch HEAD:** `af19d7e08b24469d7df101baef1d4632019d7937`  
+**Current Camera branch HEAD:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
 **Camera library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
 **Current Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
 **Roadmap revision:** Camera Module v2.0 — non-Qt, no camera-UI deliverable
@@ -273,7 +273,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 - The existing CMake tree contains `Camera::Common` and `Amscope::Driver` as the primary non-Qt surface. Legacy Qt adapter/widgets targets remain optional and excluded from default build/install; the Qt facade header is physically separated under `Camera/Amscope/legacy/qt`.
 - The inspected Optika application target links `Amscope::Driver` and Apple frameworks; its camera models, Objective-C++ bridge and frame-feed adapter are application-owned.
 - Source comparison found the 307 files under `Camera/` identical between `OPTIKA-B293-DUALSLIDE-APP-v.0.9` and `camera-v.2.0`; no Camera library copy was missing.\n- Non-Qt CI run [#45651928831](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45651928831) passed on Intel x86_64 and Apple Silicon arm64 at `5cf5bc352e2df926a2cc0317acaccfd3a912602d`, with 11/11 non-Qt CTest tests and driver/diagnostic architecture checks. This is CI evidence, not physical-camera qualification.
-- A non-Qt `AmcamPublicApiTests.cpp` target has been added to verify public API type/lifecycle invariants without opening hardware. The Qt facade header has been moved out of the `Amscope::Driver` public include directory. CI run [#45653938133](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45653938133) is pending against source commit `af19d7e08b24469d7df101baef1d4632019d7937`; it includes installation and syntax compilation of the non-Qt public headers.\n- The exact current Optika branch head inspected for this revision is `4c278aed3af29e51b7485a2902080d84314af73b`. This is an application source inspection checkpoint, not a test result.
+- A non-Qt `AmcamPublicApiTests.cpp` target has been added to verify public API type/lifecycle invariants without opening hardware. The Qt facade header has been moved out of the `Amscope::Driver` public include directory. CI run [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) is queued against source commit `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`; it includes installation and syntax compilation of the non-Qt public headers.\n- The exact current Optika branch head inspected for this revision is `4c278aed3af29e51b7485a2902080d84314af73b`. This is an application source inspection checkpoint, not a test result.
 
 ### Unresolved risks and gaps
 

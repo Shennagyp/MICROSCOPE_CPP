@@ -368,7 +368,7 @@ Every adapter feedback item carries a runtime/device scope:
 
 Feedback associated with an active operation additionally carries OperationId and StepId as one indivisible correlation, plus CommandId where related to a dispatched command. Unsolicited telemetry has no operation correlation; it cannot satisfy an active operation's completion predicate.
 
-Every item also carries observation/event kind, source/provenance, optional adapter/device source sequence, optional device timestamp with its clock domain, and a typed payload or normalized diagnostic. The Core stamps receipt time using its monotonic clock and assigns its own ingress sequence.
+Every item also carries a normalized feedback fact category, source/provenance, optional adapter/device source sequence, optional device timestamp with its clock domain, and a typed payload or normalized diagnostic. Initial adapter fact categories are DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure. CommandDispatched and TimeoutElapsed remain Core runtime facts. The Core stamps receipt time using its monotonic clock and assigns its own ingress sequence.
 
 The Core uses these identifiers/generations to reject duplicate, stale, unrelated or late feedback. A callback from a previous operation or runtime generation must not update the current operation merely because it concerns the same physical device.
 

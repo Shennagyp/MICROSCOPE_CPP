@@ -181,14 +181,14 @@ A STEP/DIR driver performs calibrated physical-unit-to-step conversion and deter
 
 The OPTIKA B293 dual-slide carrier is declared against one StageSpecification and two distinct linear axes in the horizontal stage plane. It has exactly Left and Right slots. Each occupied physical Slide has its own SlideGeometry and four-corner SlideRegistration. The four measured correspondences are fitted to an affine 2D transform, and maximum residual is checked against an explicit acceptance threshold. Both registrations map into the same stage machine-coordinate plane; slide-local coordinates are never inferred from tile order or the other slide's registration.
 
-Carrier occupancy and registration are runtime state, separate from static equipment definition and persistent Slide identity. Each SlideRegistration has a CalibrationRevisionId. A SlideNavigationTarget captures SlideId, slide-local point and registration revision; command generation rejects a changed revision. Re-homing the stage does not restore a slide registration if the physical slide moved in its slot.
+Carrier occupancy and registration are runtime state, separate from static equipment definition and persistent Slide identity. Each SlideRegistration has a CalibrationRevisionId and retains its configured maximum fit-residual acceptance limit as well as the observed residuals. A SlideNavigationTarget captures SlideId, slide-local point and registration revision; command generation rejects a changed revision. Re-homing the stage does not restore a slide registration if the physical slide moved in its slot.
 
 StageNavigationPlanner evaluates the per-axis accumulated error against a StageHomingPolicy expressed in micrometers. When both references are valid and within policy it returns a coordinated X/Y MoveAxesTo. If either axis has an invalid reference, unknown error bound or threshold exceedance, it returns HomeAxes for both in-plane axes while preserving the original target. After verified homing, resolveAfterHoming checks fresh position/reference evidence, revalidates the saved registration revision and generates the new absolute machine-coordinate command. The target is not stored as a pre-home machine coordinate.
 
 
 ### Stage position ownership and accumulated error
 
-StageAxisPositionState is the Core per-axis runtime value for machine position. It distinguishes an unusable/unreferenced coordinate from a position usable in the current machine frame, and retains the evidence kind and ObservationSource.
+StageAxisPositionState is the Core per-axis runtime value for machine position. It is scoped to one installed EquipmentComponentId and StageAxisId; navigation rejects axis states belonging to a different stage even when axis names and units match. It distinguishes an unusable/unreferenced coordinate from a position usable in the current machine frame, and retains the evidence kind and ObservationSource.
 
 Commanded movement updates the estimated coordinate only while the machine reference and starting position are valid. Its additional modeled error bound is accumulated conservatively. If either the previous or additional bound is unknown, the resulting bound remains unknown.
 

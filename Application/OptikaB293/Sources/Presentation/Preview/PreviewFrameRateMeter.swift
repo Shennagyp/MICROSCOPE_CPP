@@ -96,8 +96,10 @@ struct FrameRateCounterMeter {
         let delta = cumulativeCount - previousCount
         guard delta > 0 else { return }
 
-        if let lastProgressAt = lastProgressAt,
-           timestamp - lastProgressAt > staleInterval {
+        // Rebase after idle time even when no frame has ever progressed in
+        // this session (for example, the preview view mounted before camera start).
+        let lastProgress = lastProgressAt ?? baselineAt
+        if timestamp - lastProgress > staleInterval {
             framesPerSecond = 0
             self.baselineCount = cumulativeCount
             self.baselineAt = timestamp

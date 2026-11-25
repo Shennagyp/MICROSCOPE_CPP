@@ -11,6 +11,7 @@ struct PreviewFrameRateMeterTests {
         testCounterMeterMeasuresCoalescedPullDeltas()
         testCounterMeterResetsAfterCounterRestart()
         testCounterMeterResetsAfterNoProgress()
+        testCounterMeterIgnoresPreAcquisitionIdleTime()
         print("Preview frame-rate meter tests passed.")
     }
 
@@ -92,5 +93,17 @@ struct PreviewFrameRateMeterTests {
 
         meter.refresh(at: 1.49)
         precondition(meter.framesPerSecond == 0)
+    }
+
+    private static func testCounterMeterIgnoresPreAcquisitionIdleTime() {
+        var meter = FrameRateCounterMeter()
+        meter.record(0, at: 0.0)
+
+        // The UI existed for ten seconds before the camera began delivering.
+        meter.record(1, at: 10.0)
+        precondition(meter.framesPerSecond == 0)
+
+        meter.record(14, at: 10.52)
+        precondition(abs(meter.framesPerSecond - (13.0 / 0.52)) < 0.000001)
     }
 }

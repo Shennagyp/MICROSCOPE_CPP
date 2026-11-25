@@ -201,7 +201,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer validated; 4B stage-motion, registration identity and homing/navigation planning contracts implemented; 4C runtime remains next**
+**In progress — 4A lifecycle reducer validated; 4B stage-motion/navigation contracts implemented; 4C bounded feedback ingress implemented, serialized runtime/reconciliation remain next**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
@@ -232,6 +232,8 @@ The equipment definition now describes installed topology and static capabilitie
 - Bound every StageAxisPositionState to its installed EquipmentComponentId and StageAxisId; planning and slide position estimation reject cross-stage state even where two microscopes reuse the same axis identifiers.
 - Retain the registration's configured fit-residual acceptance threshold with the CalibrationRevisionId, alongside actual per-corner, maximum and RMS residual evidence.
 - Added CalibrationRevisionId to each SlideRegistration and SlideNavigationTarget to preserve the exact slide placement used by a navigation request.
+- Implemented BoundedFeedbackInbox<TPayload> as a fixed-capacity thread-safe ring with Core-assigned FIFO sequences, runtime-scope rejection, explicit close and an independent overflow control callback. QueueFull does not consume a sequence; overflow remains latched until the runtime acknowledges reconciliation.
+- Added tests for capacity/closure, queue overflow and loss callback, runtime-scope rejection, gap-free sequence assignment and concurrent multi-producer FIFO order.
 - Added StageNavigationPlanner and StageHomingPolicy. It validates the target and registration before planning, selects direct coordinated X/Y movement while within both error thresholds, or homes both axes otherwise. After verified homing it re-resolves the saved slide-local point only if the registration revision is unchanged.
 - Propagates slide-registration uncertainty through the inverse affine transform with the rectangular affine interpolation L1 bound and refuses slide-local position estimates outside the selected slide geometry.
 - Added focused Core tests and CMake targets for the motion port, dual-slide mapping, position tracking and homing/navigation planning. Hardware drivers and serialized runtime execution are not part of this slice.
@@ -338,8 +340,10 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 ## Immediate next implementation task
 
-The Phase 4B stage-motion port, dual-slide registration, position-state model and StageNavigationPlanner are implemented as Core contracts/pure planning functions.
+The Phase 4B motion/registration/planning contracts and the first Phase 4C ingress primitive are implemented. BoundedFeedbackInbox<TPayload> provides typed fixed-capacity FIFO storage and overflow notification, but the serialized runtime consumer is not yet implemented.
 
-Proceed with Phase 4C: one serialized runtime owner per microscope, feedback ingress and reconciliation that updates these position values only from correctly correlated feedback. The runtime must dispatch the returned HomeAxes or MoveAxesTo plan, preserve the SlideNavigationTarget during homing and call resolveAfterHoming only after the home action is verified. Phase 4D/4E then execute dependent operations and verify physical arrival from fresh feedback.
+Continue Phase 4C with one single-writer runtime owner per microscope incarnation. It must consume FeedbackReceipt values in sequence order, validate runtime/device-session/operation/command correlation, reduce AxisPositionObservation values into the scoped StageAxisPositionState, and treat feedback-loss latches as unknown device/operation state until explicit reconciliation. Driver callbacks only submit to the inbox; they never mutate Core state.
+
+The runtime must dispatch the returned HomeAxes or MoveAxesTo plan, preserve the SlideNavigationTarget during homing and call resolveAfterHoming only after the home action is verified. Phase 4D/4E then execute dependent operations and verify physical arrival from fresh feedback.
 
 Controller-specific STEP/DIR generation and vendor protocols remain in external driver libraries.

@@ -219,12 +219,19 @@ bool writeEnumeration(GenApi::IEnumeration& enumeration,
 } // namespace
 
 GenApiFeatureAccess::GenApiFeatureAccess(DeviceSession device)
-    : nodeMap_(std::make_shared<DeviceSession>(std::move(device))) {}
+    : GenApiFeatureAccess(std::make_shared<GenApiNodeMap>(
+          std::make_shared<DeviceSession>(std::move(device)))) {}
+
+GenApiFeatureAccess::GenApiFeatureAccess(
+    std::shared_ptr<GenApiNodeMap> nodeMap)
+    : nodeMap_(std::move(nodeMap)) {
+    if (!nodeMap_) throw std::invalid_argument("GenApi feature access requires a node map.");
+}
 
 camera::CameraFeatureResult<std::vector<Descriptor>>
 GenApiFeatureAccess::featureDescriptors() {
     try {
-        return nodeMap_.withNodeMap([](auto& nodeMap)
+        return nodeMap_->withNodeMap([](auto& nodeMap)
             -> camera::CameraFeatureResult<std::vector<Descriptor>> {
             GenApi::NodeList_t nodes;
             nodeMap._GetNodes(nodes);
@@ -255,7 +262,7 @@ camera::CameraFeatureResult<Value>
 GenApiFeatureAccess::readFeature(std::string_view name) {
     const std::string featureName(name);
     try {
-        return nodeMap_.withNodeMap([&](auto& nodeMap)
+        return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraFeatureResult<Value> {
             auto* node = nodeMap._GetNode(GenICam::gcstring(featureName.c_str()));
             return readNode(node, featureName);
@@ -278,7 +285,7 @@ GenApiFeatureAccess::writeFeature(
     std::string_view name, const Value& value) {
     const std::string featureName(name);
     try {
-        return nodeMap_.withNodeMap([&](auto& nodeMap)
+        return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraFeatureResult<std::monostate> {
             auto* node = nodeMap._GetNode(GenICam::gcstring(featureName.c_str()));
             if (!node) {

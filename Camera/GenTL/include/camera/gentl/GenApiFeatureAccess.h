@@ -13,6 +13,7 @@ namespace camera::gentl {
 class GenApiFeatureAccess final : public camera::ICameraFeatureAccess {
 public:
     explicit GenApiFeatureAccess(DeviceSession device);
+    explicit GenApiFeatureAccess(std::shared_ptr<GenApiNodeMap> nodeMap);
 
     GenApiFeatureAccess(const GenApiFeatureAccess&) = delete;
     GenApiFeatureAccess& operator=(const GenApiFeatureAccess&) = delete;
@@ -30,7 +31,7 @@ public:
                  const camera::CameraFeatureValue& value) override;
 
 private:
-    GenApiNodeMap nodeMap_;
+    std::shared_ptr<GenApiNodeMap> nodeMap_;
 };
 
 } // namespace camera::gentl

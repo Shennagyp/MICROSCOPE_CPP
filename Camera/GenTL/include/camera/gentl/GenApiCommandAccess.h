@@ -12,6 +12,7 @@ namespace camera::gentl {
 class GenApiCommandAccess final : public camera::ICameraCommandAccess {
 public:
     explicit GenApiCommandAccess(DeviceSession device);
+    explicit GenApiCommandAccess(std::shared_ptr<GenApiNodeMap> nodeMap);
 
     GenApiCommandAccess(const GenApiCommandAccess&) = delete;
     GenApiCommandAccess& operator=(const GenApiCommandAccess&) = delete;
@@ -28,7 +29,7 @@ public:
     isCommandDone(std::string_view name) override;
 
 private:
-    GenApiNodeMap nodeMap_;
+    std::shared_ptr<GenApiNodeMap> nodeMap_;
 };
 
 } // namespace camera::gentl

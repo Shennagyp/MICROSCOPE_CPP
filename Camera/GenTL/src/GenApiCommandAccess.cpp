@@ -44,12 +44,19 @@ std::optional<Descriptor> describeCommand(GenApi::INode* node) {
 } // namespace
 
 GenApiCommandAccess::GenApiCommandAccess(DeviceSession device)
-    : nodeMap_(std::make_shared<DeviceSession>(std::move(device))) {}
+    : GenApiCommandAccess(std::make_shared<GenApiNodeMap>(
+          std::make_shared<DeviceSession>(std::move(device)))) {}
+
+GenApiCommandAccess::GenApiCommandAccess(
+    std::shared_ptr<GenApiNodeMap> nodeMap)
+    : nodeMap_(std::move(nodeMap)) {
+    if (!nodeMap_) throw std::invalid_argument("GenApi command access requires a node map.");
+}
 
 camera::CameraCommandResult<std::vector<Descriptor>>
 GenApiCommandAccess::commandDescriptors() {
     try {
-        return nodeMap_.withNodeMap([](auto& nodeMap)
+        return nodeMap_->withNodeMap([](auto& nodeMap)
             -> camera::CameraCommandResult<std::vector<Descriptor>> {
             GenApi::NodeList_t nodes;
             nodeMap._GetNodes(nodes);
@@ -77,7 +84,7 @@ camera::CameraCommandResult<std::monostate>
 GenApiCommandAccess::executeCommand(std::string_view name) {
     const std::string commandName(name);
     try {
-        return nodeMap_.withNodeMap([&](auto& nodeMap)
+        return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraCommandResult<std::monostate> {
             auto* node = nodeMap._GetNode(GenICam::gcstring(commandName.c_str()));
             if (!node || node->GetPrincipalInterfaceType() != GenApi::intfICommand)
@@ -113,7 +120,7 @@ camera::CameraCommandResult<bool>
 GenApiCommandAccess::isCommandDone(std::string_view name) {
     const std::string commandName(name);
     try {
-        return nodeMap_.withNodeMap([&](auto& nodeMap)
+        return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraCommandResult<bool> {
             auto* node = nodeMap._GetNode(GenICam::gcstring(commandName.c_str()));
             if (!node || node->GetPrincipalInterfaceType() != GenApi::intfICommand)

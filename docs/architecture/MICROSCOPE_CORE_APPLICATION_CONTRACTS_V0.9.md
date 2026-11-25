@@ -140,7 +140,7 @@ The initial fact categories are DeviceAcknowledged, DeviceProgress, DeviceAction
 
 A present device timestamp is created with an explicit positive ticks-per-second value; zero is rejected. When the adapter cannot provide a valid timebase, it omits the timestamp rather than writing zero as an unknown sentinel.
 
-When feedback enters Core, the runtime wraps it in Core-owned FeedbackReceipt metadata containing a monotonic steady-clock receipt time and a Core ingress sequence that starts at one and increases within the runtime generation. These are distinct from adapter source sequence and device timestamp. Device timestamps are never compared directly with the Core monotonic clock without a documented clock mapping.
+When feedback enters Core, the runtime wraps it in Core-owned FeedbackReceipt metadata containing a monotonic steady-clock receipt time and a Core ingress sequence that starts at one and increases within the runtime generation. These are distinct from adapter source sequence and device timestamp. The C++ FeedbackKind explicitly distinguishes DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure; provenance remains a separate ObservationSource. DeviceTimestamp can only be created with a positive tick rate. Device timestamps are never compared directly with the Core monotonic clock without a documented clock mapping.
 
 Feedback from an old runtime generation or a different/superseded operation, step or command is stale for that work. It may be retained diagnostically but must not mutate current operation state.
 
@@ -174,7 +174,7 @@ A device need not emit every intermediate state. Missing acknowledgement/progres
 
 The runtime-level API is expected to expose an operation handle containing OperationId, an immutable operation snapshot/query, an asynchronous cancellation request and subscription to immutable operation events/snapshots.
 
-Phase 1 defines only the value contracts needed for this boundary: OperationSnapshot in Core and RuntimeHandle, OperationHandle, RuntimeSnapshot and OperationView in Application. It does not yet implement the runtime manager, query service, cancellation path, subscription token or callback executor. Those require the Phase 4 runtime lifecycle and serialized-delivery implementation; subscription lifetime and delivery context must be defined together rather than guessed in Phase 1.
+Phase 1 defines only the value contracts needed for this boundary: OperationSnapshot in Core and RuntimeHandle, OperationHandle, RuntimeSnapshot and OperationView in Application. OperationView contains the Core OperationSnapshot rather than duplicating status/revision fields. RuntimeHandle/OperationHandle are locator values, not authorization tokens; every Application operation revalidates the handle against the active runtime generation. It does not yet implement the runtime manager, query service, cancellation path, subscription token or callback executor. Those require the Phase 4 runtime lifecycle and serialized-delivery implementation; subscription lifetime and delivery context must be defined together rather than guessed in Phase 1.
 
 A cancellation request is not proof that hardware stopped. Late feedback cannot convert terminal failure/cancellation into success. Core reconciles physical state before a dependent operation requiring a known safe state.
 

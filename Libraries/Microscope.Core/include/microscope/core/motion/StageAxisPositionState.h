@@ -28,12 +28,12 @@ enum class StageAxisPositionStateError {
 class StageAxisPositionState final {
 public:
     static Result<StageAxisPositionState,StageAxisPositionStateError> unknown(
-        StageAxisId axisId,AxisCoordinateUnit unit);
+        EquipmentComponentId stageComponentId,StageAxisId axisId,AxisCoordinateUnit unit);
 
     // Called only after Core has verified a completed homing/reference action
     // and received the final reference position evidence.
     static Result<StageAxisPositionState,StageAxisPositionStateError> homed(
-        AxisPosition homePosition,double positionErrorBound,
+        EquipmentComponentId stageComponentId,AxisPosition homePosition,double positionErrorBound,
         StagePositionEvidence evidence,ObservationSource source);
 
     Result<StageAxisPositionState,StageAxisPositionStateError> afterCommandedDisplacement(
@@ -45,6 +45,7 @@ public:
 
     StageAxisPositionState invalidateMachineReference() const;
 
+    const EquipmentComponentId& stageComponentId() const noexcept;
     const StageAxisId& axisId() const noexcept;
     AxisCoordinateUnit unit() const noexcept;
     const std::optional<AxisPosition>& position() const noexcept;
@@ -60,12 +61,13 @@ public:
 
 private:
     StageAxisPositionState(
-        StageAxisId axisId,AxisCoordinateUnit unit,
+        EquipmentComponentId stageComponentId,StageAxisId axisId,AxisCoordinateUnit unit,
         std::optional<AxisPosition> position,
         std::optional<double> accumulatedErrorBound,
         StagePositionEvidence evidence,ObservationSource source,
         StageMachineReferenceStatus referenceStatus);
 
+    EquipmentComponentId stageComponentId_;
     StageAxisId axisId_;
     AxisCoordinateUnit unit_;
     std::optional<AxisPosition> position_;

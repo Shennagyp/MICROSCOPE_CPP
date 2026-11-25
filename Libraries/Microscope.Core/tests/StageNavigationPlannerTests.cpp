@@ -187,6 +187,56 @@ int main() {
     check(!foreignStage&&foreignStage.error()==StageNavigationPlanningError::StageComponentMismatch,
           "rejects same-named axes from a different installed stage");
 
+    const auto mmAxis=[](const char* axisId) {
+        return take(AxisSpecification::create(
+            id<StageAxisId>(axisId),AxisMotionType::Linear,AxisCoordinateUnit::Millimeters,
+            take(AxisOperatingRange::create(-100.0,150.0,AxisCoordinateUnit::Millimeters)),
+            take(PositiveAxisResolution::create(0.001)),std::nullopt,std::nullopt,std::nullopt,
+            AxisPositionFeedbackCapability::DeviceReported));
+    };
+    const auto mmStage=take(StageSpecification::create(
+        id<EquipmentComponentId>("mm-stage"),{mmAxis("mm-x"),mmAxis("mm-y")}));
+    const auto mmCarrierSpec=take(DualSlideCarrierSpecification::create(
+        mmStage,id<StageAxisId>("mm-x"),id<StageAxisId>("mm-y"),
+        CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
+    const auto mmLeft=registration(
+        "mm-left",DualSlideSlot::Left,5000,"mm-left-registration-v1");
+    const auto mmRight=registration(
+        "mm-right",DualSlideSlot::Right,95000,"mm-right-registration-v1");
+    const auto mmCarrier=take(DualSlideCarrierState::create(
+        mmCarrierSpec,
+        take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("mm-left"),mmLeft)),
+        take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("mm-right"),mmRight))));
+    auto mmPosition=take(StagePositionState::create(mmCarrierSpec));
+    mmPosition=take(mmPosition.afterVerifiedHomingObservation(
+        take(AxisPositionObservation::create(
+            take(AxisPosition::create(id<StageAxisId>("mm-x"),25.0,AxisCoordinateUnit::Millimeters)),
+            0.003,StagePositionEvidence::EncoderMeasured)),
+        ObservationSource::HardwareReadback));
+    mmPosition=take(mmPosition.afterVerifiedHomingObservation(
+        take(AxisPositionObservation::create(
+            take(AxisPosition::create(id<StageAxisId>("mm-y"),30.0,AxisCoordinateUnit::Millimeters)),
+            0.003,StagePositionEvidence::EncoderMeasured)),
+        ObservationSource::HardwareReadback));
+    const auto mmDirect=StageNavigationPlanner::planToSlidePoint(
+        mmCarrier,id<SlideId>("mm-left"),{20000,10000},mmPosition,policy);
+    check(mmDirect&&std::holds_alternative<StageDirectMovePlan>(mmDirect.value()),
+          "micrometer homing thresholds are converted to millimeters at the axis boundary");
+    if(mmDirect) {
+        const auto& mmMove=std::get<StageDirectMovePlan>(mmDirect.value()).command;
+        check(mmMove.targets()[0].unit()==AxisCoordinateUnit::Millimeters&&
+              std::abs(mmMove.targets()[0].value()-25.0)<1e-9&&
+              std::abs(mmMove.targets()[1].value()-30.0)<1e-9,
+              "slide coordinates are converted into the declared millimeter axis units");
+    }
+    auto mmDrift=take(mmPosition.afterCommandedDisplacement(
+        take(AxisDisplacement::create(id<StageAxisId>("mm-x"),2.0,AxisCoordinateUnit::Millimeters)),
+        0.004));
+    const auto mmRecovery=StageNavigationPlanner::planToSlidePoint(
+        mmCarrier,id<SlideId>("mm-left"),{20000,10000},mmDrift,policy);
+    check(mmRecovery&&std::holds_alternative<StageHomeThenMovePlan>(mmRecovery.value()),
+          "millimeter accumulated error exceeding five micrometers triggers homing");
+
     if(failures!=0) {
         std::cerr<<failures<<" stage navigation planner test(s) failed\n";
         return 1;

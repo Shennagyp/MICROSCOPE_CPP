@@ -1,5 +1,15 @@
 import Foundation
 
+struct ObjectiveExposureProfile: Codable, Equatable {
+    var automaticExposureEnabled: Bool
+    var manualExposureTimeMicroseconds: Int64?
+
+    static let automatic = ObjectiveExposureProfile(
+        automaticExposureEnabled: true,
+        manualExposureTimeMicroseconds: nil
+    )
+}
+
 struct MicroscopeObjective: Codable, Equatable, Identifiable {
     var id: String
     var name: String
@@ -54,6 +64,7 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
         case targetRayleighSamplingFactor
         case objectives
         case activeObjectiveID
+        case objectiveExposureProfiles
     }
 
     var microscopeName: String
@@ -70,6 +81,11 @@ struct MicroscopeOpticalConfiguration: Codable, Equatable {
     var targetRayleighSamplingFactor: Double
     var objectives: [MicroscopeObjective]
     var activeObjectiveID: String
+    var objectiveExposureProfiles: [String: ObjectiveExposureProfile] = [:]
+
+    func exposureProfile(for objectiveID: String) -> ObjectiveExposureProfile {
+        objectiveExposureProfiles[objectiveID] ?? .automatic
+    }
 
     static let optikaB293 = MicroscopeOpticalConfiguration(
         microscopeName: "OPTIKA B-293",
@@ -182,6 +198,10 @@ extension MicroscopeOpticalConfiguration {
         )
         objectives = try container.decode([MicroscopeObjective].self, forKey: .objectives)
         activeObjectiveID = try container.decode(String.self, forKey: .activeObjectiveID)
+        objectiveExposureProfiles = try container.decodeIfPresent(
+            [String: ObjectiveExposureProfile].self,
+            forKey: .objectiveExposureProfiles
+        ) ?? [:]
     }
 }
 

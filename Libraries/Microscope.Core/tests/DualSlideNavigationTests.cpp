@@ -24,6 +24,7 @@ int main(){
  auto left=registration("left",DualSlideSlot::Left,5000);
  auto mapped=left.toStage({37500,12500});
  check(mapped&&std::abs(mapped.value().horizontalMicrometers-42500)<1e-6&&std::abs(mapped.value().transverseMicrometers-32500)<1e-6,"four-corner affine transform maps slide center");
+ check(left.cornerFitResidualsMicrometers()[0]<1e-6&&left.cornerFitResidualsMicrometers()[3]<1e-6,"retains a residual for each measured corner");
  if(mapped){auto back=left.toSlide(mapped.value());check(back&&std::abs(back.value().xMicrometers-37500)<1e-6&&std::abs(back.value().yMicrometers-12500)<1e-6,"inverse transform round trips");}
  check(!left.toStage({75001,1}),"outside slide target rejected");
  auto g=take(SlideGeometry::create(75000,25000));auto src=ObservationSource::OperatorConfirmation;
@@ -38,5 +39,8 @@ int main(){
  auto rslot=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right"),right));
  auto carrier=take(DualSlideCarrierState::create(spec.value(),std::move(lslot),std::move(rslot)));
  check(carrier.registrationFor(id<SlideId>("left"))&&carrier.registrationFor(id<SlideId>("right")),"two slides retain separate simultaneous registrations");
+ auto leftCommand=carrier.commandFor(id<SlideId>("left"),{10000,10000});
+ auto rightCommand=carrier.commandFor(id<SlideId>("right"),{10000,10000});
+ check(leftCommand&&rightCommand&&leftCommand.value().targets()[0].value()!=rightCommand.value().targets()[0].value(),"navigation resolves the selected SlideId through its own registration");
  if(failures)return 1;std::cout<<"Dual slide navigation tests passed\n";return 0;
 }

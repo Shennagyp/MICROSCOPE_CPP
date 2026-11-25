@@ -24,14 +24,24 @@ struct DeviceTimestamp final {
     std::optional<std::string> clockDomain;
 };
 
-struct FeedbackCorrelation final {
+struct RuntimeDeviceCorrelation final {
     MicroscopeId microscopeId;
     RuntimeId runtimeId;
     RuntimeGeneration runtimeGeneration;
+    DeviceId deviceId;
+};
+
+struct OperationCorrelation final {
     OperationId operationId;
     StepId stepId;
     std::optional<CommandId> commandId;
-    DeviceId deviceId;
+};
+
+// Operation correlation is absent for unsolicited device telemetry. When
+// present, OperationId and StepId are both required and cannot be half-set.
+struct FeedbackCorrelation final {
+    RuntimeDeviceCorrelation runtimeDevice;
+    std::optional<OperationCorrelation> operation;
 };
 
 struct FeedbackMetadata final {

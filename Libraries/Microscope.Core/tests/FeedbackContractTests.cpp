@@ -187,6 +187,38 @@ int main() {
     check(static_cast<bool>(validActionCompletion),
           "allows action completion correlated to an operation step without requiring a command ID");
 
+    const auto acknowledgementFromOperator = FeedbackMetadata::create(
+        FeedbackCorrelation{
+            RuntimeDeviceCorrelation{
+                microscopeId,
+                runtimeId,
+                generation,
+                deviceSessionGeneration,
+                deviceId},
+            OperationCorrelation{operationId, stepId, commandId}},
+        FeedbackKind::DeviceAcknowledged,
+        ObservationSource::OperatorConfirmation);
+    check(!acknowledgementFromOperator &&
+          acknowledgementFromOperator.error() ==
+              FeedbackMetadataError::InvalidObservationSource,
+          "operator confirmation cannot be represented as device acknowledgement");
+
+    const auto completionFromEstimate = FeedbackMetadata::create(
+        operationWithoutCommand,
+        FeedbackKind::DeviceActionCompleted,
+        ObservationSource::CalibratedEstimate);
+    check(!completionFromEstimate &&
+          completionFromEstimate.error() ==
+              FeedbackMetadataError::InvalidObservationSource,
+          "calibrated estimate cannot be represented as device action completion");
+
+    const auto manualObservation = FeedbackMetadata::create(
+        telemetryCorrelation,
+        FeedbackKind::DeviceStateObserved,
+        ObservationSource::OperatorConfirmation);
+    check(static_cast<bool>(manualObservation),
+          "operator confirmation remains a valid state observation source");
+
     const auto invalidDeviceTimestamp = DeviceTimestamp::create(1500, 0);
     check(!invalidDeviceTimestamp,
           "rejects a device timestamp without a valid ticks-per-second value");

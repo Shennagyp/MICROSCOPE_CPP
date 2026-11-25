@@ -31,6 +31,9 @@ endif()
 add_subdirectory(Libraries/Microscope.Core)
 add_subdirectory(Libraries/Microscope.Application)
 
+# Camera backend-neutral contracts are shared by native and GenTL providers.
+add_subdirectory(Camera/Common)
+
 if(OPTIKA_BUILD_GENTL)
     set(CAMERA_GENTL_ENABLE_GENAPI ${OPTIKA_BUILD_GENTL_GENAPI})
     add_subdirectory(Camera/GenTL)

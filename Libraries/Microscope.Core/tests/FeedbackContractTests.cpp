@@ -145,23 +145,35 @@ int main() {
           "accepts a device timestamp with an explicit positive tick rate");
 
     const auto zeroIngressSequence =
-        FeedbackIngressSequence::create(runtimeId, generation, 0);
+        FeedbackIngressSequence::create(microscopeId, runtimeId, generation, 0);
     check(!zeroIngressSequence,
           "rejects a zero Core feedback ingress sequence");
     const auto validIngressSequence =
-        FeedbackIngressSequence::create(runtimeId, generation, 17);
+        FeedbackIngressSequence::create(microscopeId, runtimeId, generation, 17);
     const auto laterIngressSequence =
-        FeedbackIngressSequence::create(runtimeId, generation, 18);
+        FeedbackIngressSequence::create(microscopeId, runtimeId, generation, 18);
     check(static_cast<bool>(validIngressSequence),
           "accepts a positive Core feedback ingress sequence");
     check(validIngressSequence.value().precedes(laterIngressSequence.value()).value(),
           "Core ingress sequences preserve receive order within one runtime generation");
-    check(validIngressSequence.value().belongsTo(runtimeId, generation),
+    check(validIngressSequence.value().belongsTo(microscopeId, runtimeId, generation),
           "Core ingress sequence retains its runtime scope");
+    const auto otherMicroscopeId =
+        MicroscopeId::create("microscope-other").value();
+    const auto otherMicroscopeSequence =
+        FeedbackIngressSequence::create(
+            otherMicroscopeId, runtimeId, generation, 19).value();
+    const auto crossMicroscopeOrder =
+        validIngressSequence.value().precedes(otherMicroscopeSequence);
+    check(!crossMicroscopeOrder &&
+          crossMicroscopeOrder.error() ==
+              FeedbackIngressSequenceError::DifferentRuntimeScope,
+          "rejects ordering ingress sequences from different microscopes");
+
     const auto otherRuntimeId =
         RuntimeId::create("runtime-other").value();
     const auto otherRuntimeSequence =
-        FeedbackIngressSequence::create(otherRuntimeId, generation, 19).value();
+        FeedbackIngressSequence::create(microscopeId, otherRuntimeId, generation, 19).value();
     const auto crossRuntimeOrder =
         validIngressSequence.value().precedes(otherRuntimeSequence);
     check(!crossRuntimeOrder &&
@@ -191,7 +203,7 @@ int main() {
                 DeviceTimestamp::create(1500, 1000, std::string("device-clock-A")).value()},
             SelectorFeedback{true}},
         receiptTime,
-        FeedbackIngressSequence::create(runtimeId, generation, 17).value());
+        FeedbackIngressSequence::create(microscopeId, runtimeId, generation, 17).value());
     check(static_cast<bool>(receivedResult),
           "creates a feedback receipt when ingress sequence and feedback runtime match");
     if (receivedResult) {
@@ -222,7 +234,7 @@ int main() {
                 std::nullopt},
             SelectorFeedback{false}},
         receiptTime,
-        FeedbackIngressSequence::create(otherRuntimeId, generation, 20).value());
+        FeedbackIngressSequence::create(microscopeId, otherRuntimeId, generation, 20).value());
     check(!mismatchedReceipt &&
           mismatchedReceipt.error() == FeedbackReceiptError::RuntimeScopeMismatch,
           "rejects a receipt whose ingress sequence belongs to another runtime");

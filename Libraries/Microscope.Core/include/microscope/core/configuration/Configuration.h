@@ -217,10 +217,28 @@ private:
     std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds_;
 };
 
+// A validated desired microscope state, scoped to the exact installed
+// equipment definition against which the request was resolved.
+class ResolvedConfiguration final {
+public:
+    [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
+    [[nodiscard]] const ConfigurationRequest& request() const noexcept;
+
+private:
+    friend class ConfigurationResolver;
+
+    ResolvedConfiguration(
+        MicroscopeId microscopeId,
+        ConfigurationRequest request);
+
+    MicroscopeId microscopeId_;
+    ConfigurationRequest request_;
+};
+
 class ConfigurationResolution final {
 public:
-    [[nodiscard]] const std::optional<ConfigurationRequest>&
-    resolvedRequest() const noexcept;
+    [[nodiscard]] const std::optional<ResolvedConfiguration>&
+    resolvedConfiguration() const noexcept;
     [[nodiscard]] const Diagnostics& diagnostics() const noexcept;
     [[nodiscard]] bool isResolved() const noexcept;
 
@@ -228,10 +246,10 @@ private:
     friend class ConfigurationResolver;
 
     ConfigurationResolution(
-        std::optional<ConfigurationRequest> resolvedRequest,
+        std::optional<ResolvedConfiguration> resolvedConfiguration,
         Diagnostics diagnostics);
 
-    std::optional<ConfigurationRequest> resolvedRequest_;
+    std::optional<ResolvedConfiguration> resolvedConfiguration_;
     Diagnostics diagnostics_;
 };
 

@@ -117,7 +117,7 @@ struct FeedbackEnvelope final {
 };
 
 enum class FeedbackSubmitStatus {
-    Accepted,
+    Enqueued,
     QueueFull,
     Closed
 };

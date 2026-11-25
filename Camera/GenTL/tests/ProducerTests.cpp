@@ -89,9 +89,11 @@ int main(int argc, char** argv) {
             frame->pixelFormat != UINT64_C(0x01080001) ||
             frame->pixelFormatNamespace != GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
             frame->width != 4 || frame->height != 4 ||
+            frame->deliveredImageHeight != 4 ||
             frame->imageOffset != 0 || frame->xPadding != 0 ||
             frame->yPadding != 0 || frame->payloadType != GenTL::PAYLOAD_TYPE_IMAGE ||
             frame->imagePresent != true || frame->containsChunkData != false ||
+            frame->dataLargerThanBuffer != false || frame->isComposite != false ||
             frame->incomplete) return 14;
 
         const auto commonFrame = camera::gentl::makeCommonFrame(*frame);

@@ -69,7 +69,7 @@ std::optional<Descriptor> describeNode(GenApi::INode* node) {
             }
             try {
                 const auto unit = integer->GetUnit();
-                if (!unit.empty()) descriptor.unit = unit.c_str();
+                if (unit.length() != 0) descriptor.unit = unit.c_str();
             } catch (const GenICam::GenericException&) {
             }
         }

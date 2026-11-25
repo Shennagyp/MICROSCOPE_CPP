@@ -9,12 +9,13 @@ template<class T>T id(const char*s){return take(T::create(s));}
 int main(){
  int failures=0;auto check=[&](bool v,const char*m){if(!v){++failures;std::cerr<<"FAIL: "<<m<<'\n';}};
  auto x=id<StageAxisId>("x");
- auto unknown=take(StageAxisPositionState::unknown(x,AxisCoordinateUnit::Micrometers));
+ auto stage=id<EquipmentComponentId>("stage");
+ auto unknown=take(StageAxisPositionState::unknown(stage,x,AxisCoordinateUnit::Micrometers));
  check(unknown.requiresHoming(5)&&!unknown.positionIsUsable(),"unknown position requires homing");
  auto start=take(StageAxisPositionState::homed(
-   take(AxisPosition::create(x,0,AxisCoordinateUnit::Micrometers)),1.0,
+   stage,take(AxisPosition::create(x,0,AxisCoordinateUnit::Micrometers)),1.0,
    StagePositionEvidence::ControllerReported,ObservationSource::SdkStatus));
- check(start.positionIsUsable()&&!start.requiresHoming(5),"homing establishes a referenced position");
+ check(start.positionIsUsable()&&!start.requiresHoming(5)&&start.stageComponentId()==stage,"homing establishes a referenced position scoped to its installed stage");
  auto first=take(start.afterCommandedDisplacement(
    take(AxisDisplacement::create(x,1000,AxisCoordinateUnit::Micrometers)),2.0));
  check(first.position()&&first.position()->value()==1000&&first.accumulatedPositionErrorBound().value()==3.0,

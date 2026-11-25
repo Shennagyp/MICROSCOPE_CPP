@@ -1,114 +1,171 @@
-# Workstream — Controller and Motion
+# Development Line — Controller / Motion / Stage
 
-**Primary repository:** [MICROSCOPE](https://github.com/Shennagyp/MICROSCOPE)  
-**Primary implementation line:** \`station-development\` (Swift Station); Manager records are maintained separately on \`refactor-2\`.  
-**Status:** contracts and model packages exist; physical controller provider/actuation and end-to-end stage operation remain deferred.
+**Active implementation repository:** [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP)  
+**Active implementation branch:** [`OPTIKA-B293-DUALSLIDE-APP-v.0.9`](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/OPTIKA-B293-DUALSLIDE-APP-v.0.9)  
+**Source checkpoint inspected:** `c7bb4b4dc41441989d71ee800c6d33b51dc54abe` (25 November 2026)  
+**Historical design/source repository:** [MICROSCOPE](https://github.com/Shennagyp/MICROSCOPE), branches `station-development` and `refactor-2`  
+**Line status in the v0.9 target:** microscope Stage specifications exist; a C++ controller/provider/session and physical motion execution path are not established.
 
-## 1. Responsibility model
+This is one independently managed development line inside the shared OPTIKA v0.9 branch. It is not the Slide Scanning line. Slide Scanning consumes the capabilities produced here; it does not own or implement them.
 
-Controller, Motion and Stage are related but not interchangeable concepts.
+## 1. Responsibility and boundaries
 
-- **Controller** represents a physical controller device, its stable identity, capabilities, resources and provider/session function bundle.
-- **Motion** represents provider-neutral axes, endpoints, units, ranges, coordinate frames, actuator groups and immutable capability snapshots.
-- **Stage** represents microscope-specific stage geometry, logical axes, carrier/rack/slot topology and qualification against Motion capability evidence.
-- **Application/Station** coordinates a requested physical workflow and owns local execution lifecycle.
-- **Manager** stores Station-scoped controller identities and registered stage-drive relationships. It does not directly execute hardware.
+Controller, Motion and Stage are related but distinct concepts. Keep their contracts separate even though they are tracked together as the Controller development line.
 
-The controller provider must not infer stage topology; Motion must not import controller implementations; Stage qualification consumes Motion capability snapshots without opening hardware or issuing movement commands.
+- **Controller** owns physical controller identity, provider identity, resources/channels, connection and session lifecycle, controller capabilities, command transport, device feedback and controller-specific failure/recovery semantics.
+- **Motion** owns provider-neutral movement semantics: axes, endpoints, units, ranges, coordinate frames, actuator groups, command meaning and immutable capability snapshots. Motion must not depend on a vendor controller implementation.
+- **Stage** owns microscope-specific stage mechanics and topology: stage identity, logical axes, coordinate relationships, carrier/rack/slot geometry and qualification against Motion capability evidence. Stage must not open a hardware session or issue a physical command.
+- **Microscope Core/Application** owns operation meaning, lifecycle, command orchestration and application composition. Core must not retain vendor SDK handles or perform transport I/O.
+- **Slide Scanning** owns the scan workflow and its requested coverage/provenance. It calls into the application capability boundary; it does not address a controller provider directly.
+- **Camera** remains a sibling capability with its own single camera workstream. Controller code must not become a second camera/session owner.
+
+The identities must not collapse into one another: microscope identity, controller device identity, controller resource/channel identity, provider/session handle, Motion endpoint/axis identity and Stage logical-axis identity represent different things and require explicit mapping.
 
 ## 2. Development history
 
-The MICROSCOPE repository contains several historical architecture lines:
-- \`refactor-dotnet\`: an early .NET runtime/model proposal, including an accumulated-error-only DeviceBridge measurement boundary and stage calibration foundations. It is reference history, not the current distributed runtime architecture.
-- \`refactor-2\`: the distributed .NET Manager model. Controllers are Station-scoped records; stage drive-channel records refer to those controller identities. Manager owns registration and shared records, not local physical execution.
-- \`station-development\`: the independent Swift Station implementation. It introduced separate Controller, Motion and Stage Swift packages and the composition/persistence contracts around them.
-- \`station-refactor-2\`: a later historical Station refactor line. Use the current \`station-development\` source and handoff as the active Station authority unless explicitly redirected.
+### Earlier MICROSCOPE repository work — historical reference
 
-The approved distributed design separates Manager-owned registration from Station-owned hardware interaction. Earlier single-process .NET hosting proposals must not be revived as the implementation authority.
+The earlier `MICROSCOPE` repository contains three relevant historical architecture lines:
 
-## 3. Current implementation in Station source
+- `refactor-dotnet`: an early .NET runtime/model proposal, including an accumulated-error-only DeviceBridge measurement boundary and stage-calibration foundations. It is historical reference, not the current v0.9 execution authority.
+- `refactor-2`: the distributed .NET Manager model. Controllers are Station-scoped records and stage-drive/channel records refer to those identities. Manager owns shared registration/records, not physical execution.
+- `station-development`: the Swift Station implementation. It introduced separate `MicroscopeControllerCore`, `MicroscopeControllerFunctions`, `MicroscopeMotionCore`, `MicroscopeMotionFunctions` and `MicroscopeStageCore` packages.
 
-The current Station tree contains these packages:
+The historical Station code is useful for concepts, invariants, tests and decisions. It is not evidence that those Swift packages have been ported into the C++ OPTIKA branch. The ongoing implementation location is now the OPTIKA v0.9 branch in MICROSCOPE_CPP.
 
-| Package | Responsibility | Current limitation |
-|---|---|---|
-| \`MicroscopeControllerCore\` | Controller/device/resource identities and immutable capability descriptors | No vendor SDK, SwiftUI, persistence adapter or physical command execution |
-| \`MicroscopeControllerFunctions\` | Provider/session function bundles and provider registry | No concrete accepted physical controller provider |
-| \`MicroscopeMotionCore\` | Provider-neutral linear/angular coordinate semantics, axis/sensor endpoint identity, units, ranges, coordinate frames and immutable capability snapshots | No controller dependency and no physical execution |
-| \`MicroscopeMotionFunctions\` | Motion operation/provider-function registration | Contract/registration layer, not proof of motor execution |
-| \`MicroscopeStageCore\` | Deterministic Stage/carrier qualification against immutable Equipment and Motion snapshots | No SDK, session, UI, persistence, mapping execution or physical movement |
-| \`MicroscopeStageCore\` tests | Stage/motion topology and qualification tests | Source tests do not prove physical stage accuracy or safety |
+### OPTIKA v0.9 target branch
 
-The Manager side contains Station-scoped ControllerDevice records and stage-drive/channel references in its registration/domain model. The current Manager registry API has been reported as lacking a controller-device read query required by the Station projection; treat this as an integration gap until the exact current API proves otherwise.
+The checked v0.9 tree currently contains:
+- `Libraries/Microscope.Core/include/microscope/core/equipment/StageSpecifications.h`;
+- `Libraries/Microscope.Core/src/StageSpecifications.cpp`;
+- `Libraries/Microscope.Core/tests/StageSpecificationsTests.cpp`;
+- Core operation/step lifecycle semantics from Phase 4A.
 
-MICROSCOPE_CPP also contains C++ Core stage specifications and tests. Those are microscope-equipment specifications, not a controller driver or proof of stage actuation.
+StageSpecifications are microscope equipment specifications and validation. They do not constitute a controller model, provider, session, Motion executor, hardware feedback path or physical stage driver.
 
-## 4. Safety and evidence boundary
+At the inspected source checkpoint, no C++ Controller provider/session implementation, physical controller communication, Motion command executor or end-to-end Stage-to-controller actuation path is established. Do not report the historical Swift packages as implemented in this target branch.
 
-No physical movement is authorized by the presence of a model, function registry or qualified topology.
+## 3. Relationship to the application runtime
 
-The Station milestone plan places controller/stage integration at S14. The current Station continuation record states that stage motion, controller registration/channel catalogue, drive assignment, Manager StageConfiguration submission, endstop binding and physical calibration remain deferred.
+The v0.9 Core operation lifecycle is the authority for operation and step state. The 4A reducer distinguishes command dispatch, adapter acceptance, device acknowledgement/progress/action completion, device-state observation and Core verification. A command being submitted or accepted is not proof of physical movement; an action-completed report is not proof that the requested position was observed or verified.
 
-Until a separate reviewed acceptance authorizes it:
-- no stage movement, homing, jogging or motor enable;
-- no objective/nosepiece movement;
-- no condenser/aperture/illumination actuator writes;
-- no assumption that accumulated controller error is an absolute position;
-- no assumption that a command acceptance is an acknowledgement, physical completion or verified position.
+The next application contract dependency is Phase 4B — typed command values and capability-specific adapter ports. Controller development must use that shared Core contract rather than creating a second controller-specific lifecycle state machine.
 
-The earlier DeviceBridge design restricts Stage/Motion measurement input to an accumulated-error snapshot with unit, epoch, sequence, timestamp and error-semantics revision. Raw encoder position, step count, pulse count, digital endstop levels and instantaneous velocity are not substitutes for that contract. Preserve datum, channel calibration, revision and provenance requirements.
+Expected dependency direction:
 
-## 5. Current status
+```text
+Slide Scanning
+      |
+      v
+Microscope.Application use cases
+      |
+      v
+Microscope.Core operation / typed command contracts
+      |
+      v
+Controller adapter ---- Motion provider functions
+      |                         |
+      +-----------+-------------+
+                  v
+        Stage-specific mapping
+                  |
+                  v
+           Physical hardware
+```
 
-**Implemented at source/contract level:**
-- Controller identity/capability package.
-- Controller provider/session function registry package.
-- Provider-neutral Motion axis and sensor endpoint models.
-- Motion function registration package.
-- Stage/motion topology and pure Stage qualification contracts/tests.
-- Manager-side controller identity and stage-drive references.
+This is a responsibility/dependency sketch, not a claim that the complete path currently exists.
 
-**Not established:**
-- Concrete vendor controller provider.
-- Native controller communication and device-session lifecycle.
-- Controller telemetry/feedback against physical hardware.
-- Motion command execution.
-- Endstop/sensor hardware integration.
-- End-to-end Stage-to-controller mapping.
-- Physical homing, movement, calibration, accuracy or repeatability.
-- Station/Manager controller registry synchronization for the current branch.
-- Safety acceptance.
+## 4. Current status and evidence
 
-Do not report controller functionality as hardware-complete.
+**Present in the OPTIKA v0.9 source:**
+- microscope Stage specifications and their tests;
+- Core operation/step lifecycle transition semantics;
+- application-level microscope configuration and equipment architecture.
+
+**Historical reference in MICROSCOPE:**
+- Controller identity/capability contracts;
+- provider/session function-bundle and registry concepts;
+- provider-neutral Motion axis/endpoint models;
+- Stage topology and pure qualification concepts;
+- Manager-side controller registration and stage-drive references.
+
+**Not established in the active OPTIKA v0.9 line:**
+- C++ controller identity/resource/provider contracts;
+- a concrete controller provider or native transport;
+- controller connection/session lifecycle;
+- feedback ingestion and correlation with Core operations;
+- Motion command execution;
+- endstop/sensor hardware bindings;
+- explicit Stage logical-axis to Motion endpoint to controller-resource mapping;
+- physical homing, movement, calibration, accuracy or repeatability;
+- safety acceptance for physical actuation.
+
+Do not count historical source, a model, a provider registry, a simulated adapter or a Stage specification as hardware execution evidence.
+
+## 5. Safety and semantic invariants
+
+1. No physical movement is authorized by the presence of a model, command interface or qualified topology.
+2. Do not enable movement, homing, jogging, motor power or actuator writes until a separately reviewed hardware-safety and execution acceptance authorizes the exact operations.
+3. A requested command, adapter receipt, device acceptance, device acknowledgement, action completion, observed state and Core verification are distinct facts.
+4. Cancellation remains requested until the device/runtime confirms the cancellation outcome; a cancelled request is not proof that motion physically stopped.
+5. Never treat an accumulated error, step count or pulse count as an absolute position.
+6. Preserve units, coordinate frame, datum, channel calibration, calibration revision, measurement epoch/sequence/timestamp and error-semantics provenance wherever the selected measurement contract requires them.
+7. Do not map controller IDs, channel IDs, provider handles, Motion endpoints and Stage axes by coincidental numeric/string equality.
+8. Device loss, timeout, communication failure, stale feedback and unknown physical state must remain distinguishable; never synthesize a safe or completed position from missing evidence.
+
+The earlier DeviceBridge proposal's accumulated-error-only measurement contract is historical design input. Re-adopt it only after checking it against the current C++ Core command/feedback model; do not copy it into a parallel runtime without reconciling semantics.
 
 ## 6. Continuation handoff
 
-**Active milestone:** controller/stage physical integration is deferred (Station S14).  
-**Current work mode:** preserve contracts and record cross-project integration blockers; do not jump directly to motor commands.
+**Active source branch:** `MICROSCOPE_CPP / OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
+**Current target status:** Stage specification layer present; Controller/Motion execution path not yet implemented or accepted.  
+**Integration dependency:** Core Phase 4B typed commands/ports and later runtime/feedback work.
 
 ### Next bounded task
 
-The next responsible step is a contract reconciliation, not actuation:
+Establish the C++ Controller/Motion/Stage contract map against the v0.9 Core before implementing a hardware provider:
 
-1. Read \`docs/station-development-milestones.md\`, \`docs/station-continuation-handoff.md\`, \`docs/stage-mechanics-and-carrier-architecture.md\`, \`docs/equipment-composition-and-stage-architecture.md\` and the Controller/Motion/Stage package README files.
-2. Reconcile Manager controller records and stage-drive references with the Station registration projection. Identify the precise missing Manager query and required revision/identity fields.
-3. Define the provider-neutral endpoint/resource/session mapping without equating controller IDs, controller channel IDs, Motion endpoint IDs and Stage logical-axis IDs.
-4. Preserve the split: Controller owns physical-device/provider identity; Motion owns kinematic and endpoint semantics; Stage owns microscope-stage topology and qualification.
-5. Keep all movement commands disabled until the separate hardware-safety and execution acceptance is approved.
+1. Read `docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md`, `docs/architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md` and `docs/plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md`.
+2. Inspect `StageSpecifications.h`, its implementation and tests. Record which stage facts are specifications, which are runtime state, and which require physical observation.
+3. Translate the useful historical Controller/Motion/Stage concepts from `MICROSCOPE/station-development` into a C++ ownership map. Reuse semantics where applicable; do not port package structure mechanically.
+4. Define distinct typed identities for controller, provider, device resource/channel, Motion endpoint/axis and Stage logical axis, including the explicit mapping edges between them.
+5. Align command and feedback semantics with Core Phase 4B. Do not introduce a second lifecycle reducer or treat adapter submission as device completion.
+6. Define capability discovery, session ownership, error/timeout/device-loss states and the no-actuation default.
+7. Add contract tests before any concrete hardware provider. Keep simulated contract evidence separate from target-device/hardware acceptance.
 
-This task may clarify contracts and integration prerequisites. It must not claim a working controller provider or implement unapproved physical actuation.
+Do not make physical movement the first implementation task. The first deliverable is an internally consistent contract and ownership model that can be consumed by the separate Slide Scanning line without leaking controller implementation details into scan policy.
 
 ### Handoff update requirements
 
-After an approved controller slice, record exact repository/branch/commit, package changed, contract/test added, hosted CI result, target-Mac build/launch result, physical controller/stage model and exact hardware evidence. A package build cannot establish actuator operation or calibrated movement.
+After each substantive slice, record:
+- exact MICROSCOPE_CPP commit and branch;
+- Controller, Motion or Stage sub-area changed;
+- typed identities/contracts and mapping rules added;
+- Core operation/feedback semantics consumed;
+- tests written and actual CI result for that exact commit;
+- provider/simulator status, explicitly labelled;
+- physical controller model and exact hardware operations tested, if any;
+- safety approval and remaining failure modes;
+- next bounded task.
 
-## 7. Authoritative records
+A successful package build or simulated-provider test does not establish physical movement, calibrated accuracy, repeatability or safe stop behavior.
+
+## 7. Historical authoritative records
+
+These links are retained as prior-art references, not as the active implementation branch:
 
 - [Station milestones](https://github.com/Shennagyp/MICROSCOPE/blob/station-development/docs/station-development-milestones.md)
 - [Station continuation handoff](https://github.com/Shennagyp/MICROSCOPE/blob/station-development/docs/station-continuation-handoff.md)
 - [Stage mechanics and carrier architecture](https://github.com/Shennagyp/MICROSCOPE/blob/station-development/docs/stage-mechanics-and-carrier-architecture.md)
 - [Equipment composition and stage architecture](https://github.com/Shennagyp/MICROSCOPE/blob/station-development/docs/equipment-composition-and-stage-architecture.md)
-- [ControllerCore](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Controller/MicroscopeControllerCore)
-- [ControllerFunctions](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Controller/MicroscopeControllerFunctions)
-- [MotionCore](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Motion/MicroscopeMotionCore)
-- [StageCore](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Stage/MicroscopeStageCore)
+- [Historical ControllerCore](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Controller/MicroscopeControllerCore)
+- [Historical ControllerFunctions](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Controller/MicroscopeControllerFunctions)
+- [Historical MotionCore](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Motion/MicroscopeMotionCore)
+- [Historical StageCore](https://github.com/Shennagyp/MICROSCOPE/tree/station-development/swift/Packages/Stage/MicroscopeStageCore)
+
+## 8. Active OPTIKA source references
+
+- [OPTIKA v0.9 source branch](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/OPTIKA-B293-DUALSLIDE-APP-v.0.9)
+- [Stage specifications](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/OPTIKA-B293-DUALSLIDE-APP-v.0.9/Libraries/Microscope.Core)
+- [Core/Application contracts](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/OPTIKA-B293-DUALSLIDE-APP-v.0.9/docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md)
+- [v0.9 implementation plan](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/OPTIKA-B293-DUALSLIDE-APP-v.0.9/docs/plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md)

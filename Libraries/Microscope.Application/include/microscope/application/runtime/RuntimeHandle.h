@@ -62,8 +62,10 @@ enum class RuntimeSnapshotError {
     ZeroRevision
 };
 
-// Immutable application projection. Every lifecycle update publishes a new
-// snapshot revision; an existing snapshot is never mutated.
+// Immutable application projection. Revision starts at one and increases
+// strictly for each published lifecycle change to this RuntimeHandle. It is
+// scoped to that runtime incarnation, not a timestamp or cross-runtime order.
+// Every update publishes a new snapshot; an existing snapshot is never mutated.
 class RuntimeSnapshot final {
 public:
     [[nodiscard]] static core::Result<RuntimeSnapshot, RuntimeSnapshotError> create(

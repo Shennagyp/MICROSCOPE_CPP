@@ -124,20 +124,19 @@ An SDK call returning or a selector stopping does not by itself prove the reques
 
 ### 5.2 Correlation and timestamps
 
-Feedback associated with active work carries:
+Every adapter feedback item carries a runtime/device scope:
 
-- MicroscopeId, RuntimeId and RuntimeGeneration
-- OperationId and StepId
-- CommandId when related to a command
+- MicroscopeId
+- RuntimeId and RuntimeGeneration
 - logical DeviceId
-- optional adapter/device source sequence
-- feedback kind and typed payload
-- source/provenance
-- device timestamp and clock domain/timebase when available
+
+Feedback related to an active operation additionally carries one OperationCorrelation containing OperationId, StepId and optional CommandId. OperationId and StepId are an indivisible pair; a command correlation cannot exist without them. This avoids representing half-correlated work.
+
+Unsolicited telemetry has the runtime/device scope but no OperationCorrelation. It cannot satisfy an active operation's completion predicate.
+
+All feedback also carries feedback kind and typed payload, source/provenance, optional adapter/device source sequence, and optional device timestamp with clock domain/timebase.
 
 Core stamps receipt time using its monotonic clock and assigns its own ingress sequence. Device timestamps remain device observations; they are not compared directly with the Core monotonic clock without a documented clock mapping.
-
-Unsolicited telemetry may omit operation/step/command correlation, but must identify runtime, device and source generation. It cannot satisfy an active operation's completion predicate without valid correlation.
 
 Feedback from an old runtime generation or a different/superseded operation, step or command is stale for that work. It may be retained diagnostically but must not mutate current operation state.
 

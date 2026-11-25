@@ -201,7 +201,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer implemented; cross-platform validation pending**
+**In progress — 4A lifecycle reducer implemented and cross-platform validated; 4B command/port contracts next**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
@@ -219,7 +219,7 @@ The equipment definition now describes installed topology and static capabilitie
 - DeviceActionCompleted moves a step to AwaitingObservation; DeviceStateObserved moves it to Verifying; only a Core VerificationSucceeded event marks it Verified.
 - Manual steps have an AwaitingOperator path. OperatorConfirmed enters Verifying and is not itself proof of completion.
 - Timeout, adapter failure/rejection, partial completion and terminal-state behavior have focused tests.
-- Current-head CI is pending in [run 124](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45639182251).
+- Core standalone, Application standalone and root platform-only build/tests passed on Ubuntu GCC, Windows MSVC and macOS Clang: [run 124](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45639182251).
 
 **Implementation constraints**
 - Per-runtime state transitions have one logical owner. Adapter callbacks enqueue immutable feedback and never call the reducer directly from device/SDK threads.

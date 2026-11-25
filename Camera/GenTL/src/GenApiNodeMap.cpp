@@ -14,15 +14,23 @@ GenApiPort::GenApiPort(std::shared_ptr<DeviceSession> device) noexcept
 
 GenApi::EAccessMode GenApiPort::GetAccessMode() const {
     if (!device_ || !*device_) return GenApi::NA;
-    return device_->accessFlags() == GenTL::DEVICE_ACCESS_READONLY
-        ? GenApi::RO
-        : GenApi::RW;
+    switch (device_->accessFlags()) {
+    case GenTL::DEVICE_ACCESS_READONLY:
+        return GenApi::RO;
+    case GenTL::DEVICE_ACCESS_CONTROL:
+    case GenTL::DEVICE_ACCESS_EXCLUSIVE:
+        return GenApi::RW;
+    case GenTL::DEVICE_ACCESS_UNKNOWN:
+    case GenTL::DEVICE_ACCESS_NONE:
+    default:
+        return GenApi::NA;
+    }
 }
 
 void GenApiPort::Read(
     void* buffer, std::int64_t address, std::int64_t length) {
-    if (!device_ || !*device_) {
-        throw RUNTIME_EXCEPTION("GenTL device port is not open.");
+    if (!device_ || !*device_ || GetAccessMode() == GenApi::NA) {
+        throw RUNTIME_EXCEPTION("GenTL device port is not readable.");
     }
     if (address < 0 || length < 0 ||
         static_cast<std::uint64_t>(length) >
@@ -42,8 +50,8 @@ void GenApiPort::Read(
 
 void GenApiPort::Write(
     const void* buffer, std::int64_t address, std::int64_t length) {
-    if (!device_ || !*device_) {
-        throw RUNTIME_EXCEPTION("GenTL device port is not open.");
+    if (!device_ || !*device_ || GetAccessMode() != GenApi::RW) {
+        throw RUNTIME_EXCEPTION("GenTL device port is not writable.");
     }
     if (address < 0 || length < 0 ||
         static_cast<std::uint64_t>(length) >

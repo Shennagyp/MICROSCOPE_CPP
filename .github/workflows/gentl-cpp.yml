@@ -80,7 +80,7 @@ jobs:
             GENAPI_HEADER="$(find build/genapi-sdk -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
           fi
           test -n "$GENAPI_HEADER"
-          GENAPI_ROOT="${GENAPI_HEADER%/library/CPP/include/GenApi/GenApi.h}"
+          GENAPI_ROOT="$(cd "${GENAPI_HEADER%/library/CPP/include/GenApi/GenApi.h}" && pwd)"
           echo "GENAPI_ROOT=$GENAPI_ROOT" >> "$GITHUB_ENV"
 
       - name: Configure official GenApi integration

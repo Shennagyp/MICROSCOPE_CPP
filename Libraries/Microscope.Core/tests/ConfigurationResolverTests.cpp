@@ -524,7 +524,7 @@ void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
         take(ConfigurationProfileCatalog::create({phaseProfile}));
     const auto phaseRequest = makeRequest(
         fixture,
-        {fixture.fullPathId},
+        {fixture.illuminationPathId, fixture.imagingPathId},
         fixture.cameraModeId,
         ContrastMethod::PhaseContrast,
         phaseProfile.id());
@@ -613,7 +613,7 @@ void testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms() {
 
     const auto validDicRequest = makeRequest(
         fixture,
-        {fixture.fullPathId},
+        {fixture.illuminationPathId, fixture.imagingPathId},
         fixture.cameraModeId,
         ContrastMethod::DifferentialInterferenceContrast,
         dicProfile.id(),
@@ -625,7 +625,7 @@ void testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms() {
 
     const auto incompleteDicRequest = makeRequest(
         fixture,
-        {fixture.fullPathId},
+        {fixture.illuminationPathId, fixture.imagingPathId},
         fixture.cameraModeId,
         ContrastMethod::DifferentialInterferenceContrast,
         dicProfile.id(),

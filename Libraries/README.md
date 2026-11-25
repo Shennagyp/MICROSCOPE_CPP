@@ -57,7 +57,7 @@ These commands are instructions only; no build or test result is implied by this
 
 The initial source slice includes:
 
-- Core: strong opaque identities, distinct runtime/device-session generations, Result/Status, diagnostics, operation/step status values, typed feedback correlation/fact kinds, validated device timestamps and feedback receipt metadata.
+- Core: strong opaque identities, distinct runtime/device-session generations, Result/Status, diagnostics, operation/step status values, typed feedback correlation/fact kinds, validated device timestamps, typed FeedbackIngressSequence and feedback receipt metadata.
 - Application: runtime/operation handles and value projections scoped to runtime identity/generation. OperationView reuses Core's operation snapshot rather than maintaining a second state representation.
 
 This is not a completed microscope platform. Equipment/configuration semantics, operation execution, JSON definition loading, concrete adapter composition, persistence, calibration and acquisition are implemented in their planned phases. No runtime/build/test result is implied by the existence of these targets.

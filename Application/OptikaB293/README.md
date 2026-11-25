@@ -51,5 +51,4 @@ Use a fresh build directory when changing CMake generators. CMake does not
 allow an existing build tree configured with one generator to be reused with
 another.
 
-Camera remains a reusable capability under `Camera/Amscope`; the workstation UI,
-workflows, adapters and microscope configuration are owned by this application.
+This target is the current native macOS frontend and transitional implementation. The target platform separates the C++ `Microscope.Core` and `Microscope.Application` libraries from this frontend. Microscope definitions are JSON data, and microscope behavior migrates into Core incrementally. See the [platform architecture](../../docs/architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md) and [implementation plan](../../docs/plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md). The existing AmScope driver and preview pipeline remain reusable capabilities and must be preserved during migration.

@@ -687,23 +687,35 @@ Changing exposure or illumination intensity does not ordinarily invalidate image
 
 A new measured calibration creates a new immutable revision. Historical acquisitions and measurements continue to reference the revision used at their creation.
 
-### 10.3 Motion calibration: command/feedback units to physical axis movement
+### 10.3 Motion calibration: physical axis movement and controller ownership
 
-Motion calibration is independent from optical calibration and is scoped to an axis and its relevant device/configuration.
+Motion calibration is independent from optical calibration and is scoped to a physical axis and its relevant driver/controller configuration.
 
-For a linear axis, it can map step or encoder counts to micrometers. A rotary axis maps its device coordinate to an angular unit.
+The public Core motion contract uses the physical coordinate unit declared by the installed axis. It does not expose motor-step counts, pulse timing or vendor protocol values.
 
-The result retains observations, fitted mapping, residuals, accuracy, repeatability/precision evidence and uncertainty. Nominal command resolution is not reported as physical accuracy.
+- A STEP/DIR driver owns physical-unit-to-step conversion and deterministic pulse generation in its execution layer.
+- An intelligent-controller driver sends engineering coordinates and leaves configured steps-per-unit conversion and trajectory execution to the controller.
+- Exactly one component in the active driver/controller chain owns physical-unit-to-controller-unit conversion. Core must not apply a second controller scaling factor.
 
-No mechanical transmission construction details are part of this application model.
+Core motion calibration retains physical measurement evidence: observed displacement, fitted physical-axis behavior, residuals, accuracy, repeatability/precision and uncertainty. Controller steps-per-unit settings and command-derived counts are not proof of physical accuracy.
 
-If position feedback is absent, the Core records command-derived position as estimated, not measured.
+If position feedback is absent, Core records command-derived position as an estimate, not a measured position. Uncertainty remains explicit and may trigger a homing/recovery policy; homing does not correct scale error, backlash or slide movement.
 
-### 10.4 No slide-to-stage positioning calibration
+No mechanical transmission construction details are required by the Core model.
 
-This architecture does not require a transformation from microscope stage coordinates to a physical slide origin. Do not introduce a per-slide stage-registration calibration context.
+### 10.4 OPTIKA dual-slide carrier and slide registration
 
-Stage coordinates can be stored as stage-coordinate observations with their provenance. They must not be re-labelled as slide-global positions.
+The OPTIKA B293 dual-slide carrier is one horizontal stage plane with two side-by-side slide slots. It is not a vertical rack and does not add a slide-selection Z axis. Both slots use the same installed stage's two linear in-plane axes.
+
+The static DualSlideCarrierSpecification is attached to the stage component and identifies horizontal and transverse in-plane axes plus the positive-X direction from left slot to right slot. It declares exactly two positions: Left and Right. The equipment definition may omit this specification for microscopes without this carrier.
+
+Each physical Slide has its own SlideGeometry (width and height in micrometers) and independent SlideRegistration. Each registration records four distinct corner correspondences: TopLeft (0,0), TopRight (width,0), BottomRight (width,height), BottomLeft (0,height). Every correspondence maps into the common stage machine-coordinate plane in physical micrometers and retains observation provenance and uncertainty.
+
+Core fits an affine 2D mapping from all four corners and checks the maximum per-corner residual against an explicit acceptance threshold. The fourth point validates the affine model rather than being ignored. Left and right slides have independent transforms; a shared transform must never be assumed.
+
+Carrier occupancy is runtime state, separate from equipment definition and persistent Slide identity. Either slot may be empty or occupied but not registered. One SlideId cannot occupy both slots. Selecting another slide changes which transform Core uses; it does not move the stage.
+
+Homing/recovery is stage-level. Core preserves the intended destination as (SlideId, slide-local X, slide-local Y), homes the common stage, re-establishes its machine reference, resolves the saved target through that slide's still-valid registration and returns there. Removing/reseating a slide invalidates its registration unless placement is re-established. Homing alone does not restore a slide registration that physically shifted.
 
 ### 10.5 Slide/acquisition calibration history
 
@@ -777,12 +789,12 @@ A slide receives a preparation/configuration snapshot when created. Updating a r
 A Tile has:
 - Stable TileId and owning SlideId.
 - Optional user-facing field label or display-order hint.
-- Optional position observations, each with coordinate frame, units, source and uncertainty/provenance when available.
+- Optional slide-local and/or stage-machine position observations, each with coordinate frame, units, source and uncertainty/provenance when available.
 - Creation metadata and optional descriptive metadata.
 
 A Tile is the persistent identity of an acquired field/image region within a slide. Its frames are related through ImageFrame.TileId; the Tile does not duplicate frame payload metadata or maintain a second authoritative frame list.
 
-A tile may have physical position metadata when supported by the microscope. Position is optional. The system must support unpositioned fields and must not fabricate physical XYZ coordinates.
+A tile may retain slide-local and corresponding stage-machine position metadata when registration is available. Position is optional. The system must support unpositioned fields and must not fabricate physical coordinates.
 
 A tile's sequence/index or virtual navigation order is not a physical slide coordinate.
 
@@ -963,6 +975,8 @@ Each physical microscope has one active controlling runtime at a time.
 - Core operation/event handling is serialized per runtime so state transitions have one logical owner.
 - Adapter callbacks enqueue normalized events; they do not mutate Core state directly on device threads.
 - Conflicting operations declare resource claims and are serialized or rejected.
+- The stage has one runtime machine-position owner. Slide-local position is derived through the selected slide's valid registration and is not maintained as a competing position authority.
+- Position evidence distinguishes sensor measurement, controller-reported state and command-derived estimates. Accumulated uncertainty is tracked; exceeding policy or losing the machine reference may trigger homing and restoration of a saved slide-local target, only while that slide registration remains valid.
 - Independent operations may execute concurrently only when their dependencies and resource claims allow it.
 - Existing camera acquisition workers, bounded queues, frame leases and latest-frame mailbox remain owned by the camera implementation and are not replaced by the Core operation event mechanism.
 - Live image payload delivery uses a separate frame-stream contract, not the ordinary operation event channel.
@@ -1099,7 +1113,7 @@ Migration rules:
 - Implement linear/rotary axis calibration and evidence quality.
 - Store immutable revisions via calibration persistence ports.
 
-**Exit:** matching optical configurations reuse calibration revisions; changed geometry-affecting configurations do not silently reuse incompatible values; no per-slide stage registration.
+**Exit:** matching optical configurations reuse calibration revisions; changed geometry-affecting configurations do not silently reuse incompatible values; slide-to-stage registration is modeled separately from axis motion calibration.
 
 ### Phase 7 — Slide lifecycle and persistence
 - Define slide types/configuration snapshots and slide identity.

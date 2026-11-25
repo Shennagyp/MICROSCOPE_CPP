@@ -85,6 +85,22 @@ int main() {
         carrier,id<SlideId>("slide-left"),{20000,10000},aggregate,policy);
     check(aggregateDirect&&std::holds_alternative<StageDirectMovePlan>(aggregateDirect.value()),
           "application-facing planner accepts one coherent stage position aggregate");
+    const auto outsideSlidePlan=StageNavigationPlanner::planToSlidePoint(
+        carrier,id<SlideId>("slide-left"),{75001,10000},aggregate,policy);
+    check(!outsideSlidePlan&&outsideSlidePlan.error()==
+          StageNavigationPlanningError::SlidePointOutsideGeometry,
+          "rejects slide-local coordinates outside the physical slide dimensions");
+    const auto foreignSpecification=take(DualSlideCarrierSpecification::create(
+        take(StageSpecification::create(
+            id<EquipmentComponentId>("different-stage"),{axis("x"),axis("y")})),
+        id<StageAxisId>("x"),id<StageAxisId>("y"),
+        CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
+    const auto foreignAggregate=take(StagePositionState::create(foreignSpecification));
+    const auto crossStagePlan=StageNavigationPlanner::planToSlidePoint(
+        carrier,id<SlideId>("slide-left"),{20000,10000},foreignAggregate,policy);
+    check(!crossStagePlan&&crossStagePlan.error()==
+          StageNavigationPlanningError::StageComponentMismatch,
+          "aggregate navigation rejects state from another installed stage even with identical axis names");
 
     const auto direct=StageNavigationPlanner::plan(
         carrier,target,homed("x",25000,1.0),homed("y",30000,1.0),policy);

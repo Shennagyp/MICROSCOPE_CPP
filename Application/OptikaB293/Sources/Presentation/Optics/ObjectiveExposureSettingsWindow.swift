@@ -3,12 +3,17 @@ import SwiftUI
 struct ObjectiveExposureSettingsWindow: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
+    @ObservedObject private var features: NativeCameraFeatureModel
 
     @State private var exposureDraft = ""
     @State private var isEditingExposure = false
     @State private var saveMessage = ""
 
-    private var features: NativeCameraFeatureModel { model.features }
+    init(model: NativeCameraModel, microscope: MicroscopeConfigurationModel) {
+        self.model = model
+        self.microscope = microscope
+        self.features = model.features
+    }
 
     private var activeObjective: MicroscopeObjective? {
         microscope.configuration.objectives.first(where: {
@@ -53,7 +58,7 @@ struct ObjectiveExposureSettingsWindow: View {
     }
 
     private var canSaveProfile: Bool {
-        guard let exposureMode,
+        guard let exposureMode = exposureMode,
               exposureMode == "Off" || exposureMode == "Once" || exposureMode == "Continuous",
               !model.isCameraOperationPending,
               !features.isFeatureSnapshotLoading,
@@ -95,7 +100,7 @@ struct ObjectiveExposureSettingsWindow: View {
             loadStoredExposureDraft()
         }
         .onChange(of: manualExposureReadback) { value in
-            guard !isEditingExposure, let value else { return }
+            guard !isEditingExposure, let value = value else { return }
             exposureDraft = String(value)
         }
         .alert(isPresented: $model.isShowingError) {
@@ -260,11 +265,16 @@ struct ObjectiveExposureSettingsWindow: View {
                         }
 
                         HStack {
-                            TextField("Exposure time in microseconds", text: $exposureDraft) { editing in
-                                isEditingExposure = editing
-                            } onCommit: {
-                                applyManualExposure()
-                            }
+                            TextField(
+                                "Exposure time in microseconds",
+                                text: $exposureDraft,
+                                onEditingChanged: { editing in
+                                    isEditingExposure = editing
+                                },
+                                onCommit: {
+                                    applyManualExposure()
+                                }
+                            )
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .disabled(exposureMode != "Off" ||
                                       model.isCameraOperationPending ||

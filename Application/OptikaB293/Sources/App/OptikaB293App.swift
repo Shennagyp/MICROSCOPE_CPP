@@ -202,6 +202,14 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         ))
         appMenu.addItem(NSMenuItem.separator())
+        let objectiveExposureItem = NSMenuItem(
+            title: "Objective Exposure Settings…",
+            action: #selector(openObjectiveExposureSettings(_:)),
+            keyEquivalent: ","
+        )
+        objectiveExposureItem.target = self
+        appMenu.addItem(objectiveExposureItem)
+        appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(
             title: "Quit OPTIKA B293",
             action: #selector(NSApplication.terminate(_:)),
@@ -229,13 +237,6 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
         microscopeConfigurationItem.target = self
         fileMenu.addItem(microscopeConfigurationItem)
 
-        let objectiveExposureItem = NSMenuItem(
-            title: "Objective Exposure Settings…",
-            action: #selector(openObjectiveExposureSettings(_:)),
-            keyEquivalent: ""
-        )
-        objectiveExposureItem.target = self
-        fileMenu.addItem(objectiveExposureItem)
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(NSMenuItem(
             title: "Close Window",

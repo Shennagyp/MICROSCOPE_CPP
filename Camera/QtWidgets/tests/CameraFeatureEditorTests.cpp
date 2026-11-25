@@ -59,7 +59,10 @@ bool finishEdit(QDoubleSpinBox* edit) {
 bool hasError(CameraFeatureEditor& editor, const QString& expected) {
     const auto* label = editor.findChild<QLabel*>(
         QStringLiteral("cameraFeatureEditorError"));
-    return label && label->isVisible() && label->text().contains(expected);
+    // The parent editor is intentionally not shown in this offscreen test.
+    // isHidden() reflects the explicit visibility state without requiring
+    // a top-level window to be displayed.
+    return label && !label->isHidden() && label->text().contains(expected);
 }
 
 } // namespace

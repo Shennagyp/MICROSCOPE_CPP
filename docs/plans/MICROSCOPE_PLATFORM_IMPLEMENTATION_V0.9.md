@@ -73,7 +73,7 @@ The first source slice is intentionally foundational: Core currently implements 
 The implementation bullets below define the full Phase 1 intent; the committed source progress above must not be mistaken for phase completion.
 - Implement the minimum independently buildable Libraries/Microscope.Core and Libraries/Microscope.Application C++17 targets.
 - Make Application depend on Core; keep Core dependent only on the C++ standard library.
-- Implement strongly typed opaque identity wrappers and the injected identity-generation boundary.
+- Implement strongly typed opaque identity wrappers that validate caller-supplied values. Keep ID generation outside Core; add an injected identity-source contract only when a real entity/runtime creation use case first consumes it.
 - Implement typed Result/Status, boundary-specific errors and Diagnostic conventions.
 - Define feedback correlation metadata, source/provenance and runtime ingress contracts; do not invent device payloads before a real capability is modeled.
 - Define the minimal immutable OperationHandle/snapshot and Application runtime-lifecycle boundary.

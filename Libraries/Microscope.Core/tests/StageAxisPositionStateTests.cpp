@@ -12,9 +12,11 @@ int main(){
  auto stage=id<EquipmentComponentId>("stage");
  auto unknown=take(StageAxisPositionState::unknown(stage,x,AxisCoordinateUnit::Micrometers));
  check(unknown.requiresHoming(5)&&!unknown.positionIsUsable(),"unknown position requires homing");
+ auto homeObservation=take(AxisPositionObservation::create(
+   take(AxisPosition::create(x,0,AxisCoordinateUnit::Micrometers)),1.0,
+   StagePositionEvidence::ControllerReported));
  auto start=take(StageAxisPositionState::homed(
-   stage,take(AxisPosition::create(x,0,AxisCoordinateUnit::Micrometers)),1.0,
-   StagePositionEvidence::ControllerReported,ObservationSource::SdkStatus));
+   stage,homeObservation,ObservationSource::SdkStatus));
  check(start.positionIsUsable()&&!start.requiresHoming(5)&&start.stageComponentId()==stage,"homing establishes a referenced position scoped to its installed stage");
  auto first=take(start.afterCommandedDisplacement(
    take(AxisDisplacement::create(x,1000,AxisCoordinateUnit::Micrometers)),2.0));

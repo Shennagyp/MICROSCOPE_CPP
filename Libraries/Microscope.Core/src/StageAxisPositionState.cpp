@@ -54,6 +54,14 @@ StageAxisPositionState::unknown(EquipmentComponentId stageComponentId,StageAxisI
 
 Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::homed(
+    EquipmentComponentId stageComponentId,const AxisPositionObservation& observation,
+    ObservationSource source) {
+    return homed(stageComponentId,observation.position(),
+        observation.uncertaintyInAxisUnit(),observation.evidence(),source);
+}
+
+Result<StageAxisPositionState,StageAxisPositionStateError>
+StageAxisPositionState::homed(
     EquipmentComponentId stageComponentId,AxisPosition position,double error,
     StagePositionEvidence evidence,ObservationSource source) {
     if(!std::isfinite(error)||error<0)

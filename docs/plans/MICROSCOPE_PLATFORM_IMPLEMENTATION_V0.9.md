@@ -128,16 +128,26 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 3 — Declarative configuration
 
-**In progress**
+**In progress — 3A implemented and cross-platform validated**
 
 **Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
 
 **Modeling sequence**
 1. **3A — Configuration vocabulary:** objective selection, optical path, contrast method, camera output mode, illumination channel/preset, condenser configuration, phase/DIC/polarization components, exposure preset and exposure policy.
 2. **3B — Profile applicability:** declarative profile requirements, selectors and compatibility constraints over installed component identity/capability data. Profiles must not contain C++ class names, SDK calls or executable callbacks.
-3. **3C — Pure resolution:** request + equipment definition + profile catalog + known current configuration → resolved desired configuration + typed diagnostics.
+3. **3C — Pure resolution:** request + equipment definition + profile catalog → resolved desired configuration + typed diagnostics. Current/effective state comparison is not part of this pure target-compatibility step.
 4. **3D — Transition description:** derive required component selections/settings and dependency ordering, including conflicts and safe preconditions. This is a value plan only; Phase 4 executes it.
 5. **3E — Representative data-driven profiles:** brightfield, phase contrast, DIC and polarization cases, including unavailable/mismatched installed equipment.
+
+
+**Phase 3A committed source progress — cross-platform CI passed**
+- Added ConfigurationProfileId, immutable ConfigurationProfile and ConfigurationProfileCatalog values. Profiles declare compatible installed objective/condenser/path/camera/illumination identities and optional required path components.
+- Added immutable ConfigurationRequest with explicit contrast method, installed component selections, one-or-more unique optical path IDs, camera output mode, illumination channel and explicit exposure policy.
+- Added pure ConfigurationResolver over typed equipment/profile/request values. It validates profile membership, installed specifications, camera mode/channel availability and component membership across the union of selected paths.
+- Multiple paths are supported by design; a split illumination route and imaging route can jointly satisfy one configuration without requiring all components on every path.
+- Resolution returns either the immutable accepted request or stable Error diagnostics. It does not access current runtime state, issue hardware commands or claim hardware completion.
+- Added contract tests for a valid brightfield path, separate illumination/imaging paths, unavailable camera modes/channels, profile conflicts, missing paths, required path components and invalid request/profile/catalog values.
+- Cross-platform CI passed on Ubuntu GCC, Windows MSVC and macOS Clang for Core standalone, Application standalone and root platform-only builds/tests: [GitHub Actions run 85](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45597867770).
 
 **Implementation constraints**
 - Objective, contrast method, optical path, camera mode and illumination remain independent dimensions. The resolver combines them; behavior is not implemented in Objective4x/PhaseObjective/DICObjective subclasses.

@@ -42,7 +42,7 @@ static const char mock_xml[] =
     "    <AccessMode>RW</AccessMode>\n" \
     "    <pPort>Device</pPort>\n" \
     "    <Sign>Unsigned</Sign>\n" \
-    "    <Endianness>BigEndian</Endianness>\n" \
+    "    <Endianess>BigEndian</Endianess>\n" \
     "  </IntReg>\n" \
     "  <Command Name=\"AcquisitionStart\">\n" \
     "    <pValue>CommandReg</pValue>\n" \
@@ -54,7 +54,7 @@ static const char mock_xml[] =
     "    <AccessMode>RW</AccessMode>\n" \
     "    <pPort>Device</pPort>\n" \
     "    <Sign>Unsigned</Sign>\n" \
-    "    <Endianness>BigEndian</Endianness>\n" \
+    "    <Endianess>BigEndian</Endianess>\n" \
     "  </IntReg>\n" \
     "  <Port Name=\"Device\">\n" \
     "    <ToolTip>Default device port</ToolTip>\n" \

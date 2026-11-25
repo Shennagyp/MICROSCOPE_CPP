@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest source checkpoint:** `ac532619924ab30c9cdf26e2a5ba6eb524db34d0`  
+**Latest implementation checkpoint:** `549433466098c5daeb63d72609776d958a35c2fe`  
 **Latest CI-validated code checkpoint:** `549433466098c5daeb63d72609776d958a35c2fe`  
 **CI:** GenTL C++ workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64. Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs at the CMake common-target checkpoint.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  

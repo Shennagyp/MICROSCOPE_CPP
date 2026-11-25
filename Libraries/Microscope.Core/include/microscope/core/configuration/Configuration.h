@@ -5,6 +5,7 @@
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
 
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -61,6 +62,45 @@ private:
     std::uint32_t minimumComponentCount_;
 };
 
+enum class IlluminationIntensitySettingError {
+    InvalidUnit,
+    InvalidValue
+};
+
+// A target intensity in the unit declared by the selected illumination channel.
+class IlluminationIntensitySetting final {
+public:
+    [[nodiscard]] static Result<
+        IlluminationIntensitySetting,
+        IlluminationIntensitySettingError> create(
+            double value,
+            IlluminationIntensityUnit unit);
+
+    [[nodiscard]] double value() const noexcept;
+    [[nodiscard]] IlluminationIntensityUnit unit() const noexcept;
+
+private:
+    IlluminationIntensitySetting(
+        double value,
+        IlluminationIntensityUnit unit);
+
+    double value_;
+    IlluminationIntensityUnit unit_;
+};
+
+// An initial exposure target. ExposurePolicy remains a separate request choice.
+class ExposurePreset final {
+public:
+    [[nodiscard]] static ExposurePreset create(PositiveMicroseconds exposureTime);
+
+    [[nodiscard]] double exposureTimeMicroseconds() const noexcept;
+
+private:
+    explicit ExposurePreset(PositiveMicroseconds exposureTime);
+
+    PositiveMicroseconds exposureTime_;
+};
+
 enum class ConfigurationProfileError {
     InvalidContrastMethod,
     EmptyCompatibilitySet,
@@ -88,7 +128,10 @@ public:
             std::vector<EquipmentComponentId> compatibleCameraIds,
             std::vector<EquipmentComponentId> compatibleIlluminationIds,
             std::vector<EquipmentComponentId> requiredPathComponentIds = {},
-            std::vector<OpticalFunctionRequirement> requiredOpticalFunctions = {});
+            std::vector<OpticalFunctionRequirement> requiredOpticalFunctions = {},
+            std::optional<NonNegativeNumericalAperture> condenserApertureTarget = std::nullopt,
+            std::optional<IlluminationIntensitySetting> illuminationIntensityTarget = std::nullopt,
+            std::optional<ExposurePreset> exposurePreset = std::nullopt);
 
     [[nodiscard]] const ConfigurationProfileId& id() const noexcept;
     [[nodiscard]] ContrastMethod contrastMethod() const noexcept;
@@ -106,6 +149,12 @@ public:
     requiredPathComponentIds() const noexcept;
     [[nodiscard]] const std::vector<OpticalFunctionRequirement>&
     requiredOpticalFunctions() const noexcept;
+    [[nodiscard]] const std::optional<NonNegativeNumericalAperture>&
+    condenserApertureTarget() const noexcept;
+    [[nodiscard]] const std::optional<IlluminationIntensitySetting>&
+    illuminationIntensityTarget() const noexcept;
+    [[nodiscard]] const std::optional<ExposurePreset>&
+    exposurePreset() const noexcept;
 
 private:
     ConfigurationProfile(
@@ -117,7 +166,10 @@ private:
         std::vector<EquipmentComponentId> compatibleCameraIds,
         std::vector<EquipmentComponentId> compatibleIlluminationIds,
         std::vector<EquipmentComponentId> requiredPathComponentIds,
-        std::vector<OpticalFunctionRequirement> requiredOpticalFunctions);
+        std::vector<OpticalFunctionRequirement> requiredOpticalFunctions,
+        std::optional<NonNegativeNumericalAperture> condenserApertureTarget,
+        std::optional<IlluminationIntensitySetting> illuminationIntensityTarget,
+        std::optional<ExposurePreset> exposurePreset);
 
     ConfigurationProfileId id_;
     ContrastMethod contrastMethod_;
@@ -128,6 +180,9 @@ private:
     std::vector<EquipmentComponentId> compatibleIlluminationIds_;
     std::vector<EquipmentComponentId> requiredPathComponentIds_;
     std::vector<OpticalFunctionRequirement> requiredOpticalFunctions_;
+    std::optional<NonNegativeNumericalAperture> condenserApertureTarget_;
+    std::optional<IlluminationIntensitySetting> illuminationIntensityTarget_;
+    std::optional<ExposurePreset> exposurePreset_;
 };
 
 enum class ConfigurationProfileCatalogError {
@@ -223,16 +278,28 @@ class ResolvedConfiguration final {
 public:
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] const ConfigurationRequest& request() const noexcept;
+    [[nodiscard]] const std::optional<NonNegativeNumericalAperture>&
+    condenserApertureTarget() const noexcept;
+    [[nodiscard]] const std::optional<IlluminationIntensitySetting>&
+    illuminationIntensityTarget() const noexcept;
+    [[nodiscard]] const std::optional<ExposurePreset>&
+    exposurePreset() const noexcept;
 
 private:
     friend class ConfigurationResolver;
 
     ResolvedConfiguration(
         MicroscopeId microscopeId,
-        ConfigurationRequest request);
+        ConfigurationRequest request,
+        std::optional<NonNegativeNumericalAperture> condenserApertureTarget,
+        std::optional<IlluminationIntensitySetting> illuminationIntensityTarget,
+        std::optional<ExposurePreset> exposurePreset);
 
     MicroscopeId microscopeId_;
     ConfigurationRequest request_;
+    std::optional<NonNegativeNumericalAperture> condenserApertureTarget_;
+    std::optional<IlluminationIntensitySetting> illuminationIntensityTarget_;
+    std::optional<ExposurePreset> exposurePreset_;
 };
 
 class ConfigurationResolution final {

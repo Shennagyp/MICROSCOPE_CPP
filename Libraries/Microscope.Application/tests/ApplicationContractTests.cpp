@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <type_traits>
 
 namespace {
 
@@ -18,6 +19,13 @@ void check(bool condition, const char* message) {
 
 int main() {
     using namespace microscope;
+
+    static_assert(!std::is_default_constructible<application::RuntimeHandle>::value,
+                  "RuntimeHandle requires a physical microscope/runtime identity");
+    static_assert(!std::is_default_constructible<application::OperationHandle>::value,
+                  "OperationHandle requires a runtime and operation identity");
+    static_assert(!std::is_default_constructible<application::OperationView>::value,
+                  "OperationView must be created through its validated factory");
 
     const auto microscopeId = core::MicroscopeId::create("microscope-001").value();
     const auto runtimeId = core::RuntimeId::create("runtime-001").value();

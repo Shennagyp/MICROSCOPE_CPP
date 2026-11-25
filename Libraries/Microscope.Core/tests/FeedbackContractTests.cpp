@@ -154,6 +154,23 @@ int main() {
             deviceSessionGeneration,
             deviceId},
         std::nullopt};
+    const auto invalidFactKind = FeedbackMetadata::create(
+        telemetryCorrelation,
+        static_cast<FeedbackKind>(255),
+        ObservationSource::SdkStatus);
+    check(!invalidFactKind &&
+          invalidFactKind.error() == FeedbackMetadataError::InvalidFactKind,
+          "rejects an unknown feedback fact kind");
+
+    const auto invalidObservationSource = FeedbackMetadata::create(
+        telemetryCorrelation,
+        FeedbackKind::DeviceStateObserved,
+        static_cast<ObservationSource>(255));
+    check(!invalidObservationSource &&
+          invalidObservationSource.error() ==
+              FeedbackMetadataError::InvalidObservationSource,
+          "rejects an unknown observation source");
+
     const auto invalidAcknowledgement = FeedbackMetadata::create(
         telemetryCorrelation,
         FeedbackKind::DeviceAcknowledged,

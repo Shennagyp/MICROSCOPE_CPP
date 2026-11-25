@@ -2,7 +2,7 @@
 
 **Architecture reference:** ../architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
-**Status:** Phase 1 completed; Phase 2 equipment modeling in progress. Cross-platform CI passed on Ubuntu GCC, macOS Clang and Windows MSVC for Core standalone, Application standalone and root platform-only builds/tests. [Workflow run](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45583316832).
+**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration in progress. The equipment model and all registered contract tests passed on Ubuntu GCC, macOS Clang and Windows MSVC. [Latest Phase 2 validation](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45595205508).
 
 ## Objective
 
@@ -70,56 +70,92 @@ This closes the initial library/build/API foundation only. It does not claim a m
 
 ### Phase 2 — Core equipment and optical model
 
-**In progress — 2A–2D validated; 2E cross-definition validation in progress**
+**Completed — 2A through 2E validated**
+
+#### 2A — Installed equipment identity and optical topology
+
+- Added strong IDs for installed equipment components, optical ports, optical connections and optical paths.
+- Added factory-created immutable OpticalPort, EquipmentComponent, OpticalConnection, OpticalPathStep and OpticalPath values.
+- Added MicroscopeEquipmentDefinition as the immutable aggregate for one installed microscope definition.
+- Component kind constrains port capability: optical elements need input/output capability; imaging devices need input; illumination devices need output; mechanical assemblies have no optical ports.
+- Physical OpticalConnection is undirected adjacency between ports on different components. Ordered OpticalPathStep values define propagation direction. One physical connection can be reused in opposite directions when port capabilities permit.
+- Shared components are stored once and referenced from multiple optical paths. The tests cover a shared condenser and beam splitter with alternative camera output paths, and one physical adjacency traversed in opposite directions.
+- Validation covers duplicate/foreign identities, port ownership/direction, one connection per physical port, same-component connection rejection, required interior path ports and route continuity.
+- Cross-platform CI passed: [run 22](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45587716888).
+
+#### 2B — Objective and camera specifications
+
+- Added distinct positive finite domain values for micrometers, nominal magnification and numerical aperture; no general-purpose units framework.
+- ObjectiveSpecification attaches to the installed EquipmentComponentId and stores magnification, NA, working distance, chromatic/field correction, immersion medium and optional design coverglass thickness.
+- CameraSpecification attaches to the installed imaging component and stores active sensor dimensions, independent X/Y pixel pitch and unique output modes.
+- CameraOutputMode stores sensor ROI, binning, delivered dimensions, pixel layout and stable pixel-format code. Net sensor-pixels-per-delivered-pixel X/Y mapping is derived independently from ROI and delivered dimensions; hardware binning remains a separate fact.
+- Aggregate validation rejects unknown/wrong-kind component references and duplicate specialized records.
+- Tests cover NA above 1, finite/positive constraints, anisotropic pitch/mapping, ROI/binned output, invalid pixel modes, duplicate modes and invalid component associations.
+- Cross-platform CI passed: [run 33](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45589429447).
+
+#### 2C — Illumination and condenser specifications
+
+- IlluminationSpecification attaches to an installed IlluminationDevice and supports multiple independently identified channels.
+- Each channel may have an optional spectral band, an intensity-control kind and a unit-bearing intensity range. Continuous control requires a finite non-negative increasing range.
+- CondenserSpecification attaches to an installed OpticalElement and stores aperture NA range (minimum may be zero), design, immersion medium and optional working distance.
+- Aggregate validation rejects unknown/wrong-kind references and duplicate specifications.
+- Tests cover spectral ranges, intensity units/control semantics, multiple channels, condenser aperture bounds and invalid roles.
+- Cross-platform CI passed: [run 46](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45590795457).
+
+#### 2D — Stage and axis specifications
+
+- StageSpecification attaches to an installed MechanicalAssembly and contains one or more StageAxisId values.
+- Axis specifications distinguish linear/rotary/other/unknown motion and micrometer/millimeter/degree/radian/device-defined/unknown coordinate units.
+- Each axis stores a finite signed operating range and positive nominal resolution.
+- Optional accuracy, repeatability/precision and measurement uncertainty are separate values. Accuracy/repeatability preserve test conditions; repeatability preserves its metric. No metric is derived from resolution.
+- Position-feedback capability and measurement location are explicit; no-feedback axes cannot claim a measurement location.
+- Tests cover linear/rotary units, signed ranges, unit mismatches, independent performance values, test conditions, feedback semantics and stage-axis identity.
+- Cross-platform CI passed: [run 58](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45592166839).
+
+#### 2E — Complete definition validation
+
+- MicroscopeEquipmentDefinition validates non-empty installed component sets; uniqueness of component, port, connection and path IDs; component and port ownership; path entry/exit direction; adjacency continuity; and physical component sharing.
+- Objective, camera, condenser, illumination and stage specifications bind to installed component identities of the correct broad component kind.
+- Duplicate specialization records are rejected. One physical OpticalElement cannot simultaneously be classified by both ObjectiveSpecification and CondenserSpecification.
+- Stage axes are unique within their stage; camera output modes and illumination channels are unique within their owning device specification.
+- Tests cover route reversal across one shared physical connection and conflicting optical specialization roles.
+- Full Core standalone, Application standalone and root platform-only build/test matrices passed on Ubuntu GCC, macOS Clang and Windows MSVC: [run 72](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45595205508).
+
+**Phase 2 boundary**
+The equipment definition now describes installed topology and static capabilities/specifications. It does not store current device state, selected objective, aperture position, current illumination intensity, camera online status, calibrated positions or adapter-specific bindings. Those belong to configuration/runtime/calibration/deployment phases.
+
+**Exit:** satisfied. Phase 2 equipment model and contract validation are complete. JSON parsing remains Phase 5; calibration remains Phase 6; operation execution remains Phase 4.
+
+### Phase 3 — Declarative configuration
+
+**In progress**
+
+**Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
 
 **Modeling sequence**
-1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; undirected physical port connections; ordered directional light paths; shared components represented once and referenced by multiple paths; topology validation.
-2. **2B — Optical specifications and imaging:** objectives and their specification values; sensor geometry; camera output/readout modes; camera-to-optical-path attachment; explicit sensor-pixel to delivered-pixel mapping inputs.
-3. **2C — Illumination and condenser:** source identity/control capability and condenser identity/optical compatibility data, independent of objective classes.
-4. **2D — Stage and axes:** linear/rotary axis identity and unit; range, nominal resolution, accuracy, repeatability/precision, feedback provenance and uncertainty fields. No mechanical transmission implementation details.
-5. **2E — Complete definition validation:** validate references, uniqueness, port ownership/direction, connected route continuity, component sharing and required subsystem references.
+1. **3A — Configuration vocabulary:** objective selection, optical path, contrast method, camera output mode, illumination channel/preset, condenser configuration, phase/DIC/polarization components, exposure preset and exposure policy.
+2. **3B — Profile applicability:** declarative profile requirements, selectors and compatibility constraints over installed component identity/capability data. Profiles must not contain C++ class names, SDK calls or executable callbacks.
+3. **3C — Pure resolution:** request + equipment definition + profile catalog + known current configuration → resolved desired configuration + typed diagnostics.
+4. **3D — Transition description:** derive required component selections/settings and dependency ordering, including conflicts and safe preconditions. This is a value plan only; Phase 4 executes it.
+5. **3E — Representative data-driven profiles:** brightfield, phase contrast, DIC and polarization cases, including unavailable/mismatched installed equipment.
 
-**Phase 2B committed source progress**
-- Added distinct positive finite domain values for micrometers, nominal magnification and numerical aperture. The type domains are intentionally narrow; no general-purpose units framework was added.
-- Added ObjectiveSpecification attached to EquipmentComponentId, with magnification, NA, working distance, chromatic/field correction, immersion medium and optional design coverglass thickness.
-- Added CameraSpecification attached to EquipmentComponentId, including active sensor dimensions, independent X/Y pixel pitch and unique output modes.
-- Added CameraOutputMode with physical sensor ROI, binning, delivered image dimensions, pixel layout and stable pixel-format code. The net sensor-to-delivered-pixel mapping is independently derived for X and Y; binning remains separately recorded.
-- MicroscopeEquipmentDefinition validates objective/camera references against installed component identity and broad component kind, and rejects duplicate specialized records.
-- Added contract tests for finite/positive values, NA above 1, objective characteristics, anisotropic pixel pitch/mapping, ROI and binning limits, invalid pixel formats/layouts, duplicate modes/specifications, unknown component references and wrong component kinds.
-- Cross-platform CI passed on Ubuntu GCC, macOS Clang and Windows MSVC for Core standalone, Application standalone and root platform-only composition/tests in [GitHub Actions run 33](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45589429447).
+**Implementation constraints**
+- Objective, contrast method, optical path, camera mode and illumination remain independent dimensions. The resolver combines them; behavior is not implemented in Objective4x/PhaseObjective/DICObjective subclasses.
+- Objective selection may select an initial exposure preset, but ExposurePreset and ExposurePolicy are distinct. Manual/automatic/constrained-auto policies must not be overwritten implicitly by a profile.
+- Phase contrast requirements describe the compatible phase ring/condenser arrangement. DIC requirements describe the required polarizer/analyzer/prism arrangement and their optical route. The installed definition determines whether the arrangement exists.
+- Profiles are data and constraints. Pure resolver functions are deterministic and testable without a microscope, JSON parser, frontend or adapter.
+- Unknown/unspecified equipment data is not silently treated as compatible. Return explicit diagnostics when required information is absent.
+- Resolver output must not claim hardware state was changed or verified. Transition execution and device feedback remain Phase 4.
+- Keep JSON schema/loading in Application Phase 5. Phase 3 operates on typed Core values.
 
-**Phase 2C committed source progress**
-- Added condenser specifications attached to installed OpticalElement identities: minimum/maximum aperture NA (minimum may be zero), design, immersion medium and optional working distance.
-- Added illumination source specifications attached to installed IlluminationDevice identities, with multiple unique channels per source.
-- Each illumination channel carries an optional spectral band, control kind and optional unit-bearing intensity range. Continuous control requires a valid finite non-negative increasing range; fixed/device-defined/unknown controls do not pretend to expose one.
-- Equipment aggregate validation rejects condenser/illumination specifications for unknown components or components of the wrong kind, and rejects duplicate specializations.
-- Added tests for spectral ranges, intensity units/ranges/control semantics, multichannel source identity, condenser aperture bounds, invalid enums, duplicate records and aggregate reference/kind validation.
-- Cross-platform CI passed for Core standalone, Application standalone and root platform-only builds/tests on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 46](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45590795457).
+**Phase 3 first vertical slice**
+- Add configuration request/profile/result value contracts with stable identities.
+- Add typed compatibility diagnostics and explicit conflict results.
+- Implement pure objective/path/camera/contrast compatibility resolution using only installed equipment specifications.
+- Add deterministic table-driven tests for brightfield, phase contrast, DIC and impossible combinations.
+- Add transition description values only after the pure resolution result shape is stable; do not create an operation executor here.
 
-**Phase 2D committed source progress**
-- Added StageAxisId and AxisSpecification with linear/rotary/other/unknown motion types and explicit coordinate units (µm, mm, degrees, radians, device-defined, unknown).
-- Added signed finite operating range and positive nominal resolution. Range units must match the axis declaration and known linear/rotary motion types reject incompatible units.
-- Added independent optional accuracy, repeatability/precision and measurement-uncertainty specifications. Accuracy and repeatability retain test-condition descriptions; repeatability records its metric. No performance value is inferred from resolution.
-- Added explicit position-feedback capability and measurement-location values. A no-feedback axis cannot claim a measurement location; these are capability declarations, not live position states.
-- Added StageSpecification with one or more uniquely identified axes and aggregate binding to an installed MechanicalAssembly component.
-- Added tests for typed linear/rotary units, signed ranges, unit mismatch, independent performance values, measurement conditions, feedback capability/location, duplicate axes, empty stage and stage/component binding.
-- Cross-platform CI passed for Core standalone, Application standalone and root platform-only builds/tests on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 58](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45592166839).
-
-**Phase 2E committed source progress — validation pending**
-- OpticalConnection now represents undirected physical port adjacency. Ordered OpticalPathStep values define propagation direction; the same physical adjacency is indexed in both endpoint orders.
-- Added a contract case with two bidirectional optical components and one physical connection reused by forward and reverse paths.
-- Added aggregate rejection when one physical OpticalElement is declared simultaneously as an objective and a condenser; those are mutually exclusive installed component roles.
-- The aggregate already validates component/port/connection/path identity uniqueness, references, port ownership/direction, single connection per physical port, route continuity, component-kind bindings for objective/camera/condenser/illumination/stage specs, and stage-axis uniqueness.
-- The opposite-direction path and objective/condenser conflict cases are included in the current CI matrix; do not close Phase 2E until that current-head run is green on all three platforms.
-
-**Implementation constraints**### Phase 3 — Declarative configuration
-- Define profile selection and applicability.
-- Define required components, component positions, illumination/camera presets and constraints.
-- Define conflict diagnostics and compatibility rules.
-- Implement pure resolution, validation and transition-plan generation.
-- Build representative data-driven cases for brightfield, phase contrast and DIC without encoding behavior in component subclasses.
-
-**Exit:** configuration results are deterministic; impossible combinations are rejected before hardware commands are issued.
+**Exit:** configuration results are deterministic; impossible or under-specified combinations are rejected with actionable diagnostics before any hardware command can be issued.
 
 ### Phase 4 — Core operation runtime
 - Implement operation and step lifecycle.
@@ -220,4 +256,4 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 The public contract review is recorded in ../architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
 
-Phase 1 is closed by cross-platform standalone/composed CI. The current implementation task is Phase 2A: build the first typed optical-equipment and route-topology vertical slice in Core, with deterministic validation and tests. Keep JSON parsing in Phase 5, configuration behavior in Phase 3, operation execution in Phase 4 and concrete adapter registration in Phase 5. Do not add empty modules or speculative framework abstractions.
+Phases 1 and 2 are closed by cross-platform standalone/composed CI. The current implementation task is Phase 3A: define the declarative configuration vocabulary and typed request/profile/result contracts, then implement a pure compatibility resolver. Keep JSON parsing in Phase 5 and hardware transition execution in Phase 4. Do not add empty modules or speculative framework abstractions.

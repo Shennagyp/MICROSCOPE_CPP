@@ -54,21 +54,23 @@ int main() {
         operationId,
         core::OperationStatus::Running,
         4};
-    const auto applicationView = application::OperationView{
-        operation,
-        coreSnapshot};
-    check(applicationView.handle.belongsTo(first),
-          "application operation projection retains the runtime-scoped handle");
-    check(applicationView.snapshot.operationId == operationId &&
-          applicationView.snapshot.status == core::OperationStatus::Running &&
-          applicationView.snapshot.revision == 4,
-          "application projection carries Core's snapshot without duplicating state fields");
-    check(applicationView.isConsistent(),
-          "application projection confirms handle and Core snapshot identity match");
+    auto applicationViewResult = application::OperationView::create(
+        operation, coreSnapshot);
+    check(static_cast<bool>(applicationViewResult),
+          "creates an application operation view for matching identities");
+    if (applicationViewResult) {
+        const auto& applicationView = applicationViewResult.value();
+        check(applicationView.handle().belongsTo(first),
+              "application operation projection retains the runtime-scoped handle");
+        check(applicationView.snapshot().operationId == operationId &&
+              applicationView.snapshot().status == core::OperationStatus::Running &&
+              applicationView.snapshot().revision == 4,
+              "application projection carries Core's snapshot without duplicating state fields");
+    }
 
     const auto differentOperationId =
         core::OperationId::create("operation-002").value();
-    const auto mismatchedView = application::OperationView{
+    auto mismatchedView = application::OperationView::create(
         operation,
         core::OperationSnapshot{
             microscopeId,
@@ -76,9 +78,11 @@ int main() {
             generation1,
             differentOperationId,
             core::OperationStatus::Running,
-            5}};
-    check(!mismatchedView.isConsistent(),
-          "application projection detects a mismatched Core snapshot identity");
+            5});
+    check(!mismatchedView &&
+          mismatchedView.error() ==
+              application::OperationViewError::OperationIdentityMismatch,
+          "rejects a snapshot with a different operation identity");
 
     const auto staleGenerationSnapshot = core::OperationSnapshot{
         microscopeId,
@@ -87,11 +91,12 @@ int main() {
         operationId,
         core::OperationStatus::Running,
         6};
-    const auto staleGenerationView = application::OperationView{
-        operation,
-        staleGenerationSnapshot};
-    check(!staleGenerationView.isConsistent(),
-          "application projection rejects a snapshot from an earlier runtime generation");
+    auto staleGenerationView = application::OperationView::create(
+        operation, staleGenerationSnapshot);
+    check(!staleGenerationView &&
+          staleGenerationView.error() ==
+              application::OperationViewError::RuntimeIdentityMismatch,
+          "rejects a snapshot from an earlier runtime generation");
 
     const auto secondRuntimeId =
         core::RuntimeId::create("runtime-002").value();
@@ -102,11 +107,12 @@ int main() {
         operationId,
         core::OperationStatus::Running,
         6};
-    const auto foreignRuntimeView = application::OperationView{
-        operation,
-        foreignRuntimeSnapshot};
-    check(!foreignRuntimeView.isConsistent(),
-          "application projection rejects a snapshot from another runtime even when OperationId matches");
+    auto foreignRuntimeView = application::OperationView::create(
+        operation, foreignRuntimeSnapshot);
+    check(!foreignRuntimeView &&
+          foreignRuntimeView.error() ==
+              application::OperationViewError::RuntimeIdentityMismatch,
+          "rejects a snapshot from another runtime even when OperationId matches");
 
     if (failures != 0) {
         std::cerr << failures << " Application contract test(s) failed.\n";

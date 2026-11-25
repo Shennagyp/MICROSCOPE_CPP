@@ -6,6 +6,10 @@
 - [Microscope Core and Application Contracts v0.9](MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md) — Phase 1 public contract conventions for identities, results, feedback correlation, adapter ports, runtime/API boundaries and compatibility with Camera::Common.
 - [Microscope Platform Implementation Plan v0.9](../plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md) — incremental migration phases and acceptance criteria.
 
+## Physical hardware model
+
+- [OPTIKA B293 Motorized Stage Hardware Model](OPTIKA_B293_MOTORIZED_STAGE_HARDWARE_MODEL.md) — as-built assembly, coordinate frames, kinematics, limits, position evidence and the boundary to Core StageSpecification and runtime Motion contracts.
+
 ## Library implementation guide
 
 - [C++ libraries README](../../Libraries/README.md) — standalone CMake configuration, target names and current implementation boundary.

@@ -47,6 +47,20 @@ int main() {
     check(operation.operationId() == operationId,
           "operation handle preserves the stable operation ID");
 
+    const coreSnapshot = core::OperationSnapshot{
+        operationId,
+        core::OperationStatus::Running,
+        4};
+    const applicationView = application::OperationView{
+        operation,
+        coreSnapshot};
+    check(applicationView.handle.belongsTo(first),
+          "application operation projection retains the runtime-scoped handle");
+    check(applicationView.snapshot.operationId == operationId &&
+          applicationView.snapshot.status == core::OperationStatus::Running &&
+          applicationView.snapshot.revision == 4,
+          "application projection carries Core's snapshot without duplicating state fields");
+
     if (failures != 0) {
         std::cerr << failures << " Application contract test(s) failed.\n";
         return EXIT_FAILURE;

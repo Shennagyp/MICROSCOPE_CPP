@@ -156,6 +156,7 @@ enum class StageNavigationRuntimeErrorCode {
     PlanningRejected,
     ExecutionRejected,
     DispatchRejected,
+    FeedbackLossUnresolved,
     PositionFeedbackRejected,
     CommandReductionRejected,
     HomeReferenceRejected,
@@ -282,6 +283,10 @@ public:
         if (active_) {
             return failure(StageNavigationRuntimeErrorCode::NavigationAlreadyActive);
         }
+        if (operationRuntime_->feedbackLossLatched()) {
+            position_ = position_.invalidateMachineReference();
+            return failure(StageNavigationRuntimeErrorCode::FeedbackLossUnresolved);
+        }
 
         auto plan = core::StageNavigationPlanner::planToSlidePoint(
             carrier_, slideId, destination, position_, homingPolicy_);
@@ -330,6 +335,10 @@ public:
         if (active_) {
             return failure(StageNavigationRuntimeErrorCode::NavigationAlreadyActive);
         }
+        if (operationRuntime_->feedbackLossLatched()) {
+            position_ = position_.invalidateMachineReference();
+            return failure(StageNavigationRuntimeErrorCode::FeedbackLossUnresolved);
+        }
         if (identities.initialStepId == identities.restoredMoveStepId ||
             identities.initialCommandId == identities.restoredMoveCommandId) {
             return failure(StageNavigationRuntimeErrorCode::ExecutionRejected);
@@ -377,6 +386,20 @@ public:
                     : StageNavigationRuntimeDisposition::MoveDispatched);
         }
         if (dispatch == DispatchDisposition::Rejected) {
+            const auto* dispatchError =
+                std::get_if<StageMotionDispatchError>(&active_->execution.dispatch);
+            if (dispatchError != nullptr &&
+                dispatchError->code == StageMotionDispatchErrorCode::RuntimeDispatchRejected) {
+                auto failed = operationRuntime_->recordPreDispatchFailure(
+                    active_->identities.operationId,
+                    active_->execution.commandContext.operation().stepId);
+                if (!failed) {
+                    return failure(
+                        StageNavigationRuntimeErrorCode::DispatchRejected,
+                        std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                        std::nullopt, failed.error());
+                }
+            }
             const auto snapshot = operationRuntime_->operationSnapshot(
                 active_->identities.operationId);
             active_.reset();
@@ -813,6 +836,20 @@ private:
             return success(StageNavigationRuntimeDisposition::SubmissionIndeterminate);
         }
 
+        const auto* dispatchError =
+            std::get_if<StageMotionDispatchError>(&active_->execution.dispatch);
+        if (dispatchError != nullptr &&
+            dispatchError->code == StageMotionDispatchErrorCode::RuntimeDispatchRejected) {
+            const auto& operation = active_->execution.commandContext.operation();
+            auto failed = operationRuntime_->recordPreDispatchFailure(
+                operation.operationId, operation.stepId);
+            if (!failed) {
+                return failure(
+                    StageNavigationRuntimeErrorCode::DispatchRejected,
+                    std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                    std::nullopt, failed.error());
+            }
+        }
         const auto snapshot = operationRuntime_->operationSnapshot(operationId);
         active_.reset();
         return success(StageNavigationRuntimeDisposition::NavigationFailed,

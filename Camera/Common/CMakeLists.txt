@@ -13,6 +13,12 @@ if(BUILD_TESTING)
     target_link_libraries(camera_common_feature_tests PRIVATE Camera::Common)
     add_test(NAME camera_common_feature_tests COMMAND camera_common_feature_tests)
 
+    add_executable(camera_common_command_access_tests
+        tests/CameraCommandAccessTests.cpp)
+    target_link_libraries(camera_common_command_access_tests PRIVATE Camera::Common)
+    add_test(NAME camera_common_command_access_tests
+        COMMAND camera_common_command_access_tests)
+
     add_executable(camera_common_models_tests
         tests/CameraModelsTests.cpp)
     target_link_libraries(camera_common_models_tests PRIVATE Camera::Common)

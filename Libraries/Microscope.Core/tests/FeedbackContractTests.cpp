@@ -245,6 +245,22 @@ int main() {
     check(static_cast<bool>(manualObservation),
           "operator confirmation remains a valid state observation source");
 
+    const auto adapterFailureFromSensor = FeedbackMetadata::create(
+        telemetryCorrelation,
+        FeedbackKind::AdapterFailure,
+        ObservationSource::HardwareReadback);
+    check(!adapterFailureFromSensor &&
+          adapterFailureFromSensor.error() ==
+              FeedbackMetadataError::InvalidAdapterFailureSource,
+          "adapter failure cannot be mislabeled as a sensor observation");
+
+    const auto adapterFailure = FeedbackMetadata::create(
+        telemetryCorrelation,
+        FeedbackKind::AdapterFailure,
+        ObservationSource::AdapterReport);
+    check(static_cast<bool>(adapterFailure),
+          "adapter failure uses explicit adapter-report provenance");
+
     const auto invalidDeviceTimestamp = DeviceTimestamp::create(1500, 0);
     check(!invalidDeviceTimestamp,
           "rejects a device timestamp without a valid ticks-per-second value");

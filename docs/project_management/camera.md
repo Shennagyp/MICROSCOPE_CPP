@@ -281,7 +281,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 | 2 | Partially implemented | Common models/frame contracts and 2.3 ownership decision exist. Physical common-frame/RAW qualification remains. |
 | 3 | In progress | `AmcamCamera` supplies the non-Qt control/session API; concrete `Camera::Qt::FrameStream` now owns Qt frame notification/handoff; `QtAmcamCamera` composes both while retaining the serialized provider operation queue. All four CI jobs pass (12/12 non-Qt and 18/18 Qt tests per architecture). Physical same-session regression and final boundary acceptance remain. |
 | 4 | Partially implemented | Reusable Qt widgets exist. Optika already has its camera preview; do not rebuild it. Reusable component coverage and external consumer validation remain. |
-| 5 | In progress | C++ bridge and mock-tested GenTL stream lifecycle/frame delivery exist. Real Swift C ABI validation, GenApi 3.5.1 compilation/feature mapping, Common-frame layout mapping and physical CTI qualification remain. |
+| 5 | In progress | C++ bridge, producer/device/stream lifecycle, buffer requeue, and mock-tested frame delivery exist. `GenTLFrameAdapter` maps only explicitly safe PFNC Mono8 image buffers into Common frames; other layouts remain opaque. `GenApiFeatureAccess` maps scalar/enumerated features; `GenApiCommandAccess` and the separate `ICameraCommandAccess` contract now model command issue and completion separately. Real Swift C ABI validation, official GenApi 3.5.1 SDK compilation, vendor CTI/physical-camera qualification and broader PFNC layout mapping remain.
 | 6 | Open | Broad implementation exists; reconcile every feature and model claim against source, tests and hardware. |
 | 7 | Open | Initial install rules and non-Qt header checks exist; exported package and clean non-Qt/Qt consumers remain. |
 | 8 | Not accepted | Full release-candidate hardware matrix and exact-commit records remain outstanding. |
@@ -338,7 +338,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** `ff11799c1e7859aacc7aeef702cfb20237cedc8e`. **Latest CI-validated GenTL code checkpoint:** `549433466098c5daeb63d72609776d958a35c2fe`; workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed both architectures. Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs.  
+**Latest Camera status checkpoint:** `3d9d1a6a0b133acd2020abd020c5e1ca0bdf4cec`. **Latest implementation checkpoint:** `10f53f077f00e8b4a17f1e37aa5714f766246f51` before the documentation-only commit. The latest frame/command changes have pending CI; run [#45685995756](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45685995756) was created for `10f53f0`. Earlier GenTL bridge/stream baseline `549433466098c5daeb63d72609776d958a35c2fe` passed both architectures in [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203). Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

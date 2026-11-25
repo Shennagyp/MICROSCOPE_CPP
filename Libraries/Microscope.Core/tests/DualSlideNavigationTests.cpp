@@ -6,7 +6,7 @@
 using namespace microscope::core;
 template<class T,class E>T take(Result<T,E> r){if(!r)throw std::runtime_error("fixture rejected");return std::move(r).value();}
 template<class T>T id(const char*s){return take(T::create(s));}
-AxisSpecification axis(const char*s){return take(AxisSpecification::create(id<StageAxisId>(s),AxisMotionType::Linear,AxisCoordinateUnit::Micrometers,take(AxisOperatingRange::create(-100000,100000,AxisCoordinateUnit::Micrometers)),take(PositiveAxisResolution::create(0.1)),std::nullopt,std::nullopt,std::nullopt,AxisPositionFeedbackCapability::DeviceReported));}
+AxisSpecification axis(const char*s){return take(AxisSpecification::create(id<StageAxisId>(s),AxisMotionType::Linear,AxisCoordinateUnit::Micrometers,take(AxisOperatingRange::create(-300000,300000,AxisCoordinateUnit::Micrometers)),take(PositiveAxisResolution::create(0.1)),std::nullopt,std::nullopt,std::nullopt,AxisPositionFeedbackCapability::DeviceReported));}
 StageSpecification stage(){return take(StageSpecification::create(id<EquipmentComponentId>("stage"),{axis("x"),axis("y")}));}
 SlideRegistration registration(const char*s,DualSlideSlot slot,double x){
  auto g=take(SlideGeometry::create(75000,25000));auto src=ObservationSource::HardwareReadback;
@@ -42,5 +42,8 @@ int main(){
  auto leftCommand=carrier.commandFor(id<SlideId>("left"),{10000,10000});
  auto rightCommand=carrier.commandFor(id<SlideId>("right"),{10000,10000});
  check(leftCommand&&rightCommand&&leftCommand.value().targets()[0].value()!=rightCommand.value().targets()[0].value(),"navigation resolves the selected SlideId through its own registration");
+ auto outsideTravel=carrier.commandFor(id<SlideId>("right"),{75000,12000});
+ check(!outsideTravel&&outsideTravel.error()==SlideNavigationCommandError::OutsideStageTravel,
+       "mapped slide target is rejected outside installed stage travel");
  if(failures)return 1;std::cout<<"Dual slide navigation tests passed\n";return 0;
 }

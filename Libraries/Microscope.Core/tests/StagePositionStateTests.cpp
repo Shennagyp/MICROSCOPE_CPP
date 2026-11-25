@@ -68,6 +68,14 @@ int main() {
           "completed movement updates one axis and accumulates its calibrated error");
     check(moved.transverse().position()->value()==0,
           "movement of one axis preserves the other axis state");
+    auto absoluteX=take(moved.afterCommandedPosition(
+        take(AxisPosition::create(id<StageAxisId>("x"),30000,AxisCoordinateUnit::Micrometers)),
+        2.0));
+    check(absoluteX.horizontal().position()->value()==30000&&
+          absoluteX.horizontal().accumulatedPositionErrorBound().value()==5.5,
+          "absolute MoveAxesTo completion updates the target coordinate and accumulates its error");
+    check(absoluteX.transverse().position()->value()==0,
+          "absolute movement of X preserves the Y state");
 
     auto encoder=observation("x",25010,0.2,StagePositionEvidence::EncoderMeasured);
     auto measured=take(moved.afterPositionObservation(encoder,ObservationSource::HardwareReadback));

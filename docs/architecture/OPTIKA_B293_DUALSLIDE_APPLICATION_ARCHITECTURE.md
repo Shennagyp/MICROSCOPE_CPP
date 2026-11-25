@@ -362,11 +362,13 @@ The preview pipeline is already deliberately designed to avoid per-frame SwiftUI
     overlay-coordinate calculations and graphics-state setup.
 13. The dual-preview coordinator owns one FPS estimator derived from the
     monotonic successful SDK-pull counter. It publishes the same scalar value to
-    both slide panes, each rendered in a compact "FPS" annotation immediately
-    beneath its title/status row. The value is acquisition throughput, not a
-    displayed-frame rate or a sensor-reported FPS value. Pane labels update only
-    when the shared rate changes. One periodic coordinator timer only expires a
-    stale rate value; it never calls the SDK.
+    both slide panes. Each "FPS" label is arranged inline beside its slide title
+    in the existing header row; it does not create another row, plate, or reserve
+    additional preview space. The workspace dock rail retains its own permanent
+    layout allocation. The value is acquisition throughput, not a displayed-frame
+    rate or a sensor-reported FPS value. Pane labels update only when the shared
+    rate changes. One periodic coordinator timer only expires a stale rate value;
+    it never calls the SDK.
 14. Immutable frame leases cross the mailbox and Core Graphics boundary without
     copying pixel bytes. Frame-specific providers retain the source lease for the
     lifetime of the image; only small immutable color-space objects are shared.

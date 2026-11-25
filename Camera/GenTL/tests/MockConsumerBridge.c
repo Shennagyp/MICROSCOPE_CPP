@@ -6,7 +6,60 @@
 #include <stdlib.h>
 
 static int context_token;
-static const char mock_xml[] = "<RegisterDescription/>";
+static uint8_t register_memory[0x10000];
+static const char mock_xml[] =
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
+    "<RegisterDescription\n" \
+    "  ModelName=\"MockGenApiCamera\"\n" \
+    "  VendorName=\"MockVendor\"\n" \
+    "  ToolTip=\"GenApi integration test fixture\"\n" \
+    "  StandardNameSpace=\"None\"\n" \
+    "  SchemaMajorVersion=\"1\"\n" \
+    "  SchemaMinorVersion=\"1\"\n" \
+    "  SchemaSubMinorVersion=\"0\"\n" \
+    "  MajorVersion=\"1\"\n" \
+    "  MinorVersion=\"0\"\n" \
+    "  SubMinorVersion=\"0\"\n" \
+    "  ProductGuid=\"1F3C6A72-7842-4edd-9130-E2E90A2058BA\"\n" \
+    "  VersionGuid=\"7645D2A1-A41E-4ac6-B486-1531FB7BECE6\"\n" \
+    "  xmlns=\"http://www.genicam.org/GenApi/Version_1_1\"\n" \
+    "  xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n" \
+    "  <Category Name=\"Root\">\n" \
+    "    <ToolTip>Root feature category</ToolTip>\n" \
+    "    <pFeature>Gain</pFeature>\n" \
+    "    <pFeature>AcquisitionStart</pFeature>\n" \
+    "  </Category>\n" \
+    "  <Integer Name=\"Gain\">\n" \
+    "    <pValue>GainReg</pValue>\n" \
+    "    <Min>0</Min>\n" \
+    "    <Max>255</Max>\n" \
+    "    <Inc>1</Inc>\n" \
+    "    <Unit>dB</Unit>\n" \
+    "  </Integer>\n" \
+    "  <IntReg Name=\"GainReg\">\n" \
+    "    <Address>0x1000</Address>\n" \
+    "    <Length>2</Length>\n" \
+    "    <AccessMode>RW</AccessMode>\n" \
+    "    <pPort>Device</pPort>\n" \
+    "    <Sign>Unsigned</Sign>\n" \
+    "    <Endianness>BigEndian</Endianness>\n" \
+    "  </IntReg>\n" \
+    "  <Command Name=\"AcquisitionStart\">\n" \
+    "    <pValue>CommandReg</pValue>\n" \
+    "    <CommandValue>1</CommandValue>\n" \
+    "  </Command>\n" \
+    "  <IntReg Name=\"CommandReg\">\n" \
+    "    <Address>0x1002</Address>\n" \
+    "    <Length>2</Length>\n" \
+    "    <AccessMode>RW</AccessMode>\n" \
+    "    <pPort>Device</pPort>\n" \
+    "    <Sign>Unsigned</Sign>\n" \
+    "    <Endianness>BigEndian</Endianness>\n" \
+    "  </IntReg>\n" \
+    "  <Port Name=\"Device\">\n" \
+    "    <ToolTip>Default device port</ToolTip>\n" \
+    "  </Port>\n" \
+    "</RegisterDescription>\n";
 static uint8_t* stream_memory[8];
 static BUFFER_HANDLE stream_handles[8];
 static size_t stream_buffer_count;
@@ -95,12 +148,27 @@ int32_t gentl_consumer_invoke(
             memcpy(bytes, mock_xml, *size);
             return GC_ERR_SUCCESS;
         }
-        for (size_t i = 0; i < *size; ++i) bytes[i] = (uint8_t)(0xA0 + i);
+        if (arguments[1] <= sizeof(register_memory) &&
+            *size <= sizeof(register_memory) - (size_t)arguments[1]) {
+            memcpy(bytes, register_memory + (size_t)arguments[1], *size);
+        } else {
+            for (size_t i = 0; i < *size; ++i) bytes[i] = (uint8_t)(0xA0 + i);
+        }
         return GC_ERR_SUCCESS;
     }
-    case 5:
-        return argument_count == 4 && arguments[0] == 0x4444
-            ? GC_ERR_SUCCESS : GC_ERR_INVALID_HANDLE;
+    case 5: {
+        if (argument_count != 4 || arguments[0] != 0x4444)
+            return GC_ERR_INVALID_HANDLE;
+        const uint64_t address = arguments[1];
+        const uint8_t* bytes = (const uint8_t*)pointer(arguments[2]);
+        const size_t* size = (const size_t*)pointer(arguments[3]);
+        if (!size || (!bytes && *size != 0)) return GC_ERR_INVALID_PARAMETER;
+        if (address <= sizeof(register_memory) &&
+            *size <= sizeof(register_memory) - (size_t)address) {
+            memcpy(register_memory + (size_t)address, bytes, *size);
+        }
+        return GC_ERR_SUCCESS;
+    }
     case 6:
         if (argument_count != 3 || arguments[0] != 0x4444) return GC_ERR_INVALID_HANDLE;
         return write_string((char*)pointer(arguments[1]),

@@ -181,4 +181,15 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS OFF)
+
+    if(BUILD_TESTING)
+        add_executable(camera_gentl_genapi_tests
+            tests/GenApiIntegrationTests.cpp)
+        target_compile_features(camera_gentl_genapi_tests PRIVATE cxx_std_17)
+        target_link_libraries(camera_gentl_genapi_tests
+            PRIVATE Camera::GenTLGenApi)
+        add_test(NAME camera_gentl_genapi_tests
+            COMMAND camera_gentl_genapi_tests
+                "$<TARGET_FILE:gentl_consumer_bridge_fixture>")
+    endif()
 endif()

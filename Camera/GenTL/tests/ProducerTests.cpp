@@ -60,7 +60,8 @@ int main(int argc, char** argv) {
 
         const auto xmlBytes = device.genApiXml();
         const std::string xml(xmlBytes.begin(), xmlBytes.end());
-        if (xml != "<RegisterDescription/>") return 9;
+        if (xml.find("<RegisterDescription") == std::string::npos ||
+            xml.find("MockGenApiCamera") == std::string::npos) return 9;
 
         const auto bytes = device.readPort(0x10203040, 4);
         if (bytes != std::vector<std::uint8_t>{0xA0, 0xA1, 0xA2, 0xA3}) return 10;

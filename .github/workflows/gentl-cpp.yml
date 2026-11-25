@@ -93,13 +93,16 @@ jobs:
           cmake -S Camera/GenTL -B build/gentl-genapi \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
-            -DBUILD_TESTING=OFF \
+            -DBUILD_TESTING=ON \
             -DCAMERA_GENTL_ENABLE_GENAPI=ON \
             -DGENAPI_ROOT="$GENAPI_ROOT" \
             -DGenApi_DIR="$GENAPI_CMAKE_DIR"
 
       - name: Build official GenApi integration
         run: cmake --build build/gentl-genapi --config Release --parallel
+
+      - name: Test official GenApi integration
+        run: ctest --test-dir build/gentl-genapi --output-on-failure
 
       - name: Verify GenApi architecture
         run: |

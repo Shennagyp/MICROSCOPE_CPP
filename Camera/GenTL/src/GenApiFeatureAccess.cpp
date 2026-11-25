@@ -5,6 +5,7 @@
 #include <Base/GCException.h>
 #include <Base/GCString.h>
 #include <GenApi/IBoolean.h>
+#include <GenApi/ICategory.h>
 #include <GenApi/IEnumeration.h>
 #include <GenApi/IEnumEntry.h>
 #include <GenApi/IFloat.h>
@@ -233,12 +234,23 @@ GenApiFeatureAccess::featureDescriptors() {
     try {
         return nodeMap_->withNodeMap([](auto& nodeMap)
             -> camera::CameraFeatureResult<std::vector<Descriptor>> {
-            GenApi::NodeList_t nodes;
-            nodeMap._GetNodes(nodes);
+            auto* rootNode = nodeMap._GetNode(GenICam::gcstring("Root"));
+            auto* root = dynamic_cast<GenApi::ICategory*>(rootNode);
+            if (!root) {
+                return makeError(ErrorCode::BackendFailure, {},
+                    "GenApi Root category is missing or has an incompatible interface.");
+            }
+
+            // _GetNodes() includes implementation nodes such as IntReg,
+            // Port and enum entries. Public features are only those reachable
+            // from the Root category's feature tree.
+            GenApi::FeatureList_t featureValues;
+            root->GetFeatures(featureValues);
 
             std::vector<Descriptor> descriptors;
-            descriptors.reserve(nodes.size());
-            for (auto* node : nodes) {
+            descriptors.reserve(featureValues.size());
+            for (auto* featureValue : featureValues) {
+                auto* node = featureValue ? featureValue->GetNode() : nullptr;
                 auto descriptor = describeNode(node);
                 if (descriptor) descriptors.push_back(std::move(*descriptor));
             }

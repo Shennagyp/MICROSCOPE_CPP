@@ -2,6 +2,7 @@
 
 #include <Base/GCException.h>
 #include <GenApi/ICommand.h>
+#include <GenApi/ICategory.h>
 #include <GenApi/INode.h>
 
 #include <exception>
@@ -60,11 +61,20 @@ GenApiCommandAccess::commandDescriptors() {
     try {
         return nodeMap_->withNodeMap([](auto& nodeMap)
             -> camera::CameraCommandResult<std::vector<Descriptor>> {
-            GenApi::NodeList_t nodes;
-            nodeMap._GetNodes(nodes);
+            auto* rootNode = nodeMap._GetNode(GenICam::gcstring("Root"));
+            auto* root = dynamic_cast<GenApi::ICategory*>(rootNode);
+            if (!root) {
+                return makeError(ErrorCode::BackendFailure, {},
+                    "GenApi Root category is missing or has an incompatible interface.");
+            }
+
+            GenApi::FeatureList_t featureValues;
+            root->GetFeatures(featureValues);
+
             std::vector<Descriptor> descriptors;
-            descriptors.reserve(nodes.size());
-            for (auto* node : nodes) {
+            descriptors.reserve(featureValues.size());
+            for (auto* featureValue : featureValues) {
+                auto* node = featureValue ? featureValue->GetNode() : nullptr;
                 auto descriptor = describeCommand(node);
                 if (descriptor) descriptors.push_back(std::move(*descriptor));
             }

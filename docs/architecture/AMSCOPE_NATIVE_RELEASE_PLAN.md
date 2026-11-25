@@ -1,4 +1,15 @@
-# AmScope Native Camera Module — Revised Implementation and Release Plan
+# Historical AmScope Native Release Plan — superseded for Camera v2.0
+
+> **Historical plan. Do not use this document as the current Camera v2.0 roadmap.**
+> It records the former Qt adapter / Qt Widgets preview delivery. Camera v2.0
+> now defines a non-Qt programmatic library; it has no reusable camera UI
+> deliverable. Keep this file as historical evidence for the implementation
+> decisions and acceptance work performed under the previous release scope.
+>
+> The current phase numbering, implementation state, CI evidence, risks and
+> continuation sequence are maintained in
+> [`CAMERA_V2_DEVELOPMENT_STATUS.md`](CAMERA_V2_DEVELOPMENT_STATUS.md).
+
 
 **Revision date:** 24 November 2026  
 **Target branch:** `amscope-native-driver-0.7`  

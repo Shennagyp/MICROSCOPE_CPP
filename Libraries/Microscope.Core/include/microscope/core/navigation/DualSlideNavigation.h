@@ -10,7 +10,7 @@ namespace microscope::core {
 // OPTIKA dual-slide carrier: two side-by-side slides on one horizontal X/Y
 // stage plane. The transverse in-plane axis is not a vertical slide-stack axis.
 enum class DualSlideSlot { Left, Right };
-enum class SlideNavigationCommandError { InvalidStageCoordinate, SlideNotInCarrier, SlideNotRegistered };
+enum class SlideNavigationCommandError { InvalidStageCoordinate, OutsideStageTravel, SlideNotInCarrier, SlideNotRegistered };
 struct StagePlanePoint;
 enum class CarrierHorizontalDirection {
     PositiveStageXFromLeftToRight,
@@ -39,6 +39,8 @@ private:
     CarrierHorizontalDirection direction_;
     AxisCoordinateUnit horizontalUnit_;
     AxisCoordinateUnit transverseUnit_;
+    AxisOperatingRange horizontalRange_;
+    AxisOperatingRange transverseRange_;
 };
 
 enum class SlideGeometryError { NonFiniteDimension, NonPositiveDimension };

@@ -1,5 +1,6 @@
 #include "microscope/core/equipment/OpticalTopology.h"
 
+#include <cstddef>
 #include <map>
 #include <set>
 #include <utility>
@@ -90,11 +91,38 @@ Result<EquipmentComponent, EquipmentComponentError> EquipmentComponent::create(
     }
 
     std::set<OpticalPortId> portIds;
+    bool hasInput = false;
+    bool hasOutput = false;
     for (const auto& port : opticalPorts) {
         if (!portIds.insert(port.id()).second) {
             return Result<EquipmentComponent, EquipmentComponentError>::failure(
                 EquipmentComponentError::DuplicatePortId);
         }
+        hasInput = hasInput || supportsInput(port.direction());
+        hasOutput = hasOutput || supportsOutput(port.direction());
+    }
+
+    bool validPortConfiguration = true;
+    switch (kind) {
+    case EquipmentComponentKind::OpticalElement:
+        validPortConfiguration =
+            opticalPorts.size() >= 2 && hasInput && hasOutput;
+        break;
+    case EquipmentComponentKind::ImagingDevice:
+        validPortConfiguration = hasInput;
+        break;
+    case EquipmentComponentKind::IlluminationDevice:
+        validPortConfiguration = hasOutput;
+        break;
+    case EquipmentComponentKind::MechanicalAssembly:
+        validPortConfiguration = opticalPorts.empty();
+        break;
+    case EquipmentComponentKind::Other:
+        break;
+    }
+    if (!validPortConfiguration) {
+        return Result<EquipmentComponent, EquipmentComponentError>::failure(
+            EquipmentComponentError::InvalidPortConfiguration);
     }
 
     return Result<EquipmentComponent, EquipmentComponentError>::success(
@@ -236,6 +264,13 @@ Result<
         std::vector<EquipmentComponent> components,
         std::vector<OpticalConnection> connections,
         std::vector<OpticalPath> opticalPaths) {
+    if (components.empty()) {
+        return Result<
+            MicroscopeEquipmentDefinition,
+            EquipmentDefinitionError>::failure(
+                EquipmentDefinitionError::EmptyComponentSet);
+    }
+
     std::map<EquipmentComponentId, const EquipmentComponent*> componentIndex;
     std::map<OpticalPortId, PortOwner> portIndex;
 

@@ -259,7 +259,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         case .slide1:
             guard !slideOnePane.isImageFrozen,
                   let image = lease.createCGImage() else {
-                updateBothPaneDropCounters()
                 return
             }
             // INPUT FPS is already updated above. This records only an image
@@ -268,7 +267,6 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         case .slide2:
             guard !slideTwoPane.isImageFrozen,
                   let image = lease.createCGImage() else {
-                updateBothPaneDropCounters()
                 return
             }
             slideTwoPane.display(image)

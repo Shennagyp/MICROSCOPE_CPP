@@ -24,7 +24,8 @@ struct DiagnosticContext final {
 enum class DiagnosticError {
     InvalidSeverity,
     EmptyCode,
-    EmptyMessage
+    EmptyMessage,
+    EmptyContextValue
 };
 
 // A diagnostic has a stable machine-readable code and non-empty display
@@ -47,13 +48,20 @@ public:
                 DiagnosticError::InvalidSeverity);
         }
 
-        if (code.empty()) {
+        if (code.find_first_not_of(" \\t\\n\\r\\f\\v") == std::string::npos) {
             return Result<Diagnostic, DiagnosticError>::failure(
                 DiagnosticError::EmptyCode);
         }
-        if (message.empty()) {
+        if (message.find_first_not_of(" \\t\\n\\r\\f\\v") == std::string::npos) {
             return Result<Diagnostic, DiagnosticError>::failure(
                 DiagnosticError::EmptyMessage);
+        }
+        if (context &&
+            ((context->entityType && context->entityType->empty()) ||
+             (context->entityId && context->entityId->empty()) ||
+             (context->fieldPath && context->fieldPath->empty()))) {
+            return Result<Diagnostic, DiagnosticError>::failure(
+                DiagnosticError::EmptyContextValue);
         }
 
         return Result<Diagnostic, DiagnosticError>::success(

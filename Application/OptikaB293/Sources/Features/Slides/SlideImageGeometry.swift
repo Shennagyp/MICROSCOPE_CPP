@@ -25,6 +25,12 @@ struct SlideImageCoordinateScale: Equatable {
 /// Deterministic mapping between source-image, document and viewport spaces.
 enum SlideImageGeometry {
     static let scaleTolerance: CGFloat = 0.000001
+    static let maximumDigitalZoomMultiplier: CGFloat = 8
+
+    static func maximumZoomScale(physicalPixelScale: CGFloat) -> CGFloat {
+        guard isValidScale(physicalPixelScale) else { return 1 }
+        return physicalPixelScale * maximumDigitalZoomMultiplier
+    }
 
     /// AppKit points per physical display pixel.
     static func physicalPixelScale(backingScaleFactor: CGFloat) -> CGFloat {
@@ -55,12 +61,12 @@ enum SlideImageGeometry {
     static func documentSize(
         imageSize: CGSize,
         requestedScale: CGFloat,
-        physicalPixelScale: CGFloat
+        maximumScale: CGFloat
     ) -> CGSize {
         guard isValidImageSize(imageSize),
-              isValidScale(physicalPixelScale),
+              isValidScale(maximumScale),
               requestedScale.isFinite else { return .zero }
-        let boundedScale = min(max(requestedScale, 0), physicalPixelScale)
+        let boundedScale = min(max(requestedScale, 0), maximumScale)
         return CGSize(
             width: imageSize.width * boundedScale,
             height: imageSize.height * boundedScale
@@ -173,7 +179,7 @@ enum SlideImageGeometry {
         let nextDocumentSize = documentSize(
             imageSize: imageSize,
             requestedScale: nextScale,
-            physicalPixelScale: maximumScale
+            maximumScale: maximumScale
         )
         let boundedOrigin = clampedOrigin(
             proposedOrigin,

@@ -7,11 +7,12 @@ struct SlideImageGeometryTests {
         testPhysicalPixelScale()
         testAspectPreservingFitAndNoUpscaling()
         testDocumentSizeAtPhysicalOneToOne()
+        testDocumentSizeSupportsDigitalMagnification()
         testCenteringAndPanClamping()
         testViewportToSourceCoordinateMapping()
         testSourceToDocumentOverlayMapping()
         testAnchorPreservingZoom()
-        testZoomCannotExceedPhysicalOneToOne()
+        testZoomClampsAtMaximumDigitalScale()
         testInvalidInputsAreRejected()
         testSlideDistanceMeasurement()
         print("Slide image geometry tests passed.")
@@ -42,9 +43,21 @@ struct SlideImageGeometryTests {
         let size = SlideImageGeometry.documentSize(
             imageSize: CGSize(width: 4000, height: 2000),
             requestedScale: 0.5,
-            physicalPixelScale: 0.5
+            maximumScale: 0.5
         )
         precondition(size == CGSize(width: 2000, height: 1000))
+    }
+
+    private static func testDocumentSizeSupportsDigitalMagnification() {
+        let maximumScale = SlideImageGeometry.maximumZoomScale(physicalPixelScale: 0.5)
+        precondition(close(maximumScale, 4))
+
+        let size = SlideImageGeometry.documentSize(
+            imageSize: CGSize(width: 4000, height: 2000),
+            requestedScale: maximumScale,
+            maximumScale: maximumScale
+        )
+        precondition(size == CGSize(width: 16000, height: 8000))
     }
 
     private static func testCenteringAndPanClamping() {
@@ -141,7 +154,8 @@ struct SlideImageGeometryTests {
         precondition(close(newSource.y, expectedSource.y))
     }
 
-    private static func testZoomCannotExceedPhysicalOneToOne() {
+    private static func testZoomClampsAtMaximumDigitalScale() {
+        let maximumScale = SlideImageGeometry.maximumZoomScale(physicalPixelScale: 0.5)
         guard let transform = SlideImageGeometry.zoomTransform(
             imageSize: CGSize(width: 1000, height: 500),
             viewportSize: CGSize(width: 100, height: 50),
@@ -150,11 +164,11 @@ struct SlideImageGeometryTests {
             anchor: CGPoint(x: 50, y: 25),
             delta: 8,
             minimumScale: 0.1,
-            maximumScale: 0.5
+            maximumScale: maximumScale
         ) else {
-            preconditionFailure("A larger zoom request should clamp to physical 1:1.")
+            preconditionFailure("A larger zoom request should clamp at the configured digital limit.")
         }
-        precondition(close(transform.scale, 0.5))
+        precondition(close(transform.scale, maximumScale))
     }
 
     private static func testInvalidInputsAreRejected() {

@@ -25,13 +25,18 @@ final class NativeSlidePreviewPane: NSView {
     private let distanceToolButton = NSButton(title: "", target: nil, action: nil)
     private let annotationToolButton = NSButton(title: "", target: nil, action: nil)
     private let clearOverlayButton = NSButton(title: "", target: nil, action: nil)
+    private let zoomOutButton = NSButton(title: "", target: nil, action: nil)
+    private let resetZoomButton = NSButton(title: "", target: nil, action: nil)
+    private let zoomInButton = NSButton(title: "", target: nil, action: nil)
     private let annotationStack = NSStackView()
     private let actionStack = NSStackView()
     private let toolStack = NSStackView()
+    private let zoomStack = NSStackView()
     private let annotationPlate = NSView()
     private let actionPlate = NSView()
     private let toolPlate = NSView()
     private let microscopeControlsPlate = NSView()
+    private let zoomPlate = NSView()
     private var microscopeControlsHost: NSHostingView<NativeMicroscopePaneControls>?
 
     var onToggleMaximize: (() -> Void)?
@@ -176,6 +181,24 @@ final class NativeSlidePreviewPane: NSView {
             description: "Clear measurements and annotations",
             action: #selector(clearSlideOverlaysAction(_:))
         )
+        configureIconButton(
+            zoomOutButton,
+            symbol: "minus.magnifyingglass",
+            description: "Zoom out by 20%",
+            action: #selector(zoomOutAction(_:))
+        )
+        configureIconButton(
+            resetZoomButton,
+            symbol: "arrow.counterclockwise",
+            description: "Reset zoom to fit the image",
+            action: #selector(resetZoomAction(_:))
+        )
+        configureIconButton(
+            zoomInButton,
+            symbol: "plus.magnifyingglass",
+            description: "Zoom in by 25%",
+            action: #selector(zoomInAction(_:))
+        )
 
         // The former full-width header is removed. Specimen metadata is
         // presented as compact corner annotations over the image viewport;
@@ -184,6 +207,7 @@ final class NativeSlidePreviewPane: NSView {
         configureAnnotationPlate(actionPlate)
         configureAnnotationPlate(toolPlate)
         configureAnnotationPlate(microscopeControlsPlate)
+        configureAnnotationPlate(zoomPlate)
 
         annotationStack.orientation = .horizontal
         annotationStack.alignment = .centerY
@@ -215,12 +239,23 @@ final class NativeSlidePreviewPane: NSView {
         toolStack.addArrangedSubview(annotationToolButton)
         toolStack.addArrangedSubview(clearOverlayButton)
 
+        zoomStack.orientation = .horizontal
+        zoomStack.alignment = .centerY
+        zoomStack.distribution = .fill
+        zoomStack.spacing = 5
+        zoomStack.translatesAutoresizingMaskIntoConstraints = false
+        zoomStack.addArrangedSubview(zoomOutButton)
+        zoomStack.addArrangedSubview(resetZoomButton)
+        zoomStack.addArrangedSubview(zoomInButton)
+
         annotationPlate.translatesAutoresizingMaskIntoConstraints = false
         actionPlate.translatesAutoresizingMaskIntoConstraints = false
         toolPlate.translatesAutoresizingMaskIntoConstraints = false
+        zoomPlate.translatesAutoresizingMaskIntoConstraints = false
         annotationPlate.addSubview(annotationStack)
         actionPlate.addSubview(actionStack)
         toolPlate.addSubview(toolStack)
+        zoomPlate.addSubview(zoomStack)
 
         // The image viewport now occupies the complete pane. The annotation
         // plates float above it and do not reserve a header band.
@@ -230,6 +265,7 @@ final class NativeSlidePreviewPane: NSView {
         addSubview(actionPlate)
         addSubview(toolPlate)
         addSubview(microscopeControlsPlate)
+        addSubview(zoomPlate)
         NSLayoutConstraint.activate([
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -265,7 +301,14 @@ final class NativeSlidePreviewPane: NSView {
             microscopeControlsPlate.trailingAnchor.constraint(
                 lessThanOrEqualTo: trailingAnchor,
                 constant: -10
-            )
+            ),
+
+            zoomStack.leadingAnchor.constraint(equalTo: zoomPlate.leadingAnchor, constant: 5),
+            zoomStack.trailingAnchor.constraint(equalTo: zoomPlate.trailingAnchor, constant: -5),
+            zoomStack.topAnchor.constraint(equalTo: zoomPlate.topAnchor, constant: 4),
+            zoomStack.bottomAnchor.constraint(equalTo: zoomPlate.bottomAnchor, constant: -4),
+            zoomPlate.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            zoomPlate.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
         ])
         synchronizeToolbarState()
     }
@@ -305,6 +348,9 @@ final class NativeSlidePreviewPane: NSView {
             case "camera": button.title = "C"
             case "trash": button.title = "×"
             case "cursorarrow": button.title = "↖"
+            case "minus.magnifyingglass": button.title = "−"
+            case "plus.magnifyingglass": button.title = "+"
+            case "arrow.counterclockwise": button.title = "↺"
             default: button.title = "T"
             }
         }
@@ -367,6 +413,9 @@ final class NativeSlidePreviewPane: NSView {
         imageSizingButton.setAccessibilityLabel(description)
         imageSizingButton.isEnabled = state.hasImage
         fullResolutionButton.isEnabled = state.hasImage
+        zoomOutButton.isEnabled = state.hasImage
+        resetZoomButton.isEnabled = state.hasImage
+        zoomInButton.isEnabled = state.hasImage
     }
 
     private func updateToolButtonStates(_ state: NativeSlidePreviewToolbarState) {
@@ -529,6 +578,21 @@ final class NativeSlidePreviewPane: NSView {
 
     @objc private func showFullResolutionAction(_ sender: NSButton) {
         imageView.showFullResolution()
+    }
+
+    @objc private func zoomOutAction(_ sender: NSButton) {
+        imageView.zoomOut()
+        window?.makeFirstResponder(imageView)
+    }
+
+    @objc private func resetZoomAction(_ sender: NSButton) {
+        imageView.resetZoom()
+        window?.makeFirstResponder(imageView)
+    }
+
+    @objc private func zoomInAction(_ sender: NSButton) {
+        imageView.zoomIn()
+        window?.makeFirstResponder(imageView)
     }
 
     @objc private func toggleMaximizeAction(_ sender: NSButton) {

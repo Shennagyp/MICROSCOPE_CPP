@@ -28,6 +28,8 @@ final class NativeSlideImageView: NSView {
     var onOverlayStateChanged: (() -> Void)?
     var onFreezeStateChanged: (() -> Void)?
 
+    private static let buttonZoomDelta = CGFloat(Foundation.log2(1.25))
+
     /// Retained only in Manual Scale mode. The Full Resolution command sets
     /// this to the physical 1:1 scale, making the document exactly source
     /// width × source height in physical display pixels.
@@ -62,15 +64,37 @@ final class NativeSlideImageView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
         addSubview(imageContainer)
-        toolTip = "Scroll or pinch to zoom · Drag to pan · Double-click toggles automatic/manual sizing · 1:1 shows full resolution"
+        toolTip = "Pinch or scroll to zoom · Ctrl +/− to zoom · Floating controls reset or adjust zoom · Drag to pan · 1:1 shows full resolution"
     }
 
     required init?(coder: NSCoder) {
         fatalError("NativeSlideImageView does not support NSCoder initialization")
     }
 
+    override var acceptsFirstResponder: Bool { true }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers.contains(.control),
+              let key = event.charactersIgnoringModifiers?.lowercased() else {
+            super.keyDown(with: event)
+            return
+        }
+
+        switch key {
+        case "+", "=":
+            zoomIn()
+        case "-", "_":
+            zoomOut()
+        case "0":
+            resetZoom()
+        default:
+            super.keyDown(with: event)
+        }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -137,6 +161,11 @@ final class NativeSlideImageView: NSView {
         )
     }
 
+    /// Maximum display scale is bounded to eight times physical 1:1.
+    private var maximumZoomScale: CGFloat {
+        SlideImageGeometry.maximumZoomScale(physicalPixelScale: actualPixelScale)
+    }
+
     /// Largest aspect-preserving scale that keeps the complete source image
     /// inside the viewer viewport. Diagnostic content is never cropped just
     /// to eliminate margins. Upscaling beyond native 1:1 is not permitted.
@@ -154,7 +183,7 @@ final class NativeSlideImageView: NSView {
         case .resizable:
             return automaticFitScale
         case .lockedScale:
-            return min(lockedScale ?? automaticFitScale, actualPixelScale)
+            return min(lockedScale ?? automaticFitScale, maximumZoomScale)
         case .fullResolution:
             return actualPixelScale
         }
@@ -166,7 +195,7 @@ final class NativeSlideImageView: NSView {
         return SlideImageGeometry.documentSize(
             imageSize: CGSize(width: CGFloat(image.width), height: CGFloat(image.height)),
             requestedScale: scale,
-            physicalPixelScale: actualPixelScale
+            maximumScale: maximumZoomScale
         )
     }
 
@@ -312,7 +341,7 @@ final class NativeSlideImageView: NSView {
     private func zoom(by delta: CGFloat, anchoredAt anchor: CGPoint) {
         guard let image = currentImage else { return }
 
-        let maximumScale = actualPixelScale
+        let maximumScale = maximumZoomScale
         let minimumScale = min(automaticFitScale, maximumScale)
         let oldScale = currentScale
         let oldOrigin = imageOrigin ?? SlideImageGeometry.centeredOrigin(
@@ -336,7 +365,7 @@ final class NativeSlideImageView: NSView {
         // AppKit owns the sizing-mode state machine; deterministic geometry
         // is delegated to the functional core.
         let nextMode: NativeSlideImageSizingMode =
-            abs(transform.scale - maximumScale) < SlideImageGeometry.scaleTolerance
+            abs(transform.scale - actualPixelScale) < SlideImageGeometry.scaleTolerance
                 ? .fullResolution
                 : .lockedScale
         if sizingMode != nextMode {
@@ -347,6 +376,31 @@ final class NativeSlideImageView: NSView {
         updateImageContainer(scale: transform.scale, origin: transform.origin)
     }
 
+    func zoomIn() {
+        zoom(
+            by: Self.buttonZoomDelta,
+            anchoredAt: CGPoint(x: bounds.midX, y: bounds.midY)
+        )
+    }
+
+    func zoomOut() {
+        zoom(
+            by: -Self.buttonZoomDelta,
+            anchoredAt: CGPoint(x: bounds.midX, y: bounds.midY)
+        )
+    }
+
+    func resetZoom() {
+        guard currentImage != nil else { return }
+        let modeChanged = sizingMode != .resizable
+        sizingMode = .resizable
+        lockedScale = nil
+        updateImageContainer(scale: automaticFitScale, origin: nil)
+        if modeChanged {
+            onSizingModeChanged?()
+        }
+    }
+
     // MARK: - Pointer interaction and panning
 
     override func scrollWheel(with event: NSEvent) {
@@ -355,6 +409,7 @@ final class NativeSlideImageView: NSView {
             return
         }
 
+        window?.makeFirstResponder(self)
         let delta = event.hasPreciseScrollingDeltas
             ? event.scrollingDeltaY * 0.008
             : event.deltaY * 0.12
@@ -370,6 +425,7 @@ final class NativeSlideImageView: NSView {
             return
         }
 
+        window?.makeFirstResponder(self)
         let magnification = max(-0.95, event.magnification)
         let delta = log(1 + magnification) / log(2) * 0.35
         zoom(
@@ -392,6 +448,7 @@ final class NativeSlideImageView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
 
         switch toolMode {

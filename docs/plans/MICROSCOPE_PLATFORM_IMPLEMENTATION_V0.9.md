@@ -199,7 +199,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C Core bounded ingress/single-writer state plus Application wake/owner loop and X/Y feedback reducer implemented. Host control-queue integration and verified feedback-loss reconciliation remain outstanding.**
+**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C bounded ingress, single-writer runtime, wake/worker primitives, X/Y reducer and an Application StageNavigationRuntime are implemented. Host control-queue composition, real drivers and verified feedback-loss reconciliation remain outstanding.**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
@@ -214,7 +214,7 @@ The equipment definition now describes installed topology and static capabilitie
 - Added OperationLifecycleEvent and StepLifecycleEvent plus pure applyOperationLifecycleEvent / applyStepLifecycleEvent transitions.
 - Operation success is allowed only from Verifying. Cancellation remains requested until cancellation confirmation.
 - Command dispatch, adapter acceptance and device acknowledgement are separate step transitions.
-- DeviceActionCompleted moves a step to AwaitingObservation; DeviceStateObserved moves it to Verifying; only a Core VerificationSucceeded event marks it Verified.
+- DeviceActionCompleted moves a step to AwaitingObservation; DeviceStateObserved moves it to Verifying. Core also has an explicit VerificationStarted control transition from AwaitingObservation for a calibrated command-derived estimate; only a Core VerificationSucceeded event marks it Verified.
 - Manual steps have an AwaitingOperator path. OperatorConfirmed enters Verifying and is not itself proof of completion.
 - Timeout, adapter failure/rejection, partial completion and terminal-state behavior have focused tests.
 - Core standalone, Application standalone and root platform-only build/tests passed on Ubuntu GCC, Windows MSVC and macOS Clang: [run 124](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45639182251).
@@ -245,6 +245,15 @@ The equipment definition now describes installed topology and static capabilitie
 - Propagates slide-registration uncertainty through the inverse affine transform with the rectangular affine interpolation L1 bound and refuses slide-local position estimates outside the selected slide geometry.
 - Added focused Core tests and CMake targets for the motion port, dual-slide mapping, position tracking and homing/navigation planning. Hardware drivers and serialized runtime execution are not part of this slice.
 
+**Stage-navigation owner integration — source implemented; current-head CI pending**
+- Added Application StageNavigationRuntime as the owner-thread stage subsystem. It owns the active dual-slide carrier, X/Y StagePositionState, homing policy, calibrated movement-error budget, verification policy and one active navigation execution.
+- It consumes the existing StageNavigationPlanner, StageNavigationExecutor, StagePositionCommandReducer and StagePositionFeedbackReducer rather than duplicating their calculations.
+- BoundedCommandEstimate mode supports open-loop drivers: after correlated DeviceActionCompleted, Core applies the calibrated error contribution and the Application evidence policy starts verification through the explicit VerificationStarted control transition. No synthetic position observation is created.
+- DevicePositionObservations mode requires fresh, command-correlated X and Y position observations and checks target deviation plus the retained uncertainty bound before verification.
+- A complete, correlated HomeReferenceEstablished fact is checked against the requested two-axis home and its uncertainty policy. Only then is the home step verified, the X/Y reference restored, and a new absolute move resolved from the preserved SlideId/local point/registration revision.
+- Added focused Application tests for bounded open-loop completion, measured X/Y completion and home-then-restored-move. The test target is registered in Microscope.Application/CMakeLists.txt; no build or test result is claimed here.
+- The worker still relies on the host to supply its typed control-request drain. This class is invoked by that owner-thread drain/feedback handler; it does not create threads or a universal command queue.
+
 **Implementation constraints**
 - Per-runtime state transitions have one logical owner. Adapter callbacks enqueue immutable feedback and never call the reducer directly from device/SDK threads.
 - Every operation-correlated feedback item must match MicroscopeId, RuntimeId, RuntimeGeneration, DeviceId, DeviceSessionGeneration, OperationId and StepId; CommandId is required where the fact is command-specific.
@@ -267,17 +276,18 @@ The equipment definition now describes installed topology and static capabilitie
 **Exit:** application can load a JSON definition, resolve its adapter factories and create a validated Core runtime.
 
 ### Phase 6 — Calibration and slide navigation
-- Implement nominal optical estimation and measured ruler calibration.
-- Define optical calibration keys and reuse/invalidation.
-- Implement linear/rotary physical-axis calibration and evidence quality, distinct from controller steps-per-unit configuration.
-- Define slide geometry and the OPTIKA dual-slide carrier's two horizontal slot positions.
-- Implement independent four-corner affine registration for each occupied slide; retain corner provenance, uncertainty and fit residuals.
-- Implement slide-local-to-stage-plane and inverse mapping, slide-boundary validation and stage-travel validation.
-- Define runtime position/reference state and an accumulated uncertainty budget. Unknown or unbounded position remains unknown.
-- Define re-homing recovery: preserve the target in (SlideId, slide-local X, slide-local Y), home the common stage, reconcile its machine reference, then restore the target only if that slide's registration remains valid.
-- Store immutable motion-calibration and slide-registration revisions through appropriate persistence ports.
 
-**Exit:** Core can navigate to any accepted point on either registered slide; the two slide maps remain independent; homing does not imply slide re-registration or erase motion-calibration error.
+**Partially implemented in Phase 4B/4C; physical calibration and persistence remain outstanding.**
+- **Implemented:** slide geometry; OPTIKA two-slot horizontal carrier specification; independent four-corner affine registrations; fit residual and uncertainty propagation; slide-local/stage-plane transforms; slide and stage boundary validation.
+- **Implemented:** X/Y machine-reference and position state; accumulated conservative command-error bounds; homing threshold policy; preserved slide-local target and registration-revision validation after homing.
+- **Implemented:** Application navigation execution for both bounded command-derived estimates and correlated controller position observations.
+- Implement nominal optical estimation and measured ruler calibration; define optical calibration keys and reuse/invalidation.
+- Implement linear/rotary physical-axis calibration and evidence quality, distinct from controller steps-per-unit configuration. The current StageMotionErrorBudget is supplied by the host; no fitted calibration model produces its contributions yet.
+- Add slide-corner acquisition/registration workflows, registration acceptance, occupancy changes and reseat invalidation.
+- Persist immutable motion-calibration and slide-registration revisions through appropriate persistence ports.
+- Integrate host typed control requests, a real driver binding and feedback-loss reconciliation before claiming hardware navigation acceptance.
+
+**Exit:** Core can navigate to any accepted point on either registered slide with a traceable physical error bound; both slide maps remain independent; homing does not imply slide re-registration or erase motion-calibration error.
 
 ### Phase 7 — Sample, slides and persistence
 - Define distinct strong identity types for SampleId, SlideId and TileId; identifiers are opaque and independent of labels, paths and display order.
@@ -347,13 +357,13 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 ## Immediate next implementation task
 
-The Core bounded inbox, serialized operation-state owner, Application wake primitive/owner loop and dual-slide X/Y position feedback reducer are implemented. The worker itself does not own a thread or a generic command queue: the Application host starts it on a dedicated thread and supplies a typed control-request drain plus capability-specific feedback handling.
+The Core inbox/runtime and Application StageNavigationRuntime now provide the state and execution path for one active dual-slide navigation. The runtime worker still accepts a host-supplied typed control drain; it does not create a thread or a universal command bus.
 
-**Next Phase 4C/4D integration work**
-1. Compose the host's typed stage-navigation control requests with SerializedRuntimeWorker; process them only on the owner thread and preserve one source of truth for StagePositionState.
-2. Connect StageNavigationPlanner output to IStageMotionPort. A direct plan dispatches the coordinated MoveAxesTo; a homing plan must preserve SlideNavigationTarget, verify the home action and fresh axis references, then call resolveAfterHoming before dispatching the restored absolute move.
-3. Core now defines `HomeReferenceEstablished` and `StageHomeReferenceObservation`, including complete axis-reference coordinates and exact operation/step/command correlation. The Application reducer requires the matching `HomeAxes` request and live Verified step before restoring the X/Y machine reference. The remaining work is to connect a real driver/controller adapter that emits this normalized fact only after its configured physical reference procedure has succeeded.
-4. Integrate calibrated physical motion-error contributions. StagePositionState accepts the calibrated bound, but no concrete driver/controller implementation or measured motion-calibration policy is claimed.
-5. On feedback loss, invalidate capability state, read back/reconcile physical device state, and only then acknowledge the runtime loss latch. Fresh ordinary position telemetry after that point still does not establish a machine reference.
+**Next implementation work**
+1. Add the host-owned typed stage-navigation request queue and compose it with SerializedRuntimeWorker. The host creates operation identities/steps, calls StageNavigationRuntime on the owner thread and publishes immutable operation/position snapshots.
+2. Implement the physical motion-calibration model that supplies StageMotionErrorBudget contributions from measured displacement, residuals and uncertainty. The current budget is an injected value, not a fitted calibration.
+3. Implement feedback-loss reconciliation: stop/inspect the controller, read back or re-home as appropriate, re-establish references, and acknowledge the runtime latch only after reconciliation.
+4. Add stage motion-state, limit and fault reduction plus controlled-stop/timeout handling.
+5. Bind real external driver libraries through IStageMotionPort and perform user-side hardware acceptance. The main library must not implement STEP/DIR pulse generation or vendor protocols.
 
 Controller-specific STEP/DIR generation and vendor protocols remain in external driver libraries.

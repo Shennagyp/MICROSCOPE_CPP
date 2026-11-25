@@ -20,13 +20,16 @@ target_include_directories(microscope_core
 set_target_properties(microscope_core PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     VERSION "0.9.0"
-    SOVERSION "0")
+    SOVERSION "0"
+    CXX_EXTENSIONS OFF)
 
 if(BUILD_TESTING)
     add_executable(microscope_core_contract_tests
         tests/CoreContractTests.cpp)
     target_link_libraries(microscope_core_contract_tests
         PRIVATE Microscope::Core)
+    set_target_properties(microscope_core_contract_tests PROPERTIES
+        CXX_EXTENSIONS OFF)
     add_test(
         NAME microscope_core_contract_tests
         COMMAND microscope_core_contract_tests)
@@ -35,6 +38,8 @@ if(BUILD_TESTING)
         tests/FeedbackContractTests.cpp)
     target_link_libraries(microscope_core_feedback_tests
         PRIVATE Microscope::Core)
+    set_target_properties(microscope_core_feedback_tests PROPERTIES
+        CXX_EXTENSIONS OFF)
     add_test(
         NAME microscope_core_feedback_tests
         COMMAND microscope_core_feedback_tests)

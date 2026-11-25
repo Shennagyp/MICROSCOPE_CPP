@@ -13,6 +13,10 @@ Result<bool,StageNavigationPlanningError> validateAxes(
     const DualSlideCarrierSpecification& specification,
     const StageAxisPositionState& horizontal,
     const StageAxisPositionState& transverse) {
+    if(horizontal.stageComponentId()!=specification.stageComponentId()||
+       transverse.stageComponentId()!=specification.stageComponentId())
+        return Result<bool,StageNavigationPlanningError>::failure(
+            StageNavigationPlanningError::StageComponentMismatch);
     if(horizontal.axisId()!=specification.horizontalAxisId())
         return Result<bool,StageNavigationPlanningError>::failure(
             StageNavigationPlanningError::HorizontalAxisMismatch);

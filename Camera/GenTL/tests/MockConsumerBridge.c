@@ -7,6 +7,7 @@
 
 static int context_token;
 static uint8_t register_memory[0x10000];
+static size_t command_poll_count = 0;
 static const char mock_xml[] =
     "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
     "<RegisterDescription\n" \
@@ -29,6 +30,8 @@ static const char mock_xml[] =
     "    <pFeature>Gain</pFeature>\n" \
     "    <pFeature>FeatureEnabled</pFeature>\n" \
     "    <pFeature>TriggerMode</pFeature>\n" \
+    "    <pFeature>Temperature</pFeature>\n" \
+    "    <pFeature>DeviceLabel</pFeature>\n" \
     "    <pFeature>AcquisitionStart</pFeature>\n" \
     "  </Category>\n" \
     "  <Integer Name=\"Gain\">\n" \
@@ -39,6 +42,16 @@ static const char mock_xml[] =
     "    <Inc>1</Inc>\n" \
     "    <Unit>dB</Unit>\n" \
     "  </Integer>\n" \
+    "  <Float Name=\"Temperature\">\n" \
+    "    <Value>36.5</Value>\n" \
+    "    <Min>0</Min>\n" \
+    "    <Max>100</Max>\n" \
+    "    <Inc>0.1</Inc>\n" \
+    "    <Unit>degC</Unit>\n" \
+    "  </Float>\n" \
+    "  <String Name=\"DeviceLabel\">\n" \
+    "    <Value>Mock GenTL</Value>\n" \
+    "  </String>\n" \
     "  <IntReg Name=\"GainReg\">\n" \
     "    <Address>0x1000</Address>\n" \
     "    <Length>2</Length>\n" \
@@ -183,6 +196,11 @@ int32_t gentl_consumer_invoke(
             memcpy(bytes, mock_xml, *size);
             return GC_ERR_SUCCESS;
         }
+        if (arguments[1] == 0x1002 && *size == 2) {
+            if (command_poll_count > 0)
+                memset(register_memory + 0x1002, 0, 2);
+            ++command_poll_count;
+        }
         if (arguments[1] <= sizeof(register_memory) &&
             *size <= sizeof(register_memory) - (size_t)arguments[1]) {
             memcpy(bytes, register_memory + (size_t)arguments[1], *size);
@@ -198,6 +216,7 @@ int32_t gentl_consumer_invoke(
         const uint8_t* bytes = (const uint8_t*)pointer(arguments[2]);
         const size_t* size = (const size_t*)pointer(arguments[3]);
         if (!size || (!bytes && *size != 0)) return GC_ERR_INVALID_PARAMETER;
+        if (address == 0x1002 && *size == 2) command_poll_count = 0;
         if (address <= sizeof(register_memory) &&
             *size <= sizeof(register_memory) - (size_t)address) {
             memcpy(register_memory + (size_t)address, bytes, *size);

@@ -4,6 +4,7 @@
 #include <Base/GCException.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -71,6 +72,16 @@ int main(int argc, char** argv) {
                     "Gain unit was not preserved.");
             require(!gain->isAvailable,
                     "Gain should be unavailable until FeatureEnabled is set.");
+
+            const auto* temperature = findFeature(*features, "Temperature");
+            require(temperature &&
+                        temperature->kind == camera::CameraFeatureKind::FloatingPoint &&
+                        temperature->unit == std::optional<std::string>{"degC"},
+                    "Temperature was not mapped as a floating-point feature.");
+            const auto* deviceLabel = findFeature(*features, "DeviceLabel");
+            require(deviceLabel &&
+                        deviceLabel->kind == camera::CameraFeatureKind::String,
+                    "DeviceLabel was not mapped as a string feature.");
 
             const auto* triggerMode = findFeature(*features, "TriggerMode");
             require(triggerMode != nullptr &&
@@ -155,6 +166,23 @@ int main(int argc, char** argv) {
             require(readBackGain && *readBackGain == 42,
                     "GenApi Gain write/readback did not preserve the requested value.");
 
+            auto temperatureRead =
+                access.features().readFeature("Temperature");
+            auto* temperatureValue =
+                std::get_if<camera::CameraFeatureValue>(&temperatureRead);
+            require(temperatureValue != nullptr, "Temperature read failed.");
+            auto* temperatureNumber = std::get_if<double>(temperatureValue);
+            require(temperatureNumber &&
+                        std::abs(*temperatureNumber - 36.5) < 1e-9,
+                    "Temperature value was not preserved.");
+
+            auto labelRead = access.features().readFeature("DeviceLabel");
+            auto* labelValue = std::get_if<camera::CameraFeatureValue>(&labelRead);
+            require(labelValue != nullptr, "DeviceLabel read failed.");
+            auto* label = std::get_if<std::string>(labelValue);
+            require(label && *label == "Mock GenTL",
+                    "DeviceLabel string value was not preserved.");
+
             auto initialEnum = access.features().readFeature("TriggerMode");
             auto* initialEnumValue =
                 std::get_if<camera::CameraFeatureValue>(&initialEnum);
@@ -205,6 +233,12 @@ int main(int argc, char** argv) {
             auto* isDone = std::get_if<bool>(&doneResult);
             require(isDone && !*isDone,
                     "GenApi command completion polling did not preserve the active state.");
+
+            auto completedResult =
+                access.commands().isCommandDone("AcquisitionStart");
+            auto* isCompleted = std::get_if<bool>(&completedResult);
+            require(isCompleted && *isCompleted,
+                    "GenApi command completion did not transition to done.");
         }
 
         {

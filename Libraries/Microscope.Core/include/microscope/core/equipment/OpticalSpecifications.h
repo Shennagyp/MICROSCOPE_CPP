@@ -20,6 +20,8 @@ namespace detail {
 struct PositiveMicrometersTag final {};
 struct NominalMagnificationTag final {};
 struct NumericalApertureTag final {};
+struct PositiveNanometersTag final {};
+struct CondenserApertureTag final {};
 } // namespace detail
 
 // Domain-specific positive scalar values. These are not a general unit system.
@@ -60,6 +62,44 @@ private:
 using PositiveMicrometers = PositiveFiniteValue<detail::PositiveMicrometersTag>;
 using NominalMagnification = PositiveFiniteValue<detail::NominalMagnificationTag>;
 using NumericalAperture = PositiveFiniteValue<detail::NumericalApertureTag>;
+using PositiveNanometers = PositiveFiniteValue<detail::PositiveNanometersTag>;
+
+template <typename Tag>
+class NonNegativeFiniteValue final {
+public:
+    [[nodiscard]] static Result<
+        NonNegativeFiniteValue,
+        PositiveFiniteValueError> create(double value) {
+        if (!std::isfinite(value)) {
+            return Result<
+                NonNegativeFiniteValue,
+                PositiveFiniteValueError>::failure(
+                    PositiveFiniteValueError::NotFinite);
+        }
+        if (value < 0.0) {
+            return Result<
+                NonNegativeFiniteValue,
+                PositiveFiniteValueError>::failure(
+                    PositiveFiniteValueError::NotPositive);
+        }
+        return Result<
+            NonNegativeFiniteValue,
+            PositiveFiniteValueError>::success(
+                NonNegativeFiniteValue(value));
+    }
+
+    [[nodiscard]] double value() const noexcept {
+        return value_;
+    }
+
+private:
+    explicit NonNegativeFiniteValue(double value) noexcept : value_(value) {}
+
+    double value_;
+};
+
+using NonNegativeNumericalAperture =
+    NonNegativeFiniteValue<detail::CondenserApertureTag>;
 
 enum class ObjectiveChromaticCorrection {
     Achromatic,
@@ -137,6 +177,67 @@ private:
     ObjectiveFieldCorrection fieldCorrection_;
     ObjectiveImmersionMedium immersionMedium_;
     std::optional<PositiveMicrometers> designCoverglassThickness_;
+};
+
+enum class CondenserDesign {
+    Abbe,
+    Achromatic,
+    AchromatAplanatic,
+    Other,
+    Unknown
+};
+
+enum class CondenserImmersionMedium {
+    Air,
+    Water,
+    Oil,
+    Other,
+    Unknown
+};
+
+enum class CondenserSpecificationError {
+    InvalidDesign,
+    InvalidImmersionMedium,
+    InvertedApertureRange
+};
+
+// Condenser geometry/capability data. Compatibility with objectives,
+// contrast methods and illumination is resolved later from declarative profiles.
+class CondenserSpecification final {
+public:
+    [[nodiscard]] static Result<
+        CondenserSpecification,
+        CondenserSpecificationError> create(
+            EquipmentComponentId componentId,
+            NonNegativeNumericalAperture minimumAperture,
+            NumericalAperture maximumAperture,
+            CondenserDesign design,
+            CondenserImmersionMedium immersionMedium,
+            std::optional<PositiveMicrometers> workingDistance = std::nullopt);
+
+    [[nodiscard]] const EquipmentComponentId& componentId() const noexcept;
+    [[nodiscard]] double minimumApertureNA() const noexcept;
+    [[nodiscard]] double maximumApertureNA() const noexcept;
+    [[nodiscard]] CondenserDesign design() const noexcept;
+    [[nodiscard]] CondenserImmersionMedium immersionMedium() const noexcept;
+    [[nodiscard]] const std::optional<PositiveMicrometers>&
+    workingDistance() const noexcept;
+
+private:
+    CondenserSpecification(
+        EquipmentComponentId componentId,
+        NonNegativeNumericalAperture minimumAperture,
+        NumericalAperture maximumAperture,
+        CondenserDesign design,
+        CondenserImmersionMedium immersionMedium,
+        std::optional<PositiveMicrometers> workingDistance);
+
+    EquipmentComponentId componentId_;
+    NonNegativeNumericalAperture minimumAperture_;
+    NumericalAperture maximumAperture_;
+    CondenserDesign design_;
+    CondenserImmersionMedium immersionMedium_;
+    std::optional<PositiveMicrometers> workingDistance_;
 };
 
 enum class PixelDimensionsError {

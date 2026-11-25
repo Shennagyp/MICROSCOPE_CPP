@@ -243,6 +243,37 @@ private:
     std::optional<DeviceTimestamp> deviceTimestamp_;
 };
 
+// Immutable identity of the currently open logical-device session.
+// Reopening a DeviceId creates a new generation; callbacks retaining an older
+// RuntimeDeviceCorrelation no longer match this binding.
+class RuntimeDeviceSessionBinding final {
+public:
+    static RuntimeDeviceSessionBinding create(RuntimeDeviceCorrelation currentSession) {
+        return RuntimeDeviceSessionBinding(std::move(currentSession));
+    }
+
+    const RuntimeDeviceCorrelation& identity() const noexcept {
+        return identity_;
+    }
+
+    bool matches(const RuntimeDeviceCorrelation& candidate) const noexcept {
+        return identity_.microscopeId==candidate.microscopeId &&
+               identity_.runtimeId==candidate.runtimeId &&
+               identity_.runtimeGeneration==candidate.runtimeGeneration &&
+               identity_.deviceId==candidate.deviceId &&
+               identity_.deviceSessionGeneration==candidate.deviceSessionGeneration;
+    }
+
+    bool matches(const FeedbackMetadata& feedback) const noexcept {
+        return matches(feedback.correlation().runtimeDevice);
+    }
+
+private:
+    explicit RuntimeDeviceSessionBinding(RuntimeDeviceCorrelation currentSession)
+        :identity_(std::move(currentSession)) {}
+    RuntimeDeviceCorrelation identity_;
+};
+
 // TPayload is a concrete Core value for the capability/fact semantics that
 // produced it; do not instantiate this with a bare bool/string or a universal
 // state bag. The envelope is independent of vendor SDK types.

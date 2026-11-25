@@ -19,6 +19,46 @@ enum class EquipmentComponentKind {
     Other
 };
 
+enum class OpticalElementFunction {
+    PhasePlate,
+    PhaseAnnulus,
+    Polarizer,
+    Analyzer,
+    DifferentialInterferencePrism,
+    ExcitationFilter,
+    EmissionFilter,
+    DichroicMirror,
+    DarkfieldStop,
+    Other
+};
+
+enum class OpticalFunctionCapabilityError {
+    InvalidFunction
+};
+
+// Describes an installed optical function and, when relevant, the exact
+// compatibility family shared with its mating optical component.
+class OpticalFunctionCapability final {
+public:
+    [[nodiscard]] static Result<
+        OpticalFunctionCapability,
+        OpticalFunctionCapabilityError> create(
+            OpticalElementFunction function,
+            std::optional<OpticalCompatibilityId> compatibilityId = std::nullopt);
+
+    [[nodiscard]] OpticalElementFunction function() const noexcept;
+    [[nodiscard]] const std::optional<OpticalCompatibilityId>&
+    compatibilityId() const noexcept;
+
+private:
+    OpticalFunctionCapability(
+        OpticalElementFunction function,
+        std::optional<OpticalCompatibilityId> compatibilityId);
+
+    OpticalElementFunction function_;
+    std::optional<OpticalCompatibilityId> compatibilityId_;
+};
+
 enum class OpticalPortDirection {
     Input,
     Output,
@@ -48,7 +88,9 @@ private:
 enum class EquipmentComponentError {
     InvalidKind,
     DuplicatePortId,
-    InvalidPortConfiguration
+    InvalidPortConfiguration,
+    OpticalFunctionsOnNonOpticalElement,
+    DuplicateOpticalFunctionCapability
 };
 
 class EquipmentComponent final {
@@ -58,21 +100,26 @@ public:
         EquipmentComponentError> create(
             EquipmentComponentId id,
             EquipmentComponentKind kind,
-            std::vector<OpticalPort> opticalPorts);
+            std::vector<OpticalPort> opticalPorts,
+            std::vector<OpticalFunctionCapability> opticalFunctions = {});
 
     [[nodiscard]] const EquipmentComponentId& id() const noexcept;
     [[nodiscard]] EquipmentComponentKind kind() const noexcept;
     [[nodiscard]] const std::vector<OpticalPort>& opticalPorts() const noexcept;
+    [[nodiscard]] const std::vector<OpticalFunctionCapability>&
+    opticalFunctions() const noexcept;
 
 private:
     EquipmentComponent(
         EquipmentComponentId id,
         EquipmentComponentKind kind,
-        std::vector<OpticalPort> opticalPorts);
+        std::vector<OpticalPort> opticalPorts,
+        std::vector<OpticalFunctionCapability> opticalFunctions);
 
     EquipmentComponentId id_;
     EquipmentComponentKind kind_;
     std::vector<OpticalPort> opticalPorts_;
+    std::vector<OpticalFunctionCapability> opticalFunctions_;
 };
 
 enum class OpticalConnectionError {

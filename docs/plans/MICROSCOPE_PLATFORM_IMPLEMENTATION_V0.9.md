@@ -192,7 +192,7 @@ The implementation bullets below define the full Phase 1 intent; the committed s
 - **Sample/slide contract tests:** unknown SampleId rejection, Sample-to-many-Slides cardinality, distinct SampleType/SlideType semantics, stable IDs after folder moves, non-authoritative reverse indexes and archive/deletion referential integrity.
 - **Acquisition contract tests:** plan/run distinction, actual MicroscopeId capture, one-slide run constraint, frame-to-run/tile consistency, cross-slide rejection, multi-tile runs, repeated tile acquisition, idempotent duplicate frame delivery and interrupted-run recovery.
 - **Pure unit tests:** configuration resolution, calibration fitting, unit conversion, transition planning and state reducers.
-- **Runtime contract tests:** simulated adapter responses, delayed callbacks, duplicates, stale/late events, timeout, failure and manual confirmation.
+- **Runtime contract tests:** simulated adapter responses, delayed callbacks, duplicates, stale/late events, queue saturation/feedback-loss latching, reconciliation before verification, timeout, failure and manual confirmation.
 - **Application integration tests:** definition loading, adapter registration, resource conflicts, runtime lifecycle and frontend projections.
 - **Hardware acceptance:** separate user-run checks for actual camera, stage, objective selector, illumination, optical selectors and calibration equipment.
 

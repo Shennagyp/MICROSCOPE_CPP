@@ -1852,6 +1852,9 @@ struct AmcamCamera::Impl {
         g_acquisitionOwner = this;
         auto lastFrameAt = std::chrono::steady_clock::now();
         auto lastHeartbeatAt = lastFrameAt;
+        auto lastImageEventCount =
+            imageEvents.load(std::memory_order_acquire);
+        std::uint64_t pendingPullsSinceLastFrame = 0;
 
         // The outer loop is important: a fatal event can race a user Stop.
         // If Stop owns the transition, reportFatal declines ownership and the
@@ -1915,7 +1918,19 @@ struct AmcamCamera::Impl {
                                           " us; watchdog threshold " +
                                           std::to_string(
                                               detail::frameStallTimeout(exposure).count()) +
-                                          " ms)."};
+                                          " ms; image callbacks since last successful pull " +
+                                          std::to_string(
+                                              imageEvents.load(std::memory_order_acquire) -
+                                              lastImageEventCount) +
+                                          "; E_PENDING pull results since last successful pull " +
+                                          std::to_string(pendingPullsSinceLastFrame) +
+                                          "; total successful pulls " +
+                                          std::to_string(
+                                              pulledFrames.load(std::memory_order_relaxed)) +
+                                          "; discarded frames " +
+                                          std::to_string(
+                                              dropped.load(std::memory_order_relaxed)) +
+                                          ")."};
                             break;
                         }
                         continue;
@@ -2019,8 +2034,10 @@ struct AmcamCamera::Impl {
                 // The vendor documents E_PENDING as "no image data is available
                 // yet". The callback can race the frame-ready transition; this
                 // event is consumed and acquisition waits for the next image event.
-                if (hr == E_PENDING)
+                if (hr == E_PENDING) {
+                    ++pendingPullsSinceLastFrame;
                     continue;
+                }
                 if (FAILED(hr)) {
                     fatal = true;
                     error = {static_cast<std::int32_t>(hr),
@@ -2032,6 +2049,9 @@ struct AmcamCamera::Impl {
                 // An IMAGE callback or E_PENDING result alone does not reset health.
                 pulledFrames.fetch_add(1, std::memory_order_relaxed);
                 lastFrameAt = std::chrono::steady_clock::now();
+                lastImageEventCount =
+                    imageEvents.load(std::memory_order_acquire);
+                pendingPullsSinceLastFrame = 0;
                 if (info.v3.expotime != 0)
                     expectedExposureMicroseconds.store(
                         info.v3.expotime, std::memory_order_release);

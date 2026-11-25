@@ -1,6 +1,15 @@
 import AppKit
 import SwiftUI
 
+private struct NativeSlidePreviewToolbarState: Equatable {
+    let hasImage: Bool
+    let sizingMode: NativeSlideImageSizingMode
+    let isImageFrozen: Bool
+    let toolMode: NativeSlideToolMode
+    let hasOverlays: Bool
+    let isMaximized: Bool
+}
+
 final class NativeSlidePreviewPane: NSView {
     private let slide: NativeSlideID
     private let imageView: NativeSlideImageView
@@ -37,6 +46,7 @@ final class NativeSlidePreviewPane: NSView {
     private var frameRateRefreshTimer: Timer?
     private var currentIsActiveTarget = false
     private var currentIsMaximized = false
+    private var lastToolbarState: NativeSlidePreviewToolbarState?
 
     init(slide: NativeSlideID) {
         self.slide = slide
@@ -108,10 +118,10 @@ final class NativeSlidePreviewPane: NSView {
         ])
 
         imageView.onSizingModeChanged = { [weak self] in
-            self?.updateImageSizingButton()
+            self?.synchronizeToolbarState()
         }
         imageView.onOverlayStateChanged = { [weak self] in
-            self?.updateToolButtonStates()
+            self?.synchronizeToolbarState()
         }
         imageView.onFreezeStateChanged = { [weak self] in
             guard let self = self else { return }
@@ -119,7 +129,6 @@ final class NativeSlidePreviewPane: NSView {
                 isActiveTarget: self.currentIsActiveTarget,
                 isMaximized: self.currentIsMaximized
             )
-            self.updateToolButtonStates()
         }
 
         configureIconButton(
@@ -264,9 +273,7 @@ final class NativeSlidePreviewPane: NSView {
                 constant: -10
             )
         ])
-        updateImageSizingButton()
-        updateToolButtonStates()
-        updateFreezeButton()
+        synchronizeToolbarState()
         startFrameRateRefreshTimer()
     }
 
@@ -310,23 +317,80 @@ final class NativeSlidePreviewPane: NSView {
         }
     }
 
-    private func updateToolButtonStates() {
-        panToolButton.state = imageView.toolMode == .pan ? .on : .off
-        distanceToolButton.state = imageView.toolMode == .distance ? .on : .off
-        annotationToolButton.state = imageView.toolMode == .annotation ? .on : .off
+    /// Synchronizes the toolbar only when one of its semantic inputs changes.
+    /// Frame delivery does not call this path for ordinary same-size images.
+    private func synchronizeToolbarState() {
+        let next = NativeSlidePreviewToolbarState(
+            hasImage: imageView.hasImage,
+            sizingMode: imageView.sizingMode,
+            isImageFrozen: imageView.isImageFrozen,
+            toolMode: imageView.toolMode,
+            hasOverlays: imageView.hasOverlays,
+            isMaximized: currentIsMaximized
+        )
+        guard next != lastToolbarState else { return }
 
-        let hasImage = imageView.hasImage
-        panToolButton.isEnabled = hasImage
-        distanceToolButton.isEnabled = hasImage
-        annotationToolButton.isEnabled = hasImage
-        captureButton.isEnabled = hasImage
-        clearOverlayButton.isEnabled = imageView.hasOverlays
+        let previous = lastToolbarState
+        if previous?.hasImage != next.hasImage ||
+           previous?.sizingMode != next.sizingMode {
+            updateImageSizingControls(next)
+        }
+        if previous?.hasImage != next.hasImage ||
+           previous?.isImageFrozen != next.isImageFrozen {
+            updateFreezeButton(next)
+        }
+        if previous?.hasImage != next.hasImage ||
+           previous?.toolMode != next.toolMode ||
+           previous?.hasOverlays != next.hasOverlays {
+            updateToolButtonStates(next)
+        }
+        if previous?.isMaximized != next.isMaximized {
+            updateMaximizeButton(next.isMaximized)
+        }
+
+        lastToolbarState = next
     }
 
-    private func updateFreezeButton() {
-        let frozen = imageView.isImageFrozen
-        let description = frozen ? "Resume live image" : "Freeze this slide image"
-        let symbol = frozen ? "play.fill" : "pause.fill"
+    private func updateImageSizingControls(_ state: NativeSlidePreviewToolbarState) {
+        let isResizable = state.sizingMode == .resizable
+        let symbolName = isResizable ? "lock.open" : "lock.fill"
+        let description = isResizable
+            ? "Lock current image scale"
+            : "Resume automatic image resizing"
+        if #available(macOS 11.0, *) {
+            imageSizingButton.image = NSImage(
+                systemSymbolName: symbolName,
+                accessibilityDescription: description
+            )
+            imageSizingButton.imagePosition = .imageOnly
+        } else {
+            imageSizingButton.image = nil
+            imageSizingButton.imagePosition = .noImage
+            imageSizingButton.title = isResizable ? "Lock" : "Auto"
+        }
+        imageSizingButton.toolTip = isResizable
+            ? "Lock Current Scale: preserve the current image scale when this viewer is resized."
+            : "Auto Resize: resume resizing the image automatically with this viewer."
+        imageSizingButton.setAccessibilityLabel(description)
+        imageSizingButton.isEnabled = state.hasImage
+        fullResolutionButton.isEnabled = state.hasImage
+    }
+
+    private func updateToolButtonStates(_ state: NativeSlidePreviewToolbarState) {
+        panToolButton.state = state.toolMode == .pan ? .on : .off
+        distanceToolButton.state = state.toolMode == .distance ? .on : .off
+        annotationToolButton.state = state.toolMode == .annotation ? .on : .off
+
+        panToolButton.isEnabled = state.hasImage
+        distanceToolButton.isEnabled = state.hasImage
+        annotationToolButton.isEnabled = state.hasImage
+        captureButton.isEnabled = state.hasImage
+        clearOverlayButton.isEnabled = state.hasOverlays
+    }
+
+    private func updateFreezeButton(_ state: NativeSlidePreviewToolbarState) {
+        let description = state.isImageFrozen ? "Resume live image" : "Freeze this slide image"
+        let symbol = state.isImageFrozen ? "play.fill" : "pause.fill"
         if #available(macOS 11.0, *) {
             freezeButton.image = NSImage(
                 systemSymbolName: symbol,
@@ -335,11 +399,31 @@ final class NativeSlidePreviewPane: NSView {
             freezeButton.imagePosition = .imageOnly
         } else {
             freezeButton.image = nil
-            freezeButton.title = frozen ? ">" : "||"
+            freezeButton.title = state.isImageFrozen ? ">" : "||"
         }
         freezeButton.toolTip = description
         freezeButton.setAccessibilityLabel(description)
-        freezeButton.isEnabled = imageView.hasImage
+        freezeButton.isEnabled = state.hasImage
+    }
+
+    private func updateMaximizeButton(_ isMaximized: Bool) {
+        let description = isMaximized ? "Restore split view" : "Maximize slide"
+        let symbol = isMaximized
+            ? "arrow.down.right.and.arrow.up.left"
+            : "arrow.up.left.and.arrow.down.right"
+        if #available(macOS 11.0, *) {
+            maximizeButton.image = NSImage(
+                systemSymbolName: symbol,
+                accessibilityDescription: description
+            )
+            maximizeButton.imagePosition = .imageOnly
+        } else {
+            maximizeButton.image = nil
+            maximizeButton.imagePosition = .noImage
+            maximizeButton.title = isMaximized ? "Restore" : "Max"
+        }
+        maximizeButton.toolTip = description
+        maximizeButton.setAccessibilityLabel(description)
     }
 
     private func configureAnnotationPlate(_ plate: NSView) {
@@ -449,12 +533,8 @@ final class NativeSlidePreviewPane: NSView {
 
         // Update control availability only when the pane receives its first
         // image or a source-dimension change clears existing overlays.
-        if !hadImage {
-            updateImageSizingButton()
-            updateToolButtonStates()
-            updateFreezeButton()
-        } else if hadOverlays && !imageView.hasOverlays {
-            updateToolButtonStates()
+        if !hadImage || (hadOverlays && !imageView.hasOverlays) {
+            synchronizeToolbarState()
         }
 
         if previousPreviewRate != previewFrameRateMeter.framesPerSecond {
@@ -503,24 +583,7 @@ final class NativeSlidePreviewPane: NSView {
         layer?.borderColor = isActiveTarget
             ? OptikaPalette.nsLive.cgColor
             : OptikaPalette.nsSeparator.cgColor
-        let maximizeDescription = isMaximized ? "Restore split view" : "Maximize slide"
-        let maximizeSymbol = isMaximized
-            ? "arrow.down.right.and.arrow.up.left"
-            : "arrow.up.left.and.arrow.down.right"
-        if #available(macOS 11.0, *) {
-            maximizeButton.image = NSImage(
-                systemSymbolName: maximizeSymbol,
-                accessibilityDescription: maximizeDescription
-            )
-            maximizeButton.imagePosition = .imageOnly
-        } else {
-            maximizeButton.image = nil
-            maximizeButton.imagePosition = .noImage
-            maximizeButton.title = isMaximized ? "Restore" : "Max"
-        }
-        maximizeButton.toolTip = maximizeDescription
-        maximizeButton.setAccessibilityLabel(maximizeDescription)
-        updateFreezeButton()
+        synchronizeToolbarState()
     }
 
     @objc private func toggleImageSizingModeAction(_ sender: NSButton) {
@@ -548,22 +611,22 @@ final class NativeSlidePreviewPane: NSView {
 
     @objc private func selectPanToolAction(_ sender: NSButton) {
         imageView.setToolMode(.pan)
-        updateToolButtonStates()
+        synchronizeToolbarState()
     }
 
     @objc private func selectDistanceToolAction(_ sender: NSButton) {
         imageView.setToolMode(.distance)
-        updateToolButtonStates()
+        synchronizeToolbarState()
     }
 
     @objc private func selectAnnotationToolAction(_ sender: NSButton) {
         imageView.setToolMode(.annotation)
-        updateToolButtonStates()
+        synchronizeToolbarState()
     }
 
     @objc private func clearSlideOverlaysAction(_ sender: NSButton) {
         imageView.clearOverlays()
-        updateToolButtonStates()
+        synchronizeToolbarState()
     }
 }
 

@@ -336,7 +336,8 @@ ConfigurationRequest makeRequest(
     CameraModeId cameraModeId,
     ContrastMethod contrastMethod = ContrastMethod::Brightfield,
     ConfigurationProfileId profileId =
-        makeId<ConfigurationProfileId>("profile-brightfield")) {
+        makeId<ConfigurationProfileId>("profile-brightfield"),
+    std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds = {}) {
     return take(ConfigurationRequest::create(
         profileId,
         contrastMethod,
@@ -347,7 +348,8 @@ ConfigurationRequest makeRequest(
         cameraModeId,
         fixture.illuminationId,
         fixture.illuminationChannelId,
-        ExposurePolicy::Manual));
+        ExposurePolicy::Manual,
+        std::move(selectedAdditionalOpticalComponentIds)));
 }
 
 bool hasDiagnosticCode(
@@ -498,6 +500,185 @@ void testResolverAcceptsSeparateIlluminationAndImagingPaths() {
           "resolves illumination and imaging components across a selected path set");
     check(resolution.diagnostics().empty(),
           "valid split-path resolution produces no diagnostics");
+}
+
+void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
+    const auto fixture = makeConfigurationFixture();
+    const auto phaseCompatibilityId =
+        makeId<OpticalCompatibilityId>("phase-compatibility-1");
+
+    const auto phaseProfile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-phase-contrast"),
+        ContrastMethod::PhaseContrast,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhasePlate, phaseCompatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhaseAnnulus, phaseCompatibilityId))}));
+    const auto phaseCatalog =
+        take(ConfigurationProfileCatalog::create({phaseProfile}));
+    const auto phaseRequest = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::PhaseContrast,
+        phaseProfile.id());
+
+    const auto compatible = ConfigurationResolver::resolve(
+        fixture.equipment, phaseCatalog, phaseRequest);
+    check(compatible.isResolved(),
+          "accepts phase contrast when selected objective phase plate and condenser annulus share a compatibility identity");
+
+    const auto mismatchedCompatibilityId =
+        makeId<OpticalCompatibilityId>("phase-compatibility-unsupported");
+    const auto mismatchedProfile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-phase-mismatch"),
+        ContrastMethod::PhaseContrast,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhasePlate, mismatchedCompatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhaseAnnulus, mismatchedCompatibilityId))}));
+    const auto mismatchedCatalog =
+        take(ConfigurationProfileCatalog::create({mismatchedProfile}));
+    const auto mismatchedRequest = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::PhaseContrast,
+        mismatchedProfile.id());
+
+    const auto incompatible = ConfigurationResolver::resolve(
+        fixture.equipment, mismatchedCatalog, mismatchedRequest);
+    check(!incompatible.isResolved() &&
+          hasDiagnosticCode(
+              incompatible,
+              "configuration.optical_function.requirement_not_satisfied"),
+          "rejects phase contrast when the selected phase components do not match the required compatibility identity");
+}
+
+void testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms() {
+    const auto fixture = makeConfigurationFixture();
+    const auto dicCompatibilityId =
+        makeId<OpticalCompatibilityId>("dic-compatibility-1");
+
+    const auto dicProfile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-dic"),
+        ContrastMethod::DifferentialInterferenceContrast,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::Polarizer, dicCompatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::Analyzer, dicCompatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::DifferentialInterferencePrism,
+             dicCompatibilityId,
+             2)}}));
+    const auto dicCatalog = take(ConfigurationProfileCatalog::create({dicProfile}));
+
+    const auto polarizerId = makeId<EquipmentComponentId>("polarizer");
+    const auto prismOneId = makeId<EquipmentComponentId>("dic-prism-one");
+    const auto prismTwoId = makeId<EquipmentComponentId>("dic-prism-two");
+    const auto analyzerId = makeId<EquipmentComponentId>("analyzer");
+
+    const auto validDicRequest = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::DifferentialInterferenceContrast,
+        dicProfile.id(),
+        {polarizerId, prismOneId, prismTwoId, analyzerId});
+    const auto validDic = ConfigurationResolver::resolve(
+        fixture.equipment, dicCatalog, validDicRequest);
+    check(validDic.isResolved(),
+          "accepts a DIC configuration with matched polarizer, analyzer and two prism components");
+
+    const auto incompleteDicRequest = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::DifferentialInterferenceContrast,
+        dicProfile.id(),
+        {polarizerId, prismOneId, analyzerId});
+    const auto incompleteDic = ConfigurationResolver::resolve(
+        fixture.equipment, dicCatalog, incompleteDicRequest);
+    check(!incompleteDic.isResolved() &&
+          hasDiagnosticCode(
+              incompleteDic,
+              "configuration.optical_function.requirement_not_satisfied"),
+          "rejects a DIC configuration missing its second required prism");
+}
+
+void testOpticalFunctionRequirementFactoriesAndSelections() {
+    const auto fixture = makeConfigurationFixture();
+    auto zeroCount = OpticalFunctionRequirement::create(
+        OpticalElementFunction::DifferentialInterferencePrism,
+        std::nullopt,
+        0);
+    check(!zeroCount &&
+          zeroCount.error() ==
+              OpticalFunctionRequirementError::ZeroMinimumComponentCount,
+          "rejects an optical function requirement with zero minimum count");
+
+    auto invalidFunction = OpticalFunctionRequirement::create(
+        static_cast<OpticalElementFunction>(255));
+    check(!invalidFunction &&
+          invalidFunction.error() ==
+              OpticalFunctionRequirementError::InvalidFunction,
+          "rejects an unknown optical function requirement");
+
+    const auto phaseCompatibilityId =
+        makeId<OpticalCompatibilityId>("phase-compatibility-1");
+    const auto duplicateRequirement = ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("duplicate-function-requirement-profile"),
+        ContrastMethod::Brightfield,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhasePlate, phaseCompatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhasePlate, phaseCompatibilityId))});
+    check(!duplicateRequirement &&
+          duplicateRequirement.error() ==
+              ConfigurationProfileError::DuplicateOpticalFunctionRequirement,
+          "rejects duplicate optical function requirements");
+
+    auto duplicateSelection = ConfigurationRequest::create(
+        fixture.brightfieldProfileId,
+        ContrastMethod::Brightfield,
+        fixture.objectiveId,
+        fixture.condenserId,
+        {fixture.fullPathId},
+        fixture.cameraId,
+        fixture.cameraModeId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        ExposurePolicy::Manual,
+        {makeId<EquipmentComponentId>("polarizer"),
+         makeId<EquipmentComponentId>("polarizer")});
+    check(!duplicateSelection &&
+          duplicateSelection.error() ==
+              ConfigurationRequestError::DuplicateAdditionalOpticalComponent,
+          "rejects duplicate additional optical component selections");
 }
 
 void testResolverRejectsUnavailableCameraMode() {
@@ -666,6 +847,9 @@ int main() {
     testConfigurationFactoriesRejectInvalidSets();
     testResolverAcceptsOneCompleteBrightfieldPath();
     testResolverAcceptsSeparateIlluminationAndImagingPaths();
+    testPhaseContrastRequiresMatchedPhasePlateAndAnnulus();
+    testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms();
+    testOpticalFunctionRequirementFactoriesAndSelections();
     testResolverRejectsUnavailableCameraMode();
     testResolverReportsProfileConflictAndMissingPath();
     testResolverEnforcesPathCompatibilityAndIlluminationChannel();

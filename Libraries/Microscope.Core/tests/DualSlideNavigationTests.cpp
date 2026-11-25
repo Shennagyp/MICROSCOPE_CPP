@@ -69,6 +69,8 @@ int main(){
  auto mapped=left.toStage({37500,12500});
  check(mapped&&std::abs(mapped.value().horizontalMicrometers-42500)<1e-6&&std::abs(mapped.value().transverseMicrometers-32500)<1e-6,"four-corner affine transform maps slide center");
  check(left.cornerFitResidualsMicrometers()[0]<1e-6&&left.cornerFitResidualsMicrometers()[3]<1e-6,"retains a residual for each measured corner");
+ check(std::abs(left.acceptedMaximumFitResidualMicrometers()-1.0)<1e-9,
+       "retains the acceptance threshold used for the registration revision");
  if(mapped){auto back=left.toSlide(mapped.value());check(back&&std::abs(back.value().xMicrometers-37500)<1e-6&&std::abs(back.value().yMicrometers-12500)<1e-6,"inverse transform round trips");}
  check(!left.toStage({75001,1}),"outside slide target rejected");
  auto g=take(SlideGeometry::create(75000,25000));auto src=ObservationSource::OperatorConfirmation;

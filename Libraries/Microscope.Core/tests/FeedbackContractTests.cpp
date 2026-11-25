@@ -143,6 +143,14 @@ int main() {
     const auto validDeviceTimestamp = DeviceTimestamp::create(1500, 1000);
     check(static_cast<bool>(validDeviceTimestamp),
           "accepts a device timestamp with an explicit positive tick rate");
+    const auto emptyClockDomain = DeviceTimestamp::create(
+        1500, 1000, std::string{});
+    check(!emptyClockDomain &&
+          emptyClockDomain.error() == DeviceTimestampError::EmptyClockDomain,
+          "rejects an empty clock-domain sentinel");
+    const auto unknownClockDomain = DeviceTimestamp::create(1500, 1000);
+    check(static_cast<bool>(unknownClockDomain),
+          "represents an unidentified clock domain with absence");
 
     const auto zeroIngressSequence =
         FeedbackIngressSequence::create(microscopeId, runtimeId, generation, 0);

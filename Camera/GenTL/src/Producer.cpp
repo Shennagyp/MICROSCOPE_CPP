@@ -762,10 +762,10 @@ struct DataStreamSession::Impl {
         check(context->consumer.invoke(
             Operation::gcRegisterEvent, stream, GenTL::EVENT_NEW_BUFFER, &event),
             "GCRegisterEvent(NEW_BUFFER)");
+        eventRegistered = true;
         if (!event)
             throw std::runtime_error(
                 "GCRegisterEvent succeeded without returning an EVENT_HANDLE.");
-        eventRegistered = true;
 
         buffers.reserve(bufferCount);
         for (std::size_t index = 0; index < bufferCount; ++index) {
@@ -774,9 +774,11 @@ struct DataStreamSession::Impl {
                 Operation::dsAllocAndAnnounceBuffer,
                 stream, payloadBytes, nullptr, &handle),
                 "DSAllocAndAnnounceBuffer");
-            if (!handle)
+            if (!handle) {
+                context->quarantined = true;
                 throw std::runtime_error(
                     "DSAllocAndAnnounceBuffer succeeded without returning a BUFFER_HANDLE.");
+            }
             buffers.push_back(Buffer{handle});
         }
 
@@ -790,7 +792,6 @@ struct DataStreamSession::Impl {
     void close() noexcept {
         std::shared_ptr<DeviceSessionState> owner;
         GenTL::DS_HANDLE streamHandle = nullptr;
-        GenTL::EVENT_HANDLE eventHandle = nullptr;
         bool wasStarted = false;
         bool wasRegistered = false;
 
@@ -805,7 +806,6 @@ struct DataStreamSession::Impl {
             stopping = true;
             owner = device;
             streamHandle = stream;
-            eventHandle = event;
             wasStarted = started;
             wasRegistered = eventRegistered;
         }
@@ -813,6 +813,10 @@ struct DataStreamSession::Impl {
         bool safeToRelease = true;
         auto context = owner ? owner->context : nullptr;
         if (context && streamHandle) {
+            {
+                std::lock_guard<std::mutex> guard(context->mutex);
+                safeToRelease = !context->quarantined;
+            }
             if (wasStarted) {
                 std::lock_guard<std::mutex> guard(context->mutex);
                 const auto status = context->consumer.invoke(
@@ -1099,6 +1103,15 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
                     GenTL::BUFFER_INFO_PIXELFORMAT, type, value, size);
             },
             GenTL::INFO_DATATYPE_UINT64, "DSGetBufferInfo(PIXELFORMAT)");
+        frame.pixelFormatNamespace = readTypedInfo<std::uint64_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_PIXELFORMAT_NAMESPACE, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_UINT64,
+            "DSGetBufferInfo(PIXELFORMAT_NAMESPACE)");
         frame.width = readTypedInfo<std::size_t>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(

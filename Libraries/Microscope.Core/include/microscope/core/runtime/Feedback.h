@@ -125,12 +125,47 @@ enum class FeedbackSubmitStatus {
     Closed
 };
 
+enum class FeedbackIngressSequenceError {
+    ZeroSequence
+};
+
+// A Core-assigned positive sequence. It is deliberately distinct from the
+// optional adapter/device source sequence, where zero may be a valid value.
+class FeedbackIngressSequence final {
+public:
+    [[nodiscard]] static Result<
+        FeedbackIngressSequence,
+        FeedbackIngressSequenceError> create(std::uint64_t value) {
+        if (value == 0) {
+            return Result<
+                FeedbackIngressSequence,
+                FeedbackIngressSequenceError>::failure(
+                    FeedbackIngressSequenceError::ZeroSequence);
+        }
+
+        return Result<
+            FeedbackIngressSequence,
+            FeedbackIngressSequenceError>::success(
+                FeedbackIngressSequence(value));
+    }
+
+    [[nodiscard]] std::uint64_t value() const noexcept {
+        return value_;
+    }
+
+private:
+    explicit FeedbackIngressSequence(std::uint64_t value) noexcept
+        : value_(value) {}
+
+    std::uint64_t value_;
+};
+
 // Core-owned, runtime-local receipt metadata. receivedAt is a monotonic
 // ordering/deadline value and is not a durable wall-clock timestamp.
 // ingressSequence starts at one and increases within one runtime generation.
 struct FeedbackReceiptMetadata final {
     std::chrono::steady_clock::time_point receivedAt;
-    std::uint64_t ingressSequence;
+    FeedbackIngressSequence ingressSequence;
 };
 
 template <typename TPayload>

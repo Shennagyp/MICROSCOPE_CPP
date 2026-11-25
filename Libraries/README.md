@@ -36,4 +36,6 @@ The initial source slice includes:
 
 This is not a completed microscope platform. Equipment/configuration semantics, operation execution, JSON definition loading, concrete adapter composition, persistence, calibration and acquisition are implemented in their planned phases. No runtime/build/test result is implied by the existence of these targets.
 
+Sample, Slide and other identifiers are opaque values, not filesystem path fragments. Storage adapters encode them into safe portable path segments or maintain an explicit mapping; they never concatenate arbitrary ID text directly into paths.
+
 The existing camera capability remains independent. Its `Camera::Common` frame lease and mailbox are not duplicated in Core; persistent acquisition `ImageFrame` records are a separate domain concept.

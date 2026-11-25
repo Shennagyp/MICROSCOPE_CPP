@@ -128,13 +128,14 @@ ObservationSource SlideCornerMeasurement::source()const noexcept{return source_;
 double SlideCornerMeasurement::uncertaintyMicrometers()const noexcept{return uncertainty_;}
 
 SlideRegistration::SlideRegistration(
-    SlideId id,DualSlideSlot s,SlideGeometry g,std::array<SlideCornerMeasurement,4> c,
-    std::array<double,6> t,std::array<double,4> residuals,double cornerUncertainty,double m,double r)
-    :slideId_(std::move(id)),slot_(s),geometry_(g),corners_(std::move(c)),
+    SlideId id,CalibrationRevisionId revision,DualSlideSlot s,SlideGeometry g,
+    std::array<SlideCornerMeasurement,4> c,std::array<double,6> t,
+    std::array<double,4> residuals,double cornerUncertainty,double m,double r)
+    :slideId_(std::move(id)),revision_(std::move(revision)),slot_(s),geometry_(g),corners_(std::move(c)),
      transform_(t),cornerResiduals_(residuals),maximumCornerUncertainty_(cornerUncertainty),
      maxResidual_(m),rmsResidual_(r) {}
 Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
-    SlideId id,DualSlideSlot slot,SlideGeometry g,
+    SlideId id,CalibrationRevisionId revision,DualSlideSlot slot,SlideGeometry g,
     std::array<SlideCornerMeasurement,4> input,double maxAllowed) {
     if(slot!=DualSlideSlot::Left&&slot!=DualSlideSlot::Right)
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::InvalidSlot);
@@ -190,10 +191,11 @@ Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
     if(!std::isfinite(maxResidual)||maxResidual>maxAllowed)
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::FitResidualExceeded);
     return Result<SlideRegistration,SlideRegistrationError>::success(
-        SlideRegistration(std::move(id),slot,g,std::move(corners),
+        SlideRegistration(std::move(id),std::move(revision),slot,g,std::move(corners),
             {tx,ax,bx,ty,ay,by},residuals,maximumCornerUncertainty,maxResidual,std::sqrt(sum/4.0)));
 }
 const SlideId& SlideRegistration::slideId()const noexcept{return slideId_;}
+const CalibrationRevisionId& SlideRegistration::revision()const noexcept{return revision_;}
 DualSlideSlot SlideRegistration::slot()const noexcept{return slot_;}
 const SlideGeometry& SlideRegistration::geometry()const noexcept{return geometry_;}
 const std::array<SlideCornerMeasurement,4>& SlideRegistration::cornerMeasurements()const noexcept{return corners_;}
@@ -299,6 +301,50 @@ const SlideRegistration* DualSlideCarrierState::registrationFor(const SlideId&id
     if(left_.slideId()&&*left_.slideId()==id&&left_.registration())return &*left_.registration();
     if(right_.slideId()&&*right_.slideId()==id&&right_.registration())return &*right_.registration();
     return nullptr;
+}
+
+SlideNavigationTarget::SlideNavigationTarget(
+    SlideId slideId,SlideLocalPoint point,CalibrationRevisionId revision)
+    :slideId_(std::move(slideId)),point_(point),registrationRevision_(std::move(revision)) {}
+const SlideId& SlideNavigationTarget::slideId()const noexcept{return slideId_;}
+const SlideLocalPoint& SlideNavigationTarget::point()const noexcept{return point_;}
+const CalibrationRevisionId& SlideNavigationTarget::registrationRevision()const noexcept{return registrationRevision_;}
+
+Result<SlideNavigationTarget,SlideNavigationTargetError>
+DualSlideCarrierState::createTarget(const SlideId& slideId,SlideLocalPoint point) const {
+    const auto* registration=registrationFor(slideId);
+    if(!registration) {
+        const bool loaded=(left_.slideId()&&*left_.slideId()==slideId)||
+                          (right_.slideId()&&*right_.slideId()==slideId);
+        return Result<SlideNavigationTarget,SlideNavigationTargetError>::failure(
+            loaded?SlideNavigationTargetError::SlideNotRegistered:
+                   SlideNavigationTargetError::SlideNotInCarrier);
+    }
+    if(!registration->toStage(point))
+        return Result<SlideNavigationTarget,SlideNavigationTargetError>::failure(
+            SlideNavigationTargetError::PointOutsideSlide);
+    return Result<SlideNavigationTarget,SlideNavigationTargetError>::success(
+        SlideNavigationTarget(slideId,point,registration->revision()));
+}
+
+Result<MoveAxesTo,SlideNavigationCommandError> DualSlideCarrierState::commandFor(
+    const SlideNavigationTarget& target) const {
+    const auto* registration=registrationFor(target.slideId());
+    if(!registration) {
+        const bool loaded=(left_.slideId()&&*left_.slideId()==target.slideId())||
+                          (right_.slideId()&&*right_.slideId()==target.slideId());
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            loaded?SlideNavigationCommandError::SlideNotRegistered:
+                   SlideNavigationCommandError::SlideNotInCarrier);
+    }
+    if(registration->revision()!=target.registrationRevision())
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::RegistrationChanged);
+    auto stagePoint=registration->toStage(target.point());
+    if(!stagePoint)
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::InvalidStageCoordinate);
+    return specification_.moveTo(stagePoint.value());
 }
 
 Result<MoveAxesTo,SlideNavigationCommandError> DualSlideCarrierState::commandFor(

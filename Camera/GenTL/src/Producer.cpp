@@ -1167,6 +1167,15 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
                     GenTL::BUFFER_INFO_HEIGHT, type, value, size);
             },
             GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(HEIGHT)");
+        frame.deliveredImageHeight = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_DELIVERED_IMAGEHEIGHT, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET,
+            "DSGetBufferInfo(DELIVERED_IMAGEHEIGHT)");
         frame.imageOffset = readTypedInfo<std::size_t>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(
@@ -1212,6 +1221,27 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
             GenTL::INFO_DATATYPE_BOOL8, "DSGetBufferInfo(CONTAINS_CHUNKDATA)");
         if (containsChunkData)
             frame.containsChunkData = *containsChunkData != 0;
+        const auto dataLargerThanBuffer = readTypedInfo<bool8_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_DATA_LARGER_THAN_BUFFER, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_BOOL8,
+            "DSGetBufferInfo(DATA_LARGER_THAN_BUFFER)");
+        if (dataLargerThanBuffer)
+            frame.dataLargerThanBuffer = *dataLargerThanBuffer != 0;
+        const auto isComposite = readTypedInfo<bool8_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_IS_COMPOSITE, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_BOOL8, "DSGetBufferInfo(IS_COMPOSITE)");
+        if (isComposite)
+            frame.isComposite = *isComposite != 0;
 
         frame.payload.resize(*filled);
         if (*filled != 0)

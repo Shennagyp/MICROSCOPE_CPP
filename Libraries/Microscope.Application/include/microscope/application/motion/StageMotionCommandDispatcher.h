@@ -40,7 +40,7 @@ public:
         core::IStageMotionPort& port,
         Runtime& runtime) {
         return dispatch(
-            core::StageMotionAction::MoveAxesTo, context, port, runtime,
+            core::StageMotionAction::MoveAxesTo, context, runtime,
             [&](core::IFeedbackIngress<core::StageMotionFeedbackPayload>& ingress) {
                 return port.moveAxesTo(context, command, ingress);
             });
@@ -52,7 +52,7 @@ public:
         core::IStageMotionPort& port,
         Runtime& runtime) {
         return dispatch(
-            core::StageMotionAction::MoveAxesBy, context, port, runtime,
+            core::StageMotionAction::MoveAxesBy, context, runtime,
             [&](core::IFeedbackIngress<core::StageMotionFeedbackPayload>& ingress) {
                 return port.moveAxesBy(context, command, ingress);
             });
@@ -64,7 +64,7 @@ public:
         core::IStageMotionPort& port,
         Runtime& runtime) {
         return dispatch(
-            core::StageMotionAction::HomeAxes, context, port, runtime,
+            core::StageMotionAction::HomeAxes, context, runtime,
             [&](core::IFeedbackIngress<core::StageMotionFeedbackPayload>& ingress) {
                 return port.homeAxes(context, command, ingress);
             });
@@ -76,7 +76,7 @@ public:
         core::IStageMotionPort& port,
         Runtime& runtime) {
         return dispatch(
-            core::StageMotionAction::StopAxes, context, port, runtime,
+            core::StageMotionAction::StopAxes, context, runtime,
             [&](core::IFeedbackIngress<core::StageMotionFeedbackPayload>& ingress) {
                 return port.stopAxes(context, command, ingress);
             });
@@ -87,7 +87,6 @@ private:
     [[nodiscard]] static Result dispatch(
         core::StageMotionAction action,
         const core::StageMotionCommandContext& context,
-        core::IStageMotionPort&,
         Runtime& runtime,
         TSubmit&& submit) {
         const auto& operation = context.operation();

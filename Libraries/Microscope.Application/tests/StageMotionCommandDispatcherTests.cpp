@@ -2,6 +2,7 @@
 #include "microscope/application/runtime/RuntimeWakeSignal.h"
 
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <utility>

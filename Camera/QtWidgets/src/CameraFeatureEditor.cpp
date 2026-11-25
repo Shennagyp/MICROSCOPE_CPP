@@ -2,20 +2,20 @@
 
 #include "camera/CameraFeatureValidation.h"
 
+#include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QSignalBlocker>
 #include <QStackedWidget>
+#include <QStringList>
 #include <QVBoxLayout>
 
 #include <charconv>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <system_error>
 #include <type_traits>
 #include <utility>
@@ -23,6 +23,26 @@
 namespace camera::qtwidgets {
 
 namespace {
+
+CameraFeatureKind featureValueKind(const CameraFeatureValue& value) {
+    return std::visit([](const auto& item) {
+        using T = std::decay_t<decltype(item)>;
+        if constexpr (std::is_same_v<T, bool>) {
+            return CameraFeatureKind::Boolean;
+        } else if constexpr (std::is_same_v<T, std::int64_t>) {
+            return CameraFeatureKind::Integer;
+        } else if constexpr (
+            std::is_same_v<T, std::vector<std::int64_t>>) {
+            return CameraFeatureKind::IntegerVector;
+        } else if constexpr (std::is_same_v<T, double>) {
+            return CameraFeatureKind::FloatingPoint;
+        } else if constexpr (std::is_same_v<T, std::string>) {
+            return CameraFeatureKind::String;
+        } else {
+            return CameraFeatureKind::Enumeration;
+        }
+    }, value);
+}
 
 QString featureValueText(const CameraFeatureValue& value) {
     return std::visit([](const auto& item) -> QString {
@@ -71,20 +91,6 @@ std::optional<double> parseFloatingPoint(const QString& text) {
         return std::nullopt;
     }
     return value;
-}
-
-QString floatingRangePlaceholder(const CameraFeatureDescriptor& descriptor) {
-    if (!descriptor.numericRange) {
-        return QStringLiteral("Numeric value");
-    }
-    const auto* range =
-        std::get_if<CameraFloatingPointRange>(&*descriptor.numericRange);
-    if (!range) {
-        return QStringLiteral("Invalid floating-point range descriptor");
-    }
-    return QStringLiteral("%1 … %2")
-        .arg(range->minimum, 0, 'g', 12)
-        .arg(range->maximum, 0, 'g', 12);
 }
 
 } // namespace
@@ -144,7 +150,7 @@ bool CameraFeatureEditor::setCurrentValue(
         return true;
     }
 
-    if (cameraFeatureKind(*currentValue_) != descriptor_.kind) {
+    if (featureValueKind(*currentValue_) != descriptor_.kind) {
         errorMessage_ =
             "Camera readback type does not match the feature descriptor.";
         updateControls();
@@ -232,7 +238,7 @@ void CameraFeatureEditor::rebuildEditor() {
     case CameraFeatureKind::Boolean: {
         auto* control = new QCheckBox(this);
         control->setObjectName(QStringLiteral("cameraFeatureEditorInput"));
-        connect(control, &QCheckBox::toggled, this, [this](bool checked) {
+        connect(control, &QCheckBox::toggled, this, [this](bool) {
             submitEditedValue();
         });
         editor_ = control;

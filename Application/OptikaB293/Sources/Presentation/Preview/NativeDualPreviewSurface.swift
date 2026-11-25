@@ -46,6 +46,8 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private let slideTwoPane = NativeSlidePreviewPane(slide: .slide2)
     private weak var frameFeed: NativeCameraFrameFeed?
     private var measurementCalibration: NativeMicroscopeMeasurementCalibration?
+    private var pullFrameRateMeter = FrameRateCounterMeter()
+    private var frameRateRefreshTimer: Timer?
 
     private var activeSlide: NativeSlideID = .slide1
     private var maximizedSlide: NativeSlideID?
@@ -63,6 +65,10 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         configureSubviews()
+    }
+
+    deinit {
+        frameRateRefreshTimer?.invalidate()
     }
 
     private func configureSubviews() {
@@ -99,6 +105,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
             self?.onCapture?(.slide2, image)
         }
         updatePaneStates()
+        startFrameRateRefreshTimer()
     }
 
     override func layout() {
@@ -239,10 +246,9 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         // value snapshot does not copy image bytes or create another frame queue.
         let snapshot = frameFeed.takeLatestFrameSnapshot()
 
-        // Both slide labels show the same acquisition FPS from the one
-        // monotonic pull counter. It is independent of which pane receives the image.
-        slideOnePane.updatePullRate(pulledFrames: snapshot.framesPulled)
-        slideTwoPane.updatePullRate(pulledFrames: snapshot.framesPulled)
+        // One coordinator owns the acquisition-rate estimate and publishes
+        // the same value to both slide labels.
+        updateAcquisitionRate(pulledFrames: snapshot.framesPulled)
 
         guard let lease = snapshot.lease else { return }
 
@@ -268,6 +274,39 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
 
         // Frozen panes keep acquisition counters current without replacing
         // their stable source image. The lease releases when this method exits.
+    }
+
+    private func updateAcquisitionRate(pulledFrames: UInt64) {
+        let previousRate = pullFrameRateMeter.framesPerSecond
+        pullFrameRateMeter.record(
+            pulledFrames,
+            at: ProcessInfo.processInfo.systemUptime
+        )
+        if previousRate != pullFrameRateMeter.framesPerSecond {
+            publishFrameRate()
+        }
+    }
+
+    private func startFrameRateRefreshTimer() {
+        guard frameRateRefreshTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let previousRate = self.pullFrameRateMeter.framesPerSecond
+            self.pullFrameRateMeter.refresh(
+                at: ProcessInfo.processInfo.systemUptime
+            )
+            if previousRate != self.pullFrameRateMeter.framesPerSecond {
+                self.publishFrameRate()
+            }
+        }
+        frameRateRefreshTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func publishFrameRate() {
+        let framesPerSecond = pullFrameRateMeter.framesPerSecond
+        slideOnePane.updateFrameRate(framesPerSecond)
+        slideTwoPane.updateFrameRate(framesPerSecond)
     }
 }
 

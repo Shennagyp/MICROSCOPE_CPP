@@ -1,5 +1,6 @@
 #pragma once
 
+#include "microscope/core/equipment/OpticalSpecifications.h"
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
 
@@ -157,6 +158,12 @@ private:
 enum class EquipmentDefinitionError {
     EmptyComponentSet,
     DuplicateComponentId,
+    DuplicateObjectiveSpecification,
+    ObjectiveReferencesUnknownComponent,
+    ObjectiveComponentWrongKind,
+    DuplicateCameraSpecification,
+    CameraReferencesUnknownComponent,
+    CameraComponentWrongKind,
     DuplicatePortId,
     DuplicateConnectionId,
     UnknownConnectionFromPort,
@@ -189,24 +196,34 @@ public:
             MicroscopeId microscopeId,
             std::vector<EquipmentComponent> components,
             std::vector<OpticalConnection> connections,
-            std::vector<OpticalPath> opticalPaths);
+            std::vector<OpticalPath> opticalPaths,
+            std::vector<ObjectiveSpecification> objectiveSpecifications = {},
+            std::vector<CameraSpecification> cameraSpecifications = {});
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponent>& components() const noexcept;
     [[nodiscard]] const std::vector<OpticalConnection>& connections() const noexcept;
     [[nodiscard]] const std::vector<OpticalPath>& opticalPaths() const noexcept;
+    [[nodiscard]] const std::vector<ObjectiveSpecification>&
+    objectiveSpecifications() const noexcept;
+    [[nodiscard]] const std::vector<CameraSpecification>&
+    cameraSpecifications() const noexcept;
 
 private:
     MicroscopeEquipmentDefinition(
         MicroscopeId microscopeId,
         std::vector<EquipmentComponent> components,
         std::vector<OpticalConnection> connections,
-        std::vector<OpticalPath> opticalPaths);
+        std::vector<OpticalPath> opticalPaths,
+        std::vector<ObjectiveSpecification> objectiveSpecifications,
+        std::vector<CameraSpecification> cameraSpecifications);
 
     MicroscopeId microscopeId_;
     std::vector<EquipmentComponent> components_;
     std::vector<OpticalConnection> connections_;
     std::vector<OpticalPath> opticalPaths_;
+    std::vector<ObjectiveSpecification> objectiveSpecifications_;
+    std::vector<CameraSpecification> cameraSpecifications_;
 };
 
 } // namespace microscope::core

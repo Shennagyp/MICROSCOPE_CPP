@@ -356,6 +356,16 @@ int32_t gentl_consumer_invoke(
             const size_t value = 4;
             return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
         }
+        case BUFFER_INFO_IMAGEOFFSET:
+        case BUFFER_INFO_XPADDING:
+        case BUFFER_INFO_YPADDING: {
+            const size_t value = 0;
+            return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
+        }
+        case BUFFER_INFO_PAYLOADTYPE: {
+            const size_t value = PAYLOAD_TYPE_IMAGE;
+            return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
+        }
         default: return GC_ERR_NOT_AVAILABLE;
         }
     }

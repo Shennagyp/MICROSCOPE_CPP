@@ -29,7 +29,7 @@ static int32_t write_info_string(
 }
 
 void* gentl_consumer_create(const char* path, char* error, uint32_t capacity) {
-    if (!path || strcmp(path, "mock.cti") != 0) {
+    if (!path || strcmp(strrchr(path, '/') ? strrchr(path, '/') + 1 : path, "mock.cti") != 0) {
         if (error && capacity > 0) {
             const char* message = "mock rejected CTI path";
             const size_t length = strlen(message);
@@ -65,8 +65,8 @@ int32_t gentl_consumer_invoke(
             ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
     case 4: {
         if (argument_count != 4 || arguments[0] != 0x4444) return GC_ERR_INVALID_HANDLE;
-        auto* size = (size_t*)pointer(arguments[3]);
-        auto* bytes = (uint8_t*)pointer(arguments[2]);
+        size_t* size = (size_t*)pointer(arguments[3]);
+        uint8_t* bytes = (uint8_t*)pointer(arguments[2]);
         if (!size || (!bytes && *size != 0)) return GC_ERR_INVALID_PARAMETER;
         for (size_t i = 0; i < *size; ++i) bytes[i] = (uint8_t)(0xA0 + i);
         return GC_ERR_SUCCESS;

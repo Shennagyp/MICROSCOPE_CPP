@@ -2,7 +2,7 @@
 
 **Architecture reference:** ../architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
-**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration in progress. The equipment model and all registered contract tests passed on Ubuntu GCC, macOS Clang and Windows MSVC. [Latest Phase 2 validation](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45595205508).
+**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration and Phase 4 operation runtime/stage navigation are in progress. Core now has the stage/navigation model, bounded feedback inbox and serialized operation-state owner. Application now has the runtime wake primitive, owner-loop entry point and dual-slide X/Y feedback reducer.
 
 ## Objective
 
@@ -24,9 +24,7 @@ The current branch contains:
 - Core identity/diagnostic/feedback and Application handle/projection test sources registered with CTest. They have not been built or executed here.
 - Architecture, public-contract and standalone-library documentation.
 
-The two libraries are an initial Phase 1 source slice, not a completed platform implementation. Equipment/configuration models, the serialized operation executor, JSON loading, adapter factory/runtime composition, persistence, calibration, acquisition and hardware workflow integration are not implemented or claimed.
-
-The feedback ingress is currently a typed contract, not a queue/executor. Application currently provides handle/snapshot value contracts, not a runtime manager or adapter-composition implementation.
+The two libraries began as an initial Phase 1 source slice, not a completed platform implementation. Later work has added typed equipment/configuration contracts, stage navigation, a bounded feedback inbox, a serialized operation-state owner, and Application wake/owner-loop and stage-feedback-reduction primitives. Full configuration-plan execution, JSON loading, deployment adapter composition, persistence, calibrated motion execution, acquisition orchestration and hardware workflow integration are still outstanding.
 
 ## Migration rules
 
@@ -201,14 +199,14 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C Core bounded ingress and single-writer operation state implemented, Application worker loop/reconciliation integration remain next**
+**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C Core bounded ingress/single-writer state plus Application wake/owner loop and X/Y feedback reducer implemented. Host control-queue integration and verified feedback-loss reconciliation remain outstanding.**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
 **Implementation sequence**
 1. **4A — Lifecycle semantics:** immutable operation/step state and pure legal-transition functions. Distinguish CommandDispatched, AdapterAccepted, DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and StepVerified. DeviceActionCompleted moves to AwaitingObservation; it never marks a step verified by itself.
 2. **4B — Command and port contracts:** define command correlation scope and capability-specific command values/ports. Implement the typed stage-motion port (MoveAxesTo, MoveAxesBy, HomeAxes, StopAxes) in physical axis units. Keep logical DeviceId separate from SDK handles and controller-native steps/protocol values. The adapter's synchronous dispatch result reports only accepted/rejected responsibility; it is not device acknowledgement. Do not add a generic string-command API.
-3. **4C — Serialized runtime and ingress:** implement one single-writer operation runtime per microscope incarnation, thread-safe feedback ingress, bounded FIFO receipts and atomic Core-assigned ingress sequence. SDK callbacks enqueue only; they never mutate operation state directly.
+3. **4C — Serialized runtime and ingress:** implement one single-writer operation runtime per microscope incarnation, thread-safe feedback ingress, bounded FIFO receipts and atomic Core-assigned ingress sequence. SDK callbacks enqueue only; they never mutate operation state directly. Application supplies RuntimeWakeSignal and a worker-loop entry point that binds the runtime to a host-owned thread, drains feedback before host-typed controls and waits against the pre-drain wake generation.
 4. **4D — Plan execution:** execute ConfigurationTransitionPlan dependency layers through the relevant typed ports, retain command/step correlation and dispatch dependent work only when its prerequisites reach required state. Resource claims, not topological-layer membership alone, determine safe concurrency.
 5. **4E — Verification and failure lifecycle:** evaluate typed observations against step requirements and evidence policies; implement timeout, cancellation, adapter failure, stale generation/late feedback, queue overflow, partial completion and verified-state reconciliation.
 
@@ -238,7 +236,9 @@ The equipment definition now describes installed topology and static capabilitie
 - Implemented BoundedFeedbackInbox<TPayload> as a fixed-capacity thread-safe ring with Core-assigned FIFO sequences, runtime-scope rejection, explicit close and an IFeedbackRuntimeSignal control path. The noexcept signal distinguishes successful enqueue, feedback loss and ingress closure. QueueFull does not consume a sequence; overflow remains latched until the runtime acknowledges reconciliation.
 - Added RuntimeDeviceSessionBinding and ActiveOperationStepBinding to reject feedback from prior device-session generations and superseded operation-step/command identities before state reduction.
 - Implemented SerializedOperationRuntime<TPayload> as a Core single-writer operation/step state owner. It binds mutations to one owner thread, validates runtime/device/session/operation/step/command identity, applies the lifecycle reducers, returns the typed payload with its receipt to the owner, and retires active work when a device session is replaced or closed.
-- Feedback queue loss blocks command dispatch and step/operation verification until the inbox is drained and the owner acknowledges reconciliation. A completed device action remains AwaitingObservation; only an explicit verification transition marks a step Verified. The Application worker loop and notification delivery remain outstanding.
+- Added Application RuntimeWakeSignal implementing IFeedbackRuntimeSignal and SerializedRuntimeWorker::run. The host starts the worker thread; the worker binds Core ownership, drains feedback FIFO before the host's non-blocking typed control drain, and waits against a wake generation captured before draining.
+- Added StagePositionFeedbackReducer. It applies only fresh current-session AxisPositionObservation payloads to the configured X/Y plane, ignores non-position and non-planar feedback, and invalidates both machine references while feedback loss remains unresolved. Normal telemetry never establishes a home reference.
+- Feedback queue loss blocks command dispatch and step/operation verification until the inbox is drained and the owner acknowledges reconciliation. A completed device action remains AwaitingObservation; only an explicit verification transition marks a step Verified. Application now has RuntimeWakeSignal and SerializedRuntimeWorker; the worker drains receipts on the Core owner thread and runs the host-provided typed control-request drain. Subscriber notification delivery and the concrete host control queue remain outstanding.
 - Added tests for capacity/closure, queue overflow and loss callback, runtime-scope rejection, gap-free sequence assignment and concurrent multi-producer FIFO order.
 - Added StageNavigationPlanner and StageHomingPolicy. It validates the target and registration before planning, selects direct coordinated X/Y movement while within both error thresholds, or homes both axes otherwise. After verified homing it re-resolves the saved slide-local point only if the registration revision is unchanged.
 - Propagates slide-registration uncertainty through the inverse affine transform with the rectangular affine interpolation L1 bound and refuses slide-local position estimates outside the selected slide geometry.
@@ -346,10 +346,13 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 ## Immediate next implementation task
 
-The Phase 4B motion/registration/planning contracts and the first Phase 4C ingress primitive are implemented. BoundedFeedbackInbox<TPayload> provides typed fixed-capacity FIFO storage and overflow notification, but the serialized runtime consumer is not yet implemented.
+The Core bounded inbox, serialized operation-state owner, Application wake primitive/owner loop and dual-slide X/Y position feedback reducer are implemented. The worker itself does not own a thread or a generic command queue: the Application host starts it on a dedicated thread and supplies a typed control-request drain plus capability-specific feedback handling.
 
-The Core single-writer operation state owner and typed feedback inbox are implemented. Continue Phase 4C in Application: implement the worker loop that binds SerializedOperationRuntime<TPayload> to one thread, waits on an IFeedbackRuntimeSignal implementation, drains receipts in order, and applies the returned capability payload to the matching capability state (including StagePositionState) on that same owner thread. Driver callbacks only submit to the inbox; they never mutate Core state. Reconciliation must establish device state before acknowledging a feedback-loss latch.
-
-The runtime must dispatch the returned HomeAxes or MoveAxesTo plan, preserve the SlideNavigationTarget during homing and call resolveAfterHoming only after the home action is verified. Phase 4D/4E then execute dependent operations and verify physical arrival from fresh feedback.
+**Next Phase 4C/4D integration work**
+1. Compose the host's typed stage-navigation control requests with SerializedRuntimeWorker; process them only on the owner thread and preserve one source of truth for StagePositionState.
+2. Connect StageNavigationPlanner output to IStageMotionPort. A direct plan dispatches the coordinated MoveAxesTo; a homing plan must preserve SlideNavigationTarget, verify the home action and fresh axis references, then call resolveAfterHoming before dispatching the restored absolute move.
+3. Define explicit homing/reference evidence before claiming HomeAxes is verified. The current StageMotionFeedbackPayload does not yet define the hardware home-reference assertion or the referenced coordinate; a generic action-completed/Idle observation is insufficient.
+4. Integrate calibrated physical motion-error contributions. StagePositionState accepts the calibrated bound, but no concrete driver/controller implementation or measured motion-calibration policy is claimed.
+5. On feedback loss, invalidate capability state, read back/reconcile physical device state, and only then acknowledge the runtime loss latch. Fresh ordinary position telemetry after that point still does not establish a machine reference.
 
 Controller-specific STEP/DIR generation and vendor protocols remain in external driver libraries.

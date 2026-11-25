@@ -68,6 +68,8 @@ struct RuntimeSnapshot final {
 struct OperationView final {
     OperationHandle handle;
     core::OperationSnapshot snapshot;
+
+    [[nodiscard]] bool isConsistent() const noexcept;
 };
 
 } // namespace microscope::application

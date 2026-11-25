@@ -63,6 +63,14 @@ if(BUILD_TESTING)
     add_test(NAME camera_gentl_producer_tests
         COMMAND camera_gentl_producer_tests
             "$<TARGET_FILE:gentl_consumer_bridge_fixture>")
+
+    add_executable(camera_gentl_frame_adapter_tests
+        tests/GenTLFrameAdapterTests.cpp)
+    target_compile_features(camera_gentl_frame_adapter_tests PRIVATE cxx_std_17)
+    target_link_libraries(camera_gentl_frame_adapter_tests
+        PRIVATE Camera::GenTLConsumerBridge)
+    add_test(NAME camera_gentl_frame_adapter_tests
+        COMMAND camera_gentl_frame_adapter_tests)
 endif()
 
 option(CAMERA_GENTL_ENABLE_GENAPI

@@ -216,8 +216,8 @@ int main() {
     check(wrongThreadRejected.load(),
           "state queries from another thread are rejected by owner-thread affinity");
 
-    check(runtime->closeDeviceSession(
-        id<DeviceId>("stage"),take(DeviceSessionGeneration::create(4))),
+    check(bool(runtime->closeDeviceSession(
+        id<DeviceId>("stage"),take(DeviceSessionGeneration::create(4)))),
         "current device session can be closed by its owner");
     check(signal.available.load()>=5&&signal.closed.load()==0,
           "runtime receives all accepted feedback wakeups without premature closure");

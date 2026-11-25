@@ -13,7 +13,8 @@ add_library(microscope_core STATIC
     src/OpticalSpecifications.cpp
     src/IlluminationSpecifications.cpp
     src/StageSpecifications.cpp
-    src/Configuration.cpp)
+    src/Configuration.cpp
+    src/ConfigurationTransition.cpp)
 add_library(Microscope::Core ALIAS microscope_core)
 
 target_compile_features(microscope_core PUBLIC cxx_std_17)

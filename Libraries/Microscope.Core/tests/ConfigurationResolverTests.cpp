@@ -1,5 +1,7 @@
 #include "microscope/core/configuration/Configuration.h"
+#include "microscope/core/configuration/ConfigurationTransition.h"
 
+#include <algorithm>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
@@ -891,6 +893,255 @@ void testProfileTargetsAreRetainedAndValidatedAgainstInstalledRanges() {
           "requires explicit camera exposure-time capability data before accepting a profile preset");
 }
 
+void testTransitionPlannerProducesTypedRequirementsAndDependencyLayers() {
+    const auto fixture = makeConfigurationFixture();
+    const auto targetProfile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-transition-targets"),
+        ContrastMethod::Brightfield,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {},
+        nonNegativeAperture(0.60),
+        take(IlluminationIntensitySetting::create(
+            50.0, IlluminationIntensityUnit::Percent)),
+        ExposurePreset::create(microseconds(30'000.0))));
+    const auto catalog =
+        take(ConfigurationProfileCatalog::create({targetProfile}));
+    const auto request = makeRequest(
+        fixture,
+        {fixture.illuminationPathId, fixture.imagingPathId},
+        fixture.cameraModeId,
+        ContrastMethod::Brightfield,
+        targetProfile.id());
+    const auto resolution = ConfigurationResolver::resolve(
+        fixture.equipment, catalog, request);
+    check(resolution.isResolved(),
+          "precondition: transition planner receives a valid resolved configuration");
+    if (!resolution.resolvedConfiguration()) {
+        return;
+    }
+
+    const auto plan = take(ConfigurationTransitionPlanner::plan(
+        *resolution.resolvedConfiguration()));
+    check(plan.desiredConfiguration().microscopeId() == fixture.microscopeId,
+          "keeps the transition plan scoped to the resolved microscope identity");
+
+    const ConfigurationTransitionStep* gate = nullptr;
+    const ConfigurationTransitionStep* paths = nullptr;
+    const ConfigurationTransitionStep* objective = nullptr;
+    const ConfigurationTransitionStep* condenser = nullptr;
+    const ConfigurationTransitionStep* cameraMode = nullptr;
+    const ConfigurationTransitionStep* illumination = nullptr;
+    const ConfigurationTransitionStep* apertureTarget = nullptr;
+    const ConfigurationTransitionStep* intensityTarget = nullptr;
+    const ConfigurationTransitionStep* exposurePolicy = nullptr;
+    const ConfigurationTransitionStep* exposurePreset = nullptr;
+    const ConfigurationTransitionStep* verification = nullptr;
+
+    for (const auto& step : plan.steps()) {
+        const auto& requirement = step.requirement();
+        if (std::holds_alternative<AcquisitionMustBeInactive>(requirement)) {
+            gate = &step;
+        } else if (std::holds_alternative<OpticalPathSetMustMatch>(requirement)) {
+            paths = &step;
+        } else if (std::holds_alternative<ObjectiveSelectionMustMatch>(requirement)) {
+            objective = &step;
+        } else if (std::holds_alternative<CondenserSelectionMustMatch>(requirement)) {
+            condenser = &step;
+        } else if (std::holds_alternative<CameraOutputModeMustMatch>(requirement)) {
+            cameraMode = &step;
+        } else if (std::holds_alternative<IlluminationChannelMustMatch>(requirement)) {
+            illumination = &step;
+        } else if (std::holds_alternative<CondenserApertureMustMatch>(requirement)) {
+            apertureTarget = &step;
+        } else if (std::holds_alternative<IlluminationIntensityMustMatch>(requirement)) {
+            intensityTarget = &step;
+        } else if (std::holds_alternative<ExposurePolicyMustBeHonored>(requirement)) {
+            exposurePolicy = &step;
+        } else if (std::holds_alternative<InitialExposurePresetMustBeConsidered>(requirement)) {
+            exposurePreset = &step;
+        } else if (std::holds_alternative<DesiredConfigurationMustBeVerified>(requirement)) {
+            verification = &step;
+        }
+    }
+
+    check(gate && paths && objective && condenser && cameraMode &&
+          illumination && apertureTarget && intensityTarget &&
+          exposurePolicy && exposurePreset && verification,
+          "contains acquisition, selections, policy, profile targets and final verification");
+
+    if (gate && paths && objective && condenser && cameraMode &&
+        illumination && apertureTarget && intensityTarget &&
+        exposurePolicy && exposurePreset && verification) {
+        const auto hasDependency = [&plan](
+            const ConfigurationTransitionStep& prerequisite,
+            const ConfigurationTransitionStep& dependent) {
+            return std::any_of(
+                plan.dependencies().begin(),
+                plan.dependencies().end(),
+                [&prerequisite, &dependent](
+                    const ConfigurationTransitionDependency& dependency) {
+                    return dependency.prerequisiteStepId() == prerequisite.id() &&
+                           dependency.dependentStepId() == dependent.id();
+                });
+        };
+
+        check(hasDependency(*gate, *paths) &&
+              hasDependency(*gate, *objective) &&
+              hasDependency(*gate, *condenser),
+              "gates configuration requirements on acquisition inactivity");
+        check(hasDependency(*paths, *cameraMode) &&
+              hasDependency(*objective, *cameraMode),
+              "orders camera mode after path and objective requirements");
+        check(hasDependency(*condenser, *apertureTarget),
+              "orders condenser aperture target after condenser selection");
+        check(hasDependency(*illumination, *intensityTarget),
+              "orders illumination intensity after channel selection");
+        check(hasDependency(*cameraMode, *exposurePolicy) &&
+              hasDependency(*exposurePolicy, *exposurePreset),
+              "preserves exposure policy as a prerequisite to considering the initial preset");
+        check(hasDependency(*apertureTarget, *verification) &&
+              hasDependency(*intensityTarget, *verification) &&
+              hasDependency(*exposurePreset, *verification),
+              "requires final verification after all optional target requirements");
+    }
+
+    check(!plan.executionLayers().empty() &&
+          plan.executionLayers().front().size() == 1 &&
+          gate && plan.executionLayers().front().front() == gate->id(),
+          "places acquisition inactivity in the first execution layer");
+    check(plan.executionLayers().size() >= 3 &&
+          paths && objective && condenser &&
+          std::find(plan.executionLayers()[1].begin(),
+                    plan.executionLayers()[1].end(), paths->id()) !=
+              plan.executionLayers()[1].end() &&
+          std::find(plan.executionLayers()[1].begin(),
+                    plan.executionLayers()[1].end(), objective->id()) !=
+              plan.executionLayers()[1].end() &&
+          std::find(plan.executionLayers()[1].begin(),
+                    plan.executionLayers()[1].end(), condenser->id()) !=
+              plan.executionLayers()[1].end(),
+          "keeps independent path/objective/condenser selections in one parallel layer");
+    check(!plan.executionLayers().empty() &&
+          plan.executionLayers().back().size() == 1 &&
+          verification &&
+          plan.executionLayers().back().front() == verification->id(),
+          "places final desired-configuration verification in the last execution layer");
+
+    const auto* policyRequirement = exposurePolicy
+        ? std::get_if<ExposurePolicyMustBeHonored>(&exposurePolicy->requirement())
+        : nullptr;
+    const auto* presetRequirement = exposurePreset
+        ? std::get_if<InitialExposurePresetMustBeConsidered>(&exposurePreset->requirement())
+        : nullptr;
+    check(policyRequirement != nullptr &&
+          policyRequirement->policy == ExposurePolicy::Manual &&
+          presetRequirement != nullptr,
+          "retains Manual policy separately from the optional initial preset");
+
+    const auto noTargetsResolution = ConfigurationResolver::resolve(
+        fixture.equipment,
+        fixture.profiles,
+        makeRequest(fixture, {fixture.fullPathId}, fixture.cameraModeId));
+    check(noTargetsResolution.isResolved(),
+          "precondition: no-target profile resolves");
+    if (noTargetsResolution.resolvedConfiguration()) {
+        const auto noTargetsPlan = take(ConfigurationTransitionPlanner::plan(
+            *noTargetsResolution.resolvedConfiguration()));
+        check(std::none_of(
+                  noTargetsPlan.steps().begin(),
+                  noTargetsPlan.steps().end(),
+                  [](const ConfigurationTransitionStep& step) {
+                      return std::holds_alternative<CondenserApertureMustMatch>(
+                                 step.requirement()) ||
+                             std::holds_alternative<IlluminationIntensityMustMatch>(
+                                 step.requirement()) ||
+                             std::holds_alternative<InitialExposurePresetMustBeConsidered>(
+                                 step.requirement());
+                  }),
+              "does not invent optional target requirements when the profile has no targets");
+    }
+}
+
+void testTransitionPlanFactoriesRejectMalformedDependencyGraphs() {
+    const auto fixture = makeConfigurationFixture();
+    const auto resolution = ConfigurationResolver::resolve(
+        fixture.equipment,
+        fixture.profiles,
+        makeRequest(fixture, {fixture.fullPathId}, fixture.cameraModeId));
+    check(resolution.isResolved(),
+          "precondition: malformed-plan tests start from a valid resolved configuration");
+    if (!resolution.resolvedConfiguration()) {
+        return;
+    }
+
+    const auto invalidPaths = ConfigurationTransitionStep::create(
+        makeId<ConfigurationTransitionStepId>("invalid-empty-path-set"),
+        OpticalPathSetMustMatch{});
+    check(!invalidPaths &&
+          invalidPaths.error() ==
+              ConfigurationTransitionStepError::EmptyOpticalPathSet,
+          "rejects a transition path requirement with no paths");
+
+    const auto duplicatePaths = ConfigurationTransitionStep::create(
+        makeId<ConfigurationTransitionStepId>("invalid-duplicate-path-set"),
+        OpticalPathSetMustMatch{
+            {fixture.fullPathId, fixture.fullPathId}});
+    check(!duplicatePaths &&
+          duplicatePaths.error() ==
+              ConfigurationTransitionStepError::DuplicateOpticalPath,
+          "rejects duplicate paths in one transition requirement");
+
+    const auto gateId = makeId<ConfigurationTransitionStepId>("cycle-gate");
+    const auto objectiveId =
+        makeId<ConfigurationTransitionStepId>("cycle-objective");
+    const auto condenserId =
+        makeId<ConfigurationTransitionStepId>("cycle-condenser");
+    const auto verifyId = makeId<ConfigurationTransitionStepId>("cycle-verify");
+
+    const auto gate = take(ConfigurationTransitionStep::create(
+        gateId, AcquisitionMustBeInactive{}));
+    const auto objective = take(ConfigurationTransitionStep::create(
+        objectiveId, ObjectiveSelectionMustMatch{fixture.objectiveId}));
+    const auto condenser = take(ConfigurationTransitionStep::create(
+        condenserId, CondenserSelectionMustMatch{fixture.condenserId}));
+    const auto verify = take(ConfigurationTransitionStep::create(
+        verifyId, DesiredConfigurationMustBeVerified{}));
+
+    const auto dependency = [](
+        const ConfigurationTransitionStepId& prerequisite,
+        const ConfigurationTransitionStepId& dependent) {
+        return take(ConfigurationTransitionDependency::create(
+            prerequisite, dependent));
+    };
+
+    const auto cyclicPlan = ConfigurationTransitionPlan::create(
+        *resolution.resolvedConfiguration(),
+        {gate, objective, condenser, verify},
+        {dependency(gateId, objectiveId),
+         dependency(gateId, condenserId),
+         dependency(gateId, verifyId),
+         dependency(objectiveId, condenserId),
+         dependency(condenserId, objectiveId),
+         dependency(objectiveId, verifyId),
+         dependency(condenserId, verifyId)});
+    check(!cyclicPlan &&
+          cyclicPlan.error() ==
+              ConfigurationTransitionPlanError::CyclicDependencies,
+          "rejects a transition plan containing a dependency cycle");
+
+    const auto selfDependency =
+        ConfigurationTransitionDependency::create(gateId, gateId);
+    check(!selfDependency &&
+          selfDependency.error() ==
+              ConfigurationTransitionDependencyError::SelfDependency,
+          "rejects a dependency from a step to itself");
+}
+
 void testResolverRejectsUnavailableCameraMode() {
     const auto fixture = makeConfigurationFixture();
     const auto request = makeRequest(
@@ -1062,6 +1313,8 @@ int main() {
     testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms();
     testOpticalFunctionRequirementFactoriesAndSelections();
     testProfileTargetsAreRetainedAndValidatedAgainstInstalledRanges();
+    testTransitionPlannerProducesTypedRequirementsAndDependencyLayers();
+    testTransitionPlanFactoriesRejectMalformedDependencyGraphs();
     testResolverRejectsUnavailableCameraMode();
     testResolverReportsProfileConflictAndMissingPath();
     testResolverEnforcesPathCompatibilityAndIlluminationChannel();

@@ -24,6 +24,8 @@ int main() {
                   "RuntimeHandle requires a physical microscope/runtime identity");
     static_assert(!std::is_default_constructible<application::OperationHandle>::value,
                   "OperationHandle requires a runtime and operation identity");
+    static_assert(!std::is_default_constructible<application::RuntimeSnapshot>::value,
+                  "RuntimeSnapshot must be created through its validated factory");
     static_assert(!std::is_default_constructible<application::OperationView>::value,
                   "OperationView must be created through its validated factory");
 
@@ -39,6 +41,32 @@ int main() {
         microscopeId, runtimeId, generation1);
     application::RuntimeHandle reopenedRuntime(
         microscopeId, runtimeId, generation2);
+
+    auto activeRuntimeSnapshot = application::RuntimeSnapshot::create(
+        first, application::RuntimeLifecycle::Active, 1);
+    check(static_cast<bool>(activeRuntimeSnapshot),
+          "creates a known runtime lifecycle snapshot with a positive revision");
+    if (activeRuntimeSnapshot) {
+        check(activeRuntimeSnapshot.value().handle().identifiesSameRuntime(first) &&
+              activeRuntimeSnapshot.value().lifecycle() ==
+                  application::RuntimeLifecycle::Active &&
+              activeRuntimeSnapshot.value().revision() == 1,
+              "runtime snapshot preserves immutable runtime identity and lifecycle values");
+    }
+
+    auto invalidRuntimeLifecycle = application::RuntimeSnapshot::create(
+        first, static_cast<application::RuntimeLifecycle>(255), 1);
+    check(!invalidRuntimeLifecycle &&
+          invalidRuntimeLifecycle.error() ==
+              application::RuntimeSnapshotError::InvalidLifecycle,
+          "rejects an unknown runtime lifecycle state");
+
+    auto zeroRuntimeRevision = application::RuntimeSnapshot::create(
+        first, application::RuntimeLifecycle::Initializing, 0);
+    check(!zeroRuntimeRevision &&
+          zeroRuntimeRevision.error() ==
+              application::RuntimeSnapshotError::ZeroRevision,
+          "rejects a zero runtime snapshot revision");
 
     check(first.targetsSameMicroscope(reopenedRuntime),
           "runtime generations can refer to the same physical microscope");

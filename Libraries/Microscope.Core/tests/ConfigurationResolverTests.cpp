@@ -373,7 +373,23 @@ void testConfigurationFactoriesRejectInvalidSets() {
     check(!invalidExposurePolicy &&
           invalidExposurePolicy.error() ==
               ConfigurationRequestError::InvalidExposurePolicy,
-          "rejects an unknown exposure policy value");
+          "rejects an invalid exposure policy enum value");
+
+    auto unspecifiedExposurePolicy = ConfigurationRequest::create(
+        fixture.brightfieldProfileId,
+        ContrastMethod::Brightfield,
+        fixture.objectiveId,
+        fixture.condenserId,
+        {fixture.fullPathId},
+        fixture.cameraId,
+        fixture.cameraModeId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        ExposurePolicy::Unknown);
+    check(!unspecifiedExposurePolicy &&
+          unspecifiedExposurePolicy.error() ==
+              ConfigurationRequestError::InvalidExposurePolicy,
+          "requires an explicit exposure policy rather than an unknown sentinel");
 }
 
 void testResolverAcceptsOneCompleteBrightfieldPath() {

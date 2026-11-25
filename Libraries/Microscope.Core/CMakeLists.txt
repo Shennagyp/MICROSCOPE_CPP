@@ -11,7 +11,8 @@ add_library(microscope_core STATIC
     src/Identity.cpp
     src/OpticalTopology.cpp
     src/OpticalSpecifications.cpp
-    src/IlluminationSpecifications.cpp)
+    src/IlluminationSpecifications.cpp
+    src/StageSpecifications.cpp)
 add_library(Microscope::Core ALIAS microscope_core)
 
 target_compile_features(microscope_core PUBLIC cxx_std_17)
@@ -86,4 +87,16 @@ if(BUILD_TESTING)
     add_test(
         NAME microscope_core_illumination_condenser_tests
         COMMAND microscope_core_illumination_condenser_tests)
+
+    add_executable(microscope_core_stage_specification_tests
+        tests/StageSpecificationsTests.cpp)
+    target_link_libraries(microscope_core_stage_specification_tests
+        PRIVATE Microscope::Core)
+    set_target_properties(microscope_core_stage_specification_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_core_stage_specification_tests
+        COMMAND microscope_core_stage_specification_tests)
 endif()

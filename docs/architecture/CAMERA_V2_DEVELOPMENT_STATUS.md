@@ -2,9 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Current branch HEAD:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
-**Latest non-Qt implementation/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
-**CI:** passed on Intel x86_64 and Apple Silicon arm64, run #45654331539  
+**Latest non-Qt code/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
+**Non-Qt CI:** passed on Intel x86_64 and Apple Silicon arm64, run #45654331539  
+**Latest roadmap/CI-workflow correction:** on `camera-v.2.0`; separate Qt CI job is queued/running and must be checked against its exact commit  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -95,25 +95,26 @@ The original phase dependency order remains: 0 → 1 → 2 → 3 → 4; Phase 5 
 
 | Commit | Change | Effect |
 |---|---|---|
-| `70a7486` | Make Qt integrations opt-in legacy targets | Qt adapter and preview options default OFF; consumers of only the core need no Qt. This does not remove Qt Phase 3/4 deliverables. |
+| `70a7486` | Make Qt integrations opt-in | Qt adapter/preview options default OFF so core-only consumers do not inherit Qt. Optional Qt targets remain Phase 3/4 deliverables. |
 | `5cf5bc3` | First non-Qt macOS CI | Driver/probes built; 11/11 non-Qt tests passed on arm64 and x86_64. |
-| `69dbc65`, `8c36506` | Isolate Qt facade header | Move the QObject facade header out of the core driver include root; the optional Qt target owns the extra include path and install. |
-| `3e2b328`, `af19d7e` | Verify non-Qt install surface | CI checks common/native headers, absence of the Qt facade from the non-Qt install, and syntax-compiles a consumer source against installed headers. |
-| `a6f3409` | Exercise non-Qt CMake defaults | The core-only CI path relies on default OFF Qt options. |
-| `ac90288` | Add Camera v2.0 status ledger | Establish branch provenance, architecture, phase status and continuation risks. Its initial phase/UI crosswalk was incorrect and is corrected in this revision. |
-| `1ac6404`, `e5078d3`, `79d43f0`, `5ccd990` | Align provider README | Explain non-Qt core and optional Qt streaming/reusable UI obligations. |
-| `fbc1053` | Archive v0.7 continuation snapshot | Preserve prior UI evidence as history; current roadmap remains the original Phase 0–8 plan. |
-| `d250add`, `e187cfd` | Mark prior inventory/release plan snapshots | Their prior execution/status statements are historical/subordinate, not replacements for the governing roadmap. |
-| `85f0a1d`, `affcccf` | Add non-Qt public API contract test | Checks API type/ownership invariants, initial Closed state, zero counters and idempotent close without enumerating hardware. |
-| `61e1523` | Restore Qt streaming/UI CI coverage | Adds a separate Qt build/test job for optional streaming, reusable widgets and preview composition on Intel and Apple Silicon. |
+| `69dbc65`, `8c36506` | Isolate Qt facade header | Move the QObject facade header out of the core driver include root; optional Qt target owns the extra include path and installation. |
+| `3e2b328`, `af19d7e` | Verify non-Qt install surface | CI checks required common/native headers, absence of Qt facade from non-Qt install, and syntax compilation against installed headers. |
+| `a6f3409` | Exercise non-Qt CMake defaults | Core-only CI relies on default OFF Qt options. |
+| `ac90288` | Initial v2.0 status ledger | Established branch provenance and initial phase map; its removal/reindexing of Qt Phase 4 was incorrect and has been corrected to original Phases 0–8. |
+| `1ac6404`, `e5078d3`, `79d43f0`, `5ccd990` | Align driver README | Explain non-Qt core plus optional Qt streaming/reusable UI obligations. |
+| `fbc1053`, `7ae8f65` | Archive v0.7 handoff snapshot | Preserve prior native/Qt implementation evidence without treating its old next actions as current. |
+| `d250add`, `b5e0da0`, `a8e0547` | Correct historical inventory/release plan notices | Qt streaming/UI remain within Phases 3/4; later AmScope release plan is subordinate to original roadmap. |
+| `85f0a1d`, `affcccf` | Add non-Qt public API contract test | Checks API type/ownership, initial Closed state, zero counters and idempotent close without hardware enumeration. |
+| `61e1523` | Add separate Qt CI job | Builds/tests optional Qt streaming, reusable widgets and preview composition on Intel and Apple Silicon. |
+| `64ca8da` | Restore original Phase 0–8 ledger | Re-established original canonical numbering, Qt Phase 3/4 and GenTL Phase 5. |
 
 ### CI evidence
 
-Non-Qt workflow [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) passed at exact code checkpoint `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8` on Apple Silicon arm64 and Intel x86_64. Each job passed **12/12 non-Qt CTest tests**, installed the non-Qt public headers, verified that `QtAmcamCamera.h` was absent from the non-Qt install, syntax-compiled the public API test against installed headers, and verified driver/vendor/diagnostic architecture slices.
+Non-Qt workflow [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) passed at code checkpoint `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8` on Apple Silicon arm64 and Intel x86_64. Each job passed **12/12 non-Qt CTest tests**, installed the non-Qt public headers, verified that `QtAmcamCamera.h` was absent from the non-Qt install, syntax-compiled the public API test against installed headers, and verified driver/vendor/diagnostic architecture slices.
 
-The workflow now also contains a separate Qt job for the original Phase 3/4 optional targets. That new job has not yet been validated. No Qt test pass or physical-camera run is claimed until its exact run completes. The existing non-Qt pass does not prove the Qt targets compile.
+The workflow now has a second matrix for optional Qt streaming and reusable UI. The new Qt job is not yet validated. Do not infer its success from the non-Qt run. The next run after the workflow correction must be checked for both job results and exact tested commit.
 
-No local build or physical-camera run is claimed in this status update. CI evidence remains separate from physical-camera evidence and phase acceptance.
+CI results are software evidence only. They do not establish AmScope hardware behavior or close any phase's real-camera acceptance gate. No local build or physical-camera test is claimed in this status update.
 
 ## 6. Highest-priority unresolved risks
 
@@ -133,29 +134,29 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 7. Next development sequence
 
-1. Validate the new non-Qt CI workflow on the exact current branch head.
-2. Audit public headers and CMake target dependencies to ensure `Amscope::Driver` and `Camera::Common` have no hidden Qt or application dependencies.
-3. Complete Phase 2.3 common error/value classification only for semantics actually shared by providers.
-4. Implement the private native SDK dispatch seam, retaining ABI, session, lock and worker ownership.
-5. Add deterministic lifecycle fault tests and investigate the actual SDK no-new-callback guarantee.
-6. Reconcile the AmScope inventory against implementation, model-specific SDK evidence and physical tests.
-7. Continue GenTL only after choosing the existing Consumer interface and obtaining a real CTI Producer/camera.
-8. Export the non-Qt CMake package and test it from a clean external consumer.
-9. Complete physical qualification for every declared provider/model combination.
+1. Validate both the non-Qt and Qt CI matrices on the exact source checkpoint; the Qt job must build/test Phase 3/4 targets on both architectures.
+2. Finish Phase 3's responsibility split: non-Qt programmatic control and Qt streaming adapter must use one AmcamCamera session and one SDK serialization boundary.
+3. Complete Phase 4 reusable widgets for descriptors, commands, telemetry, capability/availability and still/frame presentation; keep app shell/workspace ownership in consuming apps.
+4. Complete Phase 2 physical common-frame/RAW evidence and regression; retain the documented common/provider-specific error/value decisions.
+5. Satisfy the original Phase 1 test-seam hardware entry condition before implementing behavior-changing lifecycle injection; then test callback drain and investigate the actual SDK no-new-callback guarantee.
+6. Reconcile AmScope feature/model coverage against physical evidence.
+7. Continue original Phase 5 GenTL only after choosing the existing Consumer interface and obtaining a real CTI Producer/camera.
+8. Export non-Qt and optional Qt CMake packages/targets and verify clean consumers under Phase 7.
+9. Complete Phase 8 physical qualification for every declared provider/model combination.
 
 ## 8. Continuation rules
 
 - Continue Camera source work on `camera-v.2.0`; do not develop the library on the Optika application branch.
 - Use Optika as an application integration/reference line only. Do not merge its GUI/workspace changes into Camera.
 - Keep Controller/Stage, Slide Scanning and ImageProcessing as separate workstreams.
-- No Qt dependency or reusable camera UI is to be added to Camera v2.0.
+- Keep Qt optional to the core driver/common targets; preserve optional Phase 3 streaming and Phase 4 reusable UI targets and their tests.
 - Verify branch HEAD and commits at each continuation.
 - Update this ledger after each meaningful increment with exact source commit, changed files, tests actually run, physical hardware evidence and the next bounded task.
 - Never mark phases complete from source presence or CI alone.
 
 ## 9. References
 
-- [Original Phase 0–8 roadmap](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
+- [Governing original Camera Module Phase 0–8 roadmap](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
 - [AmScope implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md)
 - [Common/provider-specific type ownership](CAMERA_COMMON_TYPE_OWNERSHIP.md)
 - [Private SDK test-seam design](AMSCOPE_NATIVE_DRIVER_TEST_SEAM.md)

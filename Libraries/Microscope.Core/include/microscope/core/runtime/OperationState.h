@@ -1,8 +1,10 @@
 #pragma once
 
 #include "microscope/core/ids/Ids.h"
+#include "microscope/core/result/Result.h"
 
 #include <cstdint>
+#include <utility>
 
 namespace microscope::core {
 

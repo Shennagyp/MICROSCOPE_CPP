@@ -231,22 +231,23 @@ and the GenTL/GenApi dependency assessment is in
   macOS CI runs these tests before checking SDK and library artifacts.
 - Application-owned delivered libraries use camera_-prefixed artifact names;
   the original Amcam SDK library remains libamcam.dylib.
-- `Camera::Qt` provides the header-only `camera::qt::FrameStreamMailbox`
-  primitive used by Qt adapters. The mailbox owns only the immutable latest-frame
-  lease and notification-pending state; QObject notification remains with the
-  adapter. It adds no camera, session, worker, or operation-queue ownership and
-  has no Qt runtime dependency itself.
-- `QtAmcamCamera` composes one `AmcamCamera` and embeds this mailbox by value. It
-  executes device enumeration, lifecycle, and feature descriptor/read/write
-  requests on one bounded, serialized worker and delivers
-  completions on its Qt affinity thread. GUI Refresh/Open/Start/Stop/Close use
-  this queue instead of blocking the UI.
+- `Camera::Common` owns the Qt-independent atomic latest-frame mailbox.
+  `Camera::Qt` is now a concrete Qt Core library exposing
+  `camera::qt::FrameStream`: it composes that mailbox with coalesced
+  `QObject`-affinity notifications, latest-frame retrieval, and clearing.
+  The Qt stream owns no camera, native session, acquisition worker, or SDK calls.
+- `QtAmcamCamera` composes one `AmcamCamera` and one `camera::qt::FrameStream`.
+  It remains the AmScope-specific operation coordinator: device enumeration,
+  lifecycle, feature, command, telemetry and accessory requests are serialized
+  on its bounded worker, with completions delivered on its Qt affinity thread.
   Lifecycle requests remain FIFO; session generations invalidate old-session
-  feature work, while a separate feature-state generation invalidates stale
-  descriptor/read snapshots without cancelling accepted FIFO writes or commands.
-  The first accepted camera operation commits a QtAmcamCamera instance for its
-  lifetime to synchronous or queued execution. Calls through the opposite API surface are
-  rejected, so the two execution models cannot interleave on one camera.
+  work, while feature-state generations invalidate stale descriptor/read
+  snapshots without cancelling accepted FIFO writes or commands.
+  The first accepted camera operation commits the facade for its lifetime to
+  synchronous or queued execution. Calls through the opposite API surface are
+  rejected, so those execution models cannot interleave on one camera.
+  The generic frame-publication and QObject notification mechanism is no longer
+  implemented inside this AmScope-specific facade.
 - The Qt Widgets app builds its settings panel from common feature descriptors,
   including typed Boolean, integer, vector, floating-point and enumeration
   editors. The complete descriptor inventory is probed while the camera is
@@ -346,10 +347,12 @@ cmake --build build/amscope --config Release --parallel
 ctest --test-dir build/amscope --output-on-failure
 ```
 
-The normal CMake defaults are non-Qt. The two Qt options remain temporarily
-available only for the legacy adapter/preview source and default to OFF. They
-must not become transitive dependencies of the driver, common contracts,
-installed package, or external non-Qt consumers.
+The normal CMake defaults are non-Qt. `AMSCOPE_BUILD_QT_ADAPTER` and
+`AMSCOPE_BUILD_PREVIEW_APP` default to OFF so a core-only consumer does not
+discover or link Qt. They remain supported opt-in targets for the Camera
+Module's Phase 3 Qt integration and Phase 4 reusable widgets/preview composition.
+Qt must not become a transitive dependency of `Amscope::Driver`,
+`Camera::Common`, or an external non-Qt consumer.
 
 For direct physical-camera acquisition diagnostics, use the production
 AmcamCamera callback-to-pull path:
@@ -487,21 +490,34 @@ uses @loader_path for runtime resolution.
 
 ## Optional Qt frame handoff
 
-`QtAmcamCamera` and `Camera::Qt` provide the current optional Qt integration
-path. Their target/header boundary is kept out of `Amscope::Driver` and
-`Camera::Common`, so non-Qt consumers do not inherit Qt dependencies.
+`Camera::Qt` now builds the concrete Qt Core target `Camera::Qt` and exposes
+`camera::qt::FrameStream`. The component receives immutable `FramePtr`
+leases from any producer thread, retains only the latest frame, coalesces
+notifications onto its QObject affinity thread, and supports take/clear.
+It contains no provider SDK code and owns no camera session or acquisition
+worker. The common mailbox remains in `Camera::Common`, so non-Qt consumers
+do not inherit Qt.
 
-The v2.0 Phase 3 target architecture still requires a clear separation between
-the non-Qt programmatic control API and Qt-specific streaming/thread handoff.
-The current facade is an existing implementation to reconcile against that
-boundary, not proof that the separation phase is complete.
+`QtAmcamCamera` composes one non-Qt `AmcamCamera` session with one
+`FrameStream`. `AmcamCamera` itself implements the common
+`ICameraFeatureAccess` contract and exposes the AmScope-specific command and
+telemetry API without Qt. The Qt facade supplies the provider-specific queued
+operation/lifecycle coordination for Qt consumers; it does not create another
+SDK handle. Its frame publication and Qt notification mechanism now delegate
+to the separate `Camera::Qt` component.
 
-The non-Qt `AmcamCamera::FrameCallback` and the Qt adapter both consume the
-same driver's immutable `FramePtr` lease model. Consumers must retain the
-lease while reading its pixel memory. They must not synchronously call start,
-stop, close or destroy the camera from the acquisition callback. The adapter
-owns Qt notification scheduling; the consuming application owns composition
-and presentation state.
+Automated Qt tests cover latest-frame coalescing, notification re-arming,
+QObject thread affinity and clearing of the retained frame. CI does not verify
+the physical same-session control/streaming contract. The Phase 3 hardware
+regression must still prove that control and Qt streaming use one opened
+camera session, that accepted operation order is preserved, and that disposing
+the stream component does not unexpectedly close/reopen the native session.
+
+The non-Qt `AmcamCamera::FrameCallback` and Qt stream consume the same
+driver-owned immutable `FramePtr` lease model. Consumers must retain the
+lease while reading its pixel memory. They must not synchronously call
+start, stop, close or destroy the camera from the acquisition callback.
+Consuming applications own composition and presentation state.
 
 
 ## Lifecycle

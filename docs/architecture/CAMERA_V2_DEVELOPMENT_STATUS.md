@@ -2,9 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest non-Qt code/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
-**Non-Qt CI:** passed on Intel x86_64 and Apple Silicon arm64, run #45654331539  
-**Latest roadmap/CI-workflow correction:** on `camera-v.2.0`; separate Qt CI job is queued/running and must be checked against its exact commit  
+**Latest source checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`  
+**Latest CI-validated checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`  
+**CI:** run [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed all four Intel/Apple Silicon non-Qt and Qt jobs; 12/12 non-Qt and 18/18 Qt tests per architecture.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -82,7 +82,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 0 | Freeze and verify the baseline | **Accepted by owner historically.** MU503 physical observations exist; extended/exact-commit regression evidence remains follow-up, and one-camera observations do not certify all models. |
 | 1 | Stabilize and qualify native AmScope driver | **Accepted by owner historically; post-acceptance hardening remains.** Single-session ownership, callback/queue/worker/pull path, frame pool and lifecycle primitives exist. Full injected SDK lifecycle tests and proof of callback quiescence around terminal Close remain open. |
 | 2 | Finalize backend-neutral camera models | **Partially implemented.** Slice 2.1 discovery/capability models and 2.2 frame/layout models exist with automated tests and prior cross-architecture CI. The 2.3 semantic ownership audit is documented: common feature-access errors remain common, while AmScope lifecycle/command errors remain provider-specific. Physical common-frame/RAW validation remains open, so Phase 2 is not accepted. |
-| 3 | Separate driver, programmatic control and Qt streaming libraries | **In progress.** `AmcamCamera` exposes a non-Qt API; `Camera::Common` has a non-Qt mailbox; `Camera::Qt` and `QtAmcamCamera` provide the existing optional Qt handoff/request path. The public header was isolated under the optional Qt target. The current facade still combines queued control/lifecycle requests and frame notification, so the target/responsibility separation and physical same-session regression are not yet complete. |
+| 3 | Separate driver, programmatic control and Qt streaming libraries | **In progress.** `AmcamCamera` is the non-Qt programmatic control/session API and sole native handle owner. `Camera::Qt` is now a concrete Qt Core library with backend-neutral `camera::qt::FrameStream`, wrapping the Common latest-frame mailbox and owning QObject-thread notification. `QtAmcamCamera` composes one driver session and one FrameStream; its provider-specific serialized operation/lifecycle queue and generation semantics remain. CI passes on both architectures; same-session physical regression and final boundary acceptance remain open. |
 | 4 | Extract reusable Qt camera UI library | **Partially implemented.** `Camera/QtWidgets` contains `FrameView`, `CameraControlPanel` and `ImageInfoBar`; the Qt preview composes them. Descriptor-driven editors, commands, telemetry, capability/availability presentation, full consumer independence and phase-wide physical UI regression are not yet accepted. |
 | 5 | Integrate existing GenTL/GenApi implementation | **Blocked.** The existing Swift GenTL Consumer has no established C++/C ABI in the reviewed source; a real target CTI Producer and physical CTI camera are required. No reimplementation or synthetic AmScope Producer. |
 | 6 | Complete capability, feature, command and model coverage | **Open.** Broad AmScope implementation exists. Reconcile every exposed claim to provider/model support, units, preconditions, readback, asynchronous completion and physical evidence. |
@@ -107,14 +107,22 @@ The original phase dependency order remains: 0 → 1 → 2 → 3 → 4; Phase 5 
 | `85f0a1d`, `affcccf` | Add non-Qt public API contract test | Checks API type/ownership, initial Closed state, zero counters and idempotent close without hardware enumeration. |
 | `61e1523` | Add separate Qt CI job | Builds/tests optional Qt streaming, reusable widgets and preview composition on Intel and Apple Silicon. |
 | `64ca8da` | Restore original Phase 0–8 ledger | Re-established original canonical numbering, Qt Phase 3/4 and GenTL Phase 5. |
+| `e12d765` | Extract backend-neutral Qt frame streaming | Added concrete `Camera::Qt` Core library and `camera::qt::FrameStream`; moved latest-frame Qt notification/handoff out of `QtAmcamCamera`; added standalone stream tests; corrected Qt workflow path filters and optional-target CMake description. |
 
 ### CI evidence
 
-Non-Qt workflow [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) passed at code checkpoint `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8` on Apple Silicon arm64 and Intel x86_64. Each job passed **12/12 non-Qt CTest tests**, installed the non-Qt public headers, verified that `QtAmcamCamera.h` was absent from the non-Qt install, syntax-compiled the public API test against installed headers, and verified driver/vendor/diagnostic architecture slices.
+Workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed at exact source checkpoint `e12d765f408c2b0be7100c64b2eb245de5a2aca4` on both Intel x86_64 and Apple Silicon arm64:
 
-The workflow now has a second matrix for optional Qt streaming and reusable UI. The new Qt job is not yet validated. Do not infer its success from the non-Qt run. The next run after the workflow correction must be checked for both job results and exact tested commit.
+- **Non-Qt Intel x86_64:** 12/12 CTest tests passed; non-Qt public headers installed; Qt facade absent from the non-Qt install; installed-header syntax check and architecture/probe checks passed.
+- **Non-Qt Apple Silicon arm64:** 12/12 CTest tests passed with the same install-surface, syntax and architecture/probe checks.
+- **Qt Apple Silicon arm64:** 18/18 CTest tests passed, including `camera_qt_frame_stream_tests`, `camera_qt_stream_handoff_tests`, the AmScope Qt request tests and all reusable widget tests; streaming library, widgets and preview built and artifact/architecture checks passed.
+- **Qt Intel x86_64:** 18/18 CTest tests passed with the same Qt target/test and artifact/architecture checks.
 
-CI results are software evidence only. They do not establish AmScope hardware behavior or close any phase's real-camera acceptance gate. No local build or physical-camera test is claimed in this status update.
+The two new Qt tests cover the generic frame-stream publication/handoff path: latest-frame retention/coalescing, notification re-arming, QObject affinity, and clearing. The successful CI run proves build/test/install-surface behavior on the two hosted architectures. It does not prove physical camera behavior, Phase 3 same-session operation, callback quiescence, RAW sensor correctness, or the Phase 4 physical UI regression.
+
+Earlier non-Qt run [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) remains historical evidence for checkpoint `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`; the newer four-job matrix supersedes it for the `e12d765` checkpoint.
+
+No local build or physical-camera test is claimed in this status update.
 
 ## 6. Highest-priority unresolved risks
 
@@ -134,9 +142,10 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 7. Next development sequence
 
-1. Validate both the non-Qt and Qt CI matrices on the exact source checkpoint; the Qt job must build/test Phase 3/4 targets on both architectures.
-2. Finish Phase 3's responsibility split: non-Qt programmatic control and Qt streaming adapter must use one AmcamCamera session and one SDK serialization boundary.
-3. Complete Phase 4 reusable widgets for descriptors, commands, telemetry, capability/availability and still/frame presentation; keep app shell/workspace ownership in consuming apps.
+1. Preserve `e12d765` as the first fully CI-validated checkpoint for the concrete Qt streaming component.
+2. Complete Phase 3 same-session physical regression: use the non-Qt `AmcamCamera` API for supported setting read/write/readback while `Camera::Qt::FrameStream` delivers frames from that same opened session; verify FIFO writes/lifecycle, retained immutable leases, stale-generation rejection, and stream disposal without an unexpected session close/reopen.
+3. Review whether the provider-specific `QtAmcamCamera` request/lifecycle coordinator is only a composition adapter over the separate control and stream responsibilities; retain its current FIFO/generation semantics unless evidence supports a safe refactor.
+4. Complete Phase 4 reusable widgets for descriptors, commands, telemetry, capability/availability and still/frame presentation; keep app shell/workspace ownership in consuming apps.
 4. Complete Phase 2 physical common-frame/RAW evidence and regression; retain the documented common/provider-specific error/value decisions.
 5. Satisfy the original Phase 1 test-seam hardware entry condition before implementing behavior-changing lifecycle injection; then test callback drain and investigate the actual SDK no-new-callback guarantee.
 6. Reconcile AmScope feature/model coverage against physical evidence.

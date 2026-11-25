@@ -30,14 +30,14 @@ enum class AxisPositionObservationError { InvalidUncertainty, InvalidEvidence };
 class AxisPositionObservation final {
 public:
     static Result<AxisPositionObservation,AxisPositionObservationError> create(
-        AxisPosition position,double uncertaintyMicrometers,StagePositionEvidence evidence);
+        AxisPosition position,double uncertaintyInAxisUnit,StagePositionEvidence evidence);
     const AxisPosition& position() const noexcept;
-    double uncertaintyMicrometers() const noexcept;
+    double uncertaintyInAxisUnit() const noexcept;
     StagePositionEvidence evidence() const noexcept;
 private:
     AxisPositionObservation(AxisPosition,double,StagePositionEvidence);
     AxisPosition position_;
-    double uncertaintyMicrometers_;
+    double uncertaintyInAxisUnit_;
     StagePositionEvidence evidence_;
 };
 

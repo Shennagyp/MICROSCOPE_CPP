@@ -5,7 +5,7 @@
 #include <string.h>
 
 static int context_token;
-static const char mock_xml[] = "<RegisterDescription ModelName=\\"Mock\\"/>";
+static const char mock_xml[] = "<RegisterDescription/>";
 
 static void* pointer(uint64_t value) {
     return (void*)(uintptr_t)value;

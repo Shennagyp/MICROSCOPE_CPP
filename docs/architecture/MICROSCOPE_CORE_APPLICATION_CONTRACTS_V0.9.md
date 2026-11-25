@@ -412,3 +412,31 @@ MicroscopeEquipmentDefinition may carry condenser and illumination specification
 
 No current control state, observed aperture position, measured brightness or device discovery is stored in the equipment definition. JSON loading remains an Application responsibility in Phase 5.
 
+## 14. Phase 2D stage and axis specification contract
+
+### 14.1 Stage and axis identity
+
+StageSpecification is attached to one installed MechanicalAssembly EquipmentComponentId. A stage contains one or more AxisSpecification records. Each axis has a StageAxisId unique within that stage; the stage's installed EquipmentComponentId provides the enclosing physical identity.
+
+AxisMotionType distinguishes Linear, Rotary, Other and Unknown. AxisCoordinateUnit distinguishes micrometers, millimeters, degrees, radians, device-defined and unknown. Known linear axes accept linear units; known rotary axes accept angular units. Device-defined/unknown values are preserved without false unit inference.
+
+### 14.2 Operating range and performance
+
+Every axis declares an increasing finite operating range and a positive nominal resolution. The range may be signed, which is necessary for centered/travel axes and rotary axes.
+
+The following metrics are independent:
+- Nominal resolution: command/readout increment.
+- Accuracy: optional maximum absolute error, with test-condition description.
+- Repeatability/precision: optional value, explicit metric (maximum deviation, standard deviation, RMS or unknown) and test-condition description.
+- Measurement uncertainty: optional value with test-condition description.
+
+All numerical values use the axis's declared coordinate unit. Non-finite values are rejected; range and resolution invariants are validated. Accuracy is never inferred from resolution or calculated by multiplying component specifications. If accuracy, repeatability or uncertainty is not established, the field remains absent.
+
+### 14.3 Position feedback capability and location
+
+AxisPositionFeedbackCapability describes the installed measurement capability: none, encoder, linear scale, device-reported value, external sensor, other or unknown. Optional AxisMeasurementLocation describes where the measurement is made: motor, axis, specimen, external, other or unknown.
+
+A no-feedback axis cannot claim a measurement location. A feedback capability is not proof that the current position is known, calibrated or accurate. Current positions, commands, readbacks, calibrated estimates and unknown state belong to runtime observations and calibration behavior, not static equipment data.
+
+The StageSpecification records capability and declared performance only. It contains no mechanical transmission design details.
+

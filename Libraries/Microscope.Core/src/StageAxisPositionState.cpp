@@ -114,6 +114,37 @@ StageAxisPositionState::afterCommandedDisplacement(
 }
 
 Result<StageAxisPositionState,StageAxisPositionStateError>
+StageAxisPositionState::afterCommandedPosition(
+    const AxisPosition& target,std::optional<double> additionalError) const {
+    if(target.axisId()!=axisId_)
+        return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
+            StageAxisPositionStateError::AxisMismatch);
+    if(target.unit()!=unit_)
+        return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
+            StageAxisPositionStateError::UnitMismatch);
+    if(!validError(additionalError))
+        return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
+            StageAxisPositionStateError::InvalidUncertainty);
+
+    if(referenceStatus_!=StageMachineReferenceStatus::Referenced||!position_) {
+        return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
+            StageAxisPositionState(stageComponentId_,axisId_,unit_,position_,std::nullopt,
+                StagePositionEvidence::Unknown,ObservationSource::Unknown,referenceStatus_));
+    }
+
+    std::optional<double> newError;
+    if(accumulatedErrorBound_&&additionalError) {
+        const double sum=*accumulatedErrorBound_+*additionalError;
+        if(std::isfinite(sum))newError=sum;
+    }
+
+    return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
+        StageAxisPositionState(stageComponentId_,axisId_,unit_,target,newError,
+            StagePositionEvidence::CommandDerivedEstimate,
+            ObservationSource::CalibratedEstimate,referenceStatus_));
+}
+
+Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::afterPositionObservation(
     const AxisPositionObservation& observation,ObservationSource source) const {
     const auto& observed=observation.position();

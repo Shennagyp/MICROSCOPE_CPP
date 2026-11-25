@@ -58,6 +58,25 @@ int main(int argc, char** argv) {
                 return item.name == "GainReg" || item.name == "CommandReg";
             }), "Internal register nodes leaked into the public feature list.");
 
+        auto hiddenRegisterRead = access.features().readFeature("GainReg");
+        auto* hiddenReadError =
+            std::get_if<camera::CameraFeatureAccessError>(&hiddenRegisterRead);
+        require(hiddenReadError &&
+                    hiddenReadError->code ==
+                        camera::CameraFeatureAccessError::Code::FeatureNotFound,
+                "Internal GenApi register was directly readable as a feature.");
+
+        const camera::CameraFeatureValue hiddenRegisterWriteValue{
+            std::int64_t{7}};
+        auto hiddenRegisterWrite =
+            access.features().writeFeature("GainReg", hiddenRegisterWriteValue);
+        auto* hiddenWriteError =
+            std::get_if<camera::CameraFeatureAccessError>(&hiddenRegisterWrite);
+        require(hiddenWriteError &&
+                    hiddenWriteError->code ==
+                        camera::CameraFeatureAccessError::Code::FeatureNotFound,
+                "Internal GenApi register was directly writable as a feature.");
+
         auto initialRead = access.features().readFeature("Gain");
         auto* initialValue = std::get_if<camera::CameraFeatureValue>(&initialRead);
         require(initialValue != nullptr, "GenApi Gain read failed.");
@@ -87,6 +106,14 @@ int main(int argc, char** argv) {
         require(std::none_of(commands->begin(), commands->end(),
             [](const auto& item) { return item.name == "CommandReg"; }),
             "Internal command register leaked into the command list.");
+
+        auto hiddenCommand = access.commands().executeCommand("CommandReg");
+        auto* hiddenCommandError =
+            std::get_if<camera::CameraCommandAccessError>(&hiddenCommand);
+        require(hiddenCommandError &&
+                    hiddenCommandError->code ==
+                        camera::CameraCommandAccessError::Code::CommandNotFound,
+                "Internal GenApi register was directly executable as a command.");
 
         auto executeResult = access.commands().executeCommand("AcquisitionStart");
         require(std::holds_alternative<std::monostate>(executeResult),

@@ -2,8 +2,9 @@
 
 #include <Base/GCException.h>
 #include <GenApi/ICommand.h>
-#include <GenApi/ICategory.h>
 #include <GenApi/INode.h>
+
+#include "GenApiFeatureTree.h"
 
 #include <exception>
 #include <optional>
@@ -61,20 +62,10 @@ GenApiCommandAccess::commandDescriptors() {
     try {
         return nodeMap_->withNodeMap([](auto& nodeMap)
             -> camera::CameraCommandResult<std::vector<Descriptor>> {
-            auto* rootNode = nodeMap._GetNode(GenICam::gcstring("Root"));
-            auto* root = dynamic_cast<GenApi::ICategory*>(rootNode);
-            if (!root) {
-                return makeError(ErrorCode::BackendFailure, {},
-                    "GenApi Root category is missing or has an incompatible interface.");
-            }
-
-            GenApi::FeatureList_t featureValues;
-            root->GetFeatures(featureValues);
-
+            const auto nodes = detail::rootFeatureNodes(nodeMap);
             std::vector<Descriptor> descriptors;
-            descriptors.reserve(featureValues.size());
-            for (auto* featureValue : featureValues) {
-                auto* node = featureValue ? featureValue->GetNode() : nullptr;
+            descriptors.reserve(nodes.size());
+            for (auto* node : nodes) {
                 auto descriptor = describeCommand(node);
                 if (descriptor) descriptors.push_back(std::move(*descriptor));
             }
@@ -98,7 +89,7 @@ GenApiCommandAccess::executeCommand(std::string_view name) {
     try {
         return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraCommandResult<std::monostate> {
-            auto* node = nodeMap._GetNode(GenICam::gcstring(commandName.c_str()));
+            auto* node = detail::findRootFeatureNode(nodeMap, commandName);
             if (!node || node->GetPrincipalInterfaceType() != GenApi::intfICommand)
                 return makeError(ErrorCode::CommandNotFound, commandName,
                                  "GenApi command was not found.");

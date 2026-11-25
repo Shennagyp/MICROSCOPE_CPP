@@ -1,11 +1,11 @@
 #include "camera/gentl/GenApiFeatureAccess.h"
 
 #include "camera/CameraFeatureValidation.h"
+#include "GenApiFeatureTree.h"
 
 #include <Base/GCException.h>
 #include <Base/GCString.h>
 #include <GenApi/IBoolean.h>
-#include <GenApi/ICategory.h>
 #include <GenApi/IEnumeration.h>
 #include <GenApi/IEnumEntry.h>
 #include <GenApi/IFloat.h>
@@ -234,23 +234,10 @@ GenApiFeatureAccess::featureDescriptors() {
     try {
         return nodeMap_->withNodeMap([](auto& nodeMap)
             -> camera::CameraFeatureResult<std::vector<Descriptor>> {
-            auto* rootNode = nodeMap._GetNode(GenICam::gcstring("Root"));
-            auto* root = dynamic_cast<GenApi::ICategory*>(rootNode);
-            if (!root) {
-                return makeError(ErrorCode::BackendFailure, {},
-                    "GenApi Root category is missing or has an incompatible interface.");
-            }
-
-            // _GetNodes() includes implementation nodes such as IntReg,
-            // Port and enum entries. Public features are only those reachable
-            // from the Root category's feature tree.
-            GenApi::FeatureList_t featureValues;
-            root->GetFeatures(featureValues);
-
+            const auto nodes = detail::rootFeatureNodes(nodeMap);
             std::vector<Descriptor> descriptors;
-            descriptors.reserve(featureValues.size());
-            for (auto* featureValue : featureValues) {
-                auto* node = featureValue ? featureValue->GetNode() : nullptr;
+            descriptors.reserve(nodes.size());
+            for (auto* node : nodes) {
                 auto descriptor = describeNode(node);
                 if (descriptor) descriptors.push_back(std::move(*descriptor));
             }
@@ -276,7 +263,7 @@ GenApiFeatureAccess::readFeature(std::string_view name) {
     try {
         return nodeMap_->withNodeMap([&](auto& nodeMap)
             -> camera::CameraFeatureResult<Value> {
-            auto* node = nodeMap._GetNode(GenICam::gcstring(featureName.c_str()));
+            auto* node = detail::findRootFeatureNode(nodeMap, featureName);
             return readNode(node, featureName);
         });
     } catch (const GenICam::GenericException& error) {

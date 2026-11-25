@@ -70,6 +70,22 @@ int main() {
     const auto target=take(carrier.createTarget(id<SlideId>("slide-left"),{20000,10000}));
     const auto policy=take(StageHomingPolicy::create(5.0,5.0));
 
+    auto aggregate=take(StagePositionState::create(specification));
+    aggregate=take(aggregate.afterVerifiedHomingObservation(
+        take(AxisPositionObservation::create(
+            take(AxisPosition::create(id<StageAxisId>("x"),25000,AxisCoordinateUnit::Micrometers)),
+            1.0,StagePositionEvidence::EncoderMeasured)),
+        ObservationSource::HardwareReadback));
+    aggregate=take(aggregate.afterVerifiedHomingObservation(
+        take(AxisPositionObservation::create(
+            take(AxisPosition::create(id<StageAxisId>("y"),30000,AxisCoordinateUnit::Micrometers)),
+            1.0,StagePositionEvidence::EncoderMeasured)),
+        ObservationSource::HardwareReadback));
+    const auto aggregateDirect=StageNavigationPlanner::planToSlidePoint(
+        carrier,id<SlideId>("slide-left"),{20000,10000},aggregate,policy);
+    check(aggregateDirect&&std::holds_alternative<StageDirectMovePlan>(aggregateDirect.value()),
+          "application-facing planner accepts one coherent stage position aggregate");
+
     const auto direct=StageNavigationPlanner::plan(
         carrier,target,homed("x",25000,1.0),homed("y",30000,1.0),policy);
     check(direct&&std::holds_alternative<StageDirectMovePlan>(direct.value()),
@@ -123,6 +139,26 @@ int main() {
         movedCarrier,target,homed("x",0,0.1),homed("y",0,0.1),policy);
     check(!stale&&stale.error()==StageNavigationPlanningError::RegistrationChanged,
           "does not restore a target through a changed physical slide placement");
+
+    auto unknownAggregate=take(StagePositionState::create(specification));
+    const auto aggregateRecovery=StageNavigationPlanner::planToSlidePoint(
+        carrier,id<SlideId>("slide-left"),{20000,10000},unknownAggregate,policy);
+    check(aggregateRecovery&&std::holds_alternative<StageHomeThenMovePlan>(aggregateRecovery.value()),
+          "unreferenced aggregate plans a home of both in-plane axes");
+    auto afterHomeAggregate=take(unknownAggregate.afterVerifiedHomingObservation(
+        take(AxisPositionObservation::create(
+            take(AxisPosition::create(id<StageAxisId>("x"),0,AxisCoordinateUnit::Micrometers)),
+            0.5,StagePositionEvidence::EncoderMeasured)),
+        ObservationSource::HardwareReadback));
+    afterHomeAggregate=take(afterHomeAggregate.afterVerifiedHomingObservation(
+        take(AxisPositionObservation::create(
+            take(AxisPosition::create(id<StageAxisId>("y"),0,AxisCoordinateUnit::Micrometers)),
+            0.5,StagePositionEvidence::EncoderMeasured)),
+        ObservationSource::HardwareReadback));
+    auto restoredAggregate=StageNavigationPlanner::resolveAfterHoming(
+        carrier,target,afterHomeAggregate,policy);
+    check(restoredAggregate&&restoredAggregate.value().targets().size()==2,
+          "aggregate-based recovery resolves the preserved slide-local destination after verified homing");
 
     const auto unknown=StageNavigationPlanner::plan(
         carrier,target,

@@ -131,6 +131,50 @@ void testResultAndStatus() {
           "Result distinguishes failure when value and error types are identical");
 }
 
+void testOperationSnapshotValidation() {
+    using namespace microscope::core;
+
+    static_assert(!std::is_default_constructible<OperationSnapshot>::value,
+                  "OperationSnapshot must be created through Core validation");
+
+    const auto microscopeId = MicroscopeId::create("snapshot-microscope").value();
+    const auto runtimeId = RuntimeId::create("snapshot-runtime").value();
+    const auto generation = RuntimeGeneration::create(1).value();
+    const auto operationId = OperationId::create("snapshot-operation").value();
+
+    const auto validSnapshot = OperationSnapshot::create(
+        microscopeId,
+        runtimeId,
+        generation,
+        operationId,
+        OperationStatus::Accepted,
+        1);
+    check(static_cast<bool>(validSnapshot),
+          "creates a known operation status with a positive revision");
+
+    const auto invalidStatus = OperationSnapshot::create(
+        microscopeId,
+        runtimeId,
+        generation,
+        operationId,
+        static_cast<OperationStatus>(255),
+        1);
+    check(!invalidStatus &&
+          invalidStatus.error() == OperationSnapshotError::InvalidStatus,
+          "rejects an unknown operation status");
+
+    const auto zeroRevision = OperationSnapshot::create(
+        microscopeId,
+        runtimeId,
+        generation,
+        operationId,
+        OperationStatus::Accepted,
+        0);
+    check(!zeroRevision &&
+          zeroRevision.error() == OperationSnapshotError::ZeroRevision,
+          "rejects a zero operation snapshot revision");
+}
+
 void testDiagnosticsAreSeparateValues() {
     using namespace microscope::core;
 
@@ -214,6 +258,7 @@ int main() {
     testStrongIdentityTypes();
     testRuntimeGeneration();
     testResultAndStatus();
+    testOperationSnapshotValidation();
     testDiagnosticsAreSeparateValues();
 
     if (failures != 0) {

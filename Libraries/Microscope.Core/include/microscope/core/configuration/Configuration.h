@@ -113,7 +113,9 @@ private:
 
 enum class ConfigurationRequestError {
     InvalidContrastMethod,
-    InvalidExposurePolicy
+    InvalidExposurePolicy,
+    EmptyOpticalPathSet,
+    DuplicateOpticalPath
 };
 
 // An immutable selection request. It names concrete installed components and
@@ -127,7 +129,7 @@ public:
             ContrastMethod contrastMethod,
             EquipmentComponentId objectiveComponentId,
             EquipmentComponentId condenserComponentId,
-            OpticalPathId opticalPathId,
+            std::vector<OpticalPathId> opticalPathIds,
             EquipmentComponentId cameraComponentId,
             CameraModeId cameraModeId,
             EquipmentComponentId illuminationComponentId,
@@ -138,7 +140,7 @@ public:
     [[nodiscard]] ContrastMethod contrastMethod() const noexcept;
     [[nodiscard]] const EquipmentComponentId& objectiveComponentId() const noexcept;
     [[nodiscard]] const EquipmentComponentId& condenserComponentId() const noexcept;
-    [[nodiscard]] const OpticalPathId& opticalPathId() const noexcept;
+    [[nodiscard]] const std::vector<OpticalPathId>& opticalPathIds() const noexcept;
     [[nodiscard]] const EquipmentComponentId& cameraComponentId() const noexcept;
     [[nodiscard]] const CameraModeId& cameraModeId() const noexcept;
     [[nodiscard]] const EquipmentComponentId& illuminationComponentId() const noexcept;
@@ -151,7 +153,7 @@ private:
         ContrastMethod contrastMethod,
         EquipmentComponentId objectiveComponentId,
         EquipmentComponentId condenserComponentId,
-        OpticalPathId opticalPathId,
+        std::vector<OpticalPathId> opticalPathIds,
         EquipmentComponentId cameraComponentId,
         CameraModeId cameraModeId,
         EquipmentComponentId illuminationComponentId,
@@ -162,7 +164,7 @@ private:
     ContrastMethod contrastMethod_;
     EquipmentComponentId objectiveComponentId_;
     EquipmentComponentId condenserComponentId_;
-    OpticalPathId opticalPathId_;
+    std::vector<OpticalPathId> opticalPathIds_;
     EquipmentComponentId cameraComponentId_;
     CameraModeId cameraModeId_;
     EquipmentComponentId illuminationComponentId_;

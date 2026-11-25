@@ -49,15 +49,23 @@ OpticalPort port(const char* id, OpticalPortDirection direction) {
     return take(OpticalPort::create(makeId<OpticalPortId>(id), direction));
 }
 
+OpticalFunctionCapability opticalCapability(
+    OpticalElementFunction function,
+    const OpticalCompatibilityId& compatibilityId) {
+    return take(OpticalFunctionCapability::create(function, compatibilityId));
+}
+
 EquipmentComponent opticalElement(
     const char* componentId,
     const char* inputPortId,
-    const char* outputPortId) {
+    const char* outputPortId,
+    std::vector<OpticalFunctionCapability> opticalFunctions = {}) {
     return take(EquipmentComponent::create(
         makeId<EquipmentComponentId>(componentId),
         EquipmentComponentKind::OpticalElement,
         {port(inputPortId, OpticalPortDirection::Input),
-         port(outputPortId, OpticalPortDirection::Output)}));
+         port(outputPortId, OpticalPortDirection::Output)},
+        std::move(opticalFunctions)));
 }
 
 OpticalPathStep pathStep(
@@ -132,41 +140,105 @@ ConfigurationFixture makeConfigurationFixture() {
         EquipmentComponentKind::IlluminationDevice,
         {take(OpticalPort::create(
             illuminationOutput, OpticalPortDirection::Output))})));
+    const auto phaseCompatibilityId =
+        makeId<OpticalCompatibilityId>("phase-compatibility-1");
+    const auto dicCompatibilityId =
+        makeId<OpticalCompatibilityId>("dic-compatibility-1");
+
     components.push_back(opticalElement(
-        "condenser-abbe", "condenser-input", "condenser-output"));
+        "condenser-abbe", "condenser-input", "condenser-output",
+        {opticalCapability(
+            OpticalElementFunction::PhaseAnnulus,
+            phaseCompatibilityId)}));
     components.push_back(opticalElement(
-        "objective-10x", "objective-input", "objective-output"));
+        "polarizer", "polarizer-input", "polarizer-output",
+        {opticalCapability(
+            OpticalElementFunction::Polarizer,
+            dicCompatibilityId)}));
+    components.push_back(opticalElement(
+        "dic-prism-one", "dic-prism-one-input", "dic-prism-one-output",
+        {opticalCapability(
+            OpticalElementFunction::DifferentialInterferencePrism,
+            dicCompatibilityId)}));
+    components.push_back(opticalElement(
+        "objective-10x", "objective-input", "objective-output",
+        {opticalCapability(
+            OpticalElementFunction::PhasePlate,
+            phaseCompatibilityId)}));
+    components.push_back(opticalElement(
+        "dic-prism-two", "dic-prism-two-input", "dic-prism-two-output",
+        {opticalCapability(
+            OpticalElementFunction::DifferentialInterferencePrism,
+            dicCompatibilityId)}));
+    components.push_back(opticalElement(
+        "analyzer", "analyzer-input", "analyzer-output",
+        {opticalCapability(
+            OpticalElementFunction::Analyzer,
+            dicCompatibilityId)}));
     components.push_back(take(EquipmentComponent::create(
         cameraId,
         EquipmentComponentKind::ImagingDevice,
         {take(OpticalPort::create(
             cameraInput, OpticalPortDirection::Input))})));
 
+    const auto polarizerInput = makeId<OpticalPortId>("polarizer-input");
+    const auto polarizerOutput = makeId<OpticalPortId>("polarizer-output");
+    const auto dicPrismOneInput = makeId<OpticalPortId>("dic-prism-one-input");
+    const auto dicPrismOneOutput = makeId<OpticalPortId>("dic-prism-one-output");
+    const auto dicPrismTwoInput = makeId<OpticalPortId>("dic-prism-two-input");
+    const auto dicPrismTwoOutput = makeId<OpticalPortId>("dic-prism-two-output");
+    const auto analyzerInput = makeId<OpticalPortId>("analyzer-input");
+    const auto analyzerOutput = makeId<OpticalPortId>("analyzer-output");
+
     std::vector<OpticalConnection> connections{
         connection("connection-source-condenser",
                    illuminationOutput, condenserInput),
-        connection("connection-condenser-objective",
-                   condenserOutput, objectiveInput),
-        connection("connection-objective-camera",
-                   objectiveOutput, cameraInput)};
+        connection("connection-condenser-polarizer",
+                   condenserOutput, polarizerInput),
+        connection("connection-polarizer-prism-one",
+                   polarizerOutput, dicPrismOneInput),
+        connection("connection-prism-one-objective",
+                   dicPrismOneOutput, objectiveInput),
+        connection("connection-objective-prism-two",
+                   objectiveOutput, dicPrismTwoInput),
+        connection("connection-prism-two-analyzer",
+                   dicPrismTwoOutput, analyzerInput),
+        connection("connection-analyzer-camera",
+                   analyzerOutput, cameraInput)};
 
     std::vector<OpticalPath> paths;
     paths.push_back(take(OpticalPath::create(
         fullPathId,
         {pathStep(illuminationId, std::nullopt, illuminationOutput),
          pathStep(condenserId, condenserInput, condenserOutput),
+         pathStep(makeId<EquipmentComponentId>("polarizer"),
+                  polarizerInput, polarizerOutput),
+         pathStep(makeId<EquipmentComponentId>("dic-prism-one"),
+                  dicPrismOneInput, dicPrismOneOutput),
          pathStep(objectiveId, objectiveInput, objectiveOutput),
+         pathStep(makeId<EquipmentComponentId>("dic-prism-two"),
+                  dicPrismTwoInput, dicPrismTwoOutput),
+         pathStep(makeId<EquipmentComponentId>("analyzer"),
+                  analyzerInput, analyzerOutput),
          pathStep(cameraId, cameraInput, std::nullopt)})));
 
     paths.push_back(take(OpticalPath::create(
         illuminationPathId,
         {pathStep(illuminationId, std::nullopt, illuminationOutput),
          pathStep(condenserId, condenserInput, condenserOutput),
+         pathStep(makeId<EquipmentComponentId>("polarizer"),
+                  polarizerInput, polarizerOutput),
+         pathStep(makeId<EquipmentComponentId>("dic-prism-one"),
+                  dicPrismOneInput, dicPrismOneOutput),
          pathStep(objectiveId, objectiveInput, std::nullopt)})));
 
     paths.push_back(take(OpticalPath::create(
         imagingPathId,
         {pathStep(objectiveId, std::nullopt, objectiveOutput),
+         pathStep(makeId<EquipmentComponentId>("dic-prism-two"),
+                  dicPrismTwoInput, dicPrismTwoOutput),
+         pathStep(makeId<EquipmentComponentId>("analyzer"),
+                  analyzerInput, analyzerOutput),
          pathStep(cameraId, cameraInput, std::nullopt)})));
 
     const auto objectiveSpecification = take(ObjectiveSpecification::create(

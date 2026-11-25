@@ -65,41 +65,72 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
     find_package(GenApi 3.5.1 EXACT CONFIG QUIET)
 
     set(_camera_genapi_libraries "")
+    set(_camera_genapi_include_dirs "")
+
     foreach(_candidate GenApi::GenApi GenApi GenICam::GenApi)
         if(TARGET ${_candidate})
             list(APPEND _camera_genapi_libraries ${_candidate})
-            break()
-        endif()
-    endforeach()
-    foreach(_candidate GenApi::GCBase GCBase::GCBase GenICam::GCBase GCBase)
-        if(TARGET ${_candidate})
-            list(APPEND _camera_genapi_libraries ${_candidate})
+            set(_camera_genapi_target_found TRUE)
             break()
         endif()
     endforeach()
 
-    if(NOT _camera_genapi_libraries)
+    foreach(_candidate GenApi::GCBase GCBase::GCBase GenICam::GCBase GCBase)
+        if(TARGET ${_candidate})
+            list(APPEND _camera_genapi_libraries ${_candidate})
+            set(_camera_gcbase_target_found TRUE)
+            break()
+        endif()
+    endforeach()
+
+    if(NOT _camera_genapi_target_found OR NOT _camera_gcbase_target_found)
         find_path(GENAPI_INCLUDE_DIR
             NAMES GenApi/GenApi.h
             HINTS "${GENAPI_ROOT}" "$ENV{GENICAM_ROOT}"
             PATH_SUFFIXES include library/CPP/include)
-        find_library(GENAPI_LIBRARY
-            NAMES GenApi GenApi_v3_5 GenApi_3_5_1
-            HINTS "${GENAPI_ROOT}" "$ENV{GENICAM_ROOT}"
-            PATH_SUFFIXES lib lib/Mac64_Universal library/CPP/lib/Mac64_Universal)
-        find_library(GCBASE_LIBRARY
-            NAMES GCBase GCBase_v3_5 GCBase_3_5_1
-            HINTS "${GENAPI_ROOT}" "$ENV{GENICAM_ROOT}"
-            PATH_SUFFIXES lib lib/Mac64_Universal library/CPP/lib/Mac64_Universal)
 
-        if(NOT GENAPI_INCLUDE_DIR OR NOT GENAPI_LIBRARY OR NOT GCBASE_LIBRARY)
+        if(NOT _camera_genapi_target_found)
+            find_library(GENAPI_LIBRARY
+                NAMES GenApi GenApi_v3_5 GenApi_3_5_1
+                HINTS "${GENAPI_ROOT}" "$ENV{GENICAM_ROOT}"
+                PATH_SUFFIXES
+                    lib
+                    lib/Mac64_Universal
+                    lib/Mac64_Universal/Release
+                    library/CPP/lib/Mac64_Universal
+                    library/CPP/lib/Mac64_Universal/Release)
+            if(GENAPI_LIBRARY)
+                list(APPEND _camera_genapi_libraries "${GENAPI_LIBRARY}")
+            endif()
+        endif()
+
+        if(NOT _camera_gcbase_target_found)
+            find_library(GCBASE_LIBRARY
+                NAMES GCBase GCBase_v3_5 GCBase_3_5_1
+                HINTS "${GENAPI_ROOT}" "$ENV{GENICAM_ROOT}"
+                PATH_SUFFIXES
+                    lib
+                    lib/Mac64_Universal
+                    lib/Mac64_Universal/Release
+                    library/CPP/lib/Mac64_Universal
+                    library/CPP/lib/Mac64_Universal/Release)
+            if(GCBASE_LIBRARY)
+                list(APPEND _camera_genapi_libraries "${GCBASE_LIBRARY}")
+            endif()
+        endif()
+
+        if(NOT GENAPI_INCLUDE_DIR OR
+           (NOT _camera_genapi_target_found AND NOT GENAPI_LIBRARY) OR
+           (NOT _camera_gcbase_target_found AND NOT GCBASE_LIBRARY))
             message(FATAL_ERROR
                 "GenApi 3.5.1 was requested but its headers, GenApi library, "
                 "and GCBase library were not found. Set GENAPI_ROOT or GenApi_DIR "
                 "to the official Mac64_Universal SDK.")
         endif()
-        set(_camera_genapi_libraries "${GENAPI_LIBRARY}" "${GCBASE_LIBRARY}")
-        set(_camera_genapi_include_dirs "${GENAPI_INCLUDE_DIR}")
+
+        if(GENAPI_INCLUDE_DIR)
+            list(APPEND _camera_genapi_include_dirs "${GENAPI_INCLUDE_DIR}")
+        endif()
     endif()
 
     add_library(camera_gentl_genapi STATIC
@@ -112,9 +143,9 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         PUBLIC
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
             "$<INSTALL_INTERFACE:include>"
-        PRIVATE ${_camera_genapi_include_dirs})
+        PUBLIC ${_camera_genapi_include_dirs})
     target_link_libraries(camera_gentl_genapi
-        PUBLIC Camera::GenTLConsumerBridge ${_camera_genapi_libraries})
+        PUBLIC Camera::GenTLConsumerBridge Camera::Common ${_camera_genapi_libraries})
     set_target_properties(camera_gentl_genapi PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CXX_STANDARD 17

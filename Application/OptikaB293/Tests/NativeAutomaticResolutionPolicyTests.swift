@@ -7,7 +7,9 @@ struct NativeAutomaticResolutionPolicyTests {
         testHighestResolutionIsFallbackWhenTargetCannotBeMet()
         testInvalidOpticalInputsAreRejected()
         testMalformedResolutionModesAreIgnored()
-        print("Automatic resolution policy tests passed.")
+        testObjectiveExposureProfilesPersist()
+        testLegacyConfigurationDefaultsToAutomaticExposure()
+        print("Automatic resolution and objective exposure tests passed.")
     }
 
     private static let modes = [
@@ -68,6 +70,49 @@ struct NativeAutomaticResolutionPolicyTests {
             modeSymbols: modes,
             configuration: invalidTarget
         ) == nil)
+    }
+
+    private static func testObjectiveExposureProfilesPersist() {
+        var configuration = MicroscopeOpticalConfiguration.optikaB293
+        let profile = ObjectiveExposureProfile(
+            automaticExposureEnabled: false,
+            manualExposureTimeMicroseconds: 12_500
+        )
+        configuration.objectiveExposureProfiles["40x"] = profile
+
+        let encoded = try! JSONEncoder().encode(configuration)
+        let decoded = try! JSONDecoder().decode(
+            MicroscopeOpticalConfiguration.self,
+            from: encoded
+        )
+
+        precondition(decoded == configuration)
+        precondition(decoded.exposureProfile(for: "40x") == profile)
+        precondition(
+            decoded.exposureProfile(for: "10x").automaticExposureEnabled
+        )
+    }
+
+    private static func testLegacyConfigurationDefaultsToAutomaticExposure() {
+        let encoded = try! JSONEncoder().encode(
+            MicroscopeOpticalConfiguration.optikaB293
+        )
+        var legacyObject = try! JSONSerialization.jsonObject(
+            with: encoded
+        ) as! [String: Any]
+        legacyObject.removeValue(forKey: "objectiveExposureProfiles")
+
+        let legacyData = try! JSONSerialization.data(withJSONObject: legacyObject)
+        let decoded = try! JSONDecoder().decode(
+            MicroscopeOpticalConfiguration.self,
+            from: legacyData
+        )
+
+        precondition(decoded.objectiveExposureProfiles.isEmpty)
+        precondition(
+            decoded.exposureProfile(for: "4x") ==
+                ObjectiveExposureProfile.automatic
+        )
     }
 
     private static func testMalformedResolutionModesAreIgnored() {

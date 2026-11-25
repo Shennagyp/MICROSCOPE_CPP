@@ -366,6 +366,14 @@ Result<
                     EquipmentDefinitionError::DuplicateCondenserSpecification);
         }
 
+        if (objectiveComponentIds.find(condenser.componentId()) !=
+            objectiveComponentIds.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::ConflictingOpticalComponentSpecifications);
+        }
+
         const auto component = componentIndex.find(condenser.componentId());
         if (component == componentIndex.end()) {
             return Result<

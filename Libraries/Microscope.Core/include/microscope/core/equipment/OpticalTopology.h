@@ -1,5 +1,6 @@
 #pragma once
 
+#include "microscope/core/equipment/IlluminationSpecifications.h"
 #include "microscope/core/equipment/OpticalSpecifications.h"
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
@@ -198,7 +199,9 @@ public:
             std::vector<OpticalConnection> connections,
             std::vector<OpticalPath> opticalPaths,
             std::vector<ObjectiveSpecification> objectiveSpecifications = {},
-            std::vector<CameraSpecification> cameraSpecifications = {});
+            std::vector<CameraSpecification> cameraSpecifications = {},
+            std::vector<CondenserSpecification> condenserSpecifications = {},
+            std::vector<IlluminationSpecification> illuminationSpecifications = {});
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponent>& components() const noexcept;
@@ -208,6 +211,10 @@ public:
     objectiveSpecifications() const noexcept;
     [[nodiscard]] const std::vector<CameraSpecification>&
     cameraSpecifications() const noexcept;
+    [[nodiscard]] const std::vector<CondenserSpecification>&
+    condenserSpecifications() const noexcept;
+    [[nodiscard]] const std::vector<IlluminationSpecification>&
+    illuminationSpecifications() const noexcept;
 
 private:
     MicroscopeEquipmentDefinition(
@@ -216,7 +223,9 @@ private:
         std::vector<OpticalConnection> connections,
         std::vector<OpticalPath> opticalPaths,
         std::vector<ObjectiveSpecification> objectiveSpecifications,
-        std::vector<CameraSpecification> cameraSpecifications);
+        std::vector<CameraSpecification> cameraSpecifications,
+        std::vector<CondenserSpecification> condenserSpecifications,
+        std::vector<IlluminationSpecification> illuminationSpecifications);
 
     MicroscopeId microscopeId_;
     std::vector<EquipmentComponent> components_;
@@ -224,6 +233,8 @@ private:
     std::vector<OpticalPath> opticalPaths_;
     std::vector<ObjectiveSpecification> objectiveSpecifications_;
     std::vector<CameraSpecification> cameraSpecifications_;
+    std::vector<CondenserSpecification> condenserSpecifications_;
+    std::vector<IlluminationSpecification> illuminationSpecifications_;
 };
 
 } // namespace microscope::core

@@ -672,39 +672,64 @@ Each acquisition and physical measurement preserves the calibration revision and
 
 ## 11. Slides, tiles and acquisition
 
-### 11.1 Product organization
+### 11.1 Specimen, preparation and acquisition identities
 
-The user-facing workspace is organized as:
+The model distinguishes three physical/data concepts:
+
+- **Sample:** the collected biological or material specimen. It represents source material before or independent of a particular slide preparation.
+- **Slide:** a physical prepared/mounted substrate made from a sample. It represents a preparation, not the sample itself.
+- **Tile:** an acquired image field associated with a particular slide.
+
+The baseline cardinality is:
 
 ~~~text
-Microscope workspace
-└── Slide collection
-    ├── Slide A
-    │   ├── Slide type/configuration snapshot
-    │   └── Tiles
-    │       ├── Tile 1
-    │       └── Tile 2
-    └── Slide B
-        └── Tiles
+Sample 1 ───── 0..N Slides 1 ───── 0..N Tiles
+   │                         │
+   └── SampleType            └── SlideType
 ~~~
 
-The workspace can group slides under a microscope for convenient operation. A slide remains an independent specimen record; the microscope does not physically own specimens. Acquisition records retain the actual MicroscopeId.
+One sample may produce multiple slides. Each slide belongs to one sample in this baseline model. Do not introduce a many-to-many contribution model unless a concrete workflow requires one physical slide to contain material from multiple samples.
 
-### 11.2 Slide and slide type
+SampleType describes the source material/category (for example, blood, bone marrow aspirate, kidney tissue or liver tissue). SlideType describes the preparation/mounting method or preparation category (for example, blood film, bone-marrow smear/aspirate preparation, tissue section or cytology preparation). These taxonomies must not be conflated: a source material does not uniquely determine its preparation.
+
+A sample is not owned by a microscope. A microscope workspace may organize or filter samples and slides for convenience, but instrument association is established by acquisition records:
+
+~~~text
+Microscope 1 ───── 0..N AcquisitionRuns
+Sample 1 ───── 0..N Slides 1 ───── 0..N Tiles
+                         ▲
+                         └── AcquisitionRun references the slide/tile being acquired
+~~~
+
+The user-facing workspace may show a microscope-scoped collection, but this is an application/workspace view rather than physical or domain ownership.
+
+### 11.2 Sample and sample type
+
+A Sample has:
+- Stable SampleId.
+- User-facing label or accession/reference where applicable.
+- SampleTypeId.
+- Collection/source metadata and timestamps where available.
+- Optional descriptive metadata required by the workflow.
+
+Sample identity and source metadata must remain independent of slide preparation, microscope identity and acquisition history. A sample can exist before any slide is prepared and may have multiple prepared slides.
+
+### 11.3 Slide and slide type
 
 A Slide has:
 - Stable SlideId.
+- SampleId identifying its source sample.
 - User-facing label.
 - SlideTypeId.
-- Versioned configuration snapshot.
+- Versioned preparation/configuration snapshot.
 - Local slide-folder identity/location.
 - Acquisition history and tile references.
 
-Slide types are reusable templates such as blood film, bone marrow aspiration, kidney histology, liver histology or custom types.
+Slide types are reusable preparation templates such as blood film, bone-marrow smear/aspirate preparation, kidney tissue section, liver tissue section or custom preparation types. They describe how material is prepared on the slide, not the source material taxonomy.
 
-A slide receives a configuration snapshot when created. Updating a reusable slide type must not silently change existing slides.
+A slide receives a preparation/configuration snapshot when created. Updating a reusable slide type must not silently change existing slides.
 
-### 11.3 Tile semantics and positions
+### 11.4 Tile semantics and positions
 
 A Tile is the persistent identity of an acquired field/image region within a slide. It can own references to original frames, derived images and acquisition records.
 
@@ -714,7 +739,7 @@ A tile's sequence/index or virtual navigation order is not a physical slide coor
 
 The architecture does not require whole-slide scanning or stitching. It supports individual fields of view such as blood-film and bone-marrow cell acquisition workflows.
 
-### 11.4 Mandatory active slide session
+### 11.5 Mandatory active slide session
 
 No acquisition may start without a valid active slide session.
 
@@ -724,7 +749,7 @@ Application coordinates folder selection/opening and persistence. Core owns the 
 
 Switching or closing a slide during acquisition requires a safe stop/completion and recovery path.
 
-### 11.5 Acquisition plan versus run
+### 11.6 Acquisition plan versus run
 
 AcquisitionPlan is the intended sequence and settings. It is immutable once execution starts.
 
@@ -739,7 +764,7 @@ AcquisitionRun is the actual execution record, including:
 
 A plan must never be recorded as if it were the actual outcome.
 
-### 11.6 Frames, Z and exposure
+### 11.7 Frames, Z and exposure
 
 The data model must support irregular acquisition sets, not assume a dense fixed tensor.
 
@@ -996,6 +1021,8 @@ Build, unit tests, integration tests, visual checks and hardware acceptance are 
 - **EffectiveConfiguration:** configuration established by observations at the assurance level supported by the instrument.
 - **OpticalCalibration:** mapping from delivered image coordinates to specimen-space dimensions for a geometry-affecting optical configuration.
 - **MotionCalibration:** mapping from an axis command/feedback coordinate to physical axis displacement.
+- **Sample:** collected source specimen/material, independent of microscope and slide preparation.
+- **Slide:** physical preparation made from one sample in the baseline model.
 - **Tile:** persistent slide-owned image-field identity; physical position is optional.
 - **SlideSession:** Core-recognized active slide context required for acquisition.
 - **Frontend:** a client of Microscope.Application; it is not an owner of microscope behavior.

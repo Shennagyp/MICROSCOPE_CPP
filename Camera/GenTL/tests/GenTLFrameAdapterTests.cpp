@@ -19,12 +19,15 @@ camera::gentl::DataStreamFrame validMono8Frame() {
     frame.pixelFormatNamespace = GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT;
     frame.width = 3;
     frame.height = 2;
+    frame.deliveredImageHeight = 2;
     frame.imageOffset = 0;
     frame.xPadding = 0;
     frame.yPadding = 0;
     frame.payloadType = GenTL::PAYLOAD_TYPE_IMAGE;
     frame.imagePresent = true;
     frame.containsChunkData = false;
+    frame.dataLargerThanBuffer = false;
+    frame.isComposite = false;
     return frame;
 }
 
@@ -80,6 +83,21 @@ void testUnsafeLayoutIsRejected() {
     source.containsChunkData = true;
     require(!camera::gentl::makeCommonFrame(source),
             "Chunk-bearing buffers must not be projected.");
+
+    source = validMono8Frame();
+    source.dataLargerThanBuffer = true;
+    require(!camera::gentl::makeCommonFrame(source),
+            "Truncated buffers must not be projected.");
+
+    source = validMono8Frame();
+    source.isComposite = true;
+    require(!camera::gentl::makeCommonFrame(source),
+            "Composite buffers must not be projected.");
+
+    source = validMono8Frame();
+    source.deliveredImageHeight = 1;
+    require(!camera::gentl::makeCommonFrame(source),
+            "Delivered image height mismatch must not be projected.");
 }
 
 void testMissingLayoutMetadataIsRejected() {
@@ -102,6 +120,21 @@ void testMissingLayoutMetadataIsRejected() {
     source.containsChunkData.reset();
     require(!camera::gentl::makeCommonFrame(source),
             "Unknown chunk-data status must not be treated as absent.");
+
+    source = validMono8Frame();
+    source.dataLargerThanBuffer.reset();
+    require(!camera::gentl::makeCommonFrame(source),
+            "Unknown buffer-size status must not be treated as safe.");
+
+    source = validMono8Frame();
+    source.isComposite.reset();
+    require(!camera::gentl::makeCommonFrame(source),
+            "Unknown composite status must not be treated as a simple image.");
+
+    source = validMono8Frame();
+    source.deliveredImageHeight.reset();
+    require(!camera::gentl::makeCommonFrame(source),
+            "Unknown delivered image height must not be inferred.");
 }
 
 void testNonImageAndIncompleteBuffersAreRejected() {

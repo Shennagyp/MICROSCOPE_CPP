@@ -18,6 +18,29 @@ private:
     AxisPosition(StageAxisId, double, AxisCoordinateUnit);
     StageAxisId axisId_; double value_; AxisCoordinateUnit unit_;
 };
+enum class StagePositionEvidence {
+    Unknown,
+    CommandDerivedEstimate,
+    ControllerReported,
+    EncoderMeasured,
+    ExternalMeasured
+};
+
+enum class AxisPositionObservationError { InvalidUncertainty, InvalidEvidence };
+class AxisPositionObservation final {
+public:
+    static Result<AxisPositionObservation,AxisPositionObservationError> create(
+        AxisPosition position,double uncertaintyMicrometers,StagePositionEvidence evidence);
+    const AxisPosition& position() const noexcept;
+    double uncertaintyMicrometers() const noexcept;
+    StagePositionEvidence evidence() const noexcept;
+private:
+    AxisPositionObservation(AxisPosition,double,StagePositionEvidence);
+    AxisPosition position_;
+    double uncertaintyMicrometers_;
+    StagePositionEvidence evidence_;
+};
+
 class AxisDisplacement final {
 public:
     static Result<AxisDisplacement, MotionValueError> create(StageAxisId, double, AxisCoordinateUnit);
@@ -159,7 +182,7 @@ private:
 };
 
 using StageMotionFeedbackPayload = std::variant<
-    AxisPosition, AxisMotionStateObservation, AxisLimitObservation,
+    AxisPositionObservation, AxisMotionStateObservation, AxisLimitObservation,
     StageMotionActionCompletion, StageMotionFaultObservation>;
 
 // Driver libraries implement this port. STEP/DIR drivers own calibrated

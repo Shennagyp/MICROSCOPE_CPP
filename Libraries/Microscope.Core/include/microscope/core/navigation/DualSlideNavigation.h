@@ -59,6 +59,15 @@ private:
 
 struct SlideLocalPoint final { double xMicrometers; double yMicrometers; };
 struct StagePlanePoint final { double horizontalMicrometers; double transverseMicrometers; };
+struct SlidePositionEstimate final {
+    SlideLocalPoint position;
+    double horizontalErrorBoundMicrometers;
+    double verticalErrorBoundMicrometers;
+    StagePositionEvidence horizontalEvidence;
+    StagePositionEvidence transverseEvidence;
+    ObservationSource horizontalSource;
+    ObservationSource transverseSource;
+};
 enum class SlideCorner { TopLeft, TopRight, BottomRight, BottomLeft };
 
 enum class SlideCornerMeasurementError {
@@ -99,6 +108,11 @@ public:
     const std::array<double,4>& cornerFitResidualsMicrometers() const noexcept;
     Result<StagePlanePoint,SlideRegistrationError> toStage(SlideLocalPoint) const;
     Result<SlideLocalPoint,SlideRegistrationError> toSlide(StagePlanePoint) const;
+    Result<SlidePositionEstimate,SlideRegistrationError> estimateSlidePosition(
+        StagePlanePoint,double horizontalErrorBoundMicrometers,
+        double transverseErrorBoundMicrometers,
+        StagePositionEvidence horizontalEvidence,StagePositionEvidence transverseEvidence,
+        ObservationSource horizontalSource,ObservationSource transverseSource) const;
 private:
     SlideRegistration(SlideId,DualSlideSlot,SlideGeometry,
         std::array<SlideCornerMeasurement,4>,std::array<double,6>,std::array<double,4>,double,double);
@@ -109,6 +123,7 @@ private:
     // X=a0+a1*x+a2*y; Y=b0+b1*x+b2*y.
     std::array<double,6> transform_;
     std::array<double,4> cornerResiduals_;
+    double maximumCornerUncertainty_;
     double maxResidual_;
     double rmsResidual_;
 };
@@ -130,6 +145,10 @@ private:
     std::optional<SlideRegistration> registration_;
 };
 enum class DualSlideCarrierStateError { WrongLeftSlot,WrongRightSlot,DuplicateSlideId,SlideSlotOrderMismatch };
+enum class CurrentSlidePositionError {
+    SlideNotInCarrier,SlideNotRegistered,HorizontalAxisMismatch,TransverseAxisMismatch,
+    PositionUnknown,PositionUncertaintyUnknown,AxisUnitMismatch,InvalidEstimate
+};
 class DualSlideCarrierState final {
 public:
     static Result<DualSlideCarrierState,DualSlideCarrierStateError> create(
@@ -139,6 +158,9 @@ public:
     const SlideSlotState& right() const noexcept;
     const SlideRegistration* registrationFor(const SlideId&) const noexcept;
     Result<MoveAxesTo, SlideNavigationCommandError> commandFor(const SlideId&, SlideLocalPoint) const;
+    Result<SlidePositionEstimate,CurrentSlidePositionError> currentSlidePosition(
+        const SlideId&,const StageAxisPositionState& horizontal,
+        const StageAxisPositionState& transverse) const;
 private:
     DualSlideCarrierState(DualSlideCarrierSpecification,SlideSlotState,SlideSlotState);
     DualSlideCarrierSpecification specification_;

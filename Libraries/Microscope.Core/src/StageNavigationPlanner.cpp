@@ -44,6 +44,20 @@ StageNavigationPlanningError mapCommandError(SlideNavigationCommandError error) 
         return StageNavigationPlanningError::SlideNotRegistered;
     case SlideNavigationCommandError::RegistrationChanged:
         return StageNavigationPlanningError::RegistrationChanged;
+    case SlideNavigationCommandError::RegistrationChanged:
+        return StageNavigationPlanningError::RegistrationChanged;
+    }
+    return StageNavigationPlanningError::InvalidStageCoordinate;
+}
+
+StageNavigationPlanningError mapTargetError(SlideNavigationTargetError error) {
+    switch(error) {
+    case SlideNavigationTargetError::SlideNotInCarrier:
+        return StageNavigationPlanningError::SlideNotInCarrier;
+    case SlideNavigationTargetError::SlideNotRegistered:
+        return StageNavigationPlanningError::SlideNotRegistered;
+    case SlideNavigationTargetError::PointOutsideSlide:
+        return StageNavigationPlanningError::SlidePointOutsideGeometry;
     }
     return StageNavigationPlanningError::InvalidStageCoordinate;
 }
@@ -107,6 +121,34 @@ Result<StageNavigationPlan,StageNavigationPlanningError> StageNavigationPlanner:
 
     return Result<StageNavigationPlan,StageNavigationPlanningError>::success(
         StageNavigationPlan{StageDirectMovePlan{target,std::move(destination).value()}});
+}
+
+Result<StageNavigationPlan,StageNavigationPlanningError>
+StageNavigationPlanner::planToSlidePoint(
+    const DualSlideCarrierState& carrier,const SlideId& slideId,
+    SlideLocalPoint point,const StagePositionState& position,
+    const StageHomingPolicy& policy) {
+    if(position.stageComponentId()!=carrier.specification().stageComponentId())
+        return Result<StageNavigationPlan,StageNavigationPlanningError>::failure(
+            StageNavigationPlanningError::StageComponentMismatch);
+
+    auto target=carrier.createTarget(slideId,point);
+    if(!target)
+        return Result<StageNavigationPlan,StageNavigationPlanningError>::failure(
+            mapTargetError(target.error()));
+
+    return plan(carrier,target.value(),position.horizontal(),position.transverse(),policy);
+}
+
+Result<MoveAxesTo,StageNavigationPlanningError>
+StageNavigationPlanner::resolveAfterHoming(
+    const DualSlideCarrierState& carrier,const SlideNavigationTarget& target,
+    const StagePositionState& position,const StageHomingPolicy& policy) {
+    if(position.stageComponentId()!=carrier.specification().stageComponentId())
+        return Result<MoveAxesTo,StageNavigationPlanningError>::failure(
+            StageNavigationPlanningError::StageComponentMismatch);
+    return resolveAfterHoming(
+        carrier,target,position.horizontal(),position.transverse(),policy);
 }
 
 Result<MoveAxesTo,StageNavigationPlanningError>

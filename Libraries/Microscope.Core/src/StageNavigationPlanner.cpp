@@ -44,8 +44,6 @@ StageNavigationPlanningError mapCommandError(SlideNavigationCommandError error) 
         return StageNavigationPlanningError::SlideNotRegistered;
     case SlideNavigationCommandError::RegistrationChanged:
         return StageNavigationPlanningError::RegistrationChanged;
-    case SlideNavigationCommandError::RegistrationChanged:
-        return StageNavigationPlanningError::RegistrationChanged;
     }
     return StageNavigationPlanningError::InvalidStageCoordinate;
 }

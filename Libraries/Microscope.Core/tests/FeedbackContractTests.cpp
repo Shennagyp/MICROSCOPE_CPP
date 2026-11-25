@@ -1,6 +1,7 @@
 #include "microscope/core/runtime/Feedback.h"
 
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
@@ -49,11 +50,19 @@ int main() {
     const auto commandId = CommandId::create("command-001").value();
     const auto deviceId = DeviceId::create("objective-selector").value();
 
-    struct SelectorFeedback final {
+    struct SelectorStateObservation final {
         bool reachedRequestedPosition;
     };
 
-    static_assert(!std::is_default_constructible<FeedbackEnvelope<SelectorFeedback>>::value,
+    struct SelectorProgressReport final {
+        std::uint8_t progressPercent;
+    };
+
+    struct SelectorCommandAcknowledgement final {
+        bool commandAccepted;
+    };
+
+    static_assert(!std::is_default_constructible<FeedbackEnvelope<SelectorStateObservation>>::value,
                   "FeedbackEnvelope must be created through its immutable factory");
     static_assert(!std::is_default_constructible<FeedbackMetadata>::value,
                   "FeedbackMetadata must be created through its validator");
@@ -61,10 +70,10 @@ int main() {
                   "DeviceTimestamp must be created through its validated factory");
     static_assert(!std::is_default_constructible<FeedbackIngressSequence>::value,
                   "FeedbackIngressSequence must carry a valid scope and positive value");
-    static_assert(!std::is_default_constructible<FeedbackReceipt<SelectorFeedback>>::value,
+    static_assert(!std::is_default_constructible<FeedbackReceipt<SelectorCommandAcknowledgement>>::value,
                   "FeedbackReceipt must be created through its scope validator");
 
-    auto feedback = FeedbackEnvelope<SelectorFeedback>::create(
+    auto feedback = FeedbackEnvelope<SelectorStateObservation>::create(
         FeedbackMetadata::create(
             FeedbackCorrelation{
                 RuntimeDeviceCorrelation{
@@ -81,9 +90,9 @@ int main() {
             ObservationSource::HardwareReadback,
             std::uint64_t{91},
             DeviceTimestamp::create(1200, 1000, std::string("device-clock-A")).value()).value(),
-        SelectorFeedback{true});
+        SelectorStateObservation{true});
 
-    CapturingIngress<SelectorFeedback> ingress;
+    CapturingIngress<SelectorStateObservation> ingress;
     const auto result = ingress.submit(std::move(feedback));
 
     check(result == FeedbackSubmitStatus::Enqueued,
@@ -122,7 +131,7 @@ int main() {
               "feedback payload remains capability-typed");
     }
 
-    auto telemetry = FeedbackEnvelope<SelectorFeedback>::create(
+    auto telemetry = FeedbackEnvelope<SelectorProgressReport>::create(
         FeedbackMetadata::create(
             FeedbackCorrelation{
                 RuntimeDeviceCorrelation{
@@ -136,8 +145,8 @@ int main() {
             ObservationSource::SdkStatus,
             std::nullopt,
             std::nullopt).value(),
-        SelectorFeedback{false});
-    CapturingIngress<SelectorFeedback> telemetryIngress;
+        SelectorProgressReport{40});
+    CapturingIngress<SelectorProgressReport> telemetryIngress;
     const auto telemetryResult = telemetryIngress.submit(std::move(telemetry));
     check(telemetryResult == FeedbackSubmitStatus::Enqueued,
           "ingress enqueues unsolicited device telemetry without operation IDs");
@@ -339,8 +348,8 @@ int main() {
 
     const auto receiptTime = std::chrono::steady_clock::time_point{
         std::chrono::steady_clock::duration{1234}};
-    auto receivedResult = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>::create(
+    auto receivedResult = FeedbackReceipt<SelectorCommandAcknowledgement>::create(
+        FeedbackEnvelope<SelectorCommandAcknowledgement>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -357,7 +366,7 @@ int main() {
                 ObservationSource::DeviceEvent,
                 std::uint64_t{92},
                 DeviceTimestamp::create(1500, 1000, std::string("device-clock-A")).value()).value(),
-            SelectorFeedback{true}),
+            SelectorCommandAcknowledgement{true}),
         receiptTime,
         FeedbackIngressSequence::create(microscopeId, runtimeId, generation, 17).value());
     check(static_cast<bool>(receivedResult),
@@ -373,8 +382,8 @@ int main() {
               "Core ingress sequence is independent of adapter source sequence");
     }
 
-    auto mismatchedReceipt = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>::create(
+    auto mismatchedReceipt = FeedbackReceipt<SelectorProgressReport>::create(
+        FeedbackEnvelope<SelectorProgressReport>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -388,15 +397,15 @@ int main() {
                 ObservationSource::SdkStatus,
                 std::nullopt,
                 std::nullopt).value(),
-            SelectorFeedback{false}),
+            SelectorProgressReport{0}),
         receiptTime,
         FeedbackIngressSequence::create(microscopeId, otherRuntimeId, generation, 20).value());
     check(!mismatchedReceipt &&
           mismatchedReceipt.error() == FeedbackReceiptError::ScopeMismatch,
           "rejects a receipt whose ingress sequence belongs to another runtime");
 
-    auto mismatchedMicroscopeReceipt = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>::create(
+    auto mismatchedMicroscopeReceipt = FeedbackReceipt<SelectorProgressReport>::create(
+        FeedbackEnvelope<SelectorProgressReport>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -410,7 +419,7 @@ int main() {
                 ObservationSource::SdkStatus,
                 std::nullopt,
                 std::nullopt).value(),
-            SelectorFeedback{false}),
+            SelectorProgressReport{0}),
         receiptTime,
         FeedbackIngressSequence::create(
             otherMicroscopeId, runtimeId, generation, 21).value());
@@ -419,8 +428,8 @@ int main() {
               FeedbackReceiptError::ScopeMismatch,
           "rejects a receipt whose ingress sequence belongs to another microscope");
 
-    auto mismatchedGenerationReceipt = FeedbackReceipt<SelectorFeedback>::create(
-        FeedbackEnvelope<SelectorFeedback>::create(
+    auto mismatchedGenerationReceipt = FeedbackReceipt<SelectorProgressReport>::create(
+        FeedbackEnvelope<SelectorProgressReport>::create(
             FeedbackMetadata::create(
                 FeedbackCorrelation{
                     RuntimeDeviceCorrelation{
@@ -434,7 +443,7 @@ int main() {
                 ObservationSource::SdkStatus,
                 std::nullopt,
                 std::nullopt).value(),
-            SelectorFeedback{false}),
+            SelectorProgressReport{0}),
         receiptTime,
         FeedbackIngressSequence::create(
             microscopeId, runtimeId, nextRuntimeGeneration, 22).value());

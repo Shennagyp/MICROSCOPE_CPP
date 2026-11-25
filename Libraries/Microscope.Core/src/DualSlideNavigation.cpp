@@ -28,9 +28,10 @@ bool validSource(ObservationSource s) {
 }
 DualSlideCarrierSpecification::DualSlideCarrierSpecification(
     EquipmentComponentId c,StageAxisId x,StageAxisId y,CarrierHorizontalDirection d,
-    AxisCoordinateUnit xu,AxisCoordinateUnit yu)
+    AxisCoordinateUnit xu,AxisCoordinateUnit yu,AxisOperatingRange xr,AxisOperatingRange yr)
     :stageComponentId_(std::move(c)),horizontalAxisId_(std::move(x)),
-     transverseAxisId_(std::move(y)),direction_(d),horizontalUnit_(xu),transverseUnit_(yu) {}
+     transverseAxisId_(std::move(y)),direction_(d),horizontalUnit_(xu),transverseUnit_(yu),
+     horizontalRange_(xr),transverseRange_(yr) {}
 Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>
 DualSlideCarrierSpecification::create(
     const StageSpecification& stage,StageAxisId x,StageAxisId y,CarrierHorizontalDirection d) {
@@ -54,7 +55,8 @@ DualSlideCarrierSpecification::create(
             DualSlideCarrierSpecificationError::InvalidHorizontalDirection);
     return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::success(
         DualSlideCarrierSpecification(stage.componentId(),std::move(x),std::move(y),d,
-            xi->coordinateUnit(),yi->coordinateUnit()));
+            xi->coordinateUnit(),yi->coordinateUnit(),
+            xi->operatingRange(),yi->operatingRange()));
 }
 const EquipmentComponentId& DualSlideCarrierSpecification::stageComponentId()const noexcept{return stageComponentId_;}
 const StageAxisId& DualSlideCarrierSpecification::horizontalAxisId()const noexcept{return horizontalAxisId_;}
@@ -70,6 +72,10 @@ DualSlideCarrierSpecification::moveTo(const StagePlanePoint& p) const {
         ? p.horizontalMicrometers/1000.0 : p.horizontalMicrometers;
     const double y=transverseUnit_==AxisCoordinateUnit::Millimeters
         ? p.transverseMicrometers/1000.0 : p.transverseMicrometers;
+    if(x<horizontalRange_.minimum()||x>horizontalRange_.maximum()||
+       y<transverseRange_.minimum()||y>transverseRange_.maximum())
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::OutsideStageTravel);
     auto xt=AxisPosition::create(horizontalAxisId_,x,horizontalUnit_);
     auto yt=AxisPosition::create(transverseAxisId_,y,transverseUnit_);
     if(!xt||!yt)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(

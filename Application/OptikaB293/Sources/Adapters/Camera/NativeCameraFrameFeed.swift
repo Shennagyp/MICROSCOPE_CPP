@@ -1,7 +1,7 @@
 import Foundation
 
 /// The latest frame lease and rate-source counter observed for one UI notification.
-/// framesPulled is used only to derive INPUT FPS, never displayed as a total.
+/// framesPulled is used only to derive PULL FPS, never displayed as a total.
 struct NativeCameraFrameSnapshot {
     let lease: AmscopeFrameLease?
     let framesPulled: UInt64

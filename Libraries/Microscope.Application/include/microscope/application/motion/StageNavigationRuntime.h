@@ -285,6 +285,7 @@ public:
         }
         if (operationRuntime_->feedbackLossLatched()) {
             position_ = position_.invalidateMachineReference();
+            feedbackLossObserved_ = true;
             return failure(StageNavigationRuntimeErrorCode::FeedbackLossUnresolved);
         }
 
@@ -425,8 +426,7 @@ public:
         }
 
         if (operationRuntime_->feedbackLossLatched()) {
-            position_ = position_.invalidateMachineReference();
-            return success(StageNavigationRuntimeDisposition::FeedbackLossDetected);
+            return synchronizeFeedbackLoss();
         }
         if (!feedback.receipt) {
             return success(StageNavigationRuntimeDisposition::IgnoredFeedback);
@@ -503,6 +503,30 @@ public:
         }
 
         return success(StageNavigationRuntimeDisposition::AwaitingPositionFeedback);
+    }
+
+    // Called from the SerializedRuntimeWorker control drain as well as from
+    // feedback handling. Queue overflow can occur without delivering a receipt,
+    // so the owner must observe the independent feedback-loss latch explicitly.
+    [[nodiscard]] Result synchronizeFeedbackLoss() {
+        auto owner = ownerThreadBound_ ? requireOwnerThread() : bindOwnerThread();
+        if (!owner) {
+            return Result::failure(owner.error());
+        }
+        if (operationRuntime_->feedbackLossLatched()) {
+            if (!feedbackLossObserved_) {
+                position_ = position_.invalidateMachineReference();
+                feedbackLossObserved_ = true;
+                return success(StageNavigationRuntimeDisposition::FeedbackLossDetected);
+            }
+            return success(StageNavigationRuntimeDisposition::IgnoredFeedback);
+        }
+        feedbackLossObserved_ = false;
+        return success(StageNavigationRuntimeDisposition::PositionUpdated);
+    }
+
+    [[nodiscard]] bool feedbackLossUnresolved() const noexcept {
+        return operationRuntime_->feedbackLossLatched();
     }
 
     // Carrier occupancy and registrations may change only between navigation
@@ -1112,6 +1136,7 @@ private:
     std::optional<ActiveNavigation> active_;
     std::thread::id ownerThread_{};
     bool ownerThreadBound_{false};
+    bool feedbackLossObserved_{false};
 };
 
 } // namespace microscope::application::motion

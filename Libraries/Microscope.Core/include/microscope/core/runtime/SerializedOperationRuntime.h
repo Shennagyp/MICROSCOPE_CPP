@@ -240,6 +240,52 @@ public:
         return Result<StepStatus,SerializedOperationRuntimeError>::success(StepStatus::Pending);
     }
 
+    // Records a Core/Application dispatch precondition failure when no
+    // adapter call was made. This is distinct from AdapterRejected, which
+    // means the adapter actually received and rejected the command.
+    Result<StepStatus,SerializedOperationRuntimeError> recordPreDispatchFailure(
+        const OperationId& operationId,const StepId& stepId) {
+        auto owner=requireOwnerThread();
+        if(!owner)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(owner.error());
+        auto* operation=findOperation(operationId);
+        if(!operation)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownOperation);
+        if(isTerminal(operation->status))
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::OperationTerminal);
+        auto* step=findStep(*operation,stepId);
+        if(!step)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::UnknownStep);
+        if(step->status!=StepStatus::Pending)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::InvalidTransition);
+        if(!canIncrementRevision(*operation))
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::SnapshotRevisionExhausted);
+
+        auto failedStep=applyStepLifecycleEvent(
+            step->status,StepLifecycleEvent::DispatchPreconditionFailed);
+        bool hasVerifiedStep=false;
+        for(const auto& candidate:operation->steps)
+            if(candidate.status==StepStatus::Verified)hasVerifiedStep=true;
+        const bool partial=hasVerifiedStep&&operation->status!=OperationStatus::Accepted;
+        auto failedOperation=applyOperationLifecycleEvent(
+            operation->status,
+            partial?OperationLifecycleEvent::PartiallyCompleted:
+                    OperationLifecycleEvent::Failed);
+        if(!failedStep||!failedOperation)
+            return Result<StepStatus,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::InvalidTransition);
+
+        step->status=failedStep.value();
+        operation->status=failedOperation.value();
+        ++operation->revision;
+        return Result<StepStatus,SerializedOperationRuntimeError>::success(step->status);
+    }
+
     Result<StepStatus,SerializedOperationRuntimeError> dispatchCommand(
         const OperationId& operationId,const StepId& stepId,CommandId commandId,
         const RuntimeDeviceCorrelation& device) {

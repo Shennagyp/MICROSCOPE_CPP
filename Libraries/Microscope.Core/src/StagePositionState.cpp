@@ -75,6 +75,28 @@ StagePositionState::afterCommandedDisplacement(
 }
 
 Result<StagePositionState,StageAxisPositionStateError>
+StagePositionState::afterCommandedPosition(
+    const AxisPosition& target,
+    std::optional<double> additionalErrorBound) const {
+    if(target.axisId()==horizontal_.axisId()) {
+        auto updated=horizontal_.afterCommandedPosition(target,additionalErrorBound);
+        if(!updated)
+            return Result<StagePositionState,StageAxisPositionStateError>::failure(updated.error());
+        return Result<StagePositionState,StageAxisPositionStateError>::success(
+            StagePositionState(stageComponentId_,std::move(updated).value(),transverse_));
+    }
+    if(target.axisId()==transverse_.axisId()) {
+        auto updated=transverse_.afterCommandedPosition(target,additionalErrorBound);
+        if(!updated)
+            return Result<StagePositionState,StageAxisPositionStateError>::failure(updated.error());
+        return Result<StagePositionState,StageAxisPositionStateError>::success(
+            StagePositionState(stageComponentId_,horizontal_,std::move(updated).value()));
+    }
+    return Result<StagePositionState,StageAxisPositionStateError>::failure(
+        StageAxisPositionStateError::AxisMismatch);
+}
+
+Result<StagePositionState,StageAxisPositionStateError>
 StagePositionState::afterPositionObservation(
     const AxisPositionObservation& observation,ObservationSource source) const {
     const auto& axisId=observation.position().axisId();

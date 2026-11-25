@@ -81,6 +81,15 @@ jobs:
       - name: Run non-Qt camera contract and driver tests
         run: ctest --test-dir build/amscope --output-on-failure
 
+      - name: Install and verify non-Qt public headers
+        run: |
+          cmake --install build/amscope --prefix build/camera-install
+          test -f build/camera-install/include/amscope/AmcamCamera.h
+          test -f build/camera-install/include/amscope/CameraTypes.h
+          test -f build/camera-install/include/camera/CameraFrames.h
+          test -f build/camera-install/include/camera/FrameStreamMailbox.h
+          test ! -e build/camera-install/include/amscope/QtAmcamCamera.h
+
       - name: Verify SDK, driver, diagnostics, and architectures
         run: |
           test -f build/amscope/libcamera_amscope_driver.dylib

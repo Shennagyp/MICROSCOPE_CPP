@@ -1,6 +1,6 @@
 #include "microscope/core/runtime/Feedback.h"
 
-#include <cstdlib>
+#include <chrono>\n#include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <utility>
@@ -123,6 +123,35 @@ int main() {
     check(telemetryIngress.lastFeedback.has_value() &&
           telemetryIngress.lastFeedback->metadata.kind == FeedbackKind::DeviceProgress,
           "telemetry preserves its normalized fact category");
+
+    const auto receiptTime = std::chrono::steady_clock::time_point{
+        std::chrono::steady_clock::duration{1234}};
+    FeedbackReceipt<SelectorFeedback> received{
+        FeedbackEnvelope<SelectorFeedback>{
+            FeedbackMetadata{
+                FeedbackCorrelation{
+                    RuntimeDeviceCorrelation{
+                        microscopeId,
+                        runtimeId,
+                        generation,
+                        deviceId},
+                    OperationCorrelation{
+                        operationId,
+                        stepId,
+                        commandId}},
+                FeedbackKind::DeviceAcknowledged,
+                ObservationSource::DeviceEvent,
+                std::uint64_t{92},
+                DeviceTimestamp{1500, 1000, std::string("device-clock-A")}},
+            SelectorFeedback{true}},
+        FeedbackReceiptMetadata{receiptTime, 17}};
+    check(received.receipt.receivedAt == receiptTime,
+          "Core receipt time uses a separate monotonic-clock field");
+    check(received.feedback.metadata.deviceTimestamp.has_value() &&
+          received.feedback.metadata.deviceTimestamp->ticks == 1500,
+          "device timestamp remains separate from Core receipt time");
+    check(received.receipt.ingressSequence == 17,
+          "Core ingress sequence is independent of adapter source sequence");
 
     if (failures != 0) {
         std::cerr << failures << " feedback contract test(s) failed.\n";

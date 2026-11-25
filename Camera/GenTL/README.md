@@ -10,7 +10,7 @@ This directory implements the Camera Module's optional GenTL provider path. It i
 
 The C++ adapter does not load CTI files itself and does not implement a second GenTL function table. The existing Swift Consumer owns CTI loading and GenTL function dispatch. The C++ adapter calls that Consumer through the versioned C ABI.
 
-The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0` at `92b7f28d3aab94d5d295a89a6436fe99df601c87`. Its packages declare macOS 13.0 as the minimum deployment target. Tests cover typed pointer/buffer marshalling, event registration/read/unregister, buffer-info forwarding and invalid invocation-shape rejection; the C ABI rejects argument vectors larger than the maximum GenTL operation arity. Workflow [#45692472539](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45692472539) was cancelled before any job steps. The real dylib and C++ interoperability remain unvalidated; C++ CI currently uses a mock C ABI bridge.
+The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0` at `e913a436d31cc3e73233311cef810ff95e1e8704`. Its packages declare macOS 13.0 as the minimum deployment target. Source tests cover typed pointer/buffer marshalling, event registration/read/unregister, buffer-info forwarding and invalid invocation-shape rejection; the C ABI rejects argument vectors larger than the maximum GenTL operation arity. The universal macOS workflow [#45695610813](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45695610813) failed before any job steps (including a rerun), with no job logs. The real dylib and C++ interoperability therefore remain unvalidated; C++ CI currently uses a mock C ABI bridge.
 
 ## Build
 
@@ -32,7 +32,7 @@ cmake -S Camera/GenTL -B build/gentl-genapi \
   -DGENAPI_ROOT=/path/to/GenApi-3.5.1-Mac64_Universal
 ```
 
-The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. The official EMVA GenICam Package 2026.07 (GenApi 3.5.1) SDK and runtime are downloaded, hash-verified and compiled in the macOS CI workflow for both Intel x86_64 and Apple Silicon arm64. XML-backed runtime tests use the official GenApi implementation and a mock GenTL port to exercise Root-category-only enumeration and lookup, internal-register rejection, dynamic availability, Boolean/Integer/Enumeration reads and writes, command issue/completion, and GenTL read-only access semantics. Workflow [#45693246924](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45693246924) passed on both architectures. This does not validate behavior against a vendor CTI Producer or physical camera.
+The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. The official EMVA GenICam Package 2026.07 (GenApi 3.5.1) SDK and runtime are downloaded, hash-verified and compiled in the macOS CI workflow for both Intel x86_64 and Apple Silicon arm64. XML-backed runtime tests use the official GenApi implementation and a mock GenTL port to exercise recursive Root-category traversal (including nested categories), internal-register rejection, dynamic availability, Boolean/Integer/Float/String/Enumeration reads and writes, nested command enumeration/execution, command completion transitions, and GenTL read-only access semantics. Workflow [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261) passed on both architectures. This does not validate behavior against a vendor CTI Producer or physical camera.
 
 ## Current C++ API
 
@@ -72,13 +72,13 @@ Ownership and lifecycle:
 - `DataStreamSession` retains the device state; it can outlive the `DeviceSession` wrapper.
 - Each stream has a bounded announced-buffer set (1–64; the Producer's minimum is enforced).
 - Acquisition uses `EVENT_NEW_BUFFER`, `EventGetData`, typed buffer metadata queries and explicit requeue.
-- `nextFrame(timeoutMilliseconds)` permits one waiter per stream. It returns `nullopt` on timeout. `GCUnregisterEvent` terminates pending `EventGetData` waits with `GC_ERR_ABORT`; stream shutdown uses this specified cancellation path before waiting for active calls to drain.
+- `nextFrame(timeoutMilliseconds)` permits one waiter per stream. It returns `nullopt` on timeout. `GCUnregisterEvent` terminates pending `EventGetData` waits with `GC_ERR_ABORT`; stream shutdown uses this specified cancellation path before waiting for active calls to drain. A deterministic regression holds `EventGetData` pending while another thread closes the stream.
 - Payload bytes are copied before the announced buffer is requeued. This avoids exposing a pointer whose contents the Producer may overwrite on the next acquisition.
 - GenTL timeout arguments are nanoseconds; the public discovery and frame-wait APIs accept milliseconds and convert with overflow checks.
 - Cleanup stops acquisition, unregisters the event (which aborts pending event waits), waits for active calls to drain, flushes the queue, revokes buffers and closes the stream. If event unregistration fails, `EventKill` is attempted as a fallback for the single permitted waiter; the native context is quarantined because normal teardown did not complete. The GenTL 1.6 contract only aborts one pending waiter per `EventKill` call.
 - If cleanup fails, the native context and C ABI bridge are retained for process lifetime. They are not unloaded while CTI handles may still exist.
 
-`DataStreamFrame` preserves payload bytes, frame ID, nanosecond timestamp, pixel-format identifier and namespace, dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete image payloads with explicit zero offset/padding and no chunk data into `camera::Frame`. PFNC Mono8 is the first typed layout mapping; unknown formats retain their opaque identifier and payload but remain `PixelFormat::Unknown` with no invented stride. Packed, planar, multipart, compressed and padded formats remain unsupported by this projection.
+`DataStreamFrame` preserves payload bytes, frame ID, nanosecond timestamp, pixel-format identifier and namespace, pixel endianness, dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete image payloads with explicit zero offset/padding, no chunk data and exact payload-size/stride checks into `camera::Frame`. Verified PFNC mappings are Mono8, unpacked Mono10/12/14/16 and RGB8. Multi-byte mappings require reported byte order; packed, Bayer, planar, multipart, compressed and padded layouts remain opaque and are not assigned a fabricated stride.
 
 ## Device port and GenApi XML
 
@@ -88,7 +88,7 @@ The adapter exposes remote-port read/write and retrieves GenApi XML using:
 
 HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
 
-`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. Both descriptor enumeration and direct feature/command lookup are restricted to nodes reachable from the GenApi `Root` category; implementation nodes such as `IntReg` and `Port` are not public features. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi 3.5.1 SDK and XML-backed integration tests pass on both macOS architectures in CI. Real CTI/physical-device validation remains outstanding.
+`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. Both descriptor enumeration and direct feature/command lookup recursively traverse nodes reachable from the GenApi `Root` category, including nested categories, while deduplicating node references; implementation nodes such as `IntReg` and `Port` are not public features. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi 3.5.1 SDK and XML-backed integration tests pass on both macOS architectures in CI. Real CTI/physical-device validation remains outstanding.
 
 
 
@@ -115,16 +115,16 @@ Implemented:
 - stream ID discovery and stream acquisition lifecycle;
 - bounded buffer announcement/queue/requeue/drain;
 - frame payload copying and basic GenTL buffer metadata;
-- safe backend-neutral frame projection for PFNC Mono8, with explicit rejection of unknown/unsafe layout metadata;
+- safe backend-neutral frame projection for verified PFNC Mono8, unpacked Mono10/12/14/16 and RGB8 layouts, with explicit byte-order and payload-size checks;
 - backend-neutral command contract and separate GenApi `ICommand` adapter source;
 - remote-port read/write and `LOCAL`/`FILE` GenApi XML retrieval;
 - process-lifetime retention after cleanup failure.
 
-GenTL/GenApi CI: [workflow #45693246924](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45693246924), commit `31278e255ea3fc7c7a23e3fd3e2e1c734be6e896`. Both Intel x86_64 and Apple Silicon arm64 passed the C++ bridge suite, official GenApi 3.5.1 build, XML-backed GenApi integration tests and architecture checks. The tests cover the mock bridge, discovery, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, quarantine retention, Common frame projection/layout rejection, Root-category feature enumeration/lookup, internal register rejection, dynamic availability, Boolean/Integer/Enumeration access, command issue/completion and read-only access semantics.
+GenTL/GenApi CI: [workflow #45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261), code commit `9043f82c51753b8c4721bd876af333d10343bfd7`. Both Intel x86_64 and Apple Silicon arm64 passed the C++ bridge suite, official GenApi 3.5.1 build, XML-backed GenApi integration tests and architecture checks. The tests cover the mock bridge, discovery, device/stream ownership, pending-wait cancellation, unregister-failure `EventKill` fallback/quarantine, buffer lifecycle, frame payload/metadata, timeout conversion, PFNC layout projection, pixel byte order, Root and nested-category feature enumeration/lookup, internal register rejection, dynamic availability, Boolean/Integer/Float/String/Enumeration access, nested command issue/completion and read-only access semantics.
 
 Not yet validated:
 - actual frame acquisition and metadata behavior with a vendor CTI Producer/device;
-- the real universal Swift `libGenTLConsumerCAPI.dylib` (latest workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before build/test steps);
+- the real universal Swift `libGenTLConsumerCAPI.dylib` (latest workflow [#45695610813](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45695610813) failed before any job steps and produced no job logs);
 - a vendor CTI Producer;
 - a physical GenTL camera;
 - actual GenTL payload/metadata behavior under acquisition;

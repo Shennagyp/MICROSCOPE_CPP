@@ -44,7 +44,7 @@ Do not introduce a generic plugin framework, service locator, universal message 
 Use distinct strong types for at least:
 
 - MicroscopeId, RuntimeId and RuntimeGeneration
-- DeviceId
+- DeviceId and DeviceSessionGeneration
 - SampleId, SlideId and TileId
 - AcquisitionPlanId, AcquisitionRunId, ImageFrameId and DerivedImageId
 - OperationId, StepId and CommandId
@@ -143,9 +143,9 @@ The initial fact categories are DeviceAcknowledged, DeviceProgress, DeviceAction
 
 A present device timestamp is created with an explicit positive ticks-per-second value; zero is rejected. When the adapter cannot provide a valid timebase, it omits the timestamp rather than writing zero as an unknown sentinel.
 
-When feedback enters Core, the runtime wraps it in Core-owned FeedbackReceipt metadata containing a monotonic steady-clock receipt time and a Core ingress sequence that starts at one and increases within the runtime generation. These are distinct from adapter source sequence and device timestamp. The C++ FeedbackKind explicitly distinguishes DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure; provenance remains a separate ObservationSource. DeviceTimestamp can only be created with a positive tick rate. Device timestamps are never compared directly with the Core monotonic clock without a documented clock mapping.
+When feedback enters Core, the runtime wraps it in Core-owned FeedbackReceipt metadata containing a monotonic steady-clock receipt time and a Core ingress sequence that starts at one and increases within the runtime generation. These are distinct from adapter source sequence and device timestamp. Device timestamps are never compared directly with the Core monotonic clock without a documented clock mapping.
 
-Feedback from an old runtime generation or a different/superseded operation, step or command is stale for that work. It may be retained diagnostically but must not mutate current operation state.
+Feedback from an old runtime generation, old device-session generation, or a different/superseded operation, step or command is stale for that work. It may be retained diagnostically but must not mutate current operation state.
 
 ### 5.3 Typed feedback and provenance
 

@@ -307,10 +307,11 @@ The first equipment model is a typed Core value model, not a general-purpose gra
 
 ### 11.2 Physical connections
 
-OpticalConnection is a directed physical adjacency from an output-capable port to an input-capable port on a different component.
+OpticalConnection is an undirected physical adjacency between two ports on different components. Endpoint storage order does not define light propagation direction; OpticalPathStep order does.
 
-- A physical port participates in at most one OpticalConnection. A component that branches light exposes separate physical output ports for its branches.
-- Bidirectional port capability is explicit; it does not mean the port may be connected to multiple components.
+- A physical port participates in at most one OpticalConnection. A component that branches light exposes separate physical ports for its branches.
+- A connection is indexed in both endpoint orders. One physical adjacency can therefore support multiple ordered paths that traverse it in opposite directions, provided each path step's entry/exit port capabilities allow that traversal.
+- Port Input/Output/Bidirectional capability constrains use in an ordered path; it does not define which endpoint of the physical connection is first.
 - Internal passage through an optical component is not represented as a self-connection. It is represented by a path step pairing that component's entry and exit ports.
 
 ### 11.3 Ordered paths and shared hardware

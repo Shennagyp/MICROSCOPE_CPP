@@ -66,11 +66,21 @@ makeCommonFrame(const DataStreamFrame& source) {
     // Mono8 is the first verified PFNC layout mapping. Do not infer stride
     // for other formats from payload size: packed, planar, multipart and
     // compressed formats need their own explicit layout rules.
+    const auto maximumSize = std::numeric_limits<std::size_t>::max();
+    const bool mono8PayloadSizeIsRepresentable =
+        frame->height != 0 &&
+        static_cast<std::size_t>(frame->width) <=
+            maximumSize / static_cast<std::size_t>(frame->height);
+    const bool mono8PayloadSizeMatches =
+        mono8PayloadSizeIsRepresentable &&
+        source.payload.size() ==
+            static_cast<std::size_t>(frame->width) *
+                static_cast<std::size_t>(frame->height);
+
     if (source.pixelFormatNamespace ==
             GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT &&
         source.pixelFormat == pfncMono8 &&
-        source.payload.size() ==
-            static_cast<std::size_t>(frame->width) * frame->height) {
+        mono8PayloadSizeMatches) {
         frame->pixelFormat = camera::PixelFormat::Raw8;
         frame->strideBytes = frame->width;
         frame->significantBitsPerPixel = 8;

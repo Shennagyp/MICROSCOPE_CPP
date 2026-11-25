@@ -139,6 +139,7 @@ public:
     [[nodiscard]] static Result<
         FeedbackIngressSequence,
         FeedbackIngressSequenceError> create(
+            MicroscopeId microscopeId,
             RuntimeId runtimeId,
             RuntimeGeneration runtimeGeneration,
             std::uint64_t value) {
@@ -153,9 +154,14 @@ public:
             FeedbackIngressSequence,
             FeedbackIngressSequenceError>::success(
                 FeedbackIngressSequence(
+                    std::move(microscopeId),
                     std::move(runtimeId),
                     runtimeGeneration,
                     value));
+    }
+
+    [[nodiscard]] const MicroscopeId& microscopeId() const noexcept {
+        return microscopeId_;
     }
 
     [[nodiscard]] const RuntimeId& runtimeId() const noexcept {
@@ -171,15 +177,20 @@ public:
     }
 
     [[nodiscard]] bool belongsTo(
+        const MicroscopeId& microscopeId,
         const RuntimeId& runtimeId,
         RuntimeGeneration runtimeGeneration) const noexcept {
-        return runtimeId_ == runtimeId &&
+        return microscopeId_ == microscopeId &&
+               runtimeId_ == runtimeId &&
                runtimeGeneration_ == runtimeGeneration;
     }
 
     [[nodiscard]] Result<bool, FeedbackIngressSequenceError> precedes(
         const FeedbackIngressSequence& other) const {
-        if (!belongsTo(other.runtimeId_, other.runtimeGeneration_)) {
+        if (!belongsTo(
+                other.microscopeId_,
+                other.runtimeId_,
+                other.runtimeGeneration_)) {
             return Result<bool, FeedbackIngressSequenceError>::failure(
                 FeedbackIngressSequenceError::DifferentRuntimeScope);
         }
@@ -190,13 +201,16 @@ public:
 
 private:
     FeedbackIngressSequence(
+        MicroscopeId microscopeId,
         RuntimeId runtimeId,
         RuntimeGeneration runtimeGeneration,
         std::uint64_t value)
-        : runtimeId_(std::move(runtimeId)),
+        : microscopeId_(std::move(microscopeId)),
+          runtimeId_(std::move(runtimeId)),
           runtimeGeneration_(runtimeGeneration),
           value_(value) {}
 
+    MicroscopeId microscopeId_;
     RuntimeId runtimeId_;
     RuntimeGeneration runtimeGeneration_;
     std::uint64_t value_;
@@ -222,6 +236,7 @@ public:
         FeedbackIngressSequence ingressSequence) {
         const auto& runtime = feedback.metadata.correlation.runtimeDevice;
         if (!ingressSequence.belongsTo(
+                runtime.microscopeId,
                 runtime.runtimeId,
                 runtime.runtimeGeneration)) {
             return Result<FeedbackReceipt, FeedbackReceiptError>::failure(

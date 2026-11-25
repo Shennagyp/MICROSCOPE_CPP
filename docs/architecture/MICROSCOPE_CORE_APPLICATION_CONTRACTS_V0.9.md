@@ -134,7 +134,9 @@ Feedback related to an active operation additionally carries one OperationCorrel
 
 Unsolicited telemetry has the runtime/device scope but no OperationCorrelation. It cannot satisfy an active operation's completion predicate.
 
-All feedback also carries feedback kind and typed payload, source/provenance, optional adapter/device source sequence, and optional device timestamp with clock domain/timebase.
+All feedback also carries a normalized fact category and typed payload, source/provenance, optional adapter/device source sequence, and optional device timestamp with clock domain/timebase.
+
+The initial fact categories are DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure. They describe the kind of fact, not its provenance. For example, DeviceStateObserved may be based on a hardware readback or SDK status. CommandDispatched and TimeoutElapsed remain Core runtime facts and are not adapter feedback kinds.
 
 Core stamps receipt time using its monotonic clock and assigns its own ingress sequence. Device timestamps remain device observations; they are not compared directly with the Core monotonic clock without a documented clock mapping.
 

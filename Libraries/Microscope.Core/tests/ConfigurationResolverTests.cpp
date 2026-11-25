@@ -486,6 +486,74 @@ void testResolverReportsProfileConflictAndMissingPath() {
           "rejects a profile identity absent from the profile catalog");
 }
 
+void testResolverEnforcesPathCompatibilityAndIlluminationChannel() {
+    const auto fixture = makeConfigurationFixture();
+
+    const auto restrictedProfile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-illumination-path-only"),
+        ContrastMethod::Brightfield,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.illuminationPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId}));
+    const auto restrictedCatalog =
+        take(ConfigurationProfileCatalog::create({restrictedProfile}));
+    const auto disallowedPathRequest = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::Brightfield,
+        restrictedProfile.id());
+    const auto disallowedPathResolution = ConfigurationResolver::resolve(
+        fixture.equipment, restrictedCatalog, disallowedPathRequest);
+    check(!disallowedPathResolution.isResolved() &&
+          hasDiagnosticCode(
+              disallowedPathResolution,
+              "configuration.optical_path.not_compatible"),
+          "rejects an installed path that is not allowed by the selected profile");
+
+    const auto missingChannelRequest = take(ConfigurationRequest::create(
+        fixture.brightfieldProfileId,
+        ContrastMethod::Brightfield,
+        fixture.objectiveId,
+        fixture.condenserId,
+        {fixture.fullPathId},
+        fixture.cameraId,
+        fixture.cameraModeId,
+        fixture.illuminationId,
+        makeId<IlluminationChannelId>("channel-not-installed"),
+        ExposurePolicy::Manual));
+    const auto missingChannelResolution = ConfigurationResolver::resolve(
+        fixture.equipment, fixture.profiles, missingChannelRequest);
+    check(!missingChannelResolution.isResolved() &&
+          hasDiagnosticCode(
+              missingChannelResolution,
+              "configuration.illumination.channel_not_available"),
+          "rejects an illumination channel absent from the selected source");
+
+    const auto incompatibleObjectiveId =
+        makeId<EquipmentComponentId>("objective-not-in-profile");
+    const auto incompatibleObjectiveRequest = take(ConfigurationRequest::create(
+        fixture.brightfieldProfileId,
+        ContrastMethod::Brightfield,
+        incompatibleObjectiveId,
+        fixture.condenserId,
+        {fixture.fullPathId},
+        fixture.cameraId,
+        fixture.cameraModeId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        ExposurePolicy::Manual));
+    const auto incompatibleObjectiveResolution = ConfigurationResolver::resolve(
+        fixture.equipment, fixture.profiles, incompatibleObjectiveRequest);
+    check(!incompatibleObjectiveResolution.isResolved() &&
+          hasDiagnosticCode(
+              incompatibleObjectiveResolution,
+              "configuration.objective.not_compatible"),
+          "rejects an installed or requested objective not allowed by the profile");
+}
+
 void testProfileRequiredComponentMustBeOnSelectedPaths() {
     const auto fixture = makeConfigurationFixture();
     const auto missingRequiredComponent =
@@ -526,6 +594,7 @@ int main() {
     testResolverAcceptsSeparateIlluminationAndImagingPaths();
     testResolverRejectsUnavailableCameraMode();
     testResolverReportsProfileConflictAndMissingPath();
+    testResolverEnforcesPathCompatibilityAndIlluminationChannel();
     testProfileRequiredComponentMustBeOnSelectedPaths();
 
     if (failures != 0) {

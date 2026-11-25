@@ -148,8 +148,13 @@ int main() {
     check(!zeroIngressSequence,
           "rejects a zero Core feedback ingress sequence");
     const auto validIngressSequence = FeedbackIngressSequence::create(17);
+    const auto laterIngressSequence = FeedbackIngressSequence::create(18);
     check(static_cast<bool>(validIngressSequence),
           "accepts a positive Core feedback ingress sequence");
+    check(validIngressSequence.value() < laterIngressSequence.value(),
+          "Core ingress sequences preserve receive order");
+    check(validIngressSequence.value() != laterIngressSequence.value(),
+          "distinct ingress sequence values compare unequal");
 
     const auto receiptTime = std::chrono::steady_clock::time_point{
         std::chrono::steady_clock::duration{1234}};

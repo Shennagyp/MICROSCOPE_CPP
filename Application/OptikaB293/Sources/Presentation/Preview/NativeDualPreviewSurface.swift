@@ -239,10 +239,9 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         // value snapshot does not copy image bytes or create another frame queue.
         let snapshot = frameFeed.takeLatestFrameSnapshot()
 
-        // Both panes derive the same PULL FPS from the monotonic pull counter.
-        // The UI does not display lifetime pull totals or presentation FPS.
+        // Only Slide 1 presents PULL FPS, derived from the monotonic
+        // acquisition counter. Image presentation does not affect the rate.
         slideOnePane.updatePullRate(pulledFrames: snapshot.framesPulled)
-        slideTwoPane.updatePullRate(pulledFrames: snapshot.framesPulled)
 
         guard let lease = snapshot.lease else { return }
 

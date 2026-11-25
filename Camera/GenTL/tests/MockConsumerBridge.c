@@ -3,9 +3,15 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 
 static int context_token;
 static const char mock_xml[] = "<RegisterDescription/>";
+static uint8_t* stream_memory[8];
+static BUFFER_HANDLE stream_handles[8];
+static size_t stream_buffer_count;
+static BUFFER_HANDLE queued_buffers[8];
+static size_t queued_buffer_count;
 
 static void* pointer(uint64_t value) {
     return (void*)(uintptr_t)value;
@@ -196,6 +202,155 @@ int32_t gentl_consumer_invoke(
                 "Local:0x2000");
         }
         return GC_ERR_NOT_AVAILABLE;
+    }
+
+    case 8: // GCRegisterEvent
+        if (argument_count != 3 || arguments[0] != 0x5555 ||
+            arguments[1] != EVENT_NEW_BUFFER) return GC_ERR_INVALID_PARAMETER;
+        *(EVENT_HANDLE*)pointer(arguments[2]) = (EVENT_HANDLE)(uintptr_t)0x6666;
+        return GC_ERR_SUCCESS;
+    case 9: // GCUnregisterEvent
+        return argument_count == 2 && arguments[0] == 0x5555 &&
+            arguments[1] == EVENT_NEW_BUFFER ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+    case 10: { // EventGetData
+        if (argument_count != 4 || arguments[0] != 0x6666)
+            return GC_ERR_INVALID_HANDLE;
+        size_t* size = (size_t*)pointer(arguments[2]);
+        if (!size || !pointer(arguments[1])) return GC_ERR_INVALID_PARAMETER;
+        if (queued_buffer_count == 0) return GC_ERR_TIMEOUT;
+        if (*size < sizeof(EVENT_NEW_BUFFER_DATA)) {
+            *size = sizeof(EVENT_NEW_BUFFER_DATA);
+            return GC_ERR_BUFFER_TOO_SMALL;
+        }
+        const BUFFER_HANDLE handle = queued_buffers[0];
+        for (size_t i = 1; i < queued_buffer_count; ++i)
+            queued_buffers[i - 1] = queued_buffers[i];
+        --queued_buffer_count;
+        size_t index = 0;
+        while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
+        if (index == stream_buffer_count) return GC_ERR_INVALID_BUFFER;
+        for (size_t i = 0; i < 16; ++i) stream_memory[index][i] = (uint8_t)(0x30 + i);
+        EVENT_NEW_BUFFER_DATA data = {handle, 0};
+        memcpy(pointer(arguments[1]), &data, sizeof(data));
+        *size = sizeof(data);
+        return GC_ERR_SUCCESS;
+    }
+    case 14: // EventKill
+        return argument_count == 1 && arguments[0] == 0x6666
+            ? GC_ERR_SUCCESS : GC_ERR_INVALID_HANDLE;
+    case 33: // DevOpenDataStream
+        if (argument_count != 3 || arguments[0] != 0x3333 ||
+            strcmp((const char*)pointer(arguments[1]), "stream0") != 0)
+            return GC_ERR_INVALID_PARAMETER;
+        *(DS_HANDLE*)pointer(arguments[2]) = (DS_HANDLE)(uintptr_t)0x5555;
+        return GC_ERR_SUCCESS;
+    case 37: { // DSAllocAndAnnounceBuffer
+        if (argument_count != 4 || arguments[0] != 0x5555 ||
+            arguments[1] != 64 || stream_buffer_count >= 8)
+            return GC_ERR_INVALID_PARAMETER;
+        const size_t index = stream_buffer_count++;
+        stream_memory[index] = (uint8_t*)malloc(64);
+        if (!stream_memory[index]) return GC_ERR_OUT_OF_MEMORY;
+        memset(stream_memory[index], 0, 64);
+        stream_handles[index] = (BUFFER_HANDLE)(uintptr_t)(0x7000 + index);
+        *(BUFFER_HANDLE*)pointer(arguments[3]) = stream_handles[index];
+        return GC_ERR_SUCCESS;
+    }
+    case 38: // DSFlushQueue
+        if (argument_count != 2 || arguments[0] != 0x5555)
+            return GC_ERR_INVALID_PARAMETER;
+        queued_buffer_count = 0;
+        return GC_ERR_SUCCESS;
+    case 39: // DSStartAcquisition
+        return argument_count == 3 && arguments[0] == 0x5555
+            ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+    case 40: // DSStopAcquisition
+        return argument_count == 2 && arguments[0] == 0x5555
+            ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+    case 41: { // DSGetInfo
+        if (argument_count != 5 || arguments[0] != 0x5555)
+            return GC_ERR_INVALID_HANDLE;
+        const int32_t command = (int32_t)arguments[1];
+        const size_t value = command == STREAM_INFO_PAYLOAD_SIZE ? 64 :
+            command == STREAM_INFO_BUF_ANNOUNCE_MIN ? 2 : 0;
+        if (value == 0) return GC_ERR_NOT_AVAILABLE;
+        return write_scalar((INFO_DATATYPE*)pointer(arguments[2]),
+            pointer(arguments[3]), (size_t*)pointer(arguments[4]),
+            INFO_DATATYPE_SIZET, &value, sizeof(value));
+    }
+    case 43: // DSClose
+        return argument_count == 1 && arguments[0] == 0x5555
+            ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+    case 44: { // DSRevokeBuffer
+        if (argument_count != 4 || arguments[0] != 0x5555)
+            return GC_ERR_INVALID_PARAMETER;
+        const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
+        size_t index = 0;
+        while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
+        if (index == stream_buffer_count) return GC_ERR_INVALID_BUFFER;
+        free(stream_memory[index]);
+        stream_memory[index] = 0;
+        *(void**)pointer(arguments[2]) = 0;
+        *(void**)pointer(arguments[3]) = 0;
+        return GC_ERR_SUCCESS;
+    }
+    case 45: { // DSQueueBuffer
+        if (argument_count != 2 || arguments[0] != 0x5555 ||
+            queued_buffer_count >= 8) return GC_ERR_INVALID_PARAMETER;
+        const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
+        size_t index = 0;
+        while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
+        if (index == stream_buffer_count || !stream_memory[index])
+            return GC_ERR_INVALID_BUFFER;
+        queued_buffers[queued_buffer_count++] = handle;
+        return GC_ERR_SUCCESS;
+    }
+    case 46: { // DSGetBufferInfo
+        if (argument_count != 6 || arguments[0] != 0x5555)
+            return GC_ERR_INVALID_HANDLE;
+        const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
+        size_t index = 0;
+        while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
+        if (index == stream_buffer_count || !stream_memory[index])
+            return GC_ERR_INVALID_BUFFER;
+        const int32_t command = (int32_t)arguments[2];
+        INFO_DATATYPE* type = (INFO_DATATYPE*)pointer(arguments[3]);
+        void* output = pointer(arguments[4]);
+        size_t* size = (size_t*)pointer(arguments[5]);
+        if (!type || !size) return GC_ERR_INVALID_PARAMETER;
+        switch (command) {
+        case BUFFER_INFO_BASE: {
+            void* value = stream_memory[index];
+            return write_scalar(type, output, size, INFO_DATATYPE_PTR, &value, sizeof(value));
+        }
+        case BUFFER_INFO_SIZE_FILLED: {
+            const size_t value = 16;
+            return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
+        }
+        case BUFFER_INFO_IS_INCOMPLETE:
+        case BUFFER_INFO_IMAGEPRESENT: {
+            const bool8_t value = command == BUFFER_INFO_IMAGEPRESENT;
+            return write_scalar(type, output, size, INFO_DATATYPE_BOOL8, &value, sizeof(value));
+        }
+        case BUFFER_INFO_FRAMEID: {
+            const uint64_t value = 42;
+            return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
+        }
+        case BUFFER_INFO_TIMESTAMP_NS: {
+            const uint64_t value = 123456789;
+            return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
+        }
+        case BUFFER_INFO_PIXELFORMAT: {
+            const uint64_t value = UINT64_C(0x01080001);
+            return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
+        }
+        case BUFFER_INFO_WIDTH:
+        case BUFFER_INFO_HEIGHT: {
+            const size_t value = 4;
+            return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
+        }
+        default: return GC_ERR_NOT_AVAILABLE;
+        }
     }
     default:
         return GC_ERR_NOT_IMPLEMENTED;

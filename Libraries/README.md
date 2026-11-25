@@ -55,7 +55,7 @@ These commands are instructions only; no build or test result is implied by this
 
 ## Continuous integration
 
-The `Microscope platform libraries` GitHub Actions workflow configures the root project with AmScope and the native macOS app disabled, then builds and runs Core/Application contract tests on Ubuntu, macOS and Windows. The existing AmScope workflow remains responsible for its macOS camera capability and integration checks. CI results are separate evidence from any local or hardware validation.
+The `Microscope platform libraries` GitHub Actions workflow independently configures/builds/tests Core, independently configures/builds/tests Application (including its Core dependency), and configures/builds/tests the root platform-only composition with AmScope/native app disabled. It runs on Ubuntu, macOS and Windows. The existing AmScope workflow remains responsible for its macOS camera capability and integration checks. CI results are separate evidence from any local or hardware validation.
 
 ## Current implementation boundary
 

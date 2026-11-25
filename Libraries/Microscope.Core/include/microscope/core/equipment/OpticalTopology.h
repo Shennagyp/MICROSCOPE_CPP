@@ -169,6 +169,7 @@ enum class EquipmentDefinitionError {
     DuplicateCondenserSpecification,
     CondenserReferencesUnknownComponent,
     CondenserComponentWrongKind,
+    ConflictingOpticalComponentSpecifications,
     DuplicateIlluminationSpecification,
     IlluminationReferencesUnknownComponent,
     IlluminationComponentWrongKind,

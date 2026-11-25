@@ -137,6 +137,20 @@ void testMissingLayoutMetadataIsRejected() {
             "Unknown delivered image height must not be inferred.");
 }
 
+
+void testEmptyPayloadIsRejectedForEveryPixelFormat() {
+    auto source = validMono8Frame();
+    source.payload.clear();
+    require(!camera::gentl::makeCommonFrame(source),
+            "An empty Mono8 image payload must not be projected.");
+
+    source = validMono8Frame();
+    source.pixelFormat = UINT64_C(0xDEADBEEF);
+    source.payload.clear();
+    require(!camera::gentl::makeCommonFrame(source),
+            "An empty unknown-format payload must not be projected.");
+}
+
 void testNonImageAndIncompleteBuffersAreRejected() {
     auto source = validMono8Frame();
     source.payloadType = GenTL::PAYLOAD_TYPE_RAW_DATA;
@@ -162,6 +176,7 @@ int main() {
         testUnknownPixelFormatPreservesIdentity();
         testUnsafeLayoutIsRejected();
         testMissingLayoutMetadataIsRejected();
+        testEmptyPayloadIsRejectedForEveryPixelFormat();
         testNonImageAndIncompleteBuffersAreRejected();
         std::cout << "All GenTL frame adapter tests passed.\n";
         return EXIT_SUCCESS;

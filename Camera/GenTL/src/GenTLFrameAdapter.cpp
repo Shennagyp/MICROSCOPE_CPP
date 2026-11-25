@@ -20,7 +20,8 @@ bool isPfncNamespace(std::uint64_t value) noexcept {
 
 std::optional<camera::FramePtr>
 makeCommonFrame(const DataStreamFrame& source) {
-    if (!source.imagePresent.value_or(false) ||
+    if (source.payload.empty() ||
+        !source.imagePresent.value_or(false) ||
         source.incomplete ||
         !source.containsChunkData ||
         *source.containsChunkData ||

@@ -32,7 +32,7 @@ cmake -S Camera/GenTL -B build/gentl-genapi \
   -DGENAPI_ROOT=/path/to/GenApi-3.5.1-Mac64_Universal
 ```
 
-The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. It has not yet been compiled against the official SDK in CI. The current Swift Consumer packages also declare macOS 13.0 as the minimum runtime platform for the GenTL C ABI dylib.
+The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. The official EMVA GenICam Package 2026.07 (GenApi 3.5.1) SDK and runtime are downloaded, hash-verified and compiled in the macOS CI workflow for both Intel x86_64 and Apple Silicon arm64. This is compile and architecture evidence only; it does not yet validate XML parsing, feature/command behavior against a real CTI Producer or a physical camera. The current Swift Consumer packages also declare macOS 13.0 as the minimum runtime platform for the GenTL C ABI dylib.
 
 ## Current C++ API
 
@@ -88,7 +88,7 @@ The adapter exposes remote-port read/write and retrieves GenApi XML using:
 
 HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
 
-`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi SDK build is now included in the macOS CI workflow and is being validated.
+`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi SDK build is now included in the macOS CI workflow and compiles against the official GenApi 3.5.1 SDK on both supported macOS architectures. Runtime mapping tests and validation against a real Producer/device remain outstanding.
 
 
 

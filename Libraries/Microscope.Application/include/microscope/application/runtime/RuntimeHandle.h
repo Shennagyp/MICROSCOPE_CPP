@@ -8,8 +8,9 @@
 namespace microscope::application {
 
 // Identifies one controlling runtime instance and the physical microscope it
-// currently controls. Generation prevents stale clients from addressing a
-// later runtime that reused the same RuntimeId.
+// currently controls. Generation distinguishes runtime incarnations when a
+// RuntimeId is reused. A handle is a value locator, not an authorization token;
+// Application revalidates it against the active runtime/resource claim.
 class RuntimeHandle final {
 public:
     RuntimeHandle(
@@ -34,6 +35,7 @@ private:
 
 // An operation handle is scoped to the runtime that accepted the request.
 // The operation ID alone is not sufficient to address a live operation.
+// Like RuntimeHandle, this is a locator value, not an authorization token.
 class OperationHandle final {
 public:
     OperationHandle(RuntimeHandle runtime, core::OperationId operationId);
@@ -65,8 +67,7 @@ struct RuntimeSnapshot final {
 
 struct OperationView final {
     OperationHandle handle;
-    core::OperationStatus status = core::OperationStatus::Accepted;
-    std::uint64_t revision = 0;
+    core::OperationSnapshot snapshot;
 };
 
 } // namespace microscope::application

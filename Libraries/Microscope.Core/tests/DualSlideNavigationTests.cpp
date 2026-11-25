@@ -82,6 +82,23 @@ int main(){
  auto rslot=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right"),right));
  auto carrier=take(DualSlideCarrierState::create(spec.value(),std::move(lslot),std::move(rslot)));
  check(carrier.registrationFor(id<SlideId>("left"))&&carrier.registrationFor(id<SlideId>("right")),"two slides retain separate simultaneous registrations");
+ auto hx=take(StageAxisPositionState::homed(
+     take(AxisPosition::create(id<StageAxisId>("x"),42500,AxisCoordinateUnit::Micrometers)),
+     0.5,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+ auto hy=take(StageAxisPositionState::homed(
+     take(AxisPosition::create(id<StageAxisId>("y"),32500,AxisCoordinateUnit::Micrometers)),
+     1.0,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+ auto current=carrier.currentSlidePosition(id<SlideId>("left"),hx,hy);
+ check(current&&std::abs(current.value().position.xMicrometers-37500)<1e-6&&
+       std::abs(current.value().position.yMicrometers-12500)<1e-6,
+       "current machine position maps back to the selected slide-local coordinate");
+ check(current&&std::abs(current.value().xErrorBoundMicrometers-1.0)<1e-6&&
+       std::abs(current.value().yErrorBoundMicrometers-1.5)<1e-6,
+       "slide-local position carries propagated stage and registration uncertainty");
+ auto unknownX=take(StageAxisPositionState::unknown(id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers));
+ auto unknownCurrent=carrier.currentSlidePosition(id<SlideId>("left"),unknownX,hy);
+ check(!unknownCurrent&&unknownCurrent.error()==CurrentSlidePositionError::PositionUnknown,
+       "unreferenced stage position cannot be presented as a slide coordinate");
  auto wrongRight=registration("wrong-right",DualSlideSlot::Right,-95000);
  auto wrongRightState=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("wrong-right"),wrongRight));
  auto wrongOrder=DualSlideCarrierState::create(spec.value(),

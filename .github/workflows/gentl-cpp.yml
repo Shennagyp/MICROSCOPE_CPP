@@ -65,10 +65,20 @@ jobs:
           echo "e74b8d982c3e7697399b03c254b6e8c596eddf0279959eba7de18734e279b64f  build/GenICam_Package_2026.07.zip" | shasum -a 256 --check
           mkdir -p build/genicam-package build/genapi-sdk
           unzip -q build/GenICam_Package_2026.07.zip -d build/genicam-package
-          SDK_ZIP="$(find build/genicam-package -type f -name 'GenApi-3.5.1-Mac64_Universal-SDK.zip' -print -quit)"
-          test -n "$SDK_ZIP"
-          unzip -q "$SDK_ZIP" -d build/genapi-sdk
-          GENAPI_HEADER="$(find build/genapi-sdk -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
+          GENAPI_HEADER="$(find build/genicam-package -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
+          if [ -z "$GENAPI_HEADER" ]; then
+            echo "GenApi SDK candidates in official package:"
+            find build/genicam-package -type f | grep -Ei 'GenApi|Mac64_Universal' | head -n 100 || true
+            SDK_ARCHIVE="$(find build/genicam-package -type f \\
+              \\( -iname '*Mac64*SDK*.zip' -o -iname '*Mac64*SDK*.tar.gz' -o -iname '*Mac64*SDK*.tgz' \\) \\
+              -print -quit)"
+            test -n "$SDK_ARCHIVE"
+            case "$SDK_ARCHIVE" in
+              *.zip) unzip -q "$SDK_ARCHIVE" -d build/genapi-sdk ;;
+              *.tar.gz|*.tgz) tar -xzf "$SDK_ARCHIVE" -C build/genapi-sdk ;;
+            esac
+            GENAPI_HEADER="$(find build/genapi-sdk -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
+          fi
           test -n "$GENAPI_HEADER"
           GENAPI_ROOT="${GENAPI_HEADER%/library/CPP/include/GenApi/GenApi.h}"
           echo "GENAPI_ROOT=$GENAPI_ROOT" >> "$GITHUB_ENV"

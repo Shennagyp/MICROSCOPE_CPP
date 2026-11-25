@@ -229,6 +229,62 @@ void testSharedComponentsAndBranching() {
           "branch selection uses distinct physical splitter output ports");
 }
 
+void testSharedPhysicalConnectionSupportsOppositePathTraversal() {
+    const auto microscopeId =
+        makeId<MicroscopeId>("microscope-reversible-optical-route");
+    const auto firstComponentId =
+        makeId<EquipmentComponentId>("reversible-optic-a");
+    const auto secondComponentId =
+        makeId<EquipmentComponentId>("reversible-optic-b");
+
+    const auto firstInput = makePort(
+        "reversible-a-input", OpticalPortDirection::Bidirectional);
+    const auto firstOutput = makePort(
+        "reversible-a-output", OpticalPortDirection::Bidirectional);
+    const auto secondInput = makePort(
+        "reversible-b-input", OpticalPortDirection::Bidirectional);
+    const auto secondOutput = makePort(
+        "reversible-b-output", OpticalPortDirection::Bidirectional);
+
+    const auto firstComponent = take(EquipmentComponent::create(
+        firstComponentId,
+        EquipmentComponentKind::OpticalElement,
+        {firstInput, firstOutput}));
+    const auto secondComponent = take(EquipmentComponent::create(
+        secondComponentId,
+        EquipmentComponentKind::OpticalElement,
+        {secondInput, secondOutput}));
+
+    const auto sharedConnection = makeConnection(
+        "reversible-shared-connection",
+        firstOutput.id(),
+        secondInput.id());
+
+    const auto forwardPath = take(OpticalPath::create(
+        makeId<OpticalPathId>("reversible-forward-path"),
+        {makeStep(firstComponentId, std::nullopt, firstOutput.id()),
+         makeStep(secondComponentId, secondInput.id(), std::nullopt)}));
+
+    const auto reversePath = take(OpticalPath::create(
+        makeId<OpticalPathId>("reversible-reverse-path"),
+        {makeStep(secondComponentId, std::nullopt, secondInput.id()),
+         makeStep(firstComponentId, firstOutput.id(), std::nullopt)}));
+
+    auto definition = MicroscopeEquipmentDefinition::create(
+        microscopeId,
+        {firstComponent, secondComponent},
+        {sharedConnection},
+        {forwardPath, reversePath});
+
+    check(static_cast<bool>(definition),
+          "reuses one physical connection in two paths with opposite traversal direction");
+    if (definition) {
+        check(definition.value().connections().size() == 1 &&
+              definition.value().opticalPaths().size() == 2,
+              "stores the shared physical adjacency once while retaining both path directions");
+    }
+}
+
 void testDuplicatePhysicalIdentitiesAreRejected() {
     auto fixture = makeSharedSplitterFixture();
     fixture.components.push_back(fixture.components.front());
@@ -474,6 +530,7 @@ void testPathAndPortFactoryValidation() {
 int main() {
     testStrongEquipmentIdentities();
     testSharedComponentsAndBranching();
+    testSharedPhysicalConnectionSupportsOppositePathTraversal();
     testDuplicatePhysicalIdentitiesAreRejected();
     testUnknownConnectionPortIsRejected();
     testConnectionEndpointOrderDoesNotDefinePropagationDirection();

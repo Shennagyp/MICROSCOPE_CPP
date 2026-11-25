@@ -21,6 +21,10 @@ int main(){
  auto axes=take(StageAxisSet::create({id<StageAxisId>("x"),id<StageAxisId>("y")}));
  auto home=HomeAxes::create(axes);auto stop=StopAxes::create(axes);
  check(home.axes().axes().size()==2&&stop.axes().axes().size()==2,"home and stop identify axes");
+ auto acknowledgement=take(StageMotionAcknowledgement::create(StageMotionAction::MoveAxesTo,axes));
+ check(acknowledgement.action()==StageMotionAction::MoveAxesTo&&
+       acknowledgement.axes().axes().size()==2,
+       "command acknowledgement carries its typed action and axis set");
  RuntimeDeviceCorrelation device{id<MicroscopeId>("m"),id<RuntimeId>("r"),take(RuntimeGeneration::create(1)),take(DeviceSessionGeneration::create(1)),id<DeviceId>("stage")};
  auto missing=StageMotionCommandContext::create(device,{id<OperationId>("op"),id<StepId>("step"),std::nullopt});
  check(!missing,"command identity required");

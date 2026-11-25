@@ -146,17 +146,17 @@ const std::vector<OpticalPort>& EquipmentComponent::opticalPorts() const noexcep
 
 OpticalConnection::OpticalConnection(
     OpticalConnectionId id,
-    OpticalPortId fromPortId,
-    OpticalPortId toPortId)
+    OpticalPortId firstPortId,
+    OpticalPortId secondPortId)
     : id_(std::move(id)),
-      fromPortId_(std::move(fromPortId)),
-      toPortId_(std::move(toPortId)) {}
+      firstPortId_(std::move(firstPortId)),
+      secondPortId_(std::move(secondPortId)) {}
 
 Result<OpticalConnection, OpticalConnectionError> OpticalConnection::create(
     OpticalConnectionId id,
-    OpticalPortId fromPortId,
-    OpticalPortId toPortId) {
-    if (fromPortId == toPortId) {
+    OpticalPortId firstPortId,
+    OpticalPortId secondPortId) {
+    if (firstPortId == secondPortId) {
         return Result<OpticalConnection, OpticalConnectionError>::failure(
             OpticalConnectionError::SamePort);
     }
@@ -164,20 +164,20 @@ Result<OpticalConnection, OpticalConnectionError> OpticalConnection::create(
     return Result<OpticalConnection, OpticalConnectionError>::success(
         OpticalConnection(
             std::move(id),
-            std::move(fromPortId),
-            std::move(toPortId)));
+            std::move(firstPortId),
+            std::move(secondPortId)));
 }
 
 const OpticalConnectionId& OpticalConnection::id() const noexcept {
     return id_;
 }
 
-const OpticalPortId& OpticalConnection::fromPortId() const noexcept {
-    return fromPortId_;
+const OpticalPortId& OpticalConnection::firstPortId() const noexcept {
+    return firstPortId_;
 }
 
-const OpticalPortId& OpticalConnection::toPortId() const noexcept {
-    return toPortId_;
+const OpticalPortId& OpticalConnection::secondPortId() const noexcept {
+    return secondPortId_;
 }
 
 OpticalPathStep::OpticalPathStep(
@@ -443,47 +443,44 @@ Result<
                     EquipmentDefinitionError::DuplicateConnectionId);
         }
 
-        const auto from = portIndex.find(connection.fromPortId());
-        if (from == portIndex.end()) {
+        const auto first = portIndex.find(connection.firstPortId());
+        if (first == portIndex.end()) {
             return Result<
                 MicroscopeEquipmentDefinition,
                 EquipmentDefinitionError>::failure(
-                    EquipmentDefinitionError::UnknownConnectionFromPort);
+                    EquipmentDefinitionError::UnknownConnectionFirstPort);
         }
 
-        const auto to = portIndex.find(connection.toPortId());
-        if (to == portIndex.end()) {
+        const auto second = portIndex.find(connection.secondPortId());
+        if (second == portIndex.end()) {
             return Result<
                 MicroscopeEquipmentDefinition,
                 EquipmentDefinitionError>::failure(
-                    EquipmentDefinitionError::UnknownConnectionToPort);
+                    EquipmentDefinitionError::UnknownConnectionSecondPort);
         }
 
-        if (from->second.componentId == to->second.componentId) {
+        if (first->second.componentId == second->second.componentId) {
             return Result<
                 MicroscopeEquipmentDefinition,
                 EquipmentDefinitionError>::failure(
                     EquipmentDefinitionError::ConnectionWithinSameComponent);
         }
 
-        if (!supportsOutput(from->second.direction) ||
-            !supportsInput(to->second.direction)) {
-            return Result<
-                MicroscopeEquipmentDefinition,
-                EquipmentDefinitionError>::failure(
-                    EquipmentDefinitionError::ConnectionPortDirectionMismatch);
-        }
-
-        if (!connectedPorts.insert(connection.fromPortId()).second ||
-            !connectedPorts.insert(connection.toPortId()).second) {
+        if (!connectedPorts.insert(connection.firstPortId()).second ||
+            !connectedPorts.insert(connection.secondPortId()).second) {
             return Result<
                 MicroscopeEquipmentDefinition,
                 EquipmentDefinitionError>::failure(
                     EquipmentDefinitionError::PortAlreadyConnected);
         }
 
+        // Physical adjacency is undirected. The ordered path determines which
+        // endpoint is currently an entry and which is an exit.
         connectionIndex.emplace(
-            std::make_pair(connection.fromPortId(), connection.toPortId()),
+            std::make_pair(connection.firstPortId(), connection.secondPortId()),
+            &connection);
+        connectionIndex.emplace(
+            std::make_pair(connection.secondPortId(), connection.firstPortId()),
             &connection);
     }
 

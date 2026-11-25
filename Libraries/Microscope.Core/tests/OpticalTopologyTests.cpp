@@ -490,6 +490,52 @@ void testEmptyEquipmentDefinitionIsRejected() {
           "rejects an equipment definition with no installed components");
 }
 
+void testOpticalFunctionCapabilitiesAreTypedAndUnique() {
+    const auto compatibilityId =
+        makeId<OpticalCompatibilityId>("optical-compatibility-phase-1");
+    const auto phasePlate = take(OpticalFunctionCapability::create(
+        OpticalElementFunction::PhasePlate, compatibilityId));
+
+    const auto invalidOnImagingDevice = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("imaging-device-with-optical-function"),
+        EquipmentComponentKind::ImagingDevice,
+        {makePort("imaging-input", OpticalPortDirection::Input)},
+        {phasePlate});
+    check(!invalidOnImagingDevice &&
+          invalidOnImagingDevice.error() ==
+              EquipmentComponentError::OpticalFunctionsOnNonOpticalElement,
+          "allows optical function capabilities only on optical elements");
+
+    const auto duplicateCapability = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("duplicate-phase-capability"),
+        EquipmentComponentKind::OpticalElement,
+        {makePort("duplicate-phase-input", OpticalPortDirection::Input),
+         makePort("duplicate-phase-output", OpticalPortDirection::Output)},
+        {phasePlate, phasePlate});
+    check(!duplicateCapability &&
+          duplicateCapability.error() ==
+              EquipmentComponentError::DuplicateOpticalFunctionCapability,
+          "rejects duplicate function/compatibility capability pairs");
+
+    const auto otherCompatibility = take(OpticalFunctionCapability::create(
+        OpticalElementFunction::PhasePlate,
+        makeId<OpticalCompatibilityId>("optical-compatibility-phase-2")));
+    const auto multipleVariants = EquipmentComponent::create(
+        makeId<EquipmentComponentId>("multi-variant-phase-component"),
+        EquipmentComponentKind::OpticalElement,
+        {makePort("multi-phase-input", OpticalPortDirection::Input),
+         makePort("multi-phase-output", OpticalPortDirection::Output)},
+        {phasePlate, otherCompatibility});
+    check(static_cast<bool>(multipleVariants),
+          "allows one component to declare distinct compatibility variants when physically supported");
+
+    auto invalidFunction = OpticalFunctionCapability::create(
+        static_cast<OpticalElementFunction>(255));
+    check(!invalidFunction &&
+          invalidFunction.error() == OpticalFunctionCapabilityError::InvalidFunction,
+          "rejects unknown optical function capability values");
+}
+
 void testPathAndPortFactoryValidation() {
     auto oneStepPath = OpticalPath::create(
         makeId<OpticalPathId>("one-step-path"),
@@ -541,6 +587,7 @@ int main() {
     testMissingIntermediateEntryIsRejected();
     testComponentKindConstrainsOpticalPortConfiguration();
     testEmptyEquipmentDefinitionIsRejected();
+    testOpticalFunctionCapabilitiesAreTypedAndUnique();
     testPathAndPortFactoryValidation();
 
     if (failures != 0) {

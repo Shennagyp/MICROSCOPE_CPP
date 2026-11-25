@@ -70,7 +70,7 @@ This closes the initial library/build/API foundation only. It does not claim a m
 
 ### Phase 2 — Core equipment and optical model
 
-**In progress**
+**In progress — 2A and 2B source slices validated**
 
 **Modeling sequence**
 1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; directed port connections; ordered light paths; shared components represented once and referenced by multiple paths; topology validation.
@@ -79,27 +79,16 @@ This closes the initial library/build/API foundation only. It does not claim a m
 4. **2D — Stage and axes:** linear/rotary axis identity and unit; range, nominal resolution, accuracy, repeatability/precision, feedback provenance and uncertainty fields. No mechanical transmission implementation details.
 5. **2E — Complete definition validation:** validate references, uniqueness, port ownership/direction, connected route continuity, component sharing and required subsystem references.
 
-**Implementation constraints**
-- All physical parts have one stable EquipmentComponentId; specialized records (Objective, Camera, IlluminationSource, Condenser and Stage) refer to that identity rather than minting a second ID for the same physical part.
-- Optical topology is a typed domain representation, not a node editor, arbitrary graph framework or executable behavior graph.
-- A light path is an ordered route over real physical component ports. Connections describe which ports are physically connected; path steps describe traversal through a component. A shared component is stored once and reused by many path definitions.
-- Component categories and specifications are data. Do not create per-objective/per-filter behavioral subclasses.
-- Use only domain-specific unit values needed by this model (for example, micrometers, magnification, numerical aperture, pixel dimensions and explicit linear/rotary axis units). Do not introduce a universal dimensional-analysis framework in this phase.
-- Equipment definitions describe installed equipment and nominal capabilities. Runtime observations, current positions, calibration results and deployment-specific adapter bindings do not belong in the static equipment model.
-- No actual OPTIKA B-293 component inventory is assumed until it is supplied/verified; examples are generic and must be labeled as illustrative.
+**Phase 2B committed source progress**
+- Added distinct positive finite domain values for micrometers, nominal magnification and numerical aperture. The type domains are intentionally narrow; no general-purpose units framework was added.
+- Added ObjectiveSpecification attached to EquipmentComponentId, with magnification, NA, working distance, chromatic/field correction, immersion medium and optional design coverglass thickness.
+- Added CameraSpecification attached to EquipmentComponentId, including active sensor dimensions, independent X/Y pixel pitch and unique output modes.
+- Added CameraOutputMode with physical sensor ROI, binning, delivered image dimensions, pixel layout and stable pixel-format code. The net sensor-to-delivered-pixel mapping is independently derived for X and Y; binning remains separately recorded.
+- MicroscopeEquipmentDefinition validates objective/camera references against installed component identity and broad component kind, and rejects duplicate specialized records.
+- Added contract tests for finite/positive values, NA above 1, objective characteristics, anisotropic pixel pitch/mapping, ROI and binning limits, invalid pixel formats/layouts, duplicate modes/specifications, unknown component references and wrong component kinds.
+- Cross-platform CI passed on Ubuntu GCC, macOS Clang and Windows MSVC for Core standalone, Application standalone and root platform-only composition/tests in [GitHub Actions run 33](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45589429447).
 
-**Phase 2A committed source progress — cross-platform CI passed**
-- Added strong EquipmentComponentId, OpticalPortId, OpticalConnectionId and OpticalPathId values. AxisId is deferred until the Stage/axis model consumes it.
-- Added factory-created OpticalPort, EquipmentComponent, OpticalConnection, OpticalPathStep and OpticalPath values.
-- Added immutable MicroscopeEquipmentDefinition aggregate with validation for non-empty component sets, unique identities, foreign references, port ownership/direction, one physical connection per port and route continuity.
-- Component kind constrains the interface: optical elements need input/output capability; imaging devices need input; illumination devices need output; mechanical assemblies have no optical ports.
-- Added an illustrative shared-condenser/shared-beam-splitter fixture with two camera paths, proving that the component is stored once and reused by both paths.
-- Added negative contract cases for duplicate component identity, unknown ports, direction mismatch, reused physical ports, missing route edges, foreign path ports, incomplete path steps and invalid component port layouts.
-- CMake builds OpticalTopology.cpp and registers microscope_core_equipment_tests. Core standalone, Application standalone and root platform-only builds/tests passed on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 22](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45587716888).
-
-**Exit:** representative equipment definitions map to typed Core values and validate without per-microscope behavior subclasses. Phase 2 is complete only after 2A–2E and the full definition contract tests are implemented.
-
-### Phase 3 — Declarative configuration
+**Implementation constraints**### Phase 3 — Declarative configuration
 - Define profile selection and applicability.
 - Define required components, component positions, illumination/camera presets and constraints.
 - Define conflict diagnostics and compatibility rules.

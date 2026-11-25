@@ -181,7 +181,10 @@ A STEP/DIR driver performs calibrated physical-unit-to-step conversion and deter
 
 The OPTIKA B293 dual-slide carrier is declared against one StageSpecification and two distinct linear axes in the horizontal stage plane. It has exactly Left and Right slots. Each occupied physical Slide has its own SlideGeometry and four-corner SlideRegistration. The four measured correspondences are fitted to an affine 2D transform, and maximum residual is checked against an explicit acceptance threshold. Both registrations map into the same stage machine-coordinate plane; slide-local coordinates are never inferred from tile order or the other slide's registration.
 
-Carrier occupancy and registration are runtime state, separate from static equipment definition and persistent Slide identity. Re-homing the stage does not restore a slide registration if the physical slide moved in its slot.
+Carrier occupancy and registration are runtime state, separate from static equipment definition and persistent Slide identity. Each SlideRegistration has a CalibrationRevisionId. A SlideNavigationTarget captures SlideId, slide-local point and registration revision; command generation rejects a changed revision. Re-homing the stage does not restore a slide registration if the physical slide moved in its slot.
+
+StageNavigationPlanner evaluates the per-axis accumulated error against a StageHomingPolicy expressed in micrometers. When both references are valid and within policy it returns a coordinated X/Y MoveAxesTo. If either axis has an invalid reference, unknown error bound or threshold exceedance, it returns HomeAxes for both in-plane axes while preserving the original target. After verified homing, resolveAfterHoming checks fresh position/reference evidence, revalidates the saved registration revision and generates the new absolute machine-coordinate command. The target is not stored as a pre-home machine coordinate.
+
 
 ### Stage position ownership and accumulated error
 
@@ -191,7 +194,7 @@ Commanded movement updates the estimated coordinate only while the machine refer
 
 A ControllerReported position observation updates the reported coordinate but cannot reduce an existing open-loop error bound: controller status may report its own command coordinate rather than independently measured physical motion. EncoderMeasured or ExternalMeasured observations can replace the accumulated bound with their supplied measurement uncertainty. Such observations do not establish a machine reference by themselves; only a verified homing/reference operation does that.
 
-The re-home policy compares the accumulated bound with a threshold in the axis's declared unit. An invalid reference, unavailable position, unknown error bound or threshold exceedance requires homing. A homing result supplies a new referenced machine position and homing uncertainty. It does not update or repair the two slide registrations.
+The re-home policy compares the accumulated bound with a threshold in micrometers, converting to each axis's declared unit at the boundary. An invalid reference, unavailable position, unknown error bound or threshold exceedance requires homing. A homing result supplies a new referenced machine position and homing uncertainty. It does not update or repair the two slide registrations. Position estimates for a selected slide are rejected when the current stage coordinate is outside that slide's registered geometry.
 
 
 

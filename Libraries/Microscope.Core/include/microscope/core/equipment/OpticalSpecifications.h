@@ -3,6 +3,7 @@
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
 
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string>

@@ -21,7 +21,8 @@ std::optional<camera::FramePtr>
 makeCommonFrame(const DataStreamFrame& source) {
     if (!source.imagePresent.value_or(false) ||
         source.incomplete ||
-        source.containsChunkData.value_or(false) ||
+        !source.containsChunkData ||
+        *source.containsChunkData ||
         !source.payloadType ||
         *source.payloadType != GenTL::PAYLOAD_TYPE_IMAGE ||
         !source.width || !source.height ||
@@ -31,9 +32,9 @@ makeCommonFrame(const DataStreamFrame& source) {
         return std::nullopt;
     }
 
-    if (source.imageOffset.value_or(0) != 0 ||
-        source.xPadding.value_or(0) != 0 ||
-        source.yPadding.value_or(0) != 0) {
+    if (!source.imageOffset || *source.imageOffset != 0 ||
+        !source.xPadding || *source.xPadding != 0 ||
+        !source.yPadding || *source.yPadding != 0) {
         return std::nullopt;
     }
 

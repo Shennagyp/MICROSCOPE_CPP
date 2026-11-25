@@ -171,19 +171,22 @@ These are logical model boundaries, not separate libraries or mandatory class hi
 
 ### 5.2 Optical topology
 
-A light path is an explicit physical optical route through connected components. Its representation must preserve component identity, connection points and optical order.
+A light path is an explicit physical optical route through installed components. Its representation preserves component identity, physical port adjacency and ordered propagation.
 
-- A component shared by multiple paths has one identity and may participate in multiple paths.
-- A beam splitter or selector may create alternative paths.
+- A physical OpticalConnection is an undirected adjacency between two ports on different components. Endpoint storage order does not encode propagation direction.
+- Ordered OpticalPathStep values determine propagation direction through each component. Entry/exit port capabilities are validated for that direction.
+- One physical connection can be reused by different paths traversing the same adjacency in opposite directions, provided the involved ports support each traversal.
+- A component shared by multiple paths has one EquipmentComponentId and may participate in multiple paths.
+- A beam splitter or selector may create alternative paths using distinct physical ports for the branches.
 - Cameras attach to appropriate output ports/paths, not merely to an objective.
-- The topology describes equipment; it is not a visual node editor.
-- Configuration profiles select valid routes and component states.
+- The topology describes equipment; it is not a visual node editor, executable behavior graph or configuration resolver.
+- Configuration profiles select valid routes and component states in Phase 3.
 
 The model must not assume that all microscopes have the same optical ordering or component inventory.
 
 ### 5.3 Objectives and magnification
 
-Objective records include the specifications needed for compatibility and optical calculations, such as nominal magnification, numerical aperture, working distance and optical correction characteristics.
+ObjectiveSpecification records attach to the installed physical EquipmentComponentId; they do not create a second identity or per-objective behavior class. They include nominal magnification, numerical aperture, working distance, chromatic/field correction, immersion medium and optional design coverglass thickness.
 
 Nominal effective magnification is derived from the relevant optical train, including objective and magnification-affecting relay/tube optics. It is not assumed to be simply the objective marking in every optical design.
 
@@ -197,22 +200,26 @@ Nominal values are estimates until refined by a suitable reference calibration.
 
 ### 5.4 Cameras
 
-Camera equipment data describes:
+CameraSpecification attaches to the installed ImagingDevice EquipmentComponentId. It describes:
 
-- Stable camera identity and sensor specification.
-- Sensor pixel pitch and active dimensions.
-- Supported output modes and pixel formats.
-- Supported resolution, ROI, binning and readout behavior.
-- Capabilities such as exposure, gain and other controls.
-- The optical output/light path to which the camera is connected.
+- Active sensor dimensions and independent X/Y sensor pixel pitch.
+- Supported output modes with unique CameraModeId values and pixel-format codes.
+- Sensor ROI origin/extents, hardware binning factors and delivered image dimensions as distinct data.
+- The net X/Y sensor-pixel-per-delivered-pixel mapping, derived independently from ROI and delivered dimensions.
+- Capability declarations such as exposure/gain only when specified by the installed equipment data.
+- The optical output/light path to which the camera component is connected.
+
+Do not assume sensor pitch alone maps directly to delivered pixels or that horizontal and vertical mapping ratios are equal.
 
 The adapter supplies actual device capabilities and observations. The Core validates them against the definition and requested configuration.
 
 ### 5.5 Illumination and condenser
 
-Illumination sources, control ranges and condenser specifications are modeled independently. Configuration profiles define compatible illumination and condenser arrangements for objectives and contrast methods.
+IlluminationSpecification attaches to an installed IlluminationDevice component and contains one or more independently identified channels. A channel may declare a spectral band and intensity-control kind; continuous control requires a finite range with explicit units. One source can therefore expose multiple channels with different spectra and control semantics.
 
-The model must not assume that illumination settings are a property of an objective class. They are configuration relationships between the objective, optical path, contrast method, condenser and illumination system.
+CondenserSpecification attaches to an installed OpticalElement component and declares design, immersion medium, aperture NA range and optional working distance. The minimum aperture NA may be zero; it must not exceed the positive maximum.
+
+Illumination and condenser data remain independent of objective classes. Configuration profiles define compatibility and selection relationships between objective, optical path, contrast method, condenser and illumination system in Phase 3.
 
 ### 5.6 Stage and axes
 
@@ -223,16 +230,18 @@ A stage contains a collection of axes. An axis has a motion type and unit:
 
 XYZ are common axis identifiers, not a hard limit on the model.
 
-Axis specifications focus on motion capability and measured performance, not mechanical construction details. Relevant properties include:
+StageSpecification attaches to an installed MechanicalAssembly component and contains one or more uniquely identified AxisSpecification values. Axis specifications focus on motion capability and measured performance, not mechanical construction details. Relevant properties include:
 
-- Motion type and coordinate unit.
-- Operating range and limits.
-- Nominal command/readout resolution.
-- Accuracy.
-- Precision/repeatability, with test conditions.
-- Position feedback capability and its measurement location/provenance.
-- Measurement uncertainty.
-- Calibration identity and validity.
+- Motion type (linear/rotary/other/unknown) and coordinate unit.
+- Finite signed operating range and limits.
+- Positive nominal command/readout resolution.
+- Optional independently measured accuracy (maximum absolute error) with test conditions.
+- Optional precision/repeatability with its metric and test conditions.
+- Optional measurement uncertainty with test conditions.
+- Position feedback capability and measurement location/provenance.
+- Calibration identity and validity, added with calibration behavior in Phase 6.
+
+Accuracy, precision/repeatability, nominal resolution and uncertainty are distinct. Unknown metrics remain absent or explicitly unknown; they are never inferred from one another.
 
 Resolution, accuracy, precision and repeatability are not interchangeable. Nominal resolution does not establish physical accuracy. Accuracy must not be calculated by blindly multiplying component specifications.
 

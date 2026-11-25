@@ -44,7 +44,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure platform-only project
+      - name: Configure Core standalone
+        run: cmake -S Libraries/Microscope.Core -B build/core -DBUILD_TESTING=ON
+        shell: bash
+
+      - name: Build Core standalone
+        run: cmake --build build/core --config Release --parallel
+        shell: bash
+
+      - name: Test Core standalone
+        run: ctest --test-dir build/core -C Release --output-on-failure
+        shell: bash
+
+      - name: Configure Application standalone
+        run: cmake -S Libraries/Microscope.Application -B build/application -DBUILD_TESTING=ON
+        shell: bash
+
+      - name: Build Application standalone
+        run: cmake --build build/application --config Release --parallel
+        shell: bash
+
+      - name: Test Application standalone
+        run: ctest --test-dir build/application -C Release --output-on-failure
+        shell: bash
+
+      - name: Configure root platform-only composition
         run: |
           cmake -S . -B build/platform \
             -DOPTIKA_BUILD_AMSCOPE=OFF \
@@ -52,10 +76,10 @@ jobs:
             -DBUILD_TESTING=ON
         shell: bash
 
-      - name: Build Core and Application
+      - name: Build root platform-only composition
         run: cmake --build build/platform --config Release --parallel
         shell: bash
 
-      - name: Run platform contract tests
+      - name: Test root platform-only composition
         run: ctest --test-dir build/platform -C Release --output-on-failure
         shell: bash

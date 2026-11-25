@@ -57,6 +57,7 @@ namespace {
 
 [[nodiscard]] bool isKnownStepEvent(StepLifecycleEvent value) noexcept {
     switch (value) {
+    case StepLifecycleEvent::DispatchPreconditionFailed:
     case StepLifecycleEvent::CommandDispatched:
     case StepLifecycleEvent::AdapterAccepted:
     case StepLifecycleEvent::AdapterRejected:
@@ -288,6 +289,10 @@ Result<
 
     switch (current) {
     case StepStatus::Pending:
+        if (event == StepLifecycleEvent::DispatchPreconditionFailed) {
+            return Result<StepStatus, StepLifecycleError>::success(
+                StepStatus::Failed);
+        }
         if (event == StepLifecycleEvent::CommandDispatched) {
             return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::Dispatched);

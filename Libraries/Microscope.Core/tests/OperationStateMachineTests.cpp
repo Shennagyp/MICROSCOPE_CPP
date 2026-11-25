@@ -113,6 +113,20 @@ void testDeviceActionCompletionDoesNotVerifyStep() {
     check(observed && observed.value() == StepStatus::Verifying,
           "moves to verification after receiving a state observation");
 
+    auto estimateVerification = applyStepLifecycleEvent(
+        StepStatus::AwaitingObservation,
+        StepLifecycleEvent::VerificationStarted);
+    check(estimateVerification &&
+          estimateVerification.value() == StepStatus::Verifying,
+          "allows Core to begin verification after evaluating a bounded command-derived position estimate");
+
+    auto prematureEstimateVerification = applyStepLifecycleEvent(
+        StepStatus::AdapterAccepted,
+        StepLifecycleEvent::VerificationStarted);
+    check(!prematureEstimateVerification &&
+          prematureEstimateVerification.error() == StepLifecycleError::TransitionNotAllowed,
+          "does not allow estimate-based verification before device action completion");
+
     auto verified = applyStepLifecycleEvent(
         StepStatus::Verifying,
         StepLifecycleEvent::VerificationSucceeded);

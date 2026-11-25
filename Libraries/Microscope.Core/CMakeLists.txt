@@ -7,6 +7,8 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     include(CTest)
 endif()
 
+find_package(Threads REQUIRED)
+
 add_library(microscope_core STATIC
     src/Identity.cpp
     src/OpticalTopology.cpp
@@ -21,6 +23,8 @@ add_library(microscope_core STATIC
     src/ConfigurationTransition.cpp
     src/OperationStateMachine.cpp)
 add_library(Microscope::Core ALIAS microscope_core)
+
+target_link_libraries(microscope_core PUBLIC Threads::Threads)
 
 target_compile_features(microscope_core PUBLIC cxx_std_17)
 target_include_directories(microscope_core

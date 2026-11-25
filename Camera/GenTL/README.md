@@ -1,0 +1,110 @@
+# GenTL Provider Adapter
+
+This directory implements the Camera Module's optional GenTL provider path. It is a second backend alongside the native AmScope provider; it does not replace or wrap the AmScope SDK.
+
+## Runtime boundary
+
+`ConsumerBridge` loads the separately built `libGenTLConsumerCAPI.dylib`. It validates:
+- bridge ABI version 1;
+- GenTL header version 1.6.
+
+The C++ adapter does not load CTI files itself and does not implement a second GenTL function table. The existing Swift Consumer owns CTI loading and GenTL function dispatch. The C++ adapter calls that Consumer through the versioned C ABI.
+
+The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0`. Its actual dylib build/load and C++ interoperability are still a separate validation gate; C++ CI currently uses a mock C ABI bridge.
+
+## Build
+
+Build the C++ adapter and mock tests independently of the AmScope target:
+
+```sh
+cmake -S Camera/GenTL -B build/gentl -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build/gentl --parallel
+ctest --test-dir build/gentl --output-on-failure
+```
+
+To enable the optional GenApi 3.5.1 integration, install the official GenApi SDK and set its root:
+
+```sh
+cmake -S Camera/GenTL -B build/gentl-genapi \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=ON \
+  -DCAMERA_GENTL_ENABLE_GENAPI=ON \
+  -DGENAPI_ROOT=/path/to/GenApi-3.5.1-Mac64_Universal
+```
+
+The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. It has not yet been compiled against the official SDK in CI.
+
+## Current C++ API
+
+```cpp
+#include "camera/gentl/Producer.h"
+
+auto bridge = camera::gentl::ConsumerBridge::load(
+    "/path/to/libGenTLConsumerCAPI.dylib");
+
+auto producer = camera::gentl::Producer::open(
+    bridge, "/path/to/vendor.cti");
+
+const auto devices = producer.discover(); // timeout argument is milliseconds
+auto device = producer.openDevice(devices.at(0));
+
+const auto streamIds = device.dataStreamIds();
+auto stream = device.openDataStream(streamIds.at(0), 4);
+stream.start();
+
+if (auto frame = stream.nextFrame(1000)) {
+    // frame->payload is an independent copy; the GenTL buffer is requeued.
+    // Optional metadata remains optional when the Producer does not report it.
+}
+
+stream.stop();
+device.close();
+```
+
+Ownership and lifecycle:
+- `Producer` owns shared TL/Consumer state.
+- `DeviceSession` retains its device handle and remote port; it can outlive the `Producer` wrapper.
+- `DataStreamSession` retains the device state; it can outlive the `DeviceSession` wrapper.
+- Each stream has a bounded announced-buffer set (1–64; the Producer's minimum is enforced).
+- Acquisition uses `EVENT_NEW_BUFFER`, `EventGetData`, typed buffer metadata queries and explicit requeue.
+- `nextFrame(timeoutMilliseconds)` permits one waiter per stream. It returns `nullopt` on timeout.
+- Payload bytes are copied before the announced buffer is requeued. This avoids exposing a pointer whose contents the Producer may overwrite on the next acquisition.
+- GenTL timeout arguments are nanoseconds; the public discovery and frame-wait APIs accept milliseconds and convert with overflow checks.
+- Cleanup stops acquisition, unregisters the event (which drains active event reads), flushes the queue, revokes buffers and closes the stream.
+- If cleanup fails, the native context and C ABI bridge are retained for process lifetime. They are not unloaded while CTI handles may still exist.
+
+`DataStreamFrame` currently preserves payload bytes, frame ID, nanosecond timestamp, PFNC/other pixel-format identifier and namespace, dimensions, image-present state and incomplete-buffer state. It is a GenTL-layer result; mapping all GenTL pixel layouts into the backend-neutral `camera::Frame` contract is still outstanding.
+
+## Device port and GenApi XML
+
+The adapter exposes remote-port read/write and retrieves GenApi XML using:
+- `LOCAL`: reads the register-map XML in bounded chunks from the advertised register address;
+- `FILE`: reads the advertised local file after size validation.
+
+HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
+
+`GenApiPort` and `GenApiNodeMap` are optional source integrations. The next GenApi work is to compile them against the official SDK, load actual device XML, and expose typed GenApi nodes through the Common feature contract. A GenApi command/action adapter remains separate from feature read/write access.
+
+## Current implementation and evidence
+
+Implemented:
+- version-checked dynamic C ABI bridge;
+- CTI initialization and TL/interface/device discovery;
+- retained interface/device lifetime and device opening;
+- stream ID discovery and stream acquisition lifecycle;
+- bounded buffer announcement/queue/requeue/drain;
+- frame payload copying and basic GenTL buffer metadata;
+- remote-port read/write and `LOCAL`/`FILE` GenApi XML retrieval;
+- process-lifetime retention after cleanup failure.
+
+Mock CI: [workflow #45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203), commit `549433466098c5daeb63d72609776d958a35c2fe`. Both Intel x86_64 and Apple Silicon arm64 passed 2/2 CTest tests and architecture checks. The tests cover the mock bridge, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, and quarantine retention.
+
+Not yet validated:
+- the real Swift `libGenTLConsumerCAPI.dylib` (its latest workflow attempt was cancelled before build/test steps);
+- a vendor CTI Producer;
+- a physical GenTL camera;
+- actual GenTL payload/metadata behavior under acquisition;
+- GenApi SDK compilation, XML parsing and feature mapping;
+- external consumer packaging and deployment of the C ABI dylib/Swift runtime.
+
+A passing mock workflow is software evidence only. It is not a real CTI or hardware qualification.

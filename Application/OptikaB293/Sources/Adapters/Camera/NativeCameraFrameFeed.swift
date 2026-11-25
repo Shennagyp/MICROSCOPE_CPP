@@ -1,9 +1,8 @@
 import Foundation
 
-/// The latest frame lease and acquisition counters observed for one UI notification.
+/// The latest frame lease and dropped-frame counter observed for one UI notification.
 struct NativeCameraFrameSnapshot {
     let lease: AmscopeFrameLease?
-    let framesPulled: UInt64
     let droppedFrames: UInt64
 }
 
@@ -20,12 +19,10 @@ extension AmscopeNativeCameraBridge: NativeCameraFrameFeed {
     }
 
     func takeLatestFrameSnapshot() -> NativeCameraFrameSnapshot {
-        let framesPulled = self.framesPulled
         let droppedFrames = self.droppedFrames
         let lease = takeLatestFrame()
         return NativeCameraFrameSnapshot(
             lease: lease,
-            framesPulled: framesPulled,
             droppedFrames: droppedFrames
         )
     }

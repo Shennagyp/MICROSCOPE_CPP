@@ -41,6 +41,7 @@ set(OPTIKA_APP_SOURCES
     Sources/Presentation/Workspace/Dock/SmartGalleryDock.swift
     Sources/Features/Slides/SlideOverlayModels.swift
     Sources/Presentation/Preview/NativeSlideToolMode.swift
+    Sources/Presentation/Preview/PreviewFrameRateMeter.swift
     Sources/Presentation/Preview/NativeMicroscopePaneControls.swift
     Sources/Presentation/Preview/NativeDualPreviewSurface.swift
     Sources/Presentation/Preview/NativeSlidePreviewPane.swift
@@ -124,4 +125,15 @@ if(BUILD_TESTING)
     target_link_libraries(optika_automatic_resolution_policy_tests PRIVATE
         "${OPTIKA_FOUNDATION_FRAMEWORK}")
     add_test(NAME optika_automatic_resolution_policy_tests COMMAND optika_automatic_resolution_policy_tests)
+
+    add_executable(optika_preview_frame_rate_meter_tests
+        Sources/Presentation/Preview/PreviewFrameRateMeter.swift
+        Tests/PreviewFrameRateMeterTests.swift)
+    target_compile_options(optika_preview_frame_rate_meter_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:Swift>:-swift-version>"
+        "$<$<COMPILE_LANGUAGE:Swift>:5>")
+    target_link_libraries(optika_preview_frame_rate_meter_tests PRIVATE
+        "${OPTIKA_FOUNDATION_FRAMEWORK}")
+    add_test(NAME optika_preview_frame_rate_meter_tests
+        COMMAND optika_preview_frame_rate_meter_tests)
 endif()

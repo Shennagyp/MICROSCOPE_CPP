@@ -380,3 +380,35 @@ At most one objective specification and one camera specification may be attached
 
 These are equipment-definition facts only. Actual camera capabilities, active output mode, current exposure, gain, online/offline status and readback observations remain runtime/adapter data. JSON loading remains an Application responsibility in Phase 5.
 
+## 13. Phase 2C illumination and condenser specification contract
+
+### 13.1 Illumination source and channels
+
+IlluminationSpecification is attached to the installed IlluminationDevice EquipmentComponentId. One physical source may expose multiple independently identified IlluminationChannel values.
+
+A source specification stores a technology classification (LED, halogen, xenon arc, mercury arc, laser, other or unknown) and at least one channel. Each channel stores:
+- Stable IlluminationChannelId, unique within the source.
+- Optional SpectralBand with positive minimum and maximum wavelengths in nanometers; absent means that the static definition does not specify a band.
+- IntensityControlKind: Fixed, Continuous, DeviceDefined or Unknown.
+- For Continuous control, a required IlluminationIntensityRange with minimum/maximum and an explicit unit (percent, milliamperes, milliwatts, relative or device-defined).
+
+A continuous range must contain finite, non-negative values with maximum greater than minimum. Units are part of the record; values from different units are not compared. A non-continuous control kind cannot carry a continuous range. A continuous channel cannot omit its range.
+
+This model supports multi-channel sources without assuming that every channel shares the same spectrum or control range. Actual online status, selected channel, current intensity, device readback and adapter-specific command semantics remain runtime data.
+
+### 13.2 Condenser specification
+
+CondenserSpecification is attached to an installed OpticalElement component. It stores:
+- Minimum and maximum aperture numerical aperture.
+- Design classification (Abbe, achromatic, achromat-aplanatic, other or unknown).
+- Immersion medium (air, water, oil, other or unknown).
+- Optional working distance in micrometers.
+
+The minimum aperture NA is non-negative (zero is valid for a fully closed aperture); the maximum is positive. Minimum cannot exceed maximum. The specification does not select a phase ring, DIC prism, polarizer, analyzer or illumination state. Those are independent installed components and their compatibility/selection belongs to Phase 3 declarative configuration.
+
+### 13.3 Aggregate binding
+
+MicroscopeEquipmentDefinition may carry condenser and illumination specifications. A condenser specification must reference an installed OpticalElement; an illumination specification must reference an installed IlluminationDevice. Each component has at most one record of each corresponding specialization. Unknown component references and kind mismatches are rejected.
+
+No current control state, observed aperture position, measured brightness or device discovery is stored in the equipment definition. JSON loading remains an Application responsibility in Phase 5.
+

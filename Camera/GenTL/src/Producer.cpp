@@ -94,6 +94,52 @@ std::optional<std::string> readOptionalInfoString(ReadOperation&& operation) {
     return std::string(bytes.begin(), terminator);
 }
 
+template <typename Invoke>
+std::string readPortUrlString(Invoke&& invoke, GenTL::PORT_HANDLE port,
+                              std::uint32_t index, GenTL::URL_INFO_CMD command) {
+    GenTL::INFO_DATATYPE type = GenTL::INFO_DATATYPE_UNKNOWN;
+    std::size_t required = 0;
+    auto status = invoke(Operation::gcGetPortURLInfo,
+                         port, index, command, &type, nullptr, &required);
+    if (status != GenTL::GC_ERR_BUFFER_TOO_SMALL &&
+        status != GenTL::GC_ERR_SUCCESS) check(status, "GCGetPortURLInfo(StringSize)");
+    if (type != GenTL::INFO_DATATYPE_STRING ||
+        required == 0 || required > maximumStringBytes)
+        throw std::runtime_error("GCGetPortURLInfo returned invalid string metadata.");
+
+    std::vector<char> bytes(required, '\\0');
+    std::size_t capacity = bytes.size();
+    status = invoke(Operation::gcGetPortURLInfo,
+                    port, index, command, &type, bytes.data(), &capacity);
+    check(status, "GCGetPortURLInfo(String)");
+    if (type != GenTL::INFO_DATATYPE_STRING ||
+        capacity == 0 || capacity > bytes.size())
+        throw std::runtime_error("GCGetPortURLInfo returned an invalid string length.");
+    bytes.back() = '\\0';
+    const auto terminator = std::find(bytes.begin(), bytes.end(), '\\0');
+    if (terminator == bytes.end())
+        throw std::runtime_error("GCGetPortURLInfo returned an unterminated string.");
+    return std::string(bytes.begin(), terminator);
+}
+
+template <typename T, typename Invoke>
+T readPortUrlValue(Invoke&& invoke, GenTL::PORT_HANDLE port,
+                   std::uint32_t index, GenTL::URL_INFO_CMD command,
+                   GenTL::INFO_DATATYPE expectedType) {
+    GenTL::INFO_DATATYPE actualType = GenTL::INFO_DATATYPE_UNKNOWN;
+    T value{};
+    std::size_t size = sizeof(T);
+    const auto status = invoke(Operation::gcGetPortURLInfo,
+                               port, index, command, &actualType, &value, &size);
+    check(status, "GCGetPortURLInfo(Value)");
+    if (actualType != expectedType || size != sizeof(T))
+        throw std::runtime_error("GCGetPortURLInfo returned a mismatched type or size.");
+    return value;
+}
+
+constexpr std::uint64_t maximumGenApiXmlBytes = 64ULL * 1024ULL * 1024ULL;
+constexpr std::size_t genApiXmlReadChunkBytes = 1024 * 1024;
+
 } // namespace
 
 class ProducerContext final {

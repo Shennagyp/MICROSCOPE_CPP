@@ -381,9 +381,14 @@ final class NativeSlidePreviewPane: NSView {
     }
 
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
+        let previousInputRate = inputFrameRateMeter.framesPerSecond
+        let previousDroppedCount = droppedFrameCount
         inputFrameRateMeter.record(pulled, at: ProcessInfo.processInfo.systemUptime)
         droppedFrameCount = dropped
-        updateFrameStatisticsLabel()
+        if previousInputRate != inputFrameRateMeter.framesPerSecond ||
+           previousDroppedCount != droppedFrameCount {
+            updateFrameStatisticsLabel()
+        }
     }
 
     func updateMeasurementCalibration(
@@ -437,6 +442,7 @@ final class NativeSlidePreviewPane: NSView {
     func display(_ image: CGImage) {
         let hadImage = imageView.hasImage
         let hadOverlays = imageView.hasOverlays
+        let previousPreviewRate = previewFrameRateMeter.framesPerSecond
 
         previewFrameRateMeter.recordFrame(at: ProcessInfo.processInfo.systemUptime)
         imageView.display(image)
@@ -451,7 +457,9 @@ final class NativeSlidePreviewPane: NSView {
             updateToolButtonStates()
         }
 
-        updateFrameStatisticsLabel()
+        if previousPreviewRate != previewFrameRateMeter.framesPerSecond {
+            updateFrameStatisticsLabel()
+        }
     }
 
     private func startFrameRateRefreshTimer() {

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -25,7 +26,8 @@ T id(const char* value) {
     return take(T::create(value));
 }
 
-bool waitUntil(const auto& predicate) {
+template <typename Predicate>
+bool waitUntil(Predicate predicate) {
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::seconds(2);
     while (std::chrono::steady_clock::now() < deadline) {

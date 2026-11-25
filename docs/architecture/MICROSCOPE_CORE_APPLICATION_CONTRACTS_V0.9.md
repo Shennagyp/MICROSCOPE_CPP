@@ -82,6 +82,8 @@ Use named quantity types or an explicit value-plus-unit representation with a do
 
 Serialized records carry explicit unit identifiers or a schema-defined unit. Conversion occurs at named boundaries. Do not create a general dimensional-analysis framework until actual operations require one.
 
+These are representation conventions, not a requirement to add unused quantity wrappers in Phase 1. Introduce a concrete named quantity value with the first domain model that consumes it; do not create a broad generic unit system in advance.
+
 Validate numeric finiteness and applicable ranges. Resolution, accuracy, precision, repeatability and uncertainty remain distinct. Conversion does not imply measurement accuracy. Device-native units remain in adapter translation code unless explicitly modeled as a reported domain observation.
 
 ## 4. Result, error and diagnostic conventions

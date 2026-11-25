@@ -2,6 +2,9 @@
 #include "microscope/core/equipment/IlluminationSpecifications.h"
 
 #include <iostream>
+#include <limits>
+#include <optional>
+#include <string>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>

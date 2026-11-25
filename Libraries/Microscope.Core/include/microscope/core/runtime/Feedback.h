@@ -30,12 +30,54 @@ enum class ObservationSource {
     Unknown
 };
 
-// Present only when the adapter has a valid tick rate. ticksPerSecond must
-// be greater than zero; absence of a timestamp is represented by nullopt.
-struct DeviceTimestamp final {
-    std::uint64_t ticks;
-    std::uint64_t ticksPerSecond;
-    std::optional<std::string> clockDomain;
+enum class DeviceTimestampError {
+    ZeroTickRate
+};
+
+// A device timestamp is constructible only with an explicit positive tick
+// rate. Absence of a timestamp is represented by nullopt.
+class DeviceTimestamp final {
+public:
+    [[nodiscard]] static Result<DeviceTimestamp, DeviceTimestampError> create(
+        std::uint64_t ticks,
+        std::uint64_t ticksPerSecond,
+        std::optional<std::string> clockDomain = std::nullopt) {
+        if (ticksPerSecond == 0) {
+            return Result<DeviceTimestamp, DeviceTimestampError>::failure(
+                DeviceTimestampError::ZeroTickRate);
+        }
+
+        return Result<DeviceTimestamp, DeviceTimestampError>::success(
+            DeviceTimestamp(
+                ticks,
+                ticksPerSecond,
+                std::move(clockDomain)));
+    }
+
+    [[nodiscard]] std::uint64_t ticks() const noexcept {
+        return ticks_;
+    }
+
+    [[nodiscard]] std::uint64_t ticksPerSecond() const noexcept {
+        return ticksPerSecond_;
+    }
+
+    [[nodiscard]] const std::optional<std::string>& clockDomain() const noexcept {
+        return clockDomain_;
+    }
+
+private:
+    DeviceTimestamp(
+        std::uint64_t ticks,
+        std::uint64_t ticksPerSecond,
+        std::optional<std::string> clockDomain)
+        : ticks_(ticks),
+          ticksPerSecond_(ticksPerSecond),
+          clockDomain_(std::move(clockDomain)) {}
+
+    std::uint64_t ticks_;
+    std::uint64_t ticksPerSecond_;
+    std::optional<std::string> clockDomain_;
 };
 
 struct RuntimeDeviceCorrelation final {
@@ -80,11 +122,9 @@ enum class FeedbackSubmitStatus {
     Closed
 };
 
-// Implementations are thread-safe. submit() transfers ownership of the
-// normalized message to the ingress. QueueFull/Closed must be surfaced to
-// the runtime; silent loss must never allow an operation to verify.
 // Core-owned receipt metadata. This uses the Core process monotonic clock,
-// not the device clock carried in FeedbackMetadata.
+// not the device clock carried in FeedbackMetadata. ingressSequence starts at
+// one and increases within one runtime generation.
 struct FeedbackReceiptMetadata final {
     std::chrono::steady_clock::time_point receivedAt;
     std::uint64_t ingressSequence;
@@ -96,6 +136,9 @@ struct FeedbackReceipt final {
     FeedbackReceiptMetadata receipt;
 };
 
+// Implementations are thread-safe. submit() transfers ownership of the
+// normalized message to the ingress. QueueFull/Closed must be surfaced to
+// the runtime; silent loss must never allow an operation to verify.
 template <typename TPayload>
 class IFeedbackIngress {
 public:

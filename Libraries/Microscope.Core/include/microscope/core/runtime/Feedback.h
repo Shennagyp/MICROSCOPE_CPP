@@ -243,6 +243,41 @@ private:
     std::optional<DeviceTimestamp> deviceTimestamp_;
 };
 
+// Identity of the currently executing operation step. An omitted command
+// ID in an action-completion fact is allowed by contract; when a feedback item
+// supplies a command ID it must match the command currently bound to this step.
+class ActiveOperationStepBinding final {
+public:
+    static ActiveOperationStepBinding create(OperationCorrelation currentStep) {
+        return ActiveOperationStepBinding(std::move(currentStep));
+    }
+
+    const OperationCorrelation& identity() const noexcept {
+        return identity_;
+    }
+
+    bool matches(const OperationCorrelation& candidate) const noexcept {
+        if(identity_.operationId!=candidate.operationId ||
+           identity_.stepId!=candidate.stepId)
+            return false;
+        if(candidate.commandId) {
+            return identity_.commandId &&
+                   *identity_.commandId==*candidate.commandId;
+        }
+        return true;
+    }
+
+    bool matches(const FeedbackMetadata& feedback) const noexcept {
+        const auto& operation=feedback.correlation().operation;
+        return operation && matches(*operation);
+    }
+
+private:
+    explicit ActiveOperationStepBinding(OperationCorrelation currentStep)
+        :identity_(std::move(currentStep)) {}
+    OperationCorrelation identity_;
+};
+
 // Immutable identity of the currently open logical-device session.
 // Reopening a DeviceId creates a new generation; callbacks retaining an older
 // RuntimeDeviceCorrelation no longer match this binding.

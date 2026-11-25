@@ -128,7 +128,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 3 — Declarative configuration
 
-**In progress — 3A implemented and cross-platform validated**
+**In progress — 3A validated; 3B source implemented, CI pending**
 
 **Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
 
@@ -148,6 +148,16 @@ The equipment definition now describes installed topology and static capabilitie
 - Resolution returns either the immutable accepted request or stable Error diagnostics. It does not access current runtime state, issue hardware commands or claim hardware completion.
 - Added contract tests for a valid brightfield path, separate illumination/imaging paths, unavailable camera modes/channels, profile conflicts, missing paths, required path components and invalid request/profile/catalog values.
 - Cross-platform CI passed on Ubuntu GCC, Windows MSVC and macOS Clang for Core standalone, Application standalone and root platform-only builds/tests: [GitHub Actions run 85](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45597867770).
+
+**Phase 3B committed source progress — cross-platform validation pending**
+- Added OpticalElementFunction and OpticalFunctionCapability on installed optical components, including phase plate/annulus, polarizer, analyzer, DIC prism, excitation/emission filters, dichroic mirror and darkfield stop.
+- Added optional OpticalCompatibilityId on capabilities so mating optical components can be matched by data rather than class behavior.
+- Added OpticalFunctionRequirement to profiles with optional compatibility identity and minimum distinct-component count. Duplicate function/compatibility requirements and zero counts are rejected.
+- Extended ConfigurationRequest with explicit additional optical component selections. Duplicate selections and overlap with the primary objective/condenser selections are rejected.
+- Resolver verifies each additional selection is installed, is an OpticalElement, belongs to a selected path and satisfies at least one optical-function requirement in the selected profile.
+- Resolver counts required functions across the selected objective, condenser and additional optical components. One physical component counts once; compatibility identity must match exactly when specified.
+- Added data-driven phase-contrast and DIC tests: matched phase plate/annulus; matched polarizer/analyzer and two DIC prisms; negative cases for mismatched phase compatibility, missing prism count and unrelated additional optical component selection.
+- Cross-platform CI for the complete 3B source/test head is pending.
 
 **Implementation constraints**
 - Objective, contrast method, optical path, camera mode and illumination remain independent dimensions. The resolver combines them; behavior is not implemented in Objective4x/PhaseObjective/DICObjective subclasses.

@@ -24,6 +24,13 @@ makeCommonFrame(const DataStreamFrame& source) {
         source.incomplete ||
         !source.containsChunkData ||
         *source.containsChunkData ||
+        !source.dataLargerThanBuffer ||
+        *source.dataLargerThanBuffer ||
+        !source.isComposite ||
+        *source.isComposite ||
+        !source.deliveredImageHeight ||
+        !source.height ||
+        *source.deliveredImageHeight != *source.height ||
         !source.payloadType ||
         *source.payloadType != GenTL::PAYLOAD_TYPE_IMAGE ||
         !source.width || !source.height ||

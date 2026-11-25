@@ -823,6 +823,29 @@ ConfigurationResolution ConfigurationResolver::resolve(
                     "A selected additional optical component is not an optical element.",
                     "EquipmentComponent",
                     additionalComponentId.value());
+            } else {
+                const bool allowedByProfile = std::any_of(
+                    profile->requiredOpticalFunctions().begin(),
+                    profile->requiredOpticalFunctions().end(),
+                    [component](const OpticalFunctionRequirement& requirement) {
+                        return std::any_of(
+                            component->opticalFunctions().begin(),
+                            component->opticalFunctions().end(),
+                            [&requirement](const OpticalFunctionCapability& capability) {
+                                return capability.function() == requirement.function() &&
+                                       (!requirement.compatibilityId() ||
+                                        capability.compatibilityId() ==
+                                            requirement.compatibilityId());
+                            });
+                    });
+                if (!allowedByProfile) {
+                    appendError(
+                        diagnostics,
+                        "configuration.additional_optical_component.not_allowed_by_profile",
+                        "The selected additional optical component does not satisfy any optical-function requirement in the selected profile.",
+                        "EquipmentComponent",
+                        additionalComponentId.value());
+                }
             }
             requireOnSelectedPaths(
                 additionalComponentId,

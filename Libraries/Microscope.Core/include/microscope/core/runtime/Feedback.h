@@ -192,9 +192,11 @@ struct FeedbackReceipt final {
     FeedbackReceiptMetadata receipt;
 };
 
-// Implementations are thread-safe. submit() transfers ownership of the
-// normalized message to the ingress. QueueFull/Closed must be surfaced to
-// the runtime; silent loss must never allow an operation to verify.
+// Implementations are thread-safe. Enqueued means the ingress owns the
+// message. On QueueFull, the ingress itself must latch feedback loss/unknown
+// device state before returning; it cannot rely on a later adapter callback
+// to report the drop. The runtime cannot verify affected work until it has
+// reconciled the lost-feedback condition. Closed identifies a disposed ingress.
 template <typename TPayload>
 class IFeedbackIngress {
 public:

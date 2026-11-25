@@ -360,20 +360,17 @@ TimeoutElapsed is produced by the Core runtime's deadline mechanism. An adapter 
 
 ### 7.3 Feedback envelope and correlation
 
-Every adapter feedback item must carry enough information to associate it with the pending work:
+Every adapter feedback item carries a runtime/device scope:
 
-- Microscope/runtime identity.
-- Operation ID.
-- Step ID.
-- Command ID, where the feedback relates to a dispatched command.
-- Logical device ID.
-- Monotonic sequence/generation information for ordering and stale-event rejection.
-- Observation or event kind.
-- Source/provenance.
-- Timestamp of receipt; device timestamp when available.
-- Typed payload or normalized diagnostic.
+- MicroscopeId.
+- RuntimeId and RuntimeGeneration.
+- Logical DeviceId.
 
-The Core uses these identifiers to reject duplicate, stale, unrelated or late feedback. A callback from a previous operation must not update the current operation merely because it concerns the same device.
+Feedback associated with an active operation additionally carries OperationId and StepId as one indivisible correlation, plus CommandId where related to a dispatched command. Unsolicited telemetry has no operation correlation; it cannot satisfy an active operation's completion predicate.
+
+Every item also carries observation/event kind, source/provenance, optional adapter/device source sequence, optional device timestamp with its clock domain, and a typed payload or normalized diagnostic. The Core stamps receipt time using its monotonic clock and assigns its own ingress sequence.
+
+The Core uses these identifiers/generations to reject duplicate, stale, unrelated or late feedback. A callback from a previous operation or runtime generation must not update the current operation merely because it concerns the same physical device.
 
 ### 7.4 Observation provenance
 

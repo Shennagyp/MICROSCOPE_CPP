@@ -3,6 +3,7 @@
 #include "camera/CameraCommandAccess.h"
 #include "camera/gentl/GenApiNodeMap.h"
 
+#include <memory>
 #include <string_view>
 
 namespace camera::gentl {

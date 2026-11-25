@@ -1,5 +1,6 @@
 #pragma once
 #include "microscope/core/navigation/DualSlideNavigation.h"
+#include "microscope/core/motion/StagePositionState.h"
 #include <variant>
 
 namespace microscope::core {
@@ -39,6 +40,7 @@ enum class StageNavigationPlanningError {
     TransverseUnitMismatch,
     SlideNotInCarrier,
     SlideNotRegistered,
+    SlidePointOutsideGeometry,
     RegistrationChanged,
     InvalidStageCoordinate,
     OutsideStageTravel,
@@ -57,6 +59,24 @@ public:
         const SlideNavigationTarget& target,
         const StageAxisPositionState& horizontal,
         const StageAxisPositionState& transverse,
+        const StageHomingPolicy& policy);
+
+    // Application-facing entry point: creates the revision-bound target
+    // from the selected SlideId and slide-local coordinate, then plans against
+    // the one stage-scoped X/Y aggregate.
+    static Result<StageNavigationPlan,StageNavigationPlanningError> planToSlidePoint(
+        const DualSlideCarrierState& carrier,
+        const SlideId& slideId,
+        SlideLocalPoint point,
+        const StagePositionState& position,
+        const StageHomingPolicy& policy);
+
+    // Aggregate overload prevents callers from combining X/Y states from
+    // different installed stages after homing.
+    static Result<MoveAxesTo,StageNavigationPlanningError> resolveAfterHoming(
+        const DualSlideCarrierState& carrier,
+        const SlideNavigationTarget& target,
+        const StagePositionState& position,
         const StageHomingPolicy& policy);
 
     // Call only after the home operation has been verified and both axis states

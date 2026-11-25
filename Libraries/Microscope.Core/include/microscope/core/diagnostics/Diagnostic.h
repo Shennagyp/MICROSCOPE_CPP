@@ -26,7 +26,8 @@ enum class DiagnosticError {
     EmptyCode,
     InvalidCode,
     EmptyMessage,
-    EmptyContextValue
+    InvalidMessage,
+    InvalidContextValue
 };
 
 // A diagnostic has a stable machine-readable code and non-empty display
@@ -53,7 +54,8 @@ public:
             return Result<Diagnostic, DiagnosticError>::failure(
                 DiagnosticError::EmptyCode);
         }
-        if (code.find_first_of(" \t\n\r\f\v") != std::string::npos) {
+        if (code.find_first_of(" \t\n\r\f\v") != std::string::npos ||
+            code.find('\0') != std::string::npos) {
             return Result<Diagnostic, DiagnosticError>::failure(
                 DiagnosticError::InvalidCode);
         }
@@ -61,12 +63,22 @@ public:
             return Result<Diagnostic, DiagnosticError>::failure(
                 DiagnosticError::EmptyMessage);
         }
-        if (context &&
-            ((context->entityType && context->entityType->empty()) ||
-             (context->entityId && context->entityId->empty()) ||
-             (context->fieldPath && context->fieldPath->empty()))) {
+        if (message.find('\0') != std::string::npos) {
             return Result<Diagnostic, DiagnosticError>::failure(
-                DiagnosticError::EmptyContextValue);
+                DiagnosticError::InvalidMessage);
+        }
+
+        const auto invalidContextText = [](const std::optional<std::string>& value) {
+            return value &&
+                (value->find_first_not_of(" \t\n\r\f\v") == std::string::npos ||
+                 value->find('\0') != std::string::npos);
+        };
+        if (context &&
+            (invalidContextText(context->entityType) ||
+             invalidContextText(context->entityId) ||
+             invalidContextText(context->fieldPath))) {
+            return Result<Diagnostic, DiagnosticError>::failure(
+                DiagnosticError::InvalidContextValue);
         }
 
         return Result<Diagnostic, DiagnosticError>::success(

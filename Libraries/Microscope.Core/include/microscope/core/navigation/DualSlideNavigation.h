@@ -11,7 +11,7 @@ namespace microscope::core {
 // OPTIKA dual-slide carrier: two side-by-side slides on one horizontal X/Y
 // stage plane. The transverse in-plane axis is not a vertical slide-stack axis.
 enum class DualSlideSlot { Left, Right };
-enum class SlideNavigationCommandError { InvalidStageCoordinate, OutsideStageTravel, SlideNotInCarrier, SlideNotRegistered };
+enum class SlideNavigationCommandError { InvalidStageCoordinate, OutsideStageTravel, SlideNotInCarrier, SlideNotRegistered, RegistrationChanged };
 struct StagePlanePoint;
 enum class CarrierHorizontalDirection {
     PositiveStageXFromLeftToRight,
@@ -61,6 +61,20 @@ private:
 };
 
 struct SlideLocalPoint final { double xMicrometers; double yMicrometers; };
+class DualSlideCarrierState;
+class SlideNavigationTarget final {
+public:
+    const SlideId& slideId() const noexcept;
+    const SlideLocalPoint& point() const noexcept;
+    const CalibrationRevisionId& registrationRevision() const noexcept;
+private:
+    SlideNavigationTarget(SlideId,SlideLocalPoint,CalibrationRevisionId);
+    SlideId slideId_;
+    SlideLocalPoint point_;
+    CalibrationRevisionId registrationRevision_;
+    friend class DualSlideCarrierState;
+};
+enum class SlideNavigationTargetError { SlideNotInCarrier,SlideNotRegistered,PointOutsideSlide };
 struct StagePlanePoint final { double horizontalMicrometers; double transverseMicrometers; };
 struct SlidePositionEstimate final {
     SlideLocalPoint position;
@@ -100,9 +114,10 @@ enum class SlideRegistrationError {
 class SlideRegistration final {
 public:
     static Result<SlideRegistration,SlideRegistrationError> create(
-        SlideId,DualSlideSlot,SlideGeometry,std::array<SlideCornerMeasurement,4>,
+        SlideId,CalibrationRevisionId,DualSlideSlot,SlideGeometry,std::array<SlideCornerMeasurement,4>,
         double maximumFitResidualMicrometers);
     const SlideId& slideId() const noexcept;
+    const CalibrationRevisionId& revision() const noexcept;
     DualSlideSlot slot() const noexcept;
     const SlideGeometry& geometry() const noexcept;
     const std::array<SlideCornerMeasurement,4>& cornerMeasurements() const noexcept;
@@ -117,9 +132,10 @@ public:
         StagePositionEvidence horizontalEvidence,StagePositionEvidence transverseEvidence,
         ObservationSource horizontalSource,ObservationSource transverseSource) const;
 private:
-    SlideRegistration(SlideId,DualSlideSlot,SlideGeometry,
+    SlideRegistration(SlideId,CalibrationRevisionId,DualSlideSlot,SlideGeometry,
         std::array<SlideCornerMeasurement,4>,std::array<double,6>,std::array<double,4>,double,double,double);
     SlideId slideId_;
+    CalibrationRevisionId revision_;
     DualSlideSlot slot_;
     SlideGeometry geometry_;
     std::array<SlideCornerMeasurement,4> corners_;
@@ -160,6 +176,9 @@ public:
     const SlideSlotState& left() const noexcept;
     const SlideSlotState& right() const noexcept;
     const SlideRegistration* registrationFor(const SlideId&) const noexcept;
+    Result<SlideNavigationTarget,SlideNavigationTargetError> createTarget(
+        const SlideId&,SlideLocalPoint) const;
+    Result<MoveAxesTo,SlideNavigationCommandError> commandFor(const SlideNavigationTarget&) const;
     Result<MoveAxesTo, SlideNavigationCommandError> commandFor(const SlideId&, SlideLocalPoint) const;
     Result<SlidePositionEstimate,CurrentSlidePositionError> currentSlidePosition(
         const SlideId&,const StageAxisPositionState& horizontal,

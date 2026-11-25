@@ -61,6 +61,9 @@ DualSlideCarrierSpecification::create(
 const EquipmentComponentId& DualSlideCarrierSpecification::stageComponentId()const noexcept{return stageComponentId_;}
 const StageAxisId& DualSlideCarrierSpecification::horizontalAxisId()const noexcept{return horizontalAxisId_;}
 const StageAxisId& DualSlideCarrierSpecification::transverseAxisId()const noexcept{return transverseAxisId_;}
+AxisCoordinateUnit DualSlideCarrierSpecification::horizontalUnit()const noexcept{return horizontalUnit_;}
+AxisCoordinateUnit DualSlideCarrierSpecification::transverseUnit()const noexcept{return transverseUnit_;}
+
 CarrierHorizontalDirection DualSlideCarrierSpecification::horizontalDirection()const noexcept{return direction_;}
 
 Result<MoveAxesTo,SlideNavigationCommandError>
@@ -340,8 +343,8 @@ DualSlideCarrierState::currentSlidePosition(
     if(transverse.axisId()!=specification_.transverseAxisId())
         return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
             CurrentSlidePositionError::TransverseAxisMismatch);
-    if(horizontal.unit()!=specification_.horizontalUnit_||
-       transverse.unit()!=specification_.transverseUnit_)
+    if(horizontal.unit()!=specification_.horizontalUnit()||
+       transverse.unit()!=specification_.transverseUnit())
         return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
             CurrentSlidePositionError::AxisUnitMismatch);
     if(!horizontal.positionIsUsable()||!transverse.positionIsUsable()||

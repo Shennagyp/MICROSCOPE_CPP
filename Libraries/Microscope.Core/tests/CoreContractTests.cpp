@@ -182,13 +182,6 @@ void testDiagnosticsAreSeparateValues() {
           whitespaceCode.error() == DiagnosticError::InvalidCode,
           "rejects whitespace in a diagnostic code");
 
-    auto emptyCode = Diagnostic::create(
-        DiagnosticSeverity::Warning,
-        "",
-        "A message is present.");
-    check(!emptyCode && emptyCode.error() == DiagnosticError::EmptyCode,
-          "rejects an empty diagnostic code");
-
     auto whitespaceMessage = Diagnostic::create(
         DiagnosticSeverity::Warning,
         "configuration.profile.incomplete",

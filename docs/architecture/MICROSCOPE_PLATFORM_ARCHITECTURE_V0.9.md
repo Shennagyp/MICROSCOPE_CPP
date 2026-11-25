@@ -707,23 +707,25 @@ The user-facing workspace may show a microscope-scoped collection, but this is a
 
 A Sample has:
 - Stable SampleId.
-- User-facing label or accession/reference where applicable.
-- SampleTypeId.
+- SampleTypeId when classified; an unclassified sample remains representable without inventing a type.
+- User-facing label and optional external accession/reference. An external accession is not the SampleId.
 - Collection/source metadata and timestamps where available.
-- Optional descriptive metadata required by the workflow.
+- Creation/update metadata and optional workflow-specific descriptive metadata.
 
-Sample identity and source metadata must remain independent of slide preparation, microscope identity and acquisition history. A sample can exist before any slide is prepared and may have multiple prepared slides.
+Sample identity and source metadata must remain independent of slide preparation, microscope identity and acquisition history. A sample can exist before any slide is prepared and may have multiple prepared slides. Patient or other source-system identifiers, when present in a particular deployment, are metadata with their own access/retention policy; they must not be used as the platform's primary identity.
 
 ### 11.3 Slide and slide type
 
 A Slide has:
 - Stable SlideId.
-- SampleId identifying its source sample.
-- User-facing label.
-- SlideTypeId.
-- Versioned preparation/configuration snapshot.
-- Local slide-folder identity/location.
-- Acquisition history and tile references.
+- Required SampleId identifying its source sample.
+- SlideTypeId when classified.
+- User-facing label and optional external slide/accession reference.
+- Versioned preparation snapshot, including the SlideType version used.
+- Creation/preparation timestamps where available.
+- A storage/package reference maintained by the persistence adapter.
+
+A Slide does not carry MicroscopeId as ownership metadata. Its acquisition history is obtained through the Slide's AcquisitionRun records, which identify the actual microscope used.
 
 Slide types are reusable preparation templates such as blood film, bone-marrow smear/aspirate preparation, kidney tissue section, liver tissue section or custom preparation types. They describe how material is prepared on the slide, not the source material taxonomy.
 
@@ -731,7 +733,13 @@ A slide receives a preparation/configuration snapshot when created. Updating a r
 
 ### 11.4 Tile semantics and positions
 
-A Tile is the persistent identity of an acquired field/image region within a slide. It can own references to original frames, derived images and acquisition records.
+A Tile has:
+- Stable TileId and owning SlideId.
+- Optional user-facing field label or display-order hint.
+- Optional position observations, each with coordinate frame, units, source and uncertainty/provenance when available.
+- Creation metadata and optional descriptive metadata.
+
+A Tile is the persistent identity of an acquired field/image region within a slide. Its frames are related through ImageFrame.TileId; the Tile does not duplicate frame payload metadata or maintain a second authoritative frame list.
 
 A tile may have physical position metadata when supported by the microscope. Position is optional. The system must support unpositioned fields and must not fabricate physical XYZ coordinates.
 
@@ -751,26 +759,42 @@ Switching or closing a slide during acquisition requires a safe stop/completion 
 
 ### 11.6 Acquisition plan versus run
 
-AcquisitionPlan is the intended sequence and settings. It is immutable once execution starts.
+AcquisitionPlan is the intended sequence and settings for one Slide. It contains:
+- AcquisitionPlanId and SlideId.
+- Requested microscope configuration and acquisition policy.
+- Intended field/tile targets and capture dimensions (for example, focal planes and exposure brackets) where applicable.
+- Plan revision and creation metadata.
 
-AcquisitionRun is the actual execution record, including:
-- Effective microscope configuration.
-- Calibration revisions used.
-- Device observations and actual camera values.
-- Frame identities and timestamps.
-- Stage/focus observations with provenance.
-- Completed, missing and failed steps.
-- Errors, interruptions and recovery status.
+The plan is immutable once execution begins. Editing the intent after execution requires a new plan revision/identity; it must not rewrite the plan already referenced by a run.
 
-A plan must never be recorded as if it were the actual outcome.
+AcquisitionRun is the actual execution record for one Slide and one physical Microscope. It contains:
+- AcquisitionRunId, AcquisitionPlanId, SlideId and actual MicroscopeId.
+- Runtime/operation correlation and start/end timestamps.
+- Outcome/status, including incomplete and partially completed outcomes.
+- Effective microscope configuration and calibration revisions used.
+- Device observations and actual camera values, with provenance.
+- Produced TileIds and ImageFrameIds.
+- Completed, missing and failed steps/frames.
+- Errors, interruptions and recovery checkpoints/status.
+
+A run records what happened, not merely what was planned. The planned settings and actual observed settings remain separately inspectable. A run cannot be reassigned to another Slide or Microscope after execution.
 
 ### 11.7 Frames, Z and exposure
 
 The data model must support irregular acquisition sets, not assume a dense fixed tensor.
 
-Each original ImageFrame has identity, pixel-data reference, source geometry, capture metadata, configuration snapshot and relevant calibration snapshot.
+Each original ImageFrame has:
+- ImageFrameId, AcquisitionRunId and TileId.
+- Immutable pixel-payload reference and integrity metadata.
+- Capture timestamp, delivered pixel dimensions and pixel format.
+- Source camera identity and the applicable readout/ROI/binning context.
+- Actual exposure and other camera settings when supported/reported.
+- Relevant optical configuration/calibration references and source geometry.
+- Position/focus observations when available, preserving source and uncertainty.
 
-Z planes and exposure brackets are explicit relationships. HDR combines exposures for the same field and focal plane; it must not merge different fields or different Z planes. Focus stacking is a separate operation across focal planes. Original frames remain immutable.
+Camera-specific fields remain capability-dependent; an unavailable readback is absent/unknown, not replaced with the requested value. Run-level configuration/calibration references may be inherited by frames when identical; frame-level overrides are recorded when actual capture conditions differ.
+
+Z planes and exposure brackets are explicit relationships or typed capture dimensions, not inferred from array position. HDR combines exposures for the same field and focal plane; it must not merge different fields or different Z planes. Focus stacking is a separate operation across focal planes. Original frames remain immutable.
 
 Incomplete runs are recoverable and marked incomplete.
 

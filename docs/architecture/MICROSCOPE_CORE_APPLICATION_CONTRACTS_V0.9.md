@@ -186,6 +186,8 @@ The OPTIKA B293 dual-slide carrier is declared against one StageSpecification an
 
 Carrier occupancy and registration are runtime state, separate from static equipment definition and persistent Slide identity. Each SlideRegistration has a CalibrationRevisionId and retains its configured maximum fit-residual acceptance limit as well as the observed residuals. A SlideNavigationTarget captures SlideId, slide-local point and registration revision; command generation rejects a changed revision. Re-homing the stage does not restore a slide registration if the physical slide moved in its slot.
 
+StageNavigationPlanner exposes planToSlidePoint as the application-facing entry point: it accepts the carrier, selected SlideId, slide-local point and one StagePositionState aggregate. It creates the revision-bound SlideNavigationTarget and validates slide geometry, carrier registration, installed stage identity and stage travel before selecting direct movement or homing. After a verified home, the aggregate resolveAfterHoming overload validates the same stage identity and saved registration revision before creating the restored absolute command.
+
 StageNavigationPlanner evaluates the per-axis accumulated error against a StageHomingPolicy expressed in micrometers. When both references are valid and within policy it returns a coordinated X/Y MoveAxesTo. If either axis has an invalid reference, unknown error bound or threshold exceedance, it returns HomeAxes for both in-plane axes while preserving the original target. After verified homing, resolveAfterHoming checks fresh position/reference evidence, revalidates the saved registration revision and generates the new absolute machine-coordinate command. The target is not stored as a pre-home machine coordinate.
 
 

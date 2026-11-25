@@ -46,7 +46,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     private let slideTwoPane = NativeSlidePreviewPane(slide: .slide2)
     private weak var frameFeed: NativeCameraFrameFeed?
     private var measurementCalibration: NativeMicroscopeMeasurementCalibration?
-    private var pullFrameRateMeter = FrameRateCounterMeter()
+    private var acquisitionFrameRateMeter = FrameRateCounterMeter()
     private var frameRateRefreshTimer: Timer?
 
     private var activeSlide: NativeSlideID = .slide1
@@ -277,12 +277,12 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     }
 
     private func updateAcquisitionRate(pulledFrames: UInt64) {
-        let previousRate = pullFrameRateMeter.framesPerSecond
-        pullFrameRateMeter.record(
+        let previousRate = acquisitionFrameRateMeter.framesPerSecond
+        acquisitionFrameRateMeter.record(
             pulledFrames,
             at: ProcessInfo.processInfo.systemUptime
         )
-        if previousRate != pullFrameRateMeter.framesPerSecond {
+        if previousRate != acquisitionFrameRateMeter.framesPerSecond {
             publishFrameRate()
         }
     }
@@ -291,11 +291,11 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         guard frameRateRefreshTimer == nil else { return }
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            let previousRate = self.pullFrameRateMeter.framesPerSecond
-            self.pullFrameRateMeter.refresh(
+            let previousRate = self.acquisitionFrameRateMeter.framesPerSecond
+            self.acquisitionFrameRateMeter.refresh(
                 at: ProcessInfo.processInfo.systemUptime
             )
-            if previousRate != self.pullFrameRateMeter.framesPerSecond {
+            if previousRate != self.acquisitionFrameRateMeter.framesPerSecond {
                 self.publishFrameRate()
             }
         }
@@ -304,7 +304,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
     }
 
     private func publishFrameRate() {
-        let framesPerSecond = pullFrameRateMeter.framesPerSecond
+        let framesPerSecond = acquisitionFrameRateMeter.framesPerSecond
         slideOnePane.updateFrameRate(framesPerSecond)
         slideTwoPane.updateFrameRate(framesPerSecond)
     }

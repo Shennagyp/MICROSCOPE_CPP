@@ -224,6 +224,7 @@ The equipment definition now describes installed topology and static capabilitie
 **4B source progress — initial stage/navigation contracts**
 - Added IStageMotionPort with absolute/relative multi-axis movement, homing and controlled stop. Multi-axis intent must be preserved or rejected; the adapter cannot silently serialize it.
 - Added typed motion values, operation/device/command correlation, immediate adapter submission result and normalized position/state/limit/action/fault feedback payloads.
+- Position feedback uses AxisPositionObservation: axis coordinate, measurement class and uncertainty in that coordinate's declared unit. The feedback envelope carries source provenance and correlation separately. Command-derived estimates are produced by Core, not sent back as device measurements.
 - Added DualSlideCarrierSpecification to the installed equipment definition. The OPTIKA arrangement is two horizontal side-by-side slots on one X/Y plane, not a vertical rack.
 - Added independent SlideGeometry/SlideRegistration values. Four measured corners are fitted to an affine mapping; individual residuals and maximum/RMS fit residuals are retained and an acceptance threshold gates registration.
 - Added DualSlideCarrierState with left/right occupancy and separate SlideId registrations. A requested SlideId/local point resolves through its own registration to a common stage-plane target, converts micrometers into the declared X/Y axis units and rejects targets outside installed stage travel.

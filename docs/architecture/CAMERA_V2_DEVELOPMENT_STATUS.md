@@ -2,7 +2,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Current implementation checkpoint:** `5cf5bc352e2df926a2cc0317acaccfd3a912602d`  
+**Current branch HEAD at this refresh:** `e5078d3fe3db8f731bde6539006a09e2526b81d1`  
+**Latest implementation/configuration checkpoint:** `5cf5bc352e2df926a2cc0317acaccfd3a912602d`  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -75,7 +76,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 0 | Freeze and verify baseline | **Accepted by owner historically.** MU503 physical observations exist; follow-up extended/exact-commit evidence does not certify all models. |
 | 1 | Stabilize native AmScope driver | **Accepted by owner historically; hardening open.** Session/queue/worker/cache-flush/frame-lease primitives exist. Full SDK lifecycle injection and callback-quiescence proof remain open. |
 | 2 | Finalize common contracts | **Partially implemented.** Discovery/model and frame/layout slices exist with tests and historical cross-architecture CI. Physical common-frame/RAW qualification is incomplete; Phase 2.3 error/value classification remains. |
-| 3 | Non-Qt API and frame delivery | **In progress.** Non-Qt `AmcamCamera` API and common mailbox exist. Build defaults and CI have now been changed so Qt is optional and not required. Public target/dependency audit and external-consumer validation remain. |
+| 3 | Non-Qt API and frame delivery | **In progress.** Non-Qt `AmcamCamera` API and common mailbox exist. Build defaults and CI now make Qt optional and non-required. CI run [#45651928831](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45651928831) passed on arm64 and x86_64 with all 11 non-Qt CTest targets. Public target/dependency audit and external-consumer validation remain. |
 | 4 | GenTL/GenApi integration | **Blocked.** Existing Swift Consumer has no established C++/C ABI in reviewed source; target CTI Producer and physical CTI camera are required. No reimplementation or synthetic AmScope Producer. |
 | 5 | Capability/feature/command/model coverage | **Open.** Broad implementation exists; reconcile each claim to provider/model support, semantics, readback and hardware evidence. |
 | 6 | Packaging/external consumers | **Open.** Initial install rules exist; exported CMake package and clean installed non-Qt consumer qualification remain. |
@@ -92,7 +93,7 @@ Original-to-current crosswalk: Original 0→0; 1→1; 2→2; 3 (driver/control/Q
 
 Current checkpoint: `5cf5bc352e2df926a2cc0317acaccfd3a912602d`.
 
-These are source/configuration changes, not proof the new workflow has passed. No local build, test or physical-camera run is claimed here. Inspect the next workflow run against its exact commit before recording Phase 3 CI evidence. The expected suite is the common contract tests plus AmScope type, frame-gate, profile, event-queue, session-primitive and watchdog tests; Qt-specific tests are excluded when the legacy adapter is OFF.
+The non-Qt workflow passed at the exact implementation/configuration commit `5cf5bc352e2df926a2cc0317acaccfd3a912602d`: GitHub Actions run [#45651928831](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45651928831) completed successfully on Apple Silicon arm64 and Intel x86_64. Both jobs configured without Qt, compiled the driver and two diagnostic probes, passed **11/11 non-Qt CTest tests**, verified the driver/vendor/probe artifacts and architecture slices, and exercised probe help paths. This is CI evidence for the non-Qt build and automated suite only; no local test or physical-camera run is claimed. A documentation-only commit after the tested revision does not change the validated implementation.
 
 ## 6. Highest-priority unresolved risks
 

@@ -44,6 +44,10 @@ public:
     void writePort(
         std::uint64_t address, const std::vector<std::uint8_t>& bytes) const;
     std::string portUrl() const;
+    std::vector<std::uint8_t> genApiXml() const;
+    void readPortInto(std::uint64_t address, void* destination, std::size_t size) const;
+    void writePortFrom(std::uint64_t address, const void* source, std::size_t size) const;
+    GenTL::DEVICE_ACCESS_FLAGS accessFlags() const noexcept;
 
     void close();
 
@@ -52,12 +56,14 @@ private:
     DeviceSession(std::shared_ptr<ProducerContext> context,
                   GenTL::DEV_HANDLE device,
                   GenTL::PORT_HANDLE remotePort,
+                  GenTL::DEVICE_ACCESS_FLAGS access,
                   std::string deviceId) noexcept;
     void reset() noexcept;
 
     std::shared_ptr<ProducerContext> context_;
     GenTL::DEV_HANDLE device_ = nullptr;
     GenTL::PORT_HANDLE remotePort_ = nullptr;
+    GenTL::DEVICE_ACCESS_FLAGS access_ = GenTL::DEVICE_ACCESS_UNKNOWN;
     std::string deviceId_;
 };
 

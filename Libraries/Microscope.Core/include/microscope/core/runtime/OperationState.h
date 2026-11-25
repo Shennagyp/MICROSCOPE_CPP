@@ -36,6 +36,9 @@ enum class StepStatus {
 // Immutable-by-convention value snapshot. The runtime creates a new revision
 // rather than mutating a snapshot already delivered to a subscriber.
 struct OperationSnapshot final {
+    MicroscopeId microscopeId;
+    RuntimeId runtimeId;
+    RuntimeGeneration runtimeGeneration;
     OperationId operationId;
     OperationStatus status = OperationStatus::Accepted;
     std::uint64_t revision = 0;

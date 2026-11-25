@@ -36,6 +36,7 @@ struct StageNavigationControlRequestOutcome final {
 
 struct StageNavigationControlDrainResult final {
     std::vector<StageNavigationControlRequestOutcome> outcomes;
+    std::optional<StageNavigationRuntimeUpdate> healthUpdate;
     bool queueClosed;
     std::size_t pendingCount;
 };
@@ -95,8 +96,24 @@ public:
                 StageNavigationRuntimeError>::failure(bound.error());
         }
 
+        auto health = navigation.synchronizeFeedbackLoss();
+        if (!health) {
+            return core::Result<StageNavigationControlDrainResult,
+                StageNavigationRuntimeError>::failure(health.error());
+        }
+        std::optional<StageNavigationRuntimeUpdate> healthUpdate;
+        if (health.value().disposition ==
+            StageNavigationRuntimeDisposition::FeedbackLossDetected) {
+            healthUpdate = health.value();
+        }
         StageNavigationControlDrainResult result{
-            {}, isClosed(), pendingCount()};
+            {}, std::move(healthUpdate), isClosed(), pendingCount()};
+        if (navigation.feedbackLossUnresolved()) {
+            result.pendingCount = pendingCount();
+            return core::Result<StageNavigationControlDrainResult,
+                StageNavigationRuntimeError>::success(std::move(result));
+        }
+
         while (!navigation.navigationActive()) {
             auto request = tryPop();
             if (!request) {

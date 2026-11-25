@@ -61,7 +61,7 @@ int main() {
             FeedbackKind::DeviceStateObserved,
             ObservationSource::HardwareReadback,
             std::uint64_t{91},
-            DeviceTimestamp{1200, 1000, std::string("device-clock-A")}},
+            DeviceTimestamp::create(1200, 1000, std::string("device-clock-A")).value()},
         SelectorFeedback{true}};
 
     CapturingIngress<SelectorFeedback> ingress;
@@ -125,6 +125,13 @@ int main() {
           telemetryIngress.lastFeedback->metadata.kind == FeedbackKind::DeviceProgress,
           "telemetry preserves its normalized fact category");
 
+    const auto invalidDeviceTimestamp = DeviceTimestamp::create(1500, 0);
+    check(!invalidDeviceTimestamp,
+          "rejects a device timestamp without a valid ticks-per-second value");
+    const auto validDeviceTimestamp = DeviceTimestamp::create(1500, 1000);
+    check(static_cast<bool>(validDeviceTimestamp),
+          "accepts a device timestamp with an explicit positive tick rate");
+
     const auto receiptTime = std::chrono::steady_clock::time_point{
         std::chrono::steady_clock::duration{1234}};
     FeedbackReceipt<SelectorFeedback> received{
@@ -143,13 +150,13 @@ int main() {
                 FeedbackKind::DeviceAcknowledged,
                 ObservationSource::DeviceEvent,
                 std::uint64_t{92},
-                DeviceTimestamp{1500, 1000, std::string("device-clock-A")}},
+                DeviceTimestamp::create(1500, 1000, std::string("device-clock-A")).value()},
             SelectorFeedback{true}},
         FeedbackReceiptMetadata{receiptTime, 17}};
     check(received.receipt.receivedAt == receiptTime,
           "Core receipt time uses a separate monotonic-clock field");
     check(received.feedback.metadata.deviceTimestamp.has_value() &&
-          received.feedback.metadata.deviceTimestamp->ticks == 1500,
+          received.feedback.metadata.deviceTimestamp->ticks() == 1500,
           "device timestamp remains separate from Core receipt time");
     check(received.receipt.ingressSequence == 17,
           "Core ingress sequence is independent of adapter source sequence");

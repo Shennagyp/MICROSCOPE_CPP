@@ -1,8 +1,10 @@
 #include "microscope/core/configuration/Configuration.h"
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace microscope::core {
@@ -43,13 +45,18 @@ template <typename TValue>
 }
 
 [[nodiscard]] bool containsOpticalPathComponent(
-    const OpticalPath& path,
+    const std::vector<const OpticalPath*>& paths,
     const EquipmentComponentId& componentId) {
     return std::any_of(
-        path.steps().begin(),
-        path.steps().end(),
-        [&componentId](const OpticalPathStep& step) {
-            return step.componentId() == componentId;
+        paths.begin(),
+        paths.end(),
+        [&componentId](const OpticalPath* path) {
+            return std::any_of(
+                path->steps().begin(),
+                path->steps().end(),
+                [&componentId](const OpticalPathStep& step) {
+                    return step.componentId() == componentId;
+                });
         });
 }
 
@@ -334,7 +341,7 @@ ConfigurationRequest::ConfigurationRequest(
     ContrastMethod contrastMethod,
     EquipmentComponentId objectiveComponentId,
     EquipmentComponentId condenserComponentId,
-    OpticalPathId opticalPathId,
+    std::vector<OpticalPathId> opticalPathIds,
     EquipmentComponentId cameraComponentId,
     CameraModeId cameraModeId,
     EquipmentComponentId illuminationComponentId,
@@ -344,7 +351,7 @@ ConfigurationRequest::ConfigurationRequest(
       contrastMethod_(contrastMethod),
       objectiveComponentId_(std::move(objectiveComponentId)),
       condenserComponentId_(std::move(condenserComponentId)),
-      opticalPathId_(std::move(opticalPathId)),
+      opticalPathIds_(std::move(opticalPathIds)),
       cameraComponentId_(std::move(cameraComponentId)),
       cameraModeId_(std::move(cameraModeId)),
       illuminationComponentId_(std::move(illuminationComponentId)),
@@ -358,7 +365,7 @@ Result<
         ContrastMethod contrastMethod,
         EquipmentComponentId objectiveComponentId,
         EquipmentComponentId condenserComponentId,
-        OpticalPathId opticalPathId,
+        std::vector<OpticalPathId> opticalPathIds,
         EquipmentComponentId cameraComponentId,
         CameraModeId cameraModeId,
         EquipmentComponentId illuminationComponentId,
@@ -378,6 +385,23 @@ Result<
                 ConfigurationRequestError::InvalidExposurePolicy);
     }
 
+    if (opticalPathIds.empty()) {
+        return Result<
+            ConfigurationRequest,
+            ConfigurationRequestError>::failure(
+                ConfigurationRequestError::EmptyOpticalPathSet);
+    }
+
+    std::set<OpticalPathId> uniqueOpticalPathIds;
+    for (const auto& opticalPathId : opticalPathIds) {
+        if (!uniqueOpticalPathIds.insert(opticalPathId).second) {
+            return Result<
+                ConfigurationRequest,
+                ConfigurationRequestError>::failure(
+                    ConfigurationRequestError::DuplicateOpticalPath);
+        }
+    }
+
     return Result<
         ConfigurationRequest,
         ConfigurationRequestError>::success(
@@ -386,7 +410,7 @@ Result<
                 contrastMethod,
                 std::move(objectiveComponentId),
                 std::move(condenserComponentId),
-                std::move(opticalPathId),
+                std::move(opticalPathIds),
                 std::move(cameraComponentId),
                 std::move(cameraModeId),
                 std::move(illuminationComponentId),
@@ -410,8 +434,8 @@ const EquipmentComponentId& ConfigurationRequest::condenserComponentId() const n
     return condenserComponentId_;
 }
 
-const OpticalPathId& ConfigurationRequest::opticalPathId() const noexcept {
-    return opticalPathId_;
+const std::vector<OpticalPathId>& ConfigurationRequest::opticalPathIds() const noexcept {
+    return opticalPathIds_;
 }
 
 const EquipmentComponentId& ConfigurationRequest::cameraComponentId() const noexcept {
@@ -496,13 +520,29 @@ ConfigurationResolution ConfigurationResolver::resolve(
             request.condenserComponentId().value());
     }
 
-    if (!contains(profile->compatibleOpticalPathIds(), request.opticalPathId())) {
-        appendError(
-            diagnostics,
-            "configuration.optical_path.not_compatible",
-            "The selected optical path is not allowed by the configuration profile.",
-            "OpticalPath",
-            request.opticalPathId().value());
+    std::vector<const OpticalPath*> selectedPaths;
+    selectedPaths.reserve(request.opticalPathIds().size());
+    for (const auto& opticalPathId : request.opticalPathIds()) {
+        if (!contains(profile->compatibleOpticalPathIds(), opticalPathId)) {
+            appendError(
+                diagnostics,
+                "configuration.optical_path.not_compatible",
+                "A selected optical path is not allowed by the configuration profile.",
+                "OpticalPath",
+                opticalPathId.value());
+        }
+
+        const auto* path = findOpticalPath(equipment, opticalPathId);
+        if (path == nullptr) {
+            appendError(
+                diagnostics,
+                "configuration.optical_path.not_installed",
+                "A selected optical path is not present in the installed equipment definition.",
+                "OpticalPath",
+                opticalPathId.value());
+        } else {
+            selectedPaths.push_back(path);
+        }
     }
 
     if (!contains(profile->compatibleCameraIds(), request.cameraComponentId())) {
@@ -596,20 +636,12 @@ ConfigurationResolution ConfigurationResolver::resolve(
         }
     }
 
-    const auto* path = findOpticalPath(equipment, request.opticalPathId());
-    if (path == nullptr) {
-        appendError(
-            diagnostics,
-            "configuration.optical_path.not_installed",
-            "The selected optical path is not present in the installed equipment definition.",
-            "OpticalPath",
-            request.opticalPathId().value());
-    } else {
-        const auto requireOnPath = [&diagnostics, path](
+    if (!selectedPaths.empty()) {
+        const auto requireOnSelectedPaths = [&diagnostics, &selectedPaths](
             const EquipmentComponentId& componentId,
             const char* code,
             const char* message) {
-            if (!containsOpticalPathComponent(*path, componentId)) {
+            if (!containsOpticalPathComponent(selectedPaths, componentId)) {
                 appendError(
                     diagnostics,
                     code,
@@ -619,32 +651,31 @@ ConfigurationResolution ConfigurationResolver::resolve(
             }
         };
 
-        requireOnPath(
+        requireOnSelectedPaths(
             request.objectiveComponentId(),
-            "configuration.objective.not_on_path",
-            "The selected objective is not traversed by the selected optical path.");
-        requireOnPath(
+            "configuration.objective.not_on_selected_paths",
+            "The selected objective is not traversed by any selected optical path.");
+        requireOnSelectedPaths(
             request.condenserComponentId(),
-            "configuration.condenser.not_on_path",
-            "The selected condenser is not traversed by the selected optical path.");
-        requireOnPath(
+            "configuration.condenser.not_on_selected_paths",
+            "The selected condenser is not traversed by any selected optical path.");
+        requireOnSelectedPaths(
             request.cameraComponentId(),
-            "configuration.camera.not_on_path",
-            "The selected camera is not traversed by the selected optical path.");
-        requireOnPath(
+            "configuration.camera.not_on_selected_paths",
+            "The selected camera is not traversed by any selected optical path.");
+        requireOnSelectedPaths(
             request.illuminationComponentId(),
-            "configuration.illumination.not_on_path",
-            "The selected illumination source is not traversed by the selected optical path.");
+            "configuration.illumination.not_on_selected_paths",
+            "The selected illumination source is not traversed by any selected optical path.");
 
         for (const auto& requiredComponent :
              profile->requiredPathComponentIds()) {
-            requireOnPath(
+            requireOnSelectedPaths(
                 requiredComponent,
                 "configuration.profile.required_component_missing",
-                "A required optical component is not present on the selected path.");
+                "A required optical component is not present on the selected optical paths.");
         }
     }
-
     const bool hasErrors = std::any_of(
         diagnostics.begin(),
         diagnostics.end(),

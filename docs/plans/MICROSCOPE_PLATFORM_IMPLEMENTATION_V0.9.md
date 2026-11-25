@@ -70,7 +70,7 @@ This closes the initial library/build/API foundation only. It does not claim a m
 
 ### Phase 2 — Core equipment and optical model
 
-**In progress — 2A and 2B source slices validated**
+**In progress — 2A, 2B and 2C source slices validated**
 
 **Modeling sequence**
 1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; directed port connections; ordered light paths; shared components represented once and referenced by multiple paths; topology validation.
@@ -87,6 +87,14 @@ This closes the initial library/build/API foundation only. It does not claim a m
 - MicroscopeEquipmentDefinition validates objective/camera references against installed component identity and broad component kind, and rejects duplicate specialized records.
 - Added contract tests for finite/positive values, NA above 1, objective characteristics, anisotropic pixel pitch/mapping, ROI and binning limits, invalid pixel formats/layouts, duplicate modes/specifications, unknown component references and wrong component kinds.
 - Cross-platform CI passed on Ubuntu GCC, macOS Clang and Windows MSVC for Core standalone, Application standalone and root platform-only composition/tests in [GitHub Actions run 33](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45589429447).
+
+**Phase 2C committed source progress**
+- Added condenser specifications attached to installed OpticalElement identities: minimum/maximum aperture NA (minimum may be zero), design, immersion medium and optional working distance.
+- Added illumination source specifications attached to installed IlluminationDevice identities, with multiple unique channels per source.
+- Each illumination channel carries an optional spectral band, control kind and optional unit-bearing intensity range. Continuous control requires a valid finite non-negative increasing range; fixed/device-defined/unknown controls do not pretend to expose one.
+- Equipment aggregate validation rejects condenser/illumination specifications for unknown components or components of the wrong kind, and rejects duplicate specializations.
+- Added tests for spectral ranges, intensity units/ranges/control semantics, multichannel source identity, condenser aperture bounds, invalid enums, duplicate records and aggregate reference/kind validation.
+- Cross-platform CI passed for Core standalone, Application standalone and root platform-only builds/tests on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 46](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45590795457).
 
 **Implementation constraints**### Phase 3 — Declarative configuration
 - Define profile selection and applicability.

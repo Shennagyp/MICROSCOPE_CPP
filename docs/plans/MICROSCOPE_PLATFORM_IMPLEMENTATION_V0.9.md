@@ -128,7 +128,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 3 — Declarative configuration
 
-**In progress — 3A validated; 3B source implemented, CI pending**
+**In progress — 3A–3C implemented and cross-platform validated; 3D transition description next**
 
 **Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
 
@@ -149,15 +149,25 @@ The equipment definition now describes installed topology and static capabilitie
 - Added contract tests for a valid brightfield path, separate illumination/imaging paths, unavailable camera modes/channels, profile conflicts, missing paths, required path components and invalid request/profile/catalog values.
 - Cross-platform CI passed on Ubuntu GCC, Windows MSVC and macOS Clang for Core standalone, Application standalone and root platform-only builds/tests: [GitHub Actions run 85](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45597867770).
 
-**Phase 3B committed source progress — cross-platform validation pending**
+**Phase 3B committed source progress — cross-platform CI passed**
 - Added OpticalElementFunction and OpticalFunctionCapability on installed optical components, including phase plate/annulus, polarizer, analyzer, DIC prism, excitation/emission filters, dichroic mirror and darkfield stop.
 - Added optional OpticalCompatibilityId on capabilities so mating optical components can be matched by data rather than class behavior.
 - Added OpticalFunctionRequirement to profiles with optional compatibility identity and minimum distinct-component count. Duplicate function/compatibility requirements and zero counts are rejected.
-- Extended ConfigurationRequest with explicit additional optical component selections. Duplicate selections and overlap with the primary objective/condenser selections are rejected.
+- Extended ConfigurationRequest with explicit additional optical component selections. Duplicate selections and overlap with primary objective/condenser selections are rejected.
 - Resolver verifies each additional selection is installed, is an OpticalElement, belongs to a selected path and satisfies at least one optical-function requirement in the selected profile.
 - Resolver counts required functions across the selected objective, condenser and additional optical components. One physical component counts once; compatibility identity must match exactly when specified.
-- Added data-driven phase-contrast and DIC tests: matched phase plate/annulus; matched polarizer/analyzer and two DIC prisms; negative cases for mismatched phase compatibility, missing prism count and unrelated additional optical component selection.
-- Cross-platform CI for the complete 3B source/test head is pending.
+- Added split-path data-driven phase-contrast and DIC tests. Phase plate/annulus may lie on the illumination/condenser path, while downstream DIC prism/analyzer and camera components are validated over the imaging path. DIC requires a matching polarizer, analyzer and two prisms.
+- Negative tests cover mismatched compatibility identities, insufficient prism count and unrelated additional optical component selection.
+
+**Phase 3C committed source progress — cross-platform CI passed**
+- Added CameraSpecification exposure-time capability range as an optional installed camera capability, expressed in positive microseconds.
+- Added profile target values for condenser aperture NA, unit-bearing illumination intensity and an initial exposure preset.
+- Resolver validates aperture against the selected condenser range, illumination target against the selected channel's continuous range and exact unit, and exposure preset against the selected camera's declared exposure-time range.
+- Missing exposure-time capability data rejects a profile preset rather than treating the camera as unlimited.
+- Added microscope-scoped ResolvedConfiguration, retaining MicroscopeId, immutable request, optional condenser aperture target, optional illumination intensity target and optional exposure preset.
+- The request's ExposurePolicy remains separate. A retained preset does not issue a command or overwrite Manual/Automatic/ConstrainedAutomatic.
+- Added tests for valid retained targets, aperture/intensity/exposure out-of-range values, intensity unit mismatch, missing camera exposure capability and microscope-scoped resolved output.
+- Full Core standalone, Application standalone and root platform-only build/test matrix passed on Ubuntu GCC, macOS Clang and Windows MSVC: [GitHub Actions run 114](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45629930294).
 
 **Implementation constraints**
 - Objective, contrast method, optical path, camera mode and illumination remain independent dimensions. The resolver combines them; behavior is not implemented in Objective4x/PhaseObjective/DICObjective subclasses.
@@ -168,14 +178,14 @@ The equipment definition now describes installed topology and static capabilitie
 - Resolver output must not claim hardware state was changed or verified. Transition execution and device feedback remain Phase 4.
 - Keep JSON schema/loading in Application Phase 5. Phase 3 operates on typed Core values.
 
-**Phase 3 first vertical slice**
-- Add configuration request/profile/result value contracts with stable identities.
-- Add typed compatibility diagnostics and explicit conflict results.
-- Implement pure objective/path/camera/contrast compatibility resolution using only installed equipment specifications.
-- Add deterministic table-driven tests for brightfield, phase contrast, DIC and impossible combinations.
-- Add transition description values only after the pure resolution result shape is stable; do not create an operation executor here.
+**Phase 3D next vertical slice — transition description**
+- Add immutable transition-plan, transition-step and dependency-edge values with stable identities.
+- Generate target requirements for selected objective/condenser/additional optics, optical path set, camera mode, illumination channel and optional profile settings.
+- Express safe preconditions and dependency ordering as a DAG; do not invent fixed hardware command sequences or vendor operations.
+- If a verified effective-configuration snapshot is supplied, omit only requirements already known to match. Unknown/unverified state must not be treated as a match.
+- Keep the plan declarative and adapter-neutral. No device commands, retries, operation state machine or persistence are introduced in Phase 3D; those remain Phase 4.
 
-**Exit:** configuration results are deterministic; impossible or under-specified combinations are rejected with actionable diagnostics before any hardware command can be issued.
+**Phase 3A–3C exit:** satisfied. Pure target resolution and profile target validation are deterministic and cross-platform validated. **Phase 3D exit:** transition requirements and dependencies are represented as a deterministic adapter-neutral plan; execution remains Phase 4.
 
 ### Phase 4 — Core operation runtime
 - Implement operation and step lifecycle.
@@ -276,4 +286,4 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 The public contract review is recorded in ../architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
 
-Phases 1 and 2 are closed by cross-platform standalone/composed CI. The current implementation task is Phase 3A: define the declarative configuration vocabulary and typed request/profile/result contracts, then implement a pure compatibility resolver. Keep JSON parsing in Phase 5 and hardware transition execution in Phase 4. Do not add empty modules or speculative framework abstractions.
+Phases 1 and 2 are closed. Phase 3A–3C are implemented and cross-platform validated. The current task is Phase 3D: define a small adapter-neutral transition-plan value model and deterministic dependency planner over ResolvedConfiguration, optionally compared with verified effective state. Do not introduce commands, executors or a universal workflow engine; those belong to Phase 4.

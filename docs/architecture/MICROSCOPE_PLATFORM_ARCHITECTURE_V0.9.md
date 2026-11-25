@@ -293,31 +293,38 @@ Examples:
 
 The implementation must not assume a universal hardcoded filter sequence for every microscope.
 
-An exposure preset is distinct from an exposure policy. Objective selection may load a useful initial preset, but manual or automatic exposure remains an independently selected policy subject to camera and acquisition constraints.
+Profile settings are desired targets, not hardware state. The optional condenser aperture target must be inside the selected condenser's declared aperture-NA range. An illumination intensity target carries an explicit unit and must be supported by the selected channel's continuous control range with the exact same unit. An exposure preset must be inside the selected camera's declared exposure-time range; a preset cannot be accepted when the camera declares no exposure-time capability range.
+
+ExposurePreset is distinct from ExposurePolicy. A profile may provide an initial exposure preset, but the request's Manual, Automatic or ConstrainedAutomatic policy remains an independent choice. Retaining an initial preset in ResolvedConfiguration does not issue an exposure command or override the policy. Phase 3D planning and Phase 4 execution decide whether/how the preset is applied.
 
 ### 6.3 Pure configuration pipeline
 
 ~~~text
-Configuration request + equipment definition + current state
+Configuration request + equipment definition + profile catalog
                          |
                          v
                Pure configuration resolver
                          |
                          v
-              Compatibility / constraint validation
+              Compatibility / target validation
                          |
                          v
-             Desired configuration + diagnostics
+     Microscope-scoped desired configuration + diagnostics
+                         |
+                         v
+    Optional verified effective configuration snapshot
                          |
                          v
                 Pure transition planner
                          |
                          v
-                Ordered dependency plan
+        Typed dependency plan (no device commands)
                          |
                          v
                  Core runtime execution
 ~~~
+
+The resolver is independent of current runtime state. It validates static compatibility and profile targets only. The transition planner may compare the resolved desired configuration with an explicitly supplied verified effective-configuration snapshot; unknown or unverified observed values must not be treated as the current effective state.
 
 Composition must be conflict-aware. Unrestricted last-write-wins merging is prohibited. Contradictory profile contributions produce explicit validation diagnostics.
 

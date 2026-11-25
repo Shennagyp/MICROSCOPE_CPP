@@ -480,13 +480,13 @@ The resolver checks:
 
 Multiple paths are intentional. For example, illumination/condenser can be on one selected branch while objective/camera are on another. The resolver checks component membership against the union of the selected paths; it does not require every selected component to be present on every path.
 
-The result is either the immutable resolved request or a set of stable, typed Error diagnostics. A successful result means only that the requested target selection is compatible with the profile and installed static equipment definition. It does not mean that any component is currently selected, that any hardware command was sent, or that device state was verified.
+The result is either a microscope-scoped immutable ResolvedConfiguration or a set of stable, typed Error diagnostics. A successful result means only that the requested target selection is compatible with the profile and installed static equipment definition. It does not mean that any component is currently selected, that any hardware command was sent, or that device state was verified.
 
 ### 15.4 Separation from later configuration phases
 
-The initial resolver does not compare with current hardware/runtime state and does not generate commands. Transition planning in Phase 3D will compare a known current/effective configuration with this resolved desired configuration and produce a value dependency plan. Execution, feedback, timeouts, cancellation and recovery remain Phase 4.
+The resolver does not compare with current hardware/runtime state and does not generate commands. Transition planning in Phase 3D may compare this desired value with an explicitly supplied verified effective-configuration snapshot and produce a value dependency plan. Unknown or merely observed state is not a verified effective configuration. Execution, feedback, timeouts, cancellation and recovery remain Phase 4.
 
-ExposurePolicy is distinct from ExposurePreset. This first slice records the selected policy but does not yet define exposure preset values, objective-triggered preset defaults or exposure parameter constraints. Those are added only when the profile model consumes them.
+ExposurePolicy is distinct from ExposurePreset. A profile may provide an initial exposure preset while the request independently selects Manual, Automatic or ConstrainedAutomatic. Retaining the preset in the resolved desired value does not itself issue a command or override the request policy.
 
 JSON schema parsing and profile loading remain in Microscope.Application in Phase 5. The Core resolver receives already-constructed typed profile and equipment values.
 
@@ -516,4 +516,27 @@ Examples:
 - Fluorescence profiles can similarly require matching excitation/emission filters and dichroic mirror components.
 
 The resolver returns the diagnostic code configuration.optical_function.requirement_not_satisfied when a required function/count is not met. It rejects additional component selections that are not allowed by any optical-function requirement. These checks remain pure data validation; no component selection command is issued.
+
+### 15.6 Profile targets and microscope-scoped desired configuration
+
+ConfigurationProfile may supply three optional target values:
+- Condenser aperture target as a non-negative numerical aperture.
+- Illumination intensity target as a finite non-negative value paired with an explicit IlluminationIntensityUnit.
+- Initial ExposurePreset as a positive exposure time in microseconds.
+
+The resolver validates each supplied target against the selected installed device specification:
+- Condenser aperture target must be within the selected CondenserSpecification minimum/maximum aperture NA.
+- Illumination intensity target requires a selected channel with Continuous control and a declared intensity range. The target unit must exactly match the channel range unit, and its value must lie inside the range.
+- ExposurePreset requires the selected CameraSpecification to declare an ExposureTimeRange, and the preset time must lie inside the inclusive range.
+
+Missing capability data is not treated as an unlimited range. The resolver emits a stable Error diagnostic and does not return a resolved value when a supplied target cannot be validated.
+
+A successful result is ResolvedConfiguration, which carries:
+- The exact MicroscopeId against which resolution was performed.
+- The immutable ConfigurationRequest, including its independent ExposurePolicy.
+- The optional condenser aperture target.
+- The optional illumination intensity target and unit.
+- The optional initial exposure preset.
+
+The profile target values are desired configuration data, not current values, observations, effective state or commands. The presence of an ExposurePreset does not override Manual/Automatic/ConstrainedAutomatic policy. Phase 3D describes the transition requirements; Phase 4 decides execution and completion using adapter feedback.
 

@@ -54,4 +54,8 @@ bool OperationHandle::belongsTo(const RuntimeHandle& runtime) const noexcept {
     return runtime_.identifiesSameRuntime(runtime);
 }
 
+bool OperationView::isConsistent() const noexcept {
+    return handle.operationId() == snapshot.operationId;
+}
+
 } // namespace microscope::application

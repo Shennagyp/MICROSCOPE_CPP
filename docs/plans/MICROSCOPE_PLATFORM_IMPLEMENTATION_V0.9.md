@@ -2,7 +2,7 @@
 
 **Architecture reference:** ../architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
-**Status:** Planned; architecture documentation is established, source migration is incremental.
+**Status:** Phase 1 in progress; initial Core/Application targets and foundational contracts are committed. Build/test validation has not been performed in this environment.
 
 ## Objective
 
@@ -19,9 +19,13 @@ The current branch contains:
 - Root CMake project using C++ and an optional native macOS application target.
 - Camera/Amscope as the reusable camera driver capability.
 - Application/OptikaB293 containing the current SwiftUI/AppKit application, Objective-C++ camera bridge and current Swift microscope configuration/resolution models.
-- Existing architecture documentation describing this transitional native application and its preview invariants.
+- Libraries/Microscope.Core and Libraries/Microscope.Application as separate C++17 static-library targets integrated by the root CMake project.
+- Initial Core contracts for strong IDs, Result/Status, diagnostics, operation-state values and typed feedback metadata/ingress.
+- Initial Application contracts for runtime and operation handles/snapshots.
+- Focused Core and Application contract-test sources registered with CTest; they have not been executed here.
+- Existing architecture documentation describing the transitional native application and its preview invariants.
 
-No Microscope.Core or Microscope.Application C++ library is claimed to exist yet. Those targets are introduced in Phase 1 when the first real contracts and implementations are added.
+The new libraries are an initial Phase 1 source slice, not a completed platform implementation. No equipment model, configuration resolver, operation executor, JSON loader, adapter factory registry, persistence implementation or hardware integration is claimed to exist yet.
 
 ## Migration rules
 
@@ -47,6 +51,21 @@ No Microscope.Core or Microscope.Application C++ library is claimed to exist yet
 **Exit:** architecture and implementation plan are committed and linked from the architecture index.
 
 ### Phase 1 — C++ library foundations and public contracts
+
+**Committed source progress (not yet build/test validated):**
+- Root CMake includes the independent Core and Application targets.
+- Core static library contains strong opaque IDs, RuntimeGeneration, Result/Status, Diagnostic, operation/step status values, feedback correlation and typed ingress interface.
+- Application static library contains runtime/operation handles and immutable-by-value runtime/operation projections.
+- Focused Core identity/result/diagnostic tests, feedback contract tests and Application runtime-handle tests are registered with CTest.
+- The current AmScope camera driver and Camera::Common targets remain separate and unchanged.
+
+**Remaining Phase 1 work:**
+- Review unit value conventions and ensure no premature general-purpose dimensional framework is introduced.
+- Complete static review of public headers, CMake dependency direction, API naming and source compatibility.
+- Build each library independently and then through the root project.
+- Run focused Core/Application contract tests and inspect generated dependency graphs.
+
+The implementation bullets below define the full Phase 1 intent; the committed source progress above must not be mistaken for phase completion.
 - Implement the minimum independently buildable Libraries/Microscope.Core and Libraries/Microscope.Application C++17 targets.
 - Make Application depend on Core; keep Core dependent only on the C++ standard library.
 - Implement strongly typed opaque identity wrappers and the injected identity-generation boundary.
@@ -177,11 +196,4 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 The public contract review is recorded in ../architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
 
-Implement Phase 1 as a narrow source slice:
-1. Add independent C++17 Core and Application CMake targets.
-2. Add the first strong ID, Result/Status and Diagnostic public headers.
-3. Add feedback correlation/provenance/ingress metadata contracts.
-4. Add the minimal Application runtime/operation-handle boundary.
-5. Add focused contract tests for type separation, validation and feedback metadata.
-
-Do not implement the full workflow executor, JSON loader, factory registry, microscope equipment catalog, device-specific command ports or acquisition persistence in this slice. Those belong to later phases. Do not create empty directories or stub classes for future subsystems.
+The initial Phase 1 source slice is committed. The next work is static review, build validation and focused contract validation in the user's development environment. Then address any findings before expanding the Core/Application API. Do not move into the full workflow executor, JSON loader, factory registry, microscope equipment catalog, device-specific command ports or acquisition persistence until their planned phases. Do not create empty directories or stub classes for future subsystems.

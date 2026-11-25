@@ -35,8 +35,9 @@ struct DataStreamFrame {
     std::optional<std::size_t> imageOffset;
     std::optional<std::size_t> xPadding;
     std::optional<std::size_t> yPadding;
-    std::optional<std::uint64_t> payloadType;
+    std::optional<std::size_t> payloadType;
     std::optional<bool> imagePresent;
+    std::optional<bool> containsChunkData;
     bool incomplete = false;
 };
 

@@ -270,8 +270,18 @@ int main() {
     const auto emptyClockDomain = DeviceTimestamp::create(
         1500, 1000, std::string{});
     check(!emptyClockDomain &&
-          emptyClockDomain.error() == DeviceTimestampError::EmptyClockDomain,
+          emptyClockDomain.error() == DeviceTimestampError::InvalidClockDomain,
           "rejects an empty clock-domain sentinel");
+    const auto whitespaceClockDomain = DeviceTimestamp::create(
+        1500, 1000, std::string(" \t "));
+    check(!whitespaceClockDomain &&
+          whitespaceClockDomain.error() == DeviceTimestampError::InvalidClockDomain,
+          "rejects a whitespace-only clock domain");
+    const auto nulClockDomain = DeviceTimestamp::create(
+        1500, 1000, std::string("clock\0domain", 12));
+    check(!nulClockDomain &&
+          nulClockDomain.error() == DeviceTimestampError::InvalidClockDomain,
+          "rejects an embedded NUL in the clock domain");
     const auto unknownClockDomain = DeviceTimestamp::create(1500, 1000);
     check(static_cast<bool>(unknownClockDomain),
           "represents an unidentified clock domain with absence");

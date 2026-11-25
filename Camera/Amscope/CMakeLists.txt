@@ -197,7 +197,7 @@ endif()
 if(AMSCOPE_BUILD_QT_ADAPTER)
     add_library(amscope_qt
         src/QtAmcamCamera.cpp
-        include/amscope/QtAmcamCamera.h)
+        legacy/qt/include/amscope/QtAmcamCamera.h)
     add_library(Amscope::Qt ALIAS amscope_qt)
     set_target_properties(amscope_qt PROPERTIES
         AUTOMOC ON
@@ -206,6 +206,7 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
     target_include_directories(amscope_qt
         PUBLIC
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
+            "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/legacy/qt/include>"
             "$<INSTALL_INTERFACE:include>")
     target_link_libraries(amscope_qt PUBLIC Amscope::Driver Camera::Qt Qt6::Core)
 endif()
@@ -248,13 +249,13 @@ include(GNUInstallDirs)
 install(TARGETS amscope_driver LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(FILES "${AMSCOPE_VENDOR_LIBRARY}"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}" RENAME "libamcam.dylib")
-install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}" PATTERN "QtAmcamCamera.h" EXCLUDE)
+install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../Common/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 if(AMSCOPE_BUILD_QT_ADAPTER)
-    install(FILES include/amscope/QtAmcamCamera.h
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amscope")
+    install(DIRECTORY legacy/qt/include/
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     install(TARGETS amscope_qt
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")

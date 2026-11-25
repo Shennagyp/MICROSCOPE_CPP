@@ -226,6 +226,17 @@ int main() {
               OperationStatus::Succeeded,
           "an accepted command-derived verification can complete the operation without inventing sensor feedback");
 
+    const auto preDispatchOperation=id<OperationId>("operation-pre-dispatch-failure");
+    const auto preDispatchStep=id<StepId>("step-pre-dispatch-failure");
+    take(runtime->createOperation(preDispatchOperation));
+    take(runtime->startOperation(preDispatchOperation));
+    take(runtime->createStep(preDispatchOperation,preDispatchStep));
+    check(runtime->recordPreDispatchFailure(preDispatchOperation,preDispatchStep).value()==
+              StepStatus::Failed &&
+          runtime->operationSnapshot(preDispatchOperation).value().status()==
+              OperationStatus::Failed,
+          "a failure before any adapter call terminates both the pending step and its operation");
+
     auto oldSession=staleSessionFeedback(deviceSession(3));
     check(runtime->feedbackIngress().submit(std::move(oldSession))==FeedbackSubmitStatus::Enqueued,
           "old-session callback is retained for freshness evaluation");

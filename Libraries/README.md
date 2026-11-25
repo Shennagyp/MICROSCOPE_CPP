@@ -9,6 +9,20 @@ The platform libraries are separate C++17 targets:
 
 Application depends on Core. Core does not depend on Application, Camera::Common, AmScope, Qt, JSON, DICOM, Swift/Objective-C++ or operating-system APIs.
 
+## Root-project configuration without AmScope
+
+The root project includes Core and Application by default. To configure/build only the microscope platform libraries on a non-macOS host, disable the existing macOS-only camera capability:
+
+```sh
+cmake -S . -B build/platform-libraries \
+  -DOPTIKA_BUILD_AMSCOPE=OFF \
+  -DOPTIKA_BUILD_NATIVE_APP=OFF
+cmake --build build/platform-libraries
+ctest --test-dir build/platform-libraries --output-on-failure
+```
+
+The default `OPTIKA_BUILD_AMSCOPE=ON` preserves the repository's existing camera/application composition. The native OPTIKA B293 app requires AmScope and cannot be configured with that option disabled.
+
 ## Standalone configuration
 
 Configure and build Core independently:

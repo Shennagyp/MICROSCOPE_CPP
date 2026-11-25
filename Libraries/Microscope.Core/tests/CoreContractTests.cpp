@@ -33,6 +33,18 @@ void testStrongIdentityTypes() {
                   "SlideId must not convert to TileId");
     static_assert(!std::is_convertible<RuntimeId, MicroscopeId>::value,
                   "RuntimeId must not convert to MicroscopeId");
+    static_assert(!std::is_convertible<DeviceId, MicroscopeId>::value,
+                  "DeviceId must not convert to MicroscopeId");
+    static_assert(!std::is_convertible<AcquisitionPlanId, AcquisitionRunId>::value,
+                  "AcquisitionPlanId must not convert to AcquisitionRunId");
+    static_assert(!std::is_convertible<AcquisitionRunId, ImageFrameId>::value,
+                  "AcquisitionRunId must not convert to ImageFrameId");
+    static_assert(!std::is_convertible<ImageFrameId, DerivedImageId>::value,
+                  "ImageFrameId must not convert to DerivedImageId");
+    static_assert(!std::is_convertible<OperationId, StepId>::value,
+                  "OperationId must not convert to StepId");
+    static_assert(!std::is_convertible<StepId, CommandId>::value,
+                  "StepId must not convert to CommandId");
     static_assert(!std::is_convertible<RuntimeGeneration, DeviceSessionGeneration>::value,
                   "runtime generation must not convert to device-session generation");
 
@@ -56,6 +68,10 @@ void testStrongIdentityTypes() {
         check(sampleSet.find(sample) != sampleSet.end(),
               "strong IDs support hash-based lookup");
     }
+
+    auto opaquePathLikeValue = SampleId::create("source/part:alpha");
+    check(static_cast<bool>(opaquePathLikeValue),
+          "opaque IDs are not restricted to filesystem path syntax");
 
     auto emptyResult = SampleId::create("");
     check(!emptyResult, "rejects an empty persisted identity");
@@ -106,6 +122,13 @@ void testResultAndStatus() {
     auto statusFailure = Status<std::string>::failure("closed");
     check(!statusFailure, "failed Status reports failure");
     check(statusFailure.error() == "closed", "Status preserves its error");
+
+    auto sameTypeSuccess = Result<std::string, std::string>::success("value");
+    auto sameTypeFailure = Result<std::string, std::string>::failure("error");
+    check(sameTypeSuccess && sameTypeSuccess.value() == "value",
+          "Result distinguishes success when value and error types are identical");
+    check(!sameTypeFailure && sameTypeFailure.error() == "error",
+          "Result distinguishes failure when value and error types are identical");
 }
 
 void testDiagnosticsAreSeparateValues() {

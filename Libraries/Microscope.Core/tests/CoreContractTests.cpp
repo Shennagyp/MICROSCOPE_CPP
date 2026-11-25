@@ -22,6 +22,10 @@ void check(bool condition, const char* message) {
 void testStrongIdentityTypes() {
     using namespace microscope::core;
 
+    static_assert(!std::is_default_constructible<SampleId>::value,
+                  "SampleId must not have an invalid default value");
+    static_assert(!std::is_convertible<std::string, SampleId>::value,
+                  "raw strings must not implicitly construct SampleId");
     static_assert(!std::is_convertible<SampleId, SlideId>::value,
                   "SampleId must not convert to SlideId");
     static_assert(!std::is_convertible<SlideId, TileId>::value,
@@ -40,9 +44,7 @@ void testStrongIdentityTypes() {
         check(sample.value() == "sample-opaque-001",
               "preserves the opaque SampleId representation");
         check(sample != SampleId::create("sample-opaque-002").value(),
-              "compares IDs by their opaque value");
-        check(!(sample == SampleId::create("sample-opaque-002").value()),
-              "different values are not equal");
+              "different opaque values are not equal");
         check(slide.value() == "slide-opaque-001",
               "preserves SlideId independently from SampleId");
 

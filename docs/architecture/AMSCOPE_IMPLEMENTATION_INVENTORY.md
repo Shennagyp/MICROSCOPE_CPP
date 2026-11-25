@@ -1,4 +1,17 @@
-# AmScope Implementation Inventory
+# Historical AmScope Implementation Inventory — v0.7/Qt UI snapshot
+
+> **Historical inventory, not the current Camera v2.0 status ledger.** This
+> source-to-test-to-UI inventory captures a prior Qt-preview implementation
+> snapshot. Driver/session/frame facts may remain useful, but its branch
+> references, UI states, Qt acceptance requirements, test counts, and phase
+> statuses must not be treated as current without reinspection against
+> `camera-v.2.0`.
+>
+> Current non-Qt scope, phase status, build/CI evidence, unresolved risks and
+> continuation work are maintained in
+> [`CAMERA_V2_DEVELOPMENT_STATUS.md`](CAMERA_V2_DEVELOPMENT_STATUS.md).
+> Qt adapter/widgets and preview material below is retained for history only.
+
 
 **Source snapshot:** `afe2c31a189c68e8502220287c08ad3b42652cc2` (v0.6 common integer-range typing, exact validation, first-frame common metadata reporting, and ownership audit)  
 **Latest UI source reviewed:** `b99ca65d09e78a615d4bcf44f472e5119bec0600` (document-centric Live Preview tab, separate Camera Explorer and Camera Properties panes, bottom Output tool window, editable ImageInfoBar in QStatusBar, lifecycle state indicator, workspace toolbar and layout reset). The owner subsequently built branch head `040e381` in Release, linked `amscope_preview`, and passed 15/15 CTest. Application visual smoke and physical MU503 workspace/editing remain pending.  

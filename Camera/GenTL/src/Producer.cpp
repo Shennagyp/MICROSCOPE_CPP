@@ -1167,6 +1167,38 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
                     GenTL::BUFFER_INFO_HEIGHT, type, value, size);
             },
             GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(HEIGHT)");
+        frame.imageOffset = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_IMAGEOFFSET, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(IMAGEOFFSET)");
+        frame.xPadding = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_XPADDING, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(XPADDING)");
+        frame.yPadding = readTypedInfo<std::size_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_YPADDING, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(YPADDING)");
+        frame.payloadType = readTypedInfo<std::uint64_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_PAYLOADTYPE, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(PAYLOADTYPE)");
 
         if (incomplete) frame.incomplete = *incomplete != 0;
         if (imagePresent) frame.imagePresent = *imagePresent != 0;

@@ -1,6 +1,9 @@
 # OPTIKA B293 Dual-Slide Application Architecture
 
-**Status:** Target architecture for the `OPTIKA-B293-DUALSLIDE-APP` branch  
+> **Authority note (v0.9):** This document is retained for the native macOS application's implementation history and its camera/preview performance constraints. The authoritative platform target is [Microscope Platform Architecture v0.9](MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md), with its [implementation plan](../plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md). Those documents supersede this file wherever ownership, C++ Core/Application boundaries, JSON microscope definitions, operation feedback or frontend independence differ.
+
+
+**Status:** Historical native-application architecture and implementation reference; superseded for platform target ownership by the Microscope Platform Architecture v0.9  
 **Baseline:** `f25e5d8e6fdefea7f742fb71fa5f4ead69291626`  
 **Product:** OPTIKA B293 Dual-Slide Microscope Workstation  
 **Scope:** Application architecture, UI architecture, capability boundaries and migration rules

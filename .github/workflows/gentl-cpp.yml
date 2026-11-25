@@ -75,6 +75,9 @@ jobs:
               *.zip) unzip -q "$SDK_ARCHIVE" -d build/genapi-sdk ;;
               *.tar.gz|*.tgz) tar -xzf "$SDK_ARCHIVE" -C build/genapi-sdk ;;
             esac
+            RUNTIME_ARCHIVE="$(find build/genicam-package -type f -name 'GenApi-3.5.1-Mac64_Universal-Runtime.tar.gz' -print -quit)"
+            test -n "$RUNTIME_ARCHIVE"
+            tar -xzf "$RUNTIME_ARCHIVE" -C build/genapi-sdk
             GENAPI_HEADER="$(find build/genapi-sdk -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
           fi
           test -n "$GENAPI_HEADER"

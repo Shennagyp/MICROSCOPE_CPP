@@ -218,6 +218,7 @@ public:
             const auto status = consumer.invoke(Operation::tlClose, system);
             if (status != GenTL::GC_ERR_SUCCESS) {
                 quarantined = true;
+                retainConsumerOnFailedShutdown();
                 return;
             }
             system = nullptr;
@@ -227,6 +228,7 @@ public:
             const auto status = consumer.invoke(Operation::gcCloseLib);
             if (status != GenTL::GC_ERR_SUCCESS) {
                 quarantined = true;
+                retainConsumerOnFailedShutdown();
                 return;
             }
             initialized = false;
@@ -910,7 +912,7 @@ struct DataStreamSession::Impl {
                     status = context->consumer.invoke(
                         Operation::dsClose, streamHandle);
                     if (status != GenTL::GC_ERR_SUCCESS) {
-                        context->quarantined = true;
+                        context->quarantineLocked();
                         safeToRelease = false;
                     }
                 }
@@ -1061,7 +1063,7 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
         [&](const auto& item) { return item.handle == eventData.BufferHandle; });
     if (knownBuffer == state->buffers.end()) {
         std::lock_guard<std::mutex> guard(context->mutex);
-        context->quarantined = true;
+        context->quarantineLocked();
         throw std::runtime_error(
             "The Producer signaled a buffer handle that this stream did not announce.");
     }
@@ -1182,7 +1184,7 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
             const auto requeueStatus = context->consumer.invoke(
                 Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle);
             if (requeueStatus != GenTL::GC_ERR_SUCCESS)
-                context->quarantined = true;
+                context->quarantineLocked();
         }
         throw;
     }

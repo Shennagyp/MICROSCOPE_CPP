@@ -39,6 +39,13 @@ bool known(StageMotionFaultKind f) noexcept {
     return false;
 }
 }
+namespace {
+bool isMeasuredEvidence(StagePositionEvidence e) noexcept {
+    return e==StagePositionEvidence::ControllerReported||
+           e==StagePositionEvidence::EncoderMeasured||
+           e==StagePositionEvidence::ExternalMeasured;
+}
+}
 AxisPosition::AxisPosition(StageAxisId a,double v,AxisCoordinateUnit u):axisId_(std::move(a)),value_(v),unit_(u){}
 Result<AxisPosition,MotionValueError> AxisPosition::create(StageAxisId a,double v,AxisCoordinateUnit u) {
     if(!std::isfinite(v)) return Result<AxisPosition,MotionValueError>::failure(MotionValueError::NonFiniteValue);
@@ -48,6 +55,25 @@ Result<AxisPosition,MotionValueError> AxisPosition::create(StageAxisId a,double 
 const StageAxisId& AxisPosition::axisId()const noexcept{return axisId_;}
 double AxisPosition::value()const noexcept{return value_;}
 AxisCoordinateUnit AxisPosition::unit()const noexcept{return unit_;}
+
+AxisPositionObservation::AxisPositionObservation(
+    AxisPosition position,double uncertainty,StagePositionEvidence evidence)
+    :position_(std::move(position)),uncertaintyMicrometers_(uncertainty),evidence_(evidence) {}
+Result<AxisPositionObservation,AxisPositionObservationError>
+AxisPositionObservation::create(
+    AxisPosition position,double uncertainty,StagePositionEvidence evidence) {
+    if(!std::isfinite(uncertainty)||uncertainty<0.0)
+        return Result<AxisPositionObservation,AxisPositionObservationError>::failure(
+            AxisPositionObservationError::InvalidUncertainty);
+    if(!isMeasuredEvidence(evidence))
+        return Result<AxisPositionObservation,AxisPositionObservationError>::failure(
+            AxisPositionObservationError::InvalidEvidence);
+    return Result<AxisPositionObservation,AxisPositionObservationError>::success(
+        AxisPositionObservation(std::move(position),uncertainty,evidence));
+}
+const AxisPosition& AxisPositionObservation::position()const noexcept{return position_;}
+double AxisPositionObservation::uncertaintyMicrometers()const noexcept{return uncertaintyMicrometers_;}
+StagePositionEvidence AxisPositionObservation::evidence()const noexcept{return evidence_;}
 
 AxisDisplacement::AxisDisplacement(StageAxisId a,double v,AxisCoordinateUnit u):axisId_(std::move(a)),value_(v),unit_(u){}
 Result<AxisDisplacement,MotionValueError> AxisDisplacement::create(StageAxisId a,double v,AxisCoordinateUnit u) {

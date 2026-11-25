@@ -201,7 +201,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C bounded ingress and freshness gates implemented, serialized runtime/reconciliation remain next**
+**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C Core bounded ingress and single-writer operation state implemented, Application worker loop/reconciliation integration remain next**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
@@ -237,6 +237,8 @@ The equipment definition now describes installed topology and static capabilitie
 - Added CalibrationRevisionId to each SlideRegistration and SlideNavigationTarget to preserve the exact slide placement used by a navigation request.
 - Implemented BoundedFeedbackInbox<TPayload> as a fixed-capacity thread-safe ring with Core-assigned FIFO sequences, runtime-scope rejection, explicit close and an IFeedbackRuntimeSignal control path. The noexcept signal distinguishes successful enqueue, feedback loss and ingress closure. QueueFull does not consume a sequence; overflow remains latched until the runtime acknowledges reconciliation.
 - Added RuntimeDeviceSessionBinding and ActiveOperationStepBinding to reject feedback from prior device-session generations and superseded operation-step/command identities before state reduction.
+- Implemented SerializedOperationRuntime<TPayload> as a Core single-writer operation/step state owner. It binds mutations to one owner thread, validates runtime/device/session/operation/step/command identity, applies the lifecycle reducers, returns the typed payload with its receipt to the owner, and retires active work when a device session is replaced or closed.
+- Feedback queue loss blocks command dispatch and step/operation verification until the inbox is drained and the owner acknowledges reconciliation. A completed device action remains AwaitingObservation; only an explicit verification transition marks a step Verified. The Application worker loop and notification delivery remain outstanding.
 - Added tests for capacity/closure, queue overflow and loss callback, runtime-scope rejection, gap-free sequence assignment and concurrent multi-producer FIFO order.
 - Added StageNavigationPlanner and StageHomingPolicy. It validates the target and registration before planning, selects direct coordinated X/Y movement while within both error thresholds, or homes both axes otherwise. After verified homing it re-resolves the saved slide-local point only if the registration revision is unchanged.
 - Propagates slide-registration uncertainty through the inverse affine transform with the rectangular affine interpolation L1 bound and refuses slide-local position estimates outside the selected slide geometry.
@@ -346,7 +348,7 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 The Phase 4B motion/registration/planning contracts and the first Phase 4C ingress primitive are implemented. BoundedFeedbackInbox<TPayload> provides typed fixed-capacity FIFO storage and overflow notification, but the serialized runtime consumer is not yet implemented.
 
-Continue Phase 4C with one single-writer runtime owner per microscope incarnation. It must consume FeedbackReceipt values in sequence order, validate runtime/device-session/operation/command correlation, reduce AxisPositionObservation values into the scoped StageAxisPositionState, and treat feedback-loss latches as unknown device/operation state until explicit reconciliation. Driver callbacks only submit to the inbox; they never mutate Core state.
+The Core single-writer operation state owner and typed feedback inbox are implemented. Continue Phase 4C in Application: implement the worker loop that binds SerializedOperationRuntime<TPayload> to one thread, waits on an IFeedbackRuntimeSignal implementation, drains receipts in order, and applies the returned capability payload to the matching capability state (including StagePositionState) on that same owner thread. Driver callbacks only submit to the inbox; they never mutate Core state. Reconciliation must establish device state before acknowledging a feedback-loss latch.
 
 The runtime must dispatch the returned HomeAxes or MoveAxesTo plan, preserve the SlideNavigationTarget during homing and call resolveAfterHoming only after the home action is verified. Phase 4D/4E then execute dependent operations and verify physical arrival from fresh feedback.
 

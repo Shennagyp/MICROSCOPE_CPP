@@ -259,16 +259,16 @@ void testUnknownConnectionPortIsRejected() {
 
     check(!definition &&
           definition.error() ==
-              EquipmentDefinitionError::UnknownConnectionFromPort,
+              EquipmentDefinitionError::UnknownConnectionFirstPort,
           "rejects a connection that references an unknown port");
 }
 
-void testConnectionDirectionIsValidated() {
+void testConnectionEndpointOrderDoesNotDefinePropagationDirection() {
     auto fixture = makeSharedSplitterFixture();
     fixture.connections[0] = makeConnection(
-        "connection-input-to-input",
+        "connection-condenser-source-reversed",
         fixture.condenserInput,
-        fixture.splitterInput);
+        fixture.sourceOutput);
 
     auto definition = MicroscopeEquipmentDefinition::create(
         fixture.microscopeId,
@@ -276,10 +276,8 @@ void testConnectionDirectionIsValidated() {
         fixture.connections,
         fixture.paths);
 
-    check(!definition &&
-          definition.error() ==
-              EquipmentDefinitionError::ConnectionPortDirectionMismatch,
-          "requires a connection to lead from output-capable to input-capable port");
+    check(static_cast<bool>(definition),
+          "accepts the same physical adjacency regardless of endpoint storage order");
 }
 
 void testAPhysicalPortCannotBeConnectedTwice() {
@@ -298,6 +296,28 @@ void testAPhysicalPortCannotBeConnectedTwice() {
     check(!definition &&
           definition.error() == EquipmentDefinitionError::PortAlreadyConnected,
           "rejects one physical port being assigned to multiple connections");
+}
+
+void testPathTraversalDirectionIsValidatedIndependently() {
+    auto fixture = makeSharedSplitterFixture();
+    fixture.paths[0] = take(OpticalPath::create(
+        makeId<OpticalPathId>("transmitted-path-a"),
+        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
+         makeStep(fixture.condenserId, fixture.condenserOutput, fixture.splitterOutput),
+         makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
+         makeStep(fixture.objectiveAId, fixture.objectiveAInput, fixture.objectiveAOutput),
+         makeStep(fixture.cameraAId, fixture.cameraAInput, std::nullopt)}));
+
+    auto definition = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        fixture.paths);
+
+    check(!definition &&
+          definition.error() ==
+              EquipmentDefinitionError::PathEntryPortDirectionMismatch,
+          "path traversal still requires an input-capable entry port");
 }
 
 void testDisconnectedPathIsRejected() {
@@ -456,7 +476,8 @@ int main() {
     testSharedComponentsAndBranching();
     testDuplicatePhysicalIdentitiesAreRejected();
     testUnknownConnectionPortIsRejected();
-    testConnectionDirectionIsValidated();
+    testConnectionEndpointOrderDoesNotDefinePropagationDirection();
+    testPathTraversalDirectionIsValidatedIndependently();
     testAPhysicalPortCannotBeConnectedTwice();
     testDisconnectedPathIsRejected();
     testPathPortMustBelongToItsComponent();

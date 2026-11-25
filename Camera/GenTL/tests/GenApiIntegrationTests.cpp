@@ -183,6 +183,30 @@ int main(int argc, char** argv) {
             require(readBackGain && *readBackGain == 42,
                     "GenApi Gain write/readback did not preserve the requested value.");
 
+            const camera::CameraFeatureValue requestedExposure{5000.5};
+            auto exposureWrite =
+                access.features().writeFeature("ExposureTime", requestedExposure);
+            require(std::holds_alternative<std::monostate>(exposureWrite),
+                    "ExposureTime floating-point write failed.");
+            auto exposureReadBack =
+                access.features().readFeature("ExposureTime");
+            auto* exposureReadBackValue =
+                std::get_if<camera::CameraFeatureValue>(&exposureReadBack);
+            require(exposureReadBackValue &&
+                        std::get_if<double>(exposureReadBackValue) &&
+                        std::abs(*std::get_if<double>(exposureReadBackValue) - 5000.5) < 1e-9,
+                    "ExposureTime floating-point write/readback failed.");
+
+            const camera::CameraFeatureValue invalidExposure{5000.25};
+            auto invalidExposureWrite =
+                access.features().writeFeature("ExposureTime", invalidExposure);
+            auto* invalidExposureError =
+                std::get_if<camera::CameraFeatureAccessError>(&invalidExposureWrite);
+            require(invalidExposureError &&
+                        invalidExposureError->code ==
+                            camera::CameraFeatureAccessError::Code::InvalidValue,
+                    "ExposureTime increment validation did not reject an invalid step.");
+
             auto temperatureRead =
                 access.features().readFeature("Temperature");
             auto* temperatureValue =
@@ -199,6 +223,20 @@ int main(int argc, char** argv) {
             auto* label = std::get_if<std::string>(labelValue);
             require(label && *label == "Mock GenTL",
                     "DeviceLabel string value was not preserved.");
+
+            const camera::CameraFeatureValue requestedLabel{
+                std::string{"Updated GenTL"}};
+            auto labelWrite =
+                access.features().writeFeature("DeviceLabel", requestedLabel);
+            require(std::holds_alternative<std::monostate>(labelWrite),
+                    "DeviceLabel string write failed.");
+            auto labelReadBack = access.features().readFeature("DeviceLabel");
+            auto* labelReadBackValue =
+                std::get_if<camera::CameraFeatureValue>(&labelReadBack);
+            require(labelReadBackValue &&
+                        std::get_if<std::string>(labelReadBackValue) &&
+                        *std::get_if<std::string>(labelReadBackValue) == "Updated GenTL",
+                    "DeviceLabel string write/readback failed.");
 
             auto initialEnum = access.features().readFeature("TriggerMode");
             auto* initialEnumValue =

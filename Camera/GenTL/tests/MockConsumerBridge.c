@@ -48,6 +48,7 @@ static const char mock_xml[] =
     "    <Value>2500.0</Value>\n" \
     "    <Min>10.0</Min>\n" \
     "    <Max>1000000.0</Max>\n" \
+    "    <Inc>0.5</Inc>\n" \
     "    <Unit>us</Unit>\n" \
     "  </Float>\n" \
     "  <Integer Name=\"TriggerDelay\">\n" \

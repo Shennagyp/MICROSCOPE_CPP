@@ -1,21 +1,25 @@
-# Historical AmScope Native Release Plan — superseded for Camera v2.0
+# AmScope Native Camera Module — Subordinate Release Execution Plan
 
-> **Historical plan. Do not use this document as the current Camera v2.0 roadmap.**
-> It records the former Qt adapter / Qt Widgets preview delivery. Camera v2.0
-> now defines a non-Qt programmatic library; it has no reusable camera UI
-> deliverable. Keep this file as historical evidence for the implementation
-> decisions and acceptance work performed under the previous release scope.
+> **Roadmap authority:** this is a narrower AmScope-native release execution
+> plan, not the governing Camera Module v2.0 roadmap. Preserve the original
+> Phase 0–8 identities in
+> [`AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md`](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md).
+> This plan's AmScope release milestones are subordinate and do not renumber or
+> remove original Camera Module deliverables.
 >
-> The current phase numbering, implementation state, CI evidence, risks and
-> continuation sequence are maintained in
+> The optional Qt streaming adapter and reusable Qt camera UI remain required
+> by original Phases 3 and 4. A non-Qt core build is an independent consumption
+> requirement, not a decision to delete Qt deliverables. GenTL/GenApi remains
+> original Phase 5.
+>
+> Current Camera v2.0 status and continuation instructions are in
 > [`CAMERA_V2_DEVELOPMENT_STATUS.md`](CAMERA_V2_DEVELOPMENT_STATUS.md).
-
 
 **Revision date:** 24 November 2026  
 **Target branch:** `amscope-native-driver-0.7`  
 **Revision baseline:** `03417b3a0dbd3b846500bed7fc2417f0a7082057` (accepted v0.6 head from which v0.7 was branched)  
 **Language/runtime:** C++17, Qt 6, macOS  
-**Status:** Active release plan. This document supersedes the earlier phase sequence in `AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md`.
+**Status:** Subordinate AmScope-native execution plan. Its phase numbering and release scope do not supersede the governing Camera Module Phase 0–8 roadmap.
 
 ---
 

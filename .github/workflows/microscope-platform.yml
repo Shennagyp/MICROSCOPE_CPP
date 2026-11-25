@@ -39,6 +39,7 @@ jobs:
             runner: windows-latest
 
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
 
     steps:
       - name: Checkout

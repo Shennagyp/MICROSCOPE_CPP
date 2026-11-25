@@ -37,8 +37,9 @@ public:
             // Capture before either queue is drained. A producer that enqueues
             // during draining advances the generation; waitForChange() then
             // returns immediately instead of losing that wakeup.
-            const auto observedGeneration = wakeSignal.snapshot().generation;
-            if (wakeSignal.snapshot().wakeFault) {
+            const auto wakeBeforeDrain = wakeSignal.snapshot();
+            const auto observedGeneration = wakeBeforeDrain.generation;
+            if (wakeBeforeDrain.wakeFault) {
                 return core::Result<bool, SerializedRuntimeWorkerError>::failure(
                     SerializedRuntimeWorkerError::WakeSignalFault);
             }

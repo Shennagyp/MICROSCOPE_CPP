@@ -40,8 +40,10 @@ enum class OperationSnapshotError {
     ZeroRevision
 };
 
-// Immutable operation value. Only Core runtime code creates new revisions;
-// consumers receive read-only accessors and cannot mutate a published snapshot.
+// Immutable operation value. Revision starts at one and increases strictly for
+// each published change to this operation's state. It is scoped to the full
+// operation identity, not a timestamp or a cross-operation ordering value.
+// Core runtime code publishes a new snapshot; consumers cannot mutate one.
 class OperationSnapshot final {
 public:
     [[nodiscard]] static Result<

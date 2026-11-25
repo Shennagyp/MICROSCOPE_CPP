@@ -204,15 +204,15 @@ public:
             Runtime& operationRuntime) {
         const auto& specification = carrier.specification();
         if (position.stageComponentId() != specification.stageComponentId()) {
-            return failure(StageNavigationRuntimeErrorCode::StagePositionMismatch);
+            return creationFailure(StageNavigationRuntimeErrorCode::StagePositionMismatch);
         }
         if (position.horizontal().axisId() != specification.horizontalAxisId() ||
             position.transverse().axisId() != specification.transverseAxisId()) {
-            return failure(StageNavigationRuntimeErrorCode::StageAxisMismatch);
+            return creationFailure(StageNavigationRuntimeErrorCode::StageAxisMismatch);
         }
         if (position.horizontal().unit() != specification.horizontalUnit() ||
             position.transverse().unit() != specification.transverseUnit()) {
-            return failure(StageNavigationRuntimeErrorCode::StageUnitMismatch);
+            return creationFailure(StageNavigationRuntimeErrorCode::StageUnitMismatch);
         }
 
         const auto* horizontalBudget =
@@ -224,14 +224,14 @@ public:
             transverseBudget == nullptr ||
             horizontalBudget->unit() != specification.horizontalUnit() ||
             transverseBudget->unit() != specification.transverseUnit()) {
-            return failure(StageNavigationRuntimeErrorCode::ErrorBudgetMismatch);
+            return creationFailure(StageNavigationRuntimeErrorCode::ErrorBudgetMismatch);
         }
 
         if (verificationPolicy.mode() !=
                 StageNavigationPositionVerificationMode::BoundedCommandEstimate &&
             verificationPolicy.mode() !=
                 StageNavigationPositionVerificationMode::DevicePositionObservations) {
-            return failure(StageNavigationRuntimeErrorCode::VerificationPolicyMismatch);
+            return creationFailure(StageNavigationRuntimeErrorCode::VerificationPolicyMismatch);
         }
 
         return core::Result<StageNavigationRuntime, StageNavigationRuntimeError>::success(
@@ -416,7 +416,9 @@ public:
         }
         if (carrier.specification().stageComponentId() != position_.stageComponentId() ||
             carrier.specification().horizontalAxisId() != position_.horizontal().axisId() ||
-            carrier.specification().transverseAxisId() != position_.transverse().axisId()) {
+            carrier.specification().transverseAxisId() != position_.transverse().axisId() ||
+            carrier.specification().horizontalUnit() != position_.horizontal().unit() ||
+            carrier.specification().transverseUnit() != position_.transverse().unit()) {
             return core::Result<bool, StageNavigationRuntimeError>::failure(
                 makeError(StageNavigationRuntimeErrorCode::StagePositionMismatch));
         }
@@ -482,7 +484,7 @@ private:
 
     [[nodiscard]] static core::Result<
         StageNavigationRuntime,
-        StageNavigationRuntimeError> failure(
+        StageNavigationRuntimeError> creationFailure(
             StageNavigationRuntimeErrorCode code) {
         return core::Result<StageNavigationRuntime, StageNavigationRuntimeError>::failure(
             makeError(code));
@@ -946,9 +948,7 @@ private:
                transverseError <= verificationPolicy_.transverseTargetToleranceMicrometers();
     }
 
-    StagePositionRuntimeDispositionDummy();
-
-    core::DualSlideCarrierState carrier_;
+        core::DualSlideCarrierState carrier_;
     core::StagePositionState position_;
     core::StageHomingPolicy homingPolicy_;
     StageMotionErrorBudget errorBudget_;

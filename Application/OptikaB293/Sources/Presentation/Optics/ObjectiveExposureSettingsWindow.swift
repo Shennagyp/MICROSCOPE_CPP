@@ -58,8 +58,12 @@ struct ObjectiveExposureSettingsWindow: View {
     }
 
     private var canSaveProfile: Bool {
-        guard let exposureMode = exposureMode,
+        guard model.canAccessFeatures,
+              let exposureMode = exposureMode,
               exposureMode == "Off" || exposureMode == "Once" || exposureMode == "Continuous",
+              let autoDescriptor = exposureAutoDescriptor,
+              autoDescriptor.isAvailable,
+              autoDescriptor.isWritable,
               !model.isCameraOperationPending,
               !features.isFeatureSnapshotLoading,
               !features.isFeatureWritePending else {

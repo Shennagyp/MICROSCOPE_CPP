@@ -567,7 +567,7 @@ void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
               "configuration.optical_function.requirement_not_satisfied"),
           "rejects phase contrast when the selected phase components do not match the required compatibility identity");
 
-    const unrelatedOpticalComponentRequest = makeRequest(
+    const auto unrelatedOpticalComponentRequest = makeRequest(
         fixture,
         {fixture.fullPathId},
         fixture.cameraModeId,

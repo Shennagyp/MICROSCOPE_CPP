@@ -2,9 +2,10 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest implementation checkpoint:** `31278e255ea3fc7c7a23e3fd3e2e1c734be6e896`  
-**Latest CI-validated code checkpoint:** `31278e255ea3fc7c7a23e3fd3e2e1c734be6e896` — official GenApi 3.5.1 SDK build and XML-backed feature/command integration tests passed on Intel x86_64 and Apple Silicon arm64 in [#45693246924](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45693246924). The suite covers Root-category-only access, hidden-register rejection, dynamic availability, Boolean/Integer/Enumeration access, command issue/completion polling and read-only access semantics.
-**CI:** GenTL/GenApi workflow [#45693246924](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45693246924) passed on Intel x86_64 and Apple Silicon arm64, including the official GenApi 3.5.1 SDK and XML-backed runtime suite. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed its four jobs; Qt/UI is now excluded from active scope.  
+**Latest implementation checkpoint:** `caa0e8afc8f31278152cc4d7e7bc2ecb1243ce05` — adds `EventKill` fallback when a Producer rejects event unregistration, with deterministic failure-injection coverage.  
+**Latest fully CI-validated checkpoint:** `67212487f579513782bf7b12f5d7cb293f57c25c` — stream-close cancellation regression and full GenTL/GenApi suite passed on both architectures in [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670).  
+**Current validation:** [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523) passed Intel x86_64, including official GenApi 3.5.1 SDK build/tests; Apple Silicon arm64 is queued. This run validates the `EventKill` fallback change.  
+**CI:** GenTL/GenApi workflow [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670) passed both architectures. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed its four jobs; Qt/UI is now excluded from active scope.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026
 
@@ -68,9 +69,9 @@ Still capture has a separate event waiter and pull path. Settings, one-shot comm
 
 - `ConsumerBridge` loads a separately built `libGenTLConsumerCAPI.dylib` and validates bridge ABI version 1 plus GenTL header version 1.6. The C++ target does not implement a second CTI loader or GenTL function table.
 - `Producer` initializes the Consumer and TL module, discovers interfaces/devices, retains interface handles, and opens a device session. `DeviceSession` owns the device handle and remote port access; producer state remains alive while device sessions retain it.
-- Data streams now open through the retained device session, register `EVENT_NEW_BUFFER`, allocate/announce and queue a bounded buffer set, start acquisition, wait for completed-buffer events, copy payload and metadata, and requeue buffers. Stop unregisters the event and drains active reads before queue flush, buffer revocation and stream close.
-- `DataStreamFrame` preserves copied payload bytes, frame ID, nanosecond timestamp, pixel-format value and namespace (including PFNC namespace), dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete, image-only, zero-offset/zero-padding buffers with explicit layout metadata into `camera::Frame`; PFNC Mono8 is the first typed mapping. Unknown formats retain their opaque identifier and payload without fabricated stride. The Mono8 byte-count calculation is overflow-checked.
-- Discovery and frame-wait APIs accept milliseconds and convert to GenTL nanosecond timeouts. Only one frame waiter is allowed per stream.
+- Data streams open through the retained device session, register `EVENT_NEW_BUFFER`, allocate/announce and queue a bounded buffer set, start acquisition, wait for completed-buffer events, copy payload and metadata, and requeue buffers. Stop unregisters the event before waiting for active reads to drain; GenTL specifies that unregistration aborts pending `EventGetData` calls. If unregistration fails, the implementation attempts `EventKill` for the single permitted waiter and quarantines the native context because normal teardown did not complete.
+- `DataStreamFrame` preserves copied payload bytes, frame ID, nanosecond timestamp, pixel-format value and namespace (including PFNC namespace), pixel endianness, dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete, image-only, zero-offset/zero-padding buffers with exact payload-size and stride checks: PFNC Mono8, unpacked Mono10/12/14/16 and RGB8 are supported. Multi-byte layouts require known byte order; packed, Bayer, planar, compressed and unknown layouts retain their opaque identifier/payload without fabricated stride. All size calculations are overflow-checked.
+- Discovery and frame-wait APIs accept milliseconds and convert to GenTL nanosecond timeouts. Only one frame waiter is allowed per stream. Deterministic tests now hold `EventGetData` pending while closing the stream and verify that event unregistration cancels the wait; a separate fault-injection test verifies the `EventKill` fallback when unregistration fails.
 - Device and stream sessions retain the required parent state. A stream can outlive its `DeviceSession` wrapper; the device handle closes only after the last stream/session reference is released.
 - Failed native cleanup quarantines and process-retains the Consumer context and dynamically loaded C ABI bridge. The bridge is not unloaded while CTI handles may remain.
 - GenApi XML retrieval uses `GCGetNumPortURLs` / `GCGetPortURLInfo`; `LOCAL` register-map XML is read in bounded chunks and `FILE` XML is read from the advertised file. HTTP and custom URL schemes are not implemented.
@@ -120,6 +121,9 @@ Active dependency order: 0 → 1 → 2 → 5 → 6 → 7 → 8. Original Phases 
 | `8a18f81`–`c629f53` | Decouple Common CMake target from AmScope | Root CMake now defines `Camera::Common` independently of the AmScope target, allowing a GenTL-only configuration. The AmScope CMake project reuses the root target or creates it when configured standalone. |
 | `f049f91` | Compile official GenApi 3.5.1 SDK | CI downloads and hash-verifies the EMVA GenICam 2026.07 package, extracts SDK/runtime and compiles the GenApi target on Intel x86_64 and Apple Silicon arm64. |
 | `78b3e43`–`31278e2` | Add XML-backed GenApi runtime coverage | Official GenApi parses a synthetic XML map and tests Root-category-only access, internal-register rejection, dynamic availability, Boolean/Integer/Enumeration read/write, command issue/completion and GenTL read-only access on both architectures. |
+| `2d851fc` | Preserve pixel endianness and map verified PFNC layouts | Added GenTL `BUFFER_INFO_PIXEL_ENDIANNESS` capture and safe Mono8, unpacked Mono10/12/14/16 and RGB8 projections with exact payload-size/stride checks. |
+| `5fa61e7`–`6721248` | Verify stream-close cancellation | Added a deterministic pending `EventGetData` test and expanded mock buffer capacity; the full GenTL/GenApi workflow passed both architectures in [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670). |
+| `caa0e8a` | Add event-unregistration failure fallback | On failed `GCUnregisterEvent`, attempt `EventKill` for the single allowed waiter and quarantine the context. Intel passed the full workflow in [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523); Apple arm64 is queued. |
 
 ### CI evidence
 
@@ -151,7 +155,7 @@ The Swift C ABI source and tests are on private repository branch `Shennagyp/AMS
 
 Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs after the Common CMake target was moved to the root project; Qt/UI is now excluded from active scope. The earlier GenTL-only run [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) is superseded by the later stream-acquisition matrix.
 
-No local build or physical-camera test is claimed in this status update. The official GenApi 3.5.1 SDK build and XML-backed integration tests pass on both supported macOS architectures in CI. Vendor CTI and physical-camera validation remain outstanding.
+No local build or physical-camera test is claimed in this status update. The GenTL/GenApi workflow [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670) passed both architectures with the pending-wait cancellation test. The newer `EventKill` fallback change passed Intel x86_64 in [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523); Apple Silicon validation is queued. Vendor CTI and physical-camera validation remain outstanding.
 
 ## 6. Highest-priority unresolved risks
 
@@ -173,8 +177,8 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 1. Validate the real Swift `libGenTLConsumerCAPI.dylib`: pointer marshalling, complete operation mapping, dynamic loading and Swift runtime packaging. The current C++ workflow validates only a mock bridge.
 2. Expand GenApi runtime coverage for malformed XML, unsupported/unknown node types, command completion transitions and failure/recovery paths; keep public access restricted to Root-category features.
-3. Complete the GenTL-to-Common frame adapter with verified PFNC layouts/stride, preserving unknown layouts without guessing; continue malformed/empty/incomplete-payload tests.
-4. Qualify discovery, device access, stream lifecycle, frame payload/metadata and GenApi behavior against a vendor CTI Producer and physical CTI camera.
+3. Finish cross-architecture validation of the `EventKill` fallback and retain deterministic cancellation/failure-path coverage.
+4. Qualify discovery, device access, stream lifecycle, frame payload/metadata, verified PFNC layouts and GenApi behavior against a vendor CTI Producer and physical CTI camera.
 5. Complete Phase 2 physical common-frame/RAW evidence.
 6. Complete Phase 1 callback-quiescence and failure-injection hardening only after satisfying its documented hardware entry condition; test callback drain and establish the SDK no-new-callback guarantee.
 7. Reconcile AmScope feature/model coverage against physical evidence.

@@ -362,9 +362,11 @@ private:
 
 // Implementations are thread-safe. Enqueued means the ingress owns the
 // message. On QueueFull, the ingress itself must latch feedback loss/unknown
-// device state before returning; it cannot rely on a later adapter callback
-// to report the drop. The runtime cannot verify affected work until it has
-// reconciled the lost-feedback condition. Closed identifies a disposed ingress.
+// device state and wake the runtime through a control path independent of the
+// saturated queue before returning. It cannot rely on a later adapter callback
+// to report the drop or on another queue slot becoming available. The runtime
+// cannot verify affected work until it has reconciled the lost-feedback
+// condition. Closed identifies a disposed ingress.
 template <typename TPayload>
 class IFeedbackIngress {
 public:

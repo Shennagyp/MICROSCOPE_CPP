@@ -27,9 +27,10 @@ bool validSource(ObservationSource s) {
 }
 }
 DualSlideCarrierSpecification::DualSlideCarrierSpecification(
-    EquipmentComponentId c,StageAxisId x,StageAxisId y,CarrierHorizontalDirection d)
+    EquipmentComponentId c,StageAxisId x,StageAxisId y,CarrierHorizontalDirection d,
+    AxisCoordinateUnit xu,AxisCoordinateUnit yu)
     :stageComponentId_(std::move(c)),horizontalAxisId_(std::move(x)),
-     transverseAxisId_(std::move(y)),direction_(d) {}
+     transverseAxisId_(std::move(y)),direction_(d),horizontalUnit_(xu),transverseUnit_(yu) {}
 Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>
 DualSlideCarrierSpecification::create(
     const StageSpecification& stage,StageAxisId x,StageAxisId y,CarrierHorizontalDirection d) {
@@ -52,12 +53,33 @@ DualSlideCarrierSpecification::create(
         return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::failure(
             DualSlideCarrierSpecificationError::InvalidHorizontalDirection);
     return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::success(
-        DualSlideCarrierSpecification(stage.componentId(),std::move(x),std::move(y),d));
+        DualSlideCarrierSpecification(stage.componentId(),std::move(x),std::move(y),d,
+            xi->coordinateUnit(),yi->coordinateUnit()));
 }
 const EquipmentComponentId& DualSlideCarrierSpecification::stageComponentId()const noexcept{return stageComponentId_;}
 const StageAxisId& DualSlideCarrierSpecification::horizontalAxisId()const noexcept{return horizontalAxisId_;}
 const StageAxisId& DualSlideCarrierSpecification::transverseAxisId()const noexcept{return transverseAxisId_;}
 CarrierHorizontalDirection DualSlideCarrierSpecification::horizontalDirection()const noexcept{return direction_;}
+
+Result<MoveAxesTo,SlideNavigationCommandError>
+DualSlideCarrierSpecification::moveTo(const StagePlanePoint& p) const {
+    if(!std::isfinite(p.horizontalMicrometers)||!std::isfinite(p.transverseMicrometers))
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::InvalidStageCoordinate);
+    const double x=horizontalUnit_==AxisCoordinateUnit::Millimeters
+        ? p.horizontalMicrometers/1000.0 : p.horizontalMicrometers;
+    const double y=transverseUnit_==AxisCoordinateUnit::Millimeters
+        ? p.transverseMicrometers/1000.0 : p.transverseMicrometers;
+    auto xt=AxisPosition::create(horizontalAxisId_,x,horizontalUnit_);
+    auto yt=AxisPosition::create(transverseAxisId_,y,transverseUnit_);
+    if(!xt||!yt)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+        SlideNavigationCommandError::InvalidStageCoordinate);
+    auto command=MoveAxesTo::create({std::move(xt).value(),std::move(yt).value()});
+    if(!command)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+        SlideNavigationCommandError::InvalidStageCoordinate);
+    return Result<MoveAxesTo,SlideNavigationCommandError>::success(std::move(command).value());
+}
+
 
 SlideGeometry::SlideGeometry(double w,double h):width_(w),height_(h){}
 Result<SlideGeometry,SlideGeometryError> SlideGeometry::create(double w,double h) {
@@ -98,9 +120,9 @@ double SlideCornerMeasurement::uncertaintyMicrometers()const noexcept{return unc
 
 SlideRegistration::SlideRegistration(
     SlideId id,DualSlideSlot s,SlideGeometry g,std::array<SlideCornerMeasurement,4> c,
-    std::array<double,6> t,double m,double r)
+    std::array<double,6> t,std::array<double,4> residuals,double m,double r)
     :slideId_(std::move(id)),slot_(s),geometry_(g),corners_(std::move(c)),
-     transform_(t),maxResidual_(m),rmsResidual_(r) {}
+     transform_(t),cornerResiduals_(residuals),maxResidual_(m),rmsResidual_(r) {}
 Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
     SlideId id,DualSlideSlot slot,SlideGeometry g,
     std::array<SlideCornerMeasurement,4> input,double maxAllowed) {
@@ -140,12 +162,14 @@ Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
        std::abs(determinant)<=std::numeric_limits<double>::epsilon()*std::max(1.0,scale)*64)
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::DegenerateTransform);
     double sum=0,maxResidual=0;
+    std::array<double,4> residuals{};
     for(int i=0;i<4;++i) {
         const double x=tx+ax*lx[i]+bx*ly[i];
         const double y=ty+ay*lx[i]+by*ly[i];
         const double dx=x-corners[i].stagePosition().horizontalMicrometers;
         const double dy=y-corners[i].stagePosition().transverseMicrometers;
         const double residual=std::hypot(dx,dy);
+        residuals[static_cast<std::size_t>(i)]=residual;
         sum+=residual*residual;
         maxResidual=std::max(maxResidual,residual);
     }
@@ -153,7 +177,7 @@ Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::FitResidualExceeded);
     return Result<SlideRegistration,SlideRegistrationError>::success(
         SlideRegistration(std::move(id),slot,g,std::move(corners),
-            {tx,ax,bx,ty,ay,by},maxResidual,std::sqrt(sum/4.0)));
+            {tx,ax,bx,ty,ay,by},residuals,maxResidual,std::sqrt(sum/4.0)));
 }
 const SlideId& SlideRegistration::slideId()const noexcept{return slideId_;}
 DualSlideSlot SlideRegistration::slot()const noexcept{return slot_;}
@@ -161,6 +185,7 @@ const SlideGeometry& SlideRegistration::geometry()const noexcept{return geometry
 const std::array<SlideCornerMeasurement,4>& SlideRegistration::cornerMeasurements()const noexcept{return corners_;}
 double SlideRegistration::maximumFitResidualMicrometers()const noexcept{return maxResidual_;}
 double SlideRegistration::rmsFitResidualMicrometers()const noexcept{return rmsResidual_;}
+const std::array<double,4>& SlideRegistration::cornerFitResidualsMicrometers()const noexcept{return cornerResiduals_;}
 Result<StagePlanePoint,SlideRegistrationError> SlideRegistration::toStage(SlideLocalPoint p)const {
     if(!std::isfinite(p.xMicrometers)||!std::isfinite(p.yMicrometers))
         return Result<StagePlanePoint,SlideRegistrationError>::failure(SlideRegistrationError::NonFiniteLocalPoint);
@@ -214,4 +239,21 @@ const SlideRegistration* DualSlideCarrierState::registrationFor(const SlideId&id
     if(right_.slideId()&&*right_.slideId()==id&&right_.registration())return &*right_.registration();
     return nullptr;
 }
+
+Result<MoveAxesTo,SlideNavigationCommandError> DualSlideCarrierState::commandFor(
+    const SlideId& slideId,SlideLocalPoint localPoint) const {
+    const auto* registration=registrationFor(slideId);
+    if(!registration) {
+        const bool loaded=(left_.slideId()&&*left_.slideId()==slideId)||
+                          (right_.slideId()&&*right_.slideId()==slideId);
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            loaded?SlideNavigationCommandError::SlideNotRegistered:
+                   SlideNavigationCommandError::SlideNotInCarrier);
+    }
+    auto stagePoint=registration->toStage(localPoint);
+    if(!stagePoint)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+        SlideNavigationCommandError::InvalidStageCoordinate);
+    return specification_.moveTo(stagePoint.value());
+}
+
 } // namespace microscope::core

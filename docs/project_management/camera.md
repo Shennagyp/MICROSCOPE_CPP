@@ -3,9 +3,9 @@
 **Canonical project:** the reusable Camera Module in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Camera development branch:** `camera-v.2.0`  
-**Latest Camera status checkpoint:** `8421f553d66b7a962bb02e0386cf148e519d2550`  
-**Last verified non-Qt code/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
-**Current workflow with Qt matrix:** [#45658538056](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45658538056) — pending  
+**Latest Camera status checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`  
+**Latest CI-validated code checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`  
+**CI:** [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) — passed all four non-Qt/Qt architecture jobs (12/12 non-Qt and 18/18 Qt tests per architecture).  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
 **Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
 **Roadmap authority:** original Camera Module Phases 0–8, preserved for v2.0.
@@ -145,12 +145,13 @@ The names and target boundaries may vary, but the ownership semantics are mandat
 
 Current source:
 - `AmcamCamera` is a non-Qt C++ API and sole session owner.
-- `Camera::Common` has a non-Qt latest-frame mailbox.
-- `Camera::Qt` and `QtAmcamCamera` provide existing Qt scheduling/stream handoff.
-- The current Qt facade combines a serialized request worker with Qt frame notification; Phase 3 must reconcile this against the target responsibility split.
-- The Qt facade header is physically isolated under `Camera/Amscope/legacy/qt` and is exposed only by the optional Qt target. This is dependency isolation, not removal of the Qt deliverable.
+- `Camera::Common` owns a non-Qt latest-frame mailbox.
+- `Camera::Qt` is now a concrete Qt Core library. Its backend-neutral `camera::qt::FrameStream` wraps the Common mailbox and owns coalesced QObject-affinity notification, latest-frame retrieval and clearing.
+- `QtAmcamCamera` composes one `AmcamCamera` session with one `FrameStream`. Its provider-specific serialized operation/lifecycle request queue and generation rules remain; generic frame notification has moved out of the AmScope facade.
+- `AmcamCamera` implements the common `ICameraFeatureAccess` contract and exposes its non-Qt provider command/telemetry API; no forwarding-only control wrapper is required.
+- The optional AmScope Qt facade header is exposed only by the optional Qt target, not by the non-Qt installed header set.
 
-**Status:** In progress. Non-Qt CI is green. The separate Qt job has been added; workflow #45658538056 is pending and must pass. Physical same-session control/streaming regression remains required by the original phase.
+**Status:** In progress. The new implementation at `e12d765f` passed all four CI jobs in workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968): non-Qt 12/12 and Qt 18/18 tests on Intel and Apple Silicon. Physical same-session control/streaming regression and owner acceptance remain required by the original phase.
 
 ### 3.6 Phase 4 — Extract reusable Qt camera UI library
 
@@ -262,7 +263,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 | 0 | Historically accepted by owner | MU503 records exist; extended/exact-commit evidence does not certify all models. |
 | 1 | Historically accepted; hardening remains | Native single-session driver exists. Callback quiescence and full SDK lifecycle fault injection remain material risks. |
 | 2 | Partially implemented | Common models/frame contracts and 2.3 ownership decision exist. Physical common-frame/RAW qualification remains. |
-| 3 | In progress | Non-Qt API works as a build target; optional Qt adapter exists. Separate responsibilities and same-session physical regression remain. Non-Qt CI passed; Qt CI validation pending. |
+| 3 | In progress | `AmcamCamera` supplies the non-Qt control/session API; concrete `Camera::Qt::FrameStream` now owns Qt frame notification/handoff; `QtAmcamCamera` composes both while retaining the serialized provider operation queue. All four CI jobs pass (12/12 non-Qt and 18/18 Qt tests per architecture). Physical same-session regression and final boundary acceptance remain. |
 | 4 | Partially implemented | FrameView, CameraControlPanel and ImageInfoBar exist. Full reusable UI extraction and phase-wide hardware/UI verification remain. |
 | 5 | Blocked follow-on | Existing Consumer integration choice, target CTI Producer and physical CTI camera remain prerequisites. |
 | 6 | Open | Broad implementation exists; reconcile every feature and model claim against source, tests and hardware. |
@@ -275,8 +276,8 @@ This ledger separates source presence, automated evidence, physical evidence and
 - Historical v0.7 FrameView physical smoke: discovery/open/start/changing frames/stop/close. It validates that UI slice only, not the current complete Phase 4 UI.
 - Separate MU503 short diagnostic runs reported approximately 91 FPS at 640 × 480 with zero reported drops. Do not conflate those with the separate 835-frame/60.722-second run or infer long-duration qualification.
 - Source comparison found 307 files under `Camera/` identical between `OPTIKA-B293-DUALSLIDE-APP-v.0.9` and the initial `camera-v.2.0` baseline. No Camera subtree copy was missing.
-- Non-Qt CI run [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) passed on Intel x86_64 and Apple Silicon arm64 at code checkpoint `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`: 12/12 CTest, non-Qt header install, Qt facade absence and installed-header syntax compilation. This is software evidence, not physical-camera qualification.
-- A separate Qt streaming/UI job has been added to `.github/workflows/amscope-macos.yml`. Workflow [#45658538056](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45658538056) is pending against `7ae8f6578370919145649a18858643c54e1e5b7f`; verify the non-Qt and Qt jobs independently. The prior non-Qt pass does not validate Qt.
+- Workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed at `e12d765f408c2b0be7100c64b2eb245de5a2aca4`: non-Qt 12/12 CTest tests on Intel and Apple Silicon; Qt 18/18 CTest tests on Intel and Apple Silicon. The Qt build includes the concrete `Camera::Qt` stream library, its handoff tests, reusable widgets, AmScope Qt request facade and preview composition. Installed non-Qt header checks and architecture/artifact verification also passed.
+- This is software evidence only. It does not constitute physical-camera regression, same-session control/stream verification, or phase acceptance.
 - Optika's Objective-C++ bridge, NativeCameraController and Swift frame feed are application-owned. They do not create a second AmScope SDK session.
 
 ### Unresolved risks and gaps
@@ -284,7 +285,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 1. Prove callback quiescence and safe callback-reachable resource release around SDK Close.
 2. Complete deterministic native SDK lifecycle fault injection after satisfying its documented physical-baseline entry gate.
 3. Complete production RAW/common-frame hardware qualification.
-4. Complete Phase 3 separation of non-Qt control and Qt streaming over one session.
+4. Complete Phase 3 same-session physical regression for non-Qt control and Qt streaming; source-level Qt frame handoff is separated and CI-validated at `e12d765`.
 5. Complete Phase 4 reusable UI coverage and physical regression.
 6. Reconcile all SDK features, commands, telemetry and model profiles to hardware evidence.
 7. Resolve GenTL Consumer integration and acquire a real CTI Producer/camera.
@@ -314,7 +315,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** `8421f553d66b7a962bb02e0386cf148e519d2550`. **Latest confirmed non-Qt code/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`; workflow [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539). **Qt matrix:** pending in workflow [#45658538056](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45658538056).  
+**Latest Camera status checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`. **Latest confirmed CI checkpoint:** `e12d765f408c2b0be7100c64b2eb245de5a2aca4`; workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed all four jobs.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

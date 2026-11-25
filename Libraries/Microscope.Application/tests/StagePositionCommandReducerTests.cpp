@@ -158,7 +158,7 @@ int main() {
     const auto check = [&failures](bool condition, const char* message) {
         if (!condition) {
             ++failures;
-            std::cerr << "FAIL: " << message << '\\n';
+            std::cerr << "FAIL: " << message << '\n';
         }
     };
 
@@ -259,9 +259,9 @@ int main() {
     fixture.runtime->closeFeedbackIngress();
 
     if (failures != 0) {
-        std::cerr << failures << " stage position command reducer test(s) failed\\n";
+        std::cerr << failures << " stage position command reducer test(s) failed\n";
         return 1;
     }
-    std::cout << "All stage position command reducer tests passed\\n";
+    std::cout << "All stage position command reducer tests passed\n";
     return 0;
 }

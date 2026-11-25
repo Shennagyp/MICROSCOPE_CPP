@@ -32,6 +32,7 @@ struct StageHomeThenMovePlan final {
 using StageNavigationPlan = std::variant<StageDirectMovePlan,StageHomeThenMovePlan>;
 
 enum class StageNavigationPlanningError {
+    StageComponentMismatch,
     HorizontalAxisMismatch,
     TransverseAxisMismatch,
     HorizontalUnitMismatch,

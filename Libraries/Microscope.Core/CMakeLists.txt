@@ -19,8 +19,6 @@ target_include_directories(microscope_core
 
 set_target_properties(microscope_core PROPERTIES
     POSITION_INDEPENDENT_CODE ON
-    VERSION "0.9.0"
-    SOVERSION "0"
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS OFF)

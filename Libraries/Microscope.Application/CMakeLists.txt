@@ -30,6 +30,8 @@ set_target_properties(microscope_application PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     VERSION "0.9.0"
     SOVERSION "0"
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS OFF)
 
 if(BUILD_TESTING)
@@ -38,6 +40,8 @@ if(BUILD_TESTING)
     target_link_libraries(microscope_application_contract_tests
         PRIVATE Microscope::Application)
     set_target_properties(microscope_application_contract_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS OFF)
     add_test(
         NAME microscope_application_contract_tests

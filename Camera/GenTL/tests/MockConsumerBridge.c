@@ -1,7 +1,32 @@
+#include "camera/gentl/GenTL_v1_6.h"
+
 #include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 
 static int context_token;
+
+static void* pointer(uint64_t value) {
+    return (void*)(uintptr_t)value;
+}
+
+static int32_t write_string(char* destination, size_t* size, const char* value) {
+    if (!size) return GC_ERR_INVALID_PARAMETER;
+    const size_t required = strlen(value) + 1;
+    if (!destination || *size < required) {
+        *size = required;
+        return GC_ERR_BUFFER_TOO_SMALL;
+    }
+    memcpy(destination, value, required);
+    *size = required;
+    return GC_ERR_SUCCESS;
+}
+
+static int32_t write_info_string(
+    INFO_DATATYPE* type, void* destination, size_t* size, const char* value) {
+    if (type) *type = INFO_DATATYPE_STRING;
+    return write_string((char*)destination, size, value);
+}
 
 void* gentl_consumer_create(const char* path, char* error, uint32_t capacity) {
     if (!path || strcmp(path, "mock.cti") != 0) {
@@ -17,26 +42,108 @@ void* gentl_consumer_create(const char* path, char* error, uint32_t capacity) {
     return &context_token;
 }
 
-void gentl_consumer_destroy(void* context) {
-    (void)context;
-}
-
-uint32_t gentl_consumer_bridge_abi_version(void) {
-    return 1;
-}
-
-uint32_t gentl_consumer_header_version(void) {
-    return 0x01060000;
-}
+void gentl_consumer_destroy(void* context) { (void)context; }
+uint32_t gentl_consumer_bridge_abi_version(void) { return 1; }
+uint32_t gentl_consumer_header_version(void) { return GC_GENTL_HEADER_VERSION; }
 
 int32_t gentl_consumer_invoke(
-    void* context,
-    uint32_t operation,
-    const uint64_t* arguments,
-    uint32_t argument_count) {
-    if (context != &context_token) return -1006;
-    if (operation == 2 && argument_count == 0) return 0;
-    if (operation == 0 && argument_count == 4 &&
-        arguments && arguments[0] == 0x1234) return -11000;
-    return -1009;
+    void* context, uint32_t operation,
+    const uint64_t* arguments, uint32_t argument_count) {
+    if (context != &context_token) return GC_ERR_INVALID_HANDLE;
+    if (argument_count != 0 && !arguments) return GC_ERR_INVALID_PARAMETER;
+
+    switch (operation) {
+    case 0:
+        return argument_count == 4 && arguments[0] == 0x1234
+            ? -11000 : GC_ERR_INVALID_PARAMETER;
+    case 2:
+    case 3:
+    case 16:
+    case 23:
+    case 35:
+        return argument_count == ((operation == 2 || operation == 3) ? 0u : 1u)
+            ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+    case 4: {
+        if (argument_count != 4 || arguments[0] != 0x4444) return GC_ERR_INVALID_HANDLE;
+        auto* size = (size_t*)pointer(arguments[3]);
+        auto* bytes = (uint8_t*)pointer(arguments[2]);
+        if (!size || (!bytes && *size != 0)) return GC_ERR_INVALID_PARAMETER;
+        for (size_t i = 0; i < *size; ++i) bytes[i] = (uint8_t)(0xA0 + i);
+        return GC_ERR_SUCCESS;
+    }
+    case 5:
+        return argument_count == 4 && arguments[0] == 0x4444
+            ? GC_ERR_SUCCESS : GC_ERR_INVALID_HANDLE;
+    case 6:
+        if (argument_count != 3 || arguments[0] != 0x4444) return GC_ERR_INVALID_HANDLE;
+        return write_string((char*)pointer(arguments[1]),
+                            (size_t*)pointer(arguments[2]), "Mock://DevicePort");
+    case 15:
+        if (argument_count != 1) return GC_ERR_INVALID_PARAMETER;
+        *(TL_HANDLE*)pointer(arguments[0]) = (TL_HANDLE)(uintptr_t)0x1111;
+        return GC_ERR_SUCCESS;
+    case 18:
+        if (argument_count != 2 || arguments[0] != 0x1111) return GC_ERR_INVALID_HANDLE;
+        *(uint32_t*)pointer(arguments[1]) = 1;
+        return GC_ERR_SUCCESS;
+    case 19:
+        if (argument_count != 4 || arguments[0] != 0x1111) return GC_ERR_INVALID_HANDLE;
+        return write_string((char*)pointer(arguments[2]),
+                            (size_t*)pointer(arguments[3]), "iface0");
+    case 21:
+        if (argument_count != 3 || arguments[0] != 0x1111) return GC_ERR_INVALID_HANDLE;
+        *(IF_HANDLE*)pointer(arguments[2]) = (IF_HANDLE)(uintptr_t)0x2222;
+        return GC_ERR_SUCCESS;
+    case 22:
+    case 27:
+        if (argument_count != 3) return GC_ERR_INVALID_PARAMETER;
+        *(bool8_t*)pointer(arguments[1]) = true;
+        return GC_ERR_SUCCESS;
+    case 24:
+        if (argument_count != 5 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+        if (arguments[1] != INTERFACE_INFO_DISPLAYNAME) return GC_ERR_NOT_AVAILABLE;
+        return write_info_string((INFO_DATATYPE*)pointer(arguments[2]),
+                                 pointer(arguments[3]), (size_t*)pointer(arguments[4]),
+                                 "Mock Interface");
+    case 25:
+        if (argument_count != 2 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+        *(uint32_t*)pointer(arguments[1]) = 1;
+        return GC_ERR_SUCCESS;
+    case 26:
+        if (argument_count != 4 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+        return write_string((char*)pointer(arguments[2]),
+                            (size_t*)pointer(arguments[3]), "device0");
+    case 28: {
+        if (argument_count != 6 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+        const char* value = 0;
+        switch ((DEVICE_INFO_CMD)arguments[2]) {
+        case DEVICE_INFO_DISPLAYNAME: value = "Mock Camera"; break;
+        case DEVICE_INFO_VENDOR: value = "Mock Vendor"; break;
+        case DEVICE_INFO_MODEL: value = "Mock Model"; break;
+        case DEVICE_INFO_SERIAL_NUMBER: value = "MOCK-0001"; break;
+        default: return GC_ERR_NOT_AVAILABLE;
+        }
+        return write_info_string((INFO_DATATYPE*)pointer(arguments[3]),
+                                 pointer(arguments[4]), (size_t*)pointer(arguments[5]),
+                                 value);
+    }
+    case 29:
+        if (argument_count != 4 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+        *(DEV_HANDLE*)pointer(arguments[3]) = (DEV_HANDLE)(uintptr_t)0x3333;
+        return GC_ERR_SUCCESS;
+    case 30:
+        if (argument_count != 2 || arguments[0] != 0x3333) return GC_ERR_INVALID_HANDLE;
+        *(PORT_HANDLE*)pointer(arguments[1]) = (PORT_HANDLE)(uintptr_t)0x4444;
+        return GC_ERR_SUCCESS;
+    case 31:
+        if (argument_count != 2 || arguments[0] != 0x3333) return GC_ERR_INVALID_HANDLE;
+        *(uint32_t*)pointer(arguments[1]) = 1;
+        return GC_ERR_SUCCESS;
+    case 32:
+        if (argument_count != 4 || arguments[0] != 0x3333) return GC_ERR_INVALID_HANDLE;
+        return write_string((char*)pointer(arguments[2]),
+                            (size_t*)pointer(arguments[3]), "stream0");
+    default:
+        return GC_ERR_NOT_IMPLEMENTED;
+    }
 }

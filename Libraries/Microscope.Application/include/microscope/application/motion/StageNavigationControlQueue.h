@@ -40,7 +40,8 @@ struct StageNavigationControlDrainResult final {
     std::size_t pendingCount;
 };
 
-// A bounded, stage-specific producer/consumer queue. Front-end threads submit
+// The wake signal is non-owning and must outlive this queue. A bounded,
+// stage-specific producer/consumer queue. Front-end threads submit
 // immutable slide-local requests; the SerializedRuntimeWorker control drain is
 // the sole consumer and dispatches at most one active navigation at a time.
 class StageNavigationControlQueue final {
@@ -50,7 +51,7 @@ public:
     [[nodiscard]] static core::Result<
         Pointer, StageNavigationControlQueueCreationError> create(
             std::size_t capacity,
-            application::runtime::RuntimeWakeSignal& wakeSignal) {
+            ::microscope::application::runtime::RuntimeWakeSignal& wakeSignal) {
         if (capacity == 0) {
             return core::Result<Pointer, StageNavigationControlQueueCreationError>::failure(
                 StageNavigationControlQueueCreationError::ZeroCapacity);
@@ -63,7 +64,7 @@ public:
     StageNavigationControlQueue& operator=(const StageNavigationControlQueue&) = delete;
 
     [[nodiscard]] StageNavigationControlSubmitStatus submit(
-        StageNavigationControlRequest request) {
+        const StageNavigationControlRequest& request) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (closed_) {
@@ -73,7 +74,7 @@ public:
                 return StageNavigationControlSubmitStatus::QueueFull;
             }
 
-            slots_[tail_].emplace(std::move(request));
+            slots_[tail_].emplace(request);
             tail_ = (tail_ + 1) % capacity_;
             ++count_;
         }
@@ -146,7 +147,7 @@ public:
 private:
     StageNavigationControlQueue(
         std::size_t capacity,
-        application::runtime::RuntimeWakeSignal& wakeSignal)
+        ::microscope::application::runtime::RuntimeWakeSignal& wakeSignal)
         : capacity_(capacity),
           wakeSignal_(&wakeSignal),
           slots_(capacity) {}
@@ -166,7 +167,7 @@ private:
     }
 
     const std::size_t capacity_;
-    application::runtime::RuntimeWakeSignal* wakeSignal_;
+    ::microscope::application::runtime::RuntimeWakeSignal* wakeSignal_;
     mutable std::mutex mutex_;
     std::vector<std::optional<StageNavigationControlRequest>> slots_;
     std::size_t head_{0};

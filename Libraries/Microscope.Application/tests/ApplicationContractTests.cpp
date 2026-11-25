@@ -47,11 +47,11 @@ int main() {
     check(operation.operationId() == operationId,
           "operation handle preserves the stable operation ID");
 
-    const coreSnapshot = core::OperationSnapshot{
+    const auto coreSnapshot = core::OperationSnapshot{
         operationId,
         core::OperationStatus::Running,
         4};
-    const applicationView = application::OperationView{
+    const auto applicationView = application::OperationView{
         operation,
         coreSnapshot};
     check(applicationView.handle.belongsTo(first),

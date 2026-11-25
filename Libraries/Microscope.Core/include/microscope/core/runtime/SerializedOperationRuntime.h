@@ -530,6 +530,9 @@ public:
         auto owner=requireOwnerThread();
         if(!owner)
             return Result<bool,SerializedOperationRuntimeError>::failure(owner.error());
+        if(feedbackInbox_->pendingCount()!=0)
+            return Result<bool,SerializedOperationRuntimeError>::failure(
+                SerializedOperationRuntimeError::FeedbackLossUnresolved);
         feedbackInbox_->acknowledgeFeedbackLoss();
         return Result<bool,SerializedOperationRuntimeError>::success(true);
     }

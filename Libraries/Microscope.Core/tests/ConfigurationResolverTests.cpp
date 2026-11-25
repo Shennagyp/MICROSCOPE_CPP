@@ -272,7 +272,7 @@ ConfigurationFixture makeConfigurationFixture() {
             "Mono8"))},
         take(ExposureTimeRange::create(
             microseconds(100.0),
-            microseconds(1'000'000.0))));
+            microseconds(1'000'000.0)))));
 
     const auto condenserSpecification = take(CondenserSpecification::create(
         condenserId,

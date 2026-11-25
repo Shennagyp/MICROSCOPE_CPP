@@ -1,7 +1,7 @@
 #include "camera/gentl/GenApiNodeMap.h"
 
 #include <Base/GCException.h>
-#include <GenICam/GCString.h>
+#include <Base/GCString.h>
 
 #include <limits>
 #include <stdexcept>

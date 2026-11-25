@@ -246,9 +246,33 @@ private:
 // produced it; do not instantiate this with a bare bool/string or a universal
 // state bag. The envelope is independent of vendor SDK types.
 template <typename TPayload>
-struct FeedbackEnvelope final {
-    FeedbackMetadata metadata;
-    TPayload payload;
+class FeedbackEnvelope final {
+public:
+    [[nodiscard]] static FeedbackEnvelope create(
+        FeedbackMetadata metadata,
+        TPayload payload) {
+        return FeedbackEnvelope(
+            std::move(metadata),
+            std::move(payload));
+    }
+
+    [[nodiscard]] const FeedbackMetadata& metadata() const noexcept {
+        return metadata_;
+    }
+
+    [[nodiscard]] const TPayload& payload() const noexcept {
+        return payload_;
+    }
+
+private:
+    FeedbackEnvelope(
+        FeedbackMetadata metadata,
+        TPayload payload)
+        : metadata_(std::move(metadata)),
+          payload_(std::move(payload)) {}
+
+    FeedbackMetadata metadata_;
+    TPayload payload_;
 };
 
 enum class FeedbackSubmitStatus {
@@ -365,7 +389,7 @@ public:
         FeedbackEnvelope<TPayload> feedback,
         std::chrono::steady_clock::time_point receivedAt,
         FeedbackIngressSequence ingressSequence) {
-        const auto& runtime = feedback.metadata.correlation().runtimeDevice;
+        const auto& runtime = feedback.metadata().correlation().runtimeDevice;
         if (!ingressSequence.belongsTo(
                 runtime.microscopeId,
                 runtime.runtimeId,

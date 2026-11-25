@@ -148,6 +148,20 @@ const StageAxisId& AxisLimitObservation::axisId()const noexcept{return axisId_;}
 AxisLimitEnd AxisLimitObservation::end()const noexcept{return end_;}
 bool AxisLimitObservation::active()const noexcept{return active_;}
 
+StageMotionAcknowledgement::StageMotionAcknowledgement(
+    StageMotionAction a,StageAxisSet axes)
+    :action_(a),axes_(std::move(axes)) {}
+Result<StageMotionAcknowledgement,StageMotionAcknowledgementError>
+StageMotionAcknowledgement::create(StageMotionAction action,StageAxisSet axes) {
+    if(!known(action))
+        return Result<StageMotionAcknowledgement,StageMotionAcknowledgementError>::failure(
+            StageMotionAcknowledgementError::InvalidAction);
+    return Result<StageMotionAcknowledgement,StageMotionAcknowledgementError>::success(
+        StageMotionAcknowledgement(action,std::move(axes)));
+}
+StageMotionAction StageMotionAcknowledgement::action()const noexcept{return action_;}
+const StageAxisSet& StageMotionAcknowledgement::axes()const noexcept{return axes_;}
+
 StageMotionActionCompletion::StageMotionActionCompletion(StageMotionAction a,StageAxisSet s):action_(a),axes_(std::move(s)){}
 Result<StageMotionActionCompletion,StageMotionActionCompletionError> StageMotionActionCompletion::create(StageMotionAction a,StageAxisSet s) {
     if(!known(a)) return Result<StageMotionActionCompletion,StageMotionActionCompletionError>::failure(StageMotionActionCompletionError::InvalidAction);

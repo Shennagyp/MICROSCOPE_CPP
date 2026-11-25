@@ -44,7 +44,8 @@ private:
 
 enum class EquipmentComponentError {
     InvalidKind,
-    DuplicatePortId
+    DuplicatePortId,
+    InvalidPortConfiguration
 };
 
 class EquipmentComponent final {
@@ -154,6 +155,7 @@ private:
 };
 
 enum class EquipmentDefinitionError {
+    EmptyComponentSet,
     DuplicateComponentId,
     DuplicatePortId,
     DuplicateConnectionId,

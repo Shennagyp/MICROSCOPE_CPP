@@ -98,7 +98,7 @@ A failure contains a stable machine-readable code, human-readable message, relev
 
 Adapter failures may preserve an opaque backend code and backend context. Core must not reinterpret a vendor native code as a cross-vendor semantic code.
 
-A Diagnostic is separate from failure. Validation may succeed while returning warnings/information. Diagnostics have severity, stable code, message and optional context. User-facing text is not the machine-readable code.
+A Diagnostic is separate from failure. Validation may succeed while returning warnings/information. Diagnostic creation validates a known severity and non-empty stable machine-readable code and message; optional context carries entity/field scope. User-facing text is not the machine-readable code.
 
 Infrastructure/host boundaries may catch exceptions and translate them to typed failures. Exceptions must not escape device callbacks, cross a C ABI or represent ordinary validation, unavailable capability, timeout or rejected commands.
 

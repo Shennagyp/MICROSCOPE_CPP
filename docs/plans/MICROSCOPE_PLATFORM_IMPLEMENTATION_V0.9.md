@@ -73,7 +73,7 @@ This closes the initial library/build/API foundation only. It does not claim a m
 **In progress — 2A–2D source slices validated**
 
 **Modeling sequence**
-1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; directed port connections; ordered light paths; shared components represented once and referenced by multiple paths; topology validation.
+1. **2A — Installed equipment identity and optical topology:** unique physical component identities; typed optical ports; undirected physical port connections; ordered directional light paths; shared components represented once and referenced by multiple paths; topology validation.
 2. **2B — Optical specifications and imaging:** objectives and their specification values; sensor geometry; camera output/readout modes; camera-to-optical-path attachment; explicit sensor-pixel to delivered-pixel mapping inputs.
 3. **2C — Illumination and condenser:** source identity/control capability and condenser identity/optical compatibility data, independent of objective classes.
 4. **2D — Stage and axes:** linear/rotary axis identity and unit; range, nominal resolution, accuracy, repeatability/precision, feedback provenance and uncertainty fields. No mechanical transmission implementation details.

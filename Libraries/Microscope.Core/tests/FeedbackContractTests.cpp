@@ -49,6 +49,23 @@ int main() {
     const auto stepId = StepId::create("step-001").value();
     const auto commandId = CommandId::create("command-001").value();
     const auto deviceId = DeviceId::create("objective-selector").value();
+    const auto currentSession = RuntimeDeviceCorrelation{
+        microscopeId,runtimeId,generation,deviceSessionGeneration,deviceId};
+    const auto sessionBinding = RuntimeDeviceSessionBinding::create(currentSession);
+    check(sessionBinding.matches(currentSession),
+          "current runtime/device-session identity is accepted");
+    auto oldSession = currentSession;
+    oldSession.deviceSessionGeneration = DeviceSessionGeneration::create(7).value();
+    check(!sessionBinding.matches(oldSession),
+          "callback from an earlier reconnect of the same logical device is stale");
+    auto otherDevice = currentSession;
+    otherDevice.deviceId = DeviceId::create("camera").value();
+    check(!sessionBinding.matches(otherDevice),
+          "session binding does not accept feedback from another logical device");
+    auto oldRuntime = currentSession;
+    oldRuntime.runtimeGeneration = RuntimeGeneration::create(2).value();
+    check(!sessionBinding.matches(oldRuntime),
+          "session binding rejects feedback from an earlier runtime incarnation");
 
     struct SelectorStateObservation final {
         bool reachedRequestedPosition;

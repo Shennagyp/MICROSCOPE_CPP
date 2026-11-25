@@ -1,0 +1,32 @@
+add_library(microscope_core STATIC
+    src/Identity.cpp)
+add_library(Microscope::Core ALIAS microscope_core)
+
+target_compile_features(microscope_core PUBLIC cxx_std_17)
+target_include_directories(microscope_core
+    PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
+        "$<INSTALL_INTERFACE:include>")
+
+set_target_properties(microscope_core PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    VERSION "0.9.0"
+    SOVERSION "0")
+
+if(BUILD_TESTING)
+    add_executable(microscope_core_contract_tests
+        tests/CoreContractTests.cpp)
+    target_link_libraries(microscope_core_contract_tests
+        PRIVATE Microscope::Core)
+    add_test(
+        NAME microscope_core_contract_tests
+        COMMAND microscope_core_contract_tests)
+
+    add_executable(microscope_core_feedback_tests
+        tests/FeedbackContractTests.cpp)
+    target_link_libraries(microscope_core_feedback_tests
+        PRIVATE Microscope::Core)
+    add_test(
+        NAME microscope_core_feedback_tests
+        COMMAND microscope_core_feedback_tests)
+endif()

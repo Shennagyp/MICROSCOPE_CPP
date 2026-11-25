@@ -1,4 +1,5 @@
 #include "microscope/core/navigation/DualSlideNavigation.h"
+#include "microscope/core/equipment/OpticalTopology.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -6,7 +7,7 @@
 using namespace microscope::core;
 template<class T,class E>T take(Result<T,E> r){if(!r)throw std::runtime_error("fixture rejected");return std::move(r).value();}
 template<class T>T id(const char*s){return take(T::create(s));}
-AxisSpecification axis(const char*s){return take(AxisSpecification::create(id<StageAxisId>(s),AxisMotionType::Linear,AxisCoordinateUnit::Micrometers,take(AxisOperatingRange::create(-300000,300000,AxisCoordinateUnit::Micrometers)),take(PositiveAxisResolution::create(0.1)),std::nullopt,std::nullopt,std::nullopt,AxisPositionFeedbackCapability::DeviceReported));}
+AxisSpecification axis(const char*s){return take(AxisSpecification::create(id<StageAxisId>(s),AxisMotionType::Linear,AxisCoordinateUnit::Micrometers,take(AxisOperatingRange::create(-100000,150000,AxisCoordinateUnit::Micrometers)),take(PositiveAxisResolution::create(0.1)),std::nullopt,std::nullopt,std::nullopt,AxisPositionFeedbackCapability::DeviceReported));}
 StageSpecification stage(){return take(StageSpecification::create(id<EquipmentComponentId>("stage"),{axis("x"),axis("y")}));}
 SlideRegistration registration(const char*s,DualSlideSlot slot,double x){
  auto g=take(SlideGeometry::create(75000,25000));auto src=ObservationSource::HardwareReadback;
@@ -16,7 +17,49 @@ SlideRegistration registration(const char*s,DualSlideSlot slot,double x){
  auto bl=take(SlideCornerMeasurement::create(SlideCorner::BottomLeft,{x,45000},src,0.5));
  return take(SlideRegistration::create(id<SlideId>(s),slot,g,{tl,tr,br,bl},1.0));
 }
+void equipmentDefinitionOwnsCarrier() {
+ auto s=stage();
+ auto carrier=take(DualSlideCarrierSpecification::create(
+     s,id<StageAxisId>("x"),id<StageAxisId>("y"),
+     CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
+ auto component=take(EquipmentComponent::create(
+     id<EquipmentComponentId>("stage"),EquipmentComponentKind::MechanicalAssembly,{}));
+ auto definition=MicroscopeEquipmentDefinition::create(
+     id<MicroscopeId>("dual-slide-scope"),{component},{},{},{},{},{},{},{s},{carrier});
+ if(!definition||definition.value().dualSlideCarrierSpecifications().size()!=1)
+     throw std::runtime_error("equipment definition did not retain carrier");
+ auto otherStage=take(StageSpecification::create(
+     id<EquipmentComponentId>("other-stage"),{axis("other-x"),axis("other-y")}));
+ auto wrongCarrier=take(DualSlideCarrierSpecification::create(
+     otherStage,id<StageAxisId>("other-x"),id<StageAxisId>("other-y"),
+     CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
+ auto invalid=MicroscopeEquipmentDefinition::create(
+     id<MicroscopeId>("dual-slide-scope"),{component},{},{},{},{},{},{},{s},{wrongCarrier});
+ if(invalid||invalid.error()!=EquipmentDefinitionError::DualSlideCarrierReferencesUnknownStage)
+     throw std::runtime_error("carrier bound to an absent stage was accepted");
+}
+void convertsMicrometersIntoDeclaredAxisUnits() {
+ auto mmAxis=[](const char* name) {
+    return take(AxisSpecification::create(id<StageAxisId>(name),AxisMotionType::Linear,
+       AxisCoordinateUnit::Millimeters,
+       take(AxisOperatingRange::create(-300.0,300.0,AxisCoordinateUnit::Millimeters)),
+       take(PositiveAxisResolution::create(0.001)),std::nullopt,std::nullopt,std::nullopt,
+       AxisPositionFeedbackCapability::DeviceReported));
+ };
+ auto mmStage=take(StageSpecification::create(
+     id<EquipmentComponentId>("mm-stage"),{mmAxis("mm-x"),mmAxis("mm-y")}));
+ auto spec=take(DualSlideCarrierSpecification::create(
+     mmStage,id<StageAxisId>("mm-x"),id<StageAxisId>("mm-y"),
+     CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
+ auto command=spec.moveTo({12500.0,22000.0});
+ if(!command||command.value().targets()[0].unit()!=AxisCoordinateUnit::Millimeters||
+    std::abs(command.value().targets()[0].value()-12.5)>1e-9||
+    std::abs(command.value().targets()[1].value()-22.0)>1e-9)
+     throw std::runtime_error("micrometer slide map was not converted to declared millimeter axes");
+}
 int main(){
+ try { equipmentDefinitionOwnsCarrier(); convertsMicrometersIntoDeclaredAxisUnits(); }
+ catch(const std::exception& e){std::cerr<<e.what()<<'\\n';return 1;}
  int failures=0;auto check=[&](bool v,const char*m){if(!v){++failures;std::cerr<<"FAIL: "<<m<<'\n';}};
  auto st=stage();
  auto spec=DualSlideCarrierSpecification::create(st,id<StageAxisId>("x"),id<StageAxisId>("y"),CarrierHorizontalDirection::PositiveStageXFromLeftToRight);

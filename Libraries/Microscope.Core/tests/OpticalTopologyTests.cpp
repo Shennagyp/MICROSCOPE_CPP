@@ -320,7 +320,7 @@ void testPathPortMustBelongToItsComponent() {
     fixture.paths[0] = take(OpticalPath::create(
         makeId<OpticalPathId>("transmitted-path-a"),
         {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
-         makeStep(fixture.condenserId, fixture.sourceOutput, fixture.condenserOutput),
+         makeStep(fixture.condenserId, fixture.splitterInput, fixture.condenserOutput),
          makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
          makeStep(fixture.objectiveAId, fixture.objectiveAInput, fixture.objectiveAOutput),
          makeStep(fixture.cameraAId, fixture.cameraAInput, std::nullopt)}));

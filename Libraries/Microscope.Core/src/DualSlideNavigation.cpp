@@ -130,10 +130,10 @@ double SlideCornerMeasurement::uncertaintyMicrometers()const noexcept{return unc
 SlideRegistration::SlideRegistration(
     SlideId id,CalibrationRevisionId revision,DualSlideSlot s,SlideGeometry g,
     std::array<SlideCornerMeasurement,4> c,std::array<double,6> t,
-    std::array<double,4> residuals,double cornerUncertainty,double m,double r)
+    std::array<double,4> residuals,double cornerUncertainty,double acceptedThreshold,double m,double r)
     :slideId_(std::move(id)),revision_(std::move(revision)),slot_(s),geometry_(g),corners_(std::move(c)),
      transform_(t),cornerResiduals_(residuals),maximumCornerUncertainty_(cornerUncertainty),
-     maxResidual_(m),rmsResidual_(r) {}
+     acceptedMaximumFitResidualMicrometers_(acceptedThreshold),maxResidual_(m),rmsResidual_(r) {}
 Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
     SlideId id,CalibrationRevisionId revision,DualSlideSlot slot,SlideGeometry g,
     std::array<SlideCornerMeasurement,4> input,double maxAllowed) {
@@ -192,7 +192,7 @@ Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::FitResidualExceeded);
     return Result<SlideRegistration,SlideRegistrationError>::success(
         SlideRegistration(std::move(id),std::move(revision),slot,g,std::move(corners),
-            {tx,ax,bx,ty,ay,by},residuals,maximumCornerUncertainty,maxResidual,std::sqrt(sum/4.0)));
+            {tx,ax,bx,ty,ay,by},residuals,maximumCornerUncertainty,maxAllowed,maxResidual,std::sqrt(sum/4.0)));
 }
 const SlideId& SlideRegistration::slideId()const noexcept{return slideId_;}
 const CalibrationRevisionId& SlideRegistration::revision()const noexcept{return revision_;}
@@ -200,6 +200,7 @@ DualSlideSlot SlideRegistration::slot()const noexcept{return slot_;}
 const SlideGeometry& SlideRegistration::geometry()const noexcept{return geometry_;}
 const std::array<SlideCornerMeasurement,4>& SlideRegistration::cornerMeasurements()const noexcept{return corners_;}
 double SlideRegistration::maximumFitResidualMicrometers()const noexcept{return maxResidual_;}
+double SlideRegistration::acceptedMaximumFitResidualMicrometers()const noexcept{return acceptedMaximumFitResidualMicrometers_;}
 double SlideRegistration::rmsFitResidualMicrometers()const noexcept{return rmsResidual_;}
 const std::array<double,4>& SlideRegistration::cornerFitResidualsMicrometers()const noexcept{return cornerResiduals_;}
 Result<StagePlanePoint,SlideRegistrationError> SlideRegistration::toStage(SlideLocalPoint p)const {

@@ -33,13 +33,10 @@ jobs:
         include:
           - name: Ubuntu GCC
             runner: ubuntu-latest
-            compiler: gcc
           - name: macOS Clang
             runner: macos-latest
-            compiler: clang
           - name: Windows MSVC
             runner: windows-latest
-            compiler: msvc
 
     runs-on: ${{ matrix.runner }}
 

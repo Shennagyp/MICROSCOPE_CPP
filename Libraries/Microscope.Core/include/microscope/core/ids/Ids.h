@@ -9,6 +9,8 @@ namespace microscope::core {
 namespace detail {
 struct MicroscopeIdTag final {};
 struct RuntimeIdTag final {};
+struct RuntimeGenerationTag final {};
+struct DeviceSessionGenerationTag final {};
 struct DeviceIdTag final {};
 struct SampleIdTag final {};
 struct SlideIdTag final {};
@@ -38,21 +40,22 @@ using StepId = StrongId<detail::StepIdTag>;
 using CommandId = StrongId<detail::CommandIdTag>;
 using CalibrationRevisionId = StrongId<detail::CalibrationRevisionIdTag>;
 
-class RuntimeGeneration final {
+template <typename Tag>
+class PositiveGeneration final {
 public:
-    RuntimeGeneration() = delete;
+    PositiveGeneration() = delete;
 
-    [[nodiscard]] static Result<RuntimeGeneration, IdentityError> create(
+    [[nodiscard]] static Result<PositiveGeneration, IdentityError> create(
         std::uint64_t value) {
         if (value == 0) {
-            return Result<RuntimeGeneration, IdentityError>::failure(
+            return Result<PositiveGeneration, IdentityError>::failure(
                 IdentityError{
                     IdentityError::Code::ZeroGeneration,
-                    "Runtime generation must be greater than zero."});
+                    "Generation must be greater than zero."});
         }
 
-        return Result<RuntimeGeneration, IdentityError>::success(
-            RuntimeGeneration(value));
+        return Result<PositiveGeneration, IdentityError>::success(
+            PositiveGeneration(value));
     }
 
     [[nodiscard]] std::uint64_t value() const noexcept {
@@ -60,25 +63,29 @@ public:
     }
 
     friend bool operator==(
-        RuntimeGeneration left, RuntimeGeneration right) noexcept {
+        PositiveGeneration left, PositiveGeneration right) noexcept {
         return left.value_ == right.value_;
     }
 
     friend bool operator!=(
-        RuntimeGeneration left, RuntimeGeneration right) noexcept {
+        PositiveGeneration left, PositiveGeneration right) noexcept {
         return !(left == right);
     }
 
     friend bool operator<(
-        RuntimeGeneration left, RuntimeGeneration right) noexcept {
+        PositiveGeneration left, PositiveGeneration right) noexcept {
         return left.value_ < right.value_;
     }
 
 private:
-    explicit RuntimeGeneration(std::uint64_t value) noexcept
+    explicit PositiveGeneration(std::uint64_t value) noexcept
         : value_(value) {}
 
     std::uint64_t value_;
 };
+
+using RuntimeGeneration = PositiveGeneration<detail::RuntimeGenerationTag>;
+using DeviceSessionGeneration =
+    PositiveGeneration<detail::DeviceSessionGenerationTag>;
 
 } // namespace microscope::core

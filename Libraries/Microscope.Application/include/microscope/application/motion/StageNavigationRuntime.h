@@ -289,8 +289,9 @@ public:
         if (!execution) {
             return failure(
                 StageNavigationRuntimeErrorCode::ExecutionRejected,
-                std::nullopt, execution.error().code, std::nullopt, std::nullopt,
-                execution.error().runtimeError);
+                execution.error().planningError,
+                execution.error().code, std::nullopt, std::nullopt,
+                std::nullopt, execution.error().runtimeError);
         }
 
         active_.emplace(ActiveNavigation{
@@ -337,6 +338,12 @@ public:
         const auto& envelope = feedback.receipt->feedback();
         const auto& metadata = envelope.metadata();
         if (!sameDevice(metadata.correlation().runtimeDevice, runtimeDevice_)) {
+            return success(StageNavigationRuntimeDisposition::IgnoredFeedback);
+        }
+
+        if (active_ &&
+            feedback.disposition == core::FeedbackProcessingDisposition::AppliedToOperation &&
+            !matchesCommand(feedback, active_->execution.commandContext)) {
             return success(StageNavigationRuntimeDisposition::IgnoredFeedback);
         }
 
@@ -648,6 +655,12 @@ private:
             const auto stepId = active_->execution.commandContext.operation().stepId;
             auto failed = operationRuntime_->recordStepVerification(
                 operationId, stepId, false);
+            if (!failed) {
+                return failure(
+                    StageNavigationRuntimeErrorCode::StepVerificationRejected,
+                    std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                    std::nullopt, failed.error());
+            }
             position_ = position_.invalidateMachineReference();
             active_.reset();
             const auto snapshot = operationRuntime_->operationSnapshot(operationId);
@@ -739,6 +752,11 @@ private:
             position_, feedback, active_->execution.commandContext,
             direct->command, errorBudget_, operationRuntime_->feedbackLossLatched());
         if (!reduction) {
+            position_ = position_.invalidateMachineReference();
+            const auto failed = failMoveVerification();
+            if (!failed) {
+                return failed;
+            }
             return failure(
                 StageNavigationRuntimeErrorCode::CommandReductionRejected,
                 std::nullopt, std::nullopt, reduction.error().code);
@@ -751,6 +769,7 @@ private:
                 active_->horizontalObservation->observation,
                 active_->horizontalObservation->source);
             if (!updated) {
+                position_ = position_.invalidateMachineReference();
                 return failure(
                     StageNavigationRuntimeErrorCode::PositionFeedbackRejected,
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -868,7 +887,13 @@ private:
         const auto& operation = active_->execution.commandContext.operation();
         auto status = operationRuntime_->stepStatus(
             operation.operationId, operation.stepId);
-        if (status && status.value() == core::StepStatus::AwaitingObservation) {
+        if (!status) {
+            return failure(
+                StageNavigationRuntimeErrorCode::StepVerificationRejected,
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, status.error());
+        }
+        if (status.value() == core::StepStatus::AwaitingObservation) {
             auto started = operationRuntime_->beginStepVerification(
                 operation.operationId, operation.stepId);
             if (!started) {
@@ -877,9 +902,17 @@ private:
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
                     std::nullopt, started.error());
             }
+        } else if (status.value() != core::StepStatus::Verifying) {
+            return failure(StageNavigationRuntimeErrorCode::StepVerificationRejected);
         }
         auto failed = operationRuntime_->recordStepVerification(
             operation.operationId, operation.stepId, false);
+        if (!failed) {
+            return failure(
+                StageNavigationRuntimeErrorCode::StepVerificationRejected,
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, failed.error());
+        }
         const auto snapshot = operationRuntime_->operationSnapshot(operation.operationId);
         active_.reset();
         return success(StageNavigationRuntimeDisposition::NavigationFailed,

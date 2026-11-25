@@ -1,4 +1,18 @@
-# Historical AmScope Implementation Inventory — v0.7/Qt UI snapshot
+# AmScope Implementation Inventory — v0.7 source snapshot
+
+> **Evidence classification:** this is a source-to-test-to-UI inventory snapshot
+> from the former v0.7 Qt-preview implementation. It is not the current phase
+> ledger. Recheck source SHAs and test counts against `camera-v.2.0` before
+> quoting a current implementation claim.
+>
+> The optional Qt streaming adapter and reusable Qt Widgets components remain
+> Camera Module deliverables under the governing original Phases 3 and 4.
+> Sections describing them are not dismissed as out of scope; their exact
+> implementation and acceptance status must be refreshed. The v0.7 application
+> workspace composition remains a historical UI snapshot.
+>
+> The governing roadmap and current continuation state are maintained in
+> [`CAMERA_V2_DEVELOPMENT_STATUS.md`](CAMERA_V2_DEVELOPMENT_STATUS.md).
 
 > **Historical inventory, not the current Camera v2.0 status ledger.** This
 > source-to-test-to-UI inventory captures a prior Qt-preview implementation

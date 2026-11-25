@@ -21,6 +21,7 @@ struct PositiveMicrometersTag final {};
 struct NominalMagnificationTag final {};
 struct NumericalApertureTag final {};
 struct PositiveNanometersTag final {};
+struct PositiveMicrosecondsTag final {};
 struct CondenserApertureTag final {};
 struct AxisResolutionTag final {};
 struct AxisAccuracyTag final {};
@@ -67,6 +68,7 @@ using PositiveMicrometers = PositiveFiniteValue<detail::PositiveMicrometersTag>;
 using NominalMagnification = PositiveFiniteValue<detail::NominalMagnificationTag>;
 using NumericalAperture = PositiveFiniteValue<detail::NumericalApertureTag>;
 using PositiveNanometers = PositiveFiniteValue<detail::PositiveNanometersTag>;
+using PositiveMicroseconds = PositiveFiniteValue<detail::PositiveMicrosecondsTag>;
 
 template <typename Tag>
 class NonNegativeFiniteValue final {
@@ -384,6 +386,29 @@ private:
     std::string pixelFormatCode_;
 };
 
+enum class ExposureTimeRangeError {
+    InvertedRange
+};
+
+// Camera exposure time is expressed in microseconds.
+class ExposureTimeRange final {
+public:
+    [[nodiscard]] static Result<ExposureTimeRange, ExposureTimeRangeError> create(
+        PositiveMicroseconds minimum,
+        PositiveMicroseconds maximum);
+
+    [[nodiscard]] double minimumMicroseconds() const noexcept;
+    [[nodiscard]] double maximumMicroseconds() const noexcept;
+
+private:
+    ExposureTimeRange(
+        PositiveMicroseconds minimum,
+        PositiveMicroseconds maximum);
+
+    PositiveMicroseconds minimum_;
+    PositiveMicroseconds maximum_;
+};
+
 enum class CameraSpecificationError {
     NoOutputModes,
     DuplicateOutputModeId,
@@ -401,13 +426,16 @@ public:
             PixelDimensions activeSensorDimensions,
             PositiveMicrometers pixelPitchX,
             PositiveMicrometers pixelPitchY,
-            std::vector<CameraOutputMode> outputModes);
+            std::vector<CameraOutputMode> outputModes,
+            std::optional<ExposureTimeRange> exposureTimeRange = std::nullopt);
 
     [[nodiscard]] const EquipmentComponentId& componentId() const noexcept;
     [[nodiscard]] const PixelDimensions& activeSensorDimensions() const noexcept;
     [[nodiscard]] double pixelPitchXMicrometers() const noexcept;
     [[nodiscard]] double pixelPitchYMicrometers() const noexcept;
     [[nodiscard]] const std::vector<CameraOutputMode>& outputModes() const noexcept;
+    [[nodiscard]] const std::optional<ExposureTimeRange>&
+    exposureTimeRange() const noexcept;
 
 private:
     CameraSpecification(
@@ -415,13 +443,15 @@ private:
         PixelDimensions activeSensorDimensions,
         PositiveMicrometers pixelPitchX,
         PositiveMicrometers pixelPitchY,
-        std::vector<CameraOutputMode> outputModes);
+        std::vector<CameraOutputMode> outputModes,
+        std::optional<ExposureTimeRange> exposureTimeRange);
 
     EquipmentComponentId componentId_;
     PixelDimensions activeSensorDimensions_;
     PositiveMicrometers pixelPitchX_;
     PositiveMicrometers pixelPitchY_;
     std::vector<CameraOutputMode> outputModes_;
+    std::optional<ExposureTimeRange> exposureTimeRange_;
 };
 
 } // namespace microscope::core

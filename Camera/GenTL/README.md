@@ -73,7 +73,7 @@ Ownership and lifecycle:
 - Cleanup stops acquisition, unregisters the event (which drains active event reads), flushes the queue, revokes buffers and closes the stream.
 - If cleanup fails, the native context and C ABI bridge are retained for process lifetime. They are not unloaded while CTI handles may still exist.
 
-`DataStreamFrame` currently preserves payload bytes, frame ID, nanosecond timestamp, PFNC/other pixel-format identifier and namespace, dimensions, image-present state and incomplete-buffer state. It is a GenTL-layer result; mapping all GenTL pixel layouts into the backend-neutral `camera::Frame` contract is still outstanding.
+`DataStreamFrame` preserves payload bytes, frame ID, nanosecond timestamp, pixel-format identifier and namespace, dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete image payloads with explicit zero offset/padding and no chunk data into `camera::Frame`. PFNC Mono8 is the first typed layout mapping; unknown formats retain their opaque identifier and payload but remain `PixelFormat::Unknown` with no invented stride. Packed, planar, multipart, compressed and padded formats remain unsupported by this projection.
 
 ## Device port and GenApi XML
 
@@ -83,7 +83,7 @@ The adapter exposes remote-port read/write and retrieves GenApi XML using:
 
 HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
 
-`GenApiPort`, `GenApiNodeMap` and `GenApiFeatureAccess` are optional source integrations. `GenApiFeatureAccess` maps implemented GenApi Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including current availability/readability/writability, numeric range/unit and currently available enumeration symbols. It moves the `DeviceSession` into the feature-access object so the remote port cannot be closed while the node map is connected. GenApi IntegerVector, ICommand and IRegister nodes are not presented as ordinary features; command/action access remains a separate API. These sources have not yet been compiled against the official SDK.
+`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess` and `GenApiCommandAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. Both adapters retain the device session through their node map. IntegerVector and IRegister nodes are not yet exposed. These sources have not yet been compiled against the official SDK.
 
 ## Current implementation and evidence
 
@@ -94,12 +94,15 @@ Implemented:
 - stream ID discovery and stream acquisition lifecycle;
 - bounded buffer announcement/queue/requeue/drain;
 - frame payload copying and basic GenTL buffer metadata;
+- safe backend-neutral frame projection for PFNC Mono8, with explicit rejection of unknown/unsafe layout metadata;
+- backend-neutral command contract and separate GenApi `ICommand` adapter source;
 - remote-port read/write and `LOCAL`/`FILE` GenApi XML retrieval;
 - process-lifetime retention after cleanup failure.
 
 Mock CI: [workflow #45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203), commit `549433466098c5daeb63d72609776d958a35c2fe`. Both Intel x86_64 and Apple Silicon arm64 passed 2/2 CTest tests and architecture checks. The tests cover the mock bridge, device/stream ownership, buffer lifecycle, frame payload/metadata, timeout conversion, and quarantine retention.
 
 Not yet validated:
+- the latest frame-adapter and command-contract commits (CI run for the current branch is pending);
 - the real universal Swift `libGenTLConsumerCAPI.dylib` (latest workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before build/test steps);
 - a vendor CTI Producer;
 - a physical GenTL camera;

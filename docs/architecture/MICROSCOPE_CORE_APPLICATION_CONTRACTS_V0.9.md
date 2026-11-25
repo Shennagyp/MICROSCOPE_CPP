@@ -441,3 +441,52 @@ A no-feedback axis cannot claim a measurement location. A feedback capability is
 
 The StageSpecification records capability and declared performance only. It contains no mechanical transmission design details.
 
+## 15. Phase 3A declarative configuration profile and resolver contract
+
+### 15.1 Configuration profile
+
+ConfigurationProfile is immutable, identified by ConfigurationProfileId and contains declarative compatibility data:
+- One known ContrastMethod.
+- Non-empty allowed sets for objective component IDs, condenser component IDs, optical path IDs, camera component IDs and illumination component IDs.
+- Optional required path component IDs, all of which must occur on at least one selected path.
+
+Profile catalogs reject duplicate profile IDs. Profile data contains identities and constraints only. It contains no C++ class names, SDK calls, executable callbacks or UI-specific values.
+
+### 15.2 Configuration request
+
+ConfigurationRequest is an immutable value that selects:
+- Profile and contrast method.
+- One installed objective component and one installed condenser component.
+- One or more unique installed OpticalPathIds.
+- One installed camera component and one output CameraModeId.
+- One installed illumination component and one IlluminationChannelId.
+- An explicit ExposurePolicy: Manual, Automatic or ConstrainedAutomatic.
+
+A request with no path or duplicate paths is invalid. Unknown contrast or exposure-policy enum values are rejected. Unknown is not treated as a user-selected exposure policy.
+
+### 15.3 Pure resolution semantics
+
+ConfigurationResolver receives only typed Core values: MicroscopeEquipmentDefinition, ConfigurationProfileCatalog and ConfigurationRequest. It has no hardware, storage, JSON, UI, clock or mutable runtime dependency.
+
+The resolver checks:
+- The requested profile exists and the contrast method matches.
+- Each selected component/path identity is allowed by the profile.
+- Each selected path exists in the installed equipment definition.
+- Objective, condenser, camera and illumination specifications exist for the selected installed components.
+- The selected CameraModeId exists on the selected camera.
+- The selected IlluminationChannelId exists on the selected illumination source.
+- Objective, condenser, camera and illumination components occur on at least one of the selected paths.
+- Every profile-required path component occurs on at least one selected path.
+
+Multiple paths are intentional. For example, illumination/condenser can be on one selected branch while objective/camera are on another. The resolver checks component membership against the union of the selected paths; it does not require every selected component to be present on every path.
+
+The result is either the immutable resolved request or a set of stable, typed Error diagnostics. A successful result means only that the requested target selection is compatible with the profile and installed static equipment definition. It does not mean that any component is currently selected, that any hardware command was sent, or that device state was verified.
+
+### 15.4 Separation from later configuration phases
+
+The initial resolver does not compare with current hardware/runtime state and does not generate commands. Transition planning in Phase 3D will compare a known current/effective configuration with this resolved desired configuration and produce a value dependency plan. Execution, feedback, timeouts, cancellation and recovery remain Phase 4.
+
+ExposurePolicy is distinct from ExposurePreset. This first slice records the selected policy but does not yet define exposure preset values, objective-triggered preset defaults or exposure parameter constraints. Those are added only when the profile model consumes them.
+
+JSON schema parsing and profile loading remain in Microscope.Application in Phase 5. The Core resolver receives already-constructed typed profile and equipment values.
+

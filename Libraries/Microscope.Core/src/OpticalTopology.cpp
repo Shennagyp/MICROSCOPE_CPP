@@ -255,7 +255,8 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     std::vector<ObjectiveSpecification> objectiveSpecifications,
     std::vector<CameraSpecification> cameraSpecifications,
     std::vector<CondenserSpecification> condenserSpecifications,
-    std::vector<IlluminationSpecification> illuminationSpecifications)
+    std::vector<IlluminationSpecification> illuminationSpecifications,
+    std::vector<StageSpecification> stageSpecifications)
     : microscopeId_(std::move(microscopeId)),
       components_(std::move(components)),
       connections_(std::move(connections)),
@@ -263,7 +264,8 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
       objectiveSpecifications_(std::move(objectiveSpecifications)),
       cameraSpecifications_(std::move(cameraSpecifications)),
       condenserSpecifications_(std::move(condenserSpecifications)),
-      illuminationSpecifications_(std::move(illuminationSpecifications)) {}
+      illuminationSpecifications_(std::move(illuminationSpecifications)),
+      stageSpecifications_(std::move(stageSpecifications)) {}
 
 Result<
     MicroscopeEquipmentDefinition,
@@ -275,7 +277,8 @@ Result<
         std::vector<ObjectiveSpecification> objectiveSpecifications,
         std::vector<CameraSpecification> cameraSpecifications,
         std::vector<CondenserSpecification> condenserSpecifications,
-        std::vector<IlluminationSpecification> illuminationSpecifications) {
+        std::vector<IlluminationSpecification> illuminationSpecifications,
+        std::vector<StageSpecification> stageSpecifications) {
     if (components.empty()) {
         return Result<
             MicroscopeEquipmentDefinition,
@@ -399,6 +402,30 @@ Result<
                 MicroscopeEquipmentDefinition,
                 EquipmentDefinitionError>::failure(
                     EquipmentDefinitionError::IlluminationComponentWrongKind);
+        }
+    }
+
+    std::set<EquipmentComponentId> stageComponentIds;
+    for (const auto& stage : stageSpecifications) {
+        if (!stageComponentIds.insert(stage.componentId()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateStageSpecification);
+        }
+
+        const auto component = componentIndex.find(stage.componentId());
+        if (component == componentIndex.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::StageReferencesUnknownComponent);
+        }
+        if (component->second->kind() != EquipmentComponentKind::MechanicalAssembly) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::StageComponentWrongKind);
         }
     }
 
@@ -583,7 +610,8 @@ Result<
                 std::move(objectiveSpecifications),
                 std::move(cameraSpecifications),
                 std::move(condenserSpecifications),
-                std::move(illuminationSpecifications)));
+                std::move(illuminationSpecifications),
+                std::move(stageSpecifications)));
 }
 
 const MicroscopeId& MicroscopeEquipmentDefinition::microscopeId() const noexcept {
@@ -625,6 +653,12 @@ MicroscopeEquipmentDefinition::condenserSpecifications() const noexcept {
 const std::vector<IlluminationSpecification>&
 MicroscopeEquipmentDefinition::illuminationSpecifications() const noexcept {
     return illuminationSpecifications_;
+}
+
+
+const std::vector<StageSpecification>&
+MicroscopeEquipmentDefinition::stageSpecifications() const noexcept {
+    return stageSpecifications_;
 }
 
 } // namespace microscope::core

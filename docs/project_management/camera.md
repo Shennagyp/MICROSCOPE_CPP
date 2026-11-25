@@ -3,10 +3,10 @@
 **Canonical project:** the reusable Camera Module in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Camera development branch:** `camera-v.2.0`  
-**Latest Camera status checkpoint:** `433e66850ee4dd49003d6e1a7599354fa5fe5466` (`docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md`).  
-**Latest fully CI-validated code checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7` — GenTL/GenApi workflow [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build/runtime tests, PFNC mapping, pending-event shutdown, `EventKill` fallback and recursive nested-category feature/command access.  
-**Latest implementation checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7` adds recursive GenApi Root-category traversal, deduplicated feature/command discovery, nested feature direct lookup and nested command execution.  
-**CI:** Full GenTL/GenApi and official SDK validation is green on both architectures in [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261).  
+**Latest Camera status checkpoint:** `a4acfefa71939a082d4253f5e228d0a20fc59d45` (`docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md`).  
+**Latest fully CI-validated code checkpoint:** `31ac9f6d936d84859412aada586db36bcefdd51c` — GenTL/GenApi workflow [#45701918457](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701918457) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build/runtime tests, PFNC mapping, pending-event shutdown, `EventKill` fallback, recursive nested-category feature/command access and moved-payload frame projection.  
+**Latest implementation checkpoint:** `31ac9f6d936d84859412aada586db36bcefdd51c` adds a move-aware Common-frame projection to avoid a second full-frame payload copy.  
+**CI:** Full GenTL/GenApi and official SDK validation is green on both architectures in [#45701918457](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701918457).  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
 **Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
 **Roadmap authority:** original Camera Module Phases 0–8, preserved for v2.0.
@@ -163,7 +163,7 @@ Current implementation on `camera-v.2.0` under `Camera/GenTL`:
 
 C++ mock CI [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261) passed on Intel x86_64 and Apple Silicon arm64, including the official GenApi SDK/runtime. The suite covers pending event-wait cancellation, injected event-unregistration failure with `EventKill` fallback, context quarantine, PFNC mapping and nested GenApi categories. Earlier test [#45694159857](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45694159857) established all five scalar feature types and command semantics.
 
-The Swift C ABI source/tests/workflow are on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, latest commit `e913a436d31cc3e73233311cef810ff95e1e8704`. Tests cover typed pointer/buffer marshalling, event registration/read/unregister, buffer-info forwarding and invalid invocation-shape rejection; the bridge bounds argument vectors to the maximum GenTL operation arity. The workflow was moved from `macos-14` to `macos-15`, but [#45695610813](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45695610813) failed before any job steps, including a rerun, and has no logs; Swift compilation/test evidence remains unavailable. The real dylib and operation mapping remain unvalidated. The Swift GenTL packages declare macOS 13.0 as their minimum deployment target.
+The Swift C ABI source/tests/workflow are on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, latest commit `0edf2d7580553111665b283656b07ced949c6025`. A deterministic test now blocks `EventGetData`, invokes C ABI `GCUnregisterEvent`, and verifies that `EventKill` aborts the read and unregister waits for it to drain. Workflow [#45702208270](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45702208270) failed before any job steps and has no logs; Swift compilation/test evidence remains unavailable. The real dylib and operation mapping remain unvalidated. The Swift GenTL packages declare macOS 13.0 as their minimum deployment target.
 
 Still required:
 - validate the actual Swift C ABI dylib and its runtime packaging;
@@ -303,7 +303,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** `433e66850ee4dd49003d6e1a7599354fa5fe5466`. **Latest implementation checkpoint:** `9043f82c51753b8c4721bd876af333d10343bfd7`. GenTL/GenApi, PFNC mapping, event cancellation/fallback and recursive GenApi categories passed Intel x86_64 and Apple Silicon arm64 in [#45701059261](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701059261). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
+**Latest Camera status checkpoint:** `a4acfefa71939a082d4253f5e228d0a20fc59d45`. **Latest implementation checkpoint:** `31ac9f6d936d84859412aada586db36bcefdd51c`. GenTL/GenApi, PFNC mapping, event cancellation/fallback, recursive GenApi categories and move-aware payload transfer passed Intel x86_64 and Apple Silicon arm64 in [#45701918457](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45701918457). The Swift C ABI pending-wait test is committed at `AMSCOPE_DRIVER:gentl-c-api-v.1.0` commit `0edf2d7`, but its workflow [#45702208270](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45702208270) failed before job steps. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

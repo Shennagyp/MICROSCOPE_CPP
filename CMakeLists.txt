@@ -10,6 +10,7 @@ include(CTest)
 
 option(OPTIKA_BUILD_NATIVE_APP "Build the OPTIKA B293 native macOS application" OFF)
 option(OPTIKA_BUILD_AMSCOPE "Build the AmScope camera capability and its integrations" ON)
+option(OPTIKA_BUILD_GENTL "Build the optional GenTL Consumer bridge adapter" ON)
 
 if(OPTIKA_BUILD_NATIVE_APP AND NOT OPTIKA_BUILD_AMSCOPE)
     message(FATAL_ERROR
@@ -28,6 +29,10 @@ endif()
 # independently from the existing AmScope camera capability.
 add_subdirectory(Libraries/Microscope.Core)
 add_subdirectory(Libraries/Microscope.Application)
+
+if(OPTIKA_BUILD_GENTL)
+    add_subdirectory(Camera/GenTL)
+endif()
 
 if(OPTIKA_BUILD_AMSCOPE)
     add_subdirectory(Camera/Amscope)

@@ -37,6 +37,14 @@ PositiveMicrometers micrometers(double value) {
     return take(PositiveMicrometers::create(value));
 }
 
+PositiveMicroseconds microseconds(double value) {
+    return take(PositiveMicroseconds::create(value));
+}
+
+NonNegativeNumericalAperture nonNegativeAperture(double value) {
+    return take(NonNegativeNumericalAperture::create(value));
+}
+
 NominalMagnification magnification(double value) {
     return take(NominalMagnification::create(value));
 }
@@ -261,7 +269,10 @@ ConfigurationFixture makeConfigurationFixture() {
             take(PixelBinning::create(1, 1)),
             take(PixelDimensions::create(640, 480)),
             CameraPixelLayout::Monochrome,
-            "Mono8"))}));
+            "Mono8"))},
+        take(ExposureTimeRange::create(
+            microseconds(100.0),
+            microseconds(1'000'000.0))));
 
     const auto condenserSpecification = take(CondenserSpecification::create(
         condenserId,
@@ -697,6 +708,167 @@ void testOpticalFunctionRequirementFactoriesAndSelections() {
           "rejects duplicate additional optical component selections");
 }
 
+void testProfileTargetsAreRetainedAndValidatedAgainstInstalledRanges() {
+    const auto fixture = makeConfigurationFixture();
+
+    const auto createTargetProfile = [&fixture](
+        const char* id,
+        std::optional<NonNegativeNumericalAperture> apertureTarget,
+        std::optional<IlluminationIntensitySetting> intensityTarget,
+        std::optional<ExposurePreset> exposurePreset) {
+        return take(ConfigurationProfile::create(
+            makeId<ConfigurationProfileId>(id),
+            ContrastMethod::Brightfield,
+            {fixture.objectiveId},
+            {fixture.condenserId},
+            {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+            {fixture.cameraId},
+            {fixture.illuminationId},
+            {},
+            {},
+            std::move(apertureTarget),
+            std::move(intensityTarget),
+            std::move(exposurePreset)));
+    };
+
+    const auto targetProfile = createTargetProfile(
+        "profile-with-targets",
+        nonNegativeAperture(0.65),
+        take(IlluminationIntensitySetting::create(
+            55.0, IlluminationIntensityUnit::Percent)),
+        ExposurePreset::create(microseconds(20'000.0)));
+    const auto targetCatalog =
+        take(ConfigurationProfileCatalog::create({targetProfile}));
+    const auto request = makeRequest(
+        fixture,
+        {fixture.illuminationPathId, fixture.imagingPathId},
+        fixture.cameraModeId,
+        ContrastMethod::Brightfield,
+        targetProfile.id());
+
+    const auto resolved = ConfigurationResolver::resolve(
+        fixture.equipment, targetCatalog, request);
+    check(resolved.isResolved(),
+          "accepts profile targets inside condenser, illumination and camera capability ranges");
+    if (resolved.resolvedConfiguration()) {
+        const auto& desired = *resolved.resolvedConfiguration();
+        check(desired.microscopeId() == fixture.microscopeId,
+              "keeps the resolved target scoped to the installed microscope identity");
+        check(desired.condenserApertureTarget().has_value() &&
+              desired.condenserApertureTarget()->value() == 0.65,
+              "retains the resolved condenser aperture target");
+        check(desired.illuminationIntensityTarget().has_value() &&
+              desired.illuminationIntensityTarget()->value() == 55.0 &&
+              desired.illuminationIntensityTarget()->unit() ==
+                  IlluminationIntensityUnit::Percent,
+              "retains the resolved illumination target and its explicit unit");
+        check(desired.exposurePreset().has_value() &&
+              desired.exposurePreset()->exposureTimeMicroseconds() == 20'000.0,
+              "retains the initial exposure preset independently from exposure policy");
+        check(desired.request().exposurePolicy() == ExposurePolicy::Manual,
+              "does not rewrite the explicit manual exposure policy when a profile supplies a preset");
+    }
+
+    const auto apertureOutOfRangeProfile = createTargetProfile(
+        "profile-aperture-out-of-range",
+        nonNegativeAperture(1.0),
+        std::nullopt,
+        std::nullopt);
+    const auto apertureOutOfRange = ConfigurationResolver::resolve(
+        fixture.equipment,
+        take(ConfigurationProfileCatalog::create({apertureOutOfRangeProfile})),
+        makeRequest(
+            fixture, {fixture.fullPathId}, fixture.cameraModeId,
+            ContrastMethod::Brightfield, apertureOutOfRangeProfile.id()));
+    check(!apertureOutOfRange.isResolved() &&
+          hasDiagnosticCode(
+              apertureOutOfRange,
+              "configuration.condenser.aperture_target_out_of_range"),
+          "rejects a condenser aperture target above the installed aperture NA maximum");
+
+    const auto intensityOutOfRangeProfile = createTargetProfile(
+        "profile-intensity-out-of-range",
+        std::nullopt,
+        take(IlluminationIntensitySetting::create(
+            101.0, IlluminationIntensityUnit::Percent)),
+        std::nullopt);
+    const auto intensityOutOfRange = ConfigurationResolver::resolve(
+        fixture.equipment,
+        take(ConfigurationProfileCatalog::create({intensityOutOfRangeProfile})),
+        makeRequest(
+            fixture, {fixture.fullPathId}, fixture.cameraModeId,
+            ContrastMethod::Brightfield, intensityOutOfRangeProfile.id()));
+    check(!intensityOutOfRange.isResolved() &&
+          hasDiagnosticCode(
+              intensityOutOfRange,
+              "configuration.illumination.intensity_target_out_of_range"),
+          "rejects an illumination target above the selected channel's range");
+
+    const auto intensityUnitMismatchProfile = createTargetProfile(
+        "profile-intensity-unit-mismatch",
+        std::nullopt,
+        take(IlluminationIntensitySetting::create(
+            20.0, IlluminationIntensityUnit::Milliwatts)),
+        std::nullopt);
+    const auto intensityUnitMismatch = ConfigurationResolver::resolve(
+        fixture.equipment,
+        take(ConfigurationProfileCatalog::create({intensityUnitMismatchProfile})),
+        makeRequest(
+            fixture, {fixture.fullPathId}, fixture.cameraModeId,
+            ContrastMethod::Brightfield, intensityUnitMismatchProfile.id()));
+    check(!intensityUnitMismatch.isResolved() &&
+          hasDiagnosticCode(
+              intensityUnitMismatch,
+              "configuration.illumination.intensity_unit_mismatch"),
+          "rejects an intensity target whose unit differs from the selected channel's unit");
+
+    const auto exposureOutOfRangeProfile = createTargetProfile(
+        "profile-exposure-out-of-range",
+        std::nullopt,
+        std::nullopt,
+        ExposurePreset::create(microseconds(2'000'000.0)));
+    const auto exposureOutOfRange = ConfigurationResolver::resolve(
+        fixture.equipment,
+        take(ConfigurationProfileCatalog::create({exposureOutOfRangeProfile})),
+        makeRequest(
+            fixture, {fixture.fullPathId}, fixture.cameraModeId,
+            ContrastMethod::Brightfield, exposureOutOfRangeProfile.id()));
+    check(!exposureOutOfRange.isResolved() &&
+          hasDiagnosticCode(
+              exposureOutOfRange,
+              "configuration.camera.exposure_preset_out_of_range"),
+          "rejects an exposure preset above the selected camera's declared capability range");
+
+    const auto cameraWithoutExposureRange = take(CameraSpecification::create(
+        fixture.cameraId,
+        fixture.equipment.cameraSpecifications().front().activeSensorDimensions(),
+        micrometers(
+            fixture.equipment.cameraSpecifications().front().pixelPitchXMicrometers()),
+        micrometers(
+            fixture.equipment.cameraSpecifications().front().pixelPitchYMicrometers()),
+        fixture.equipment.cameraSpecifications().front().outputModes()));
+    auto equipmentWithoutExposureCapability = take(
+        MicroscopeEquipmentDefinition::create(
+            fixture.microscopeId,
+            fixture.equipment.components(),
+            fixture.equipment.connections(),
+            fixture.equipment.opticalPaths(),
+            fixture.equipment.objectiveSpecifications(),
+            {cameraWithoutExposureRange},
+            fixture.equipment.condenserSpecifications(),
+            fixture.equipment.illuminationSpecifications(),
+            fixture.equipment.stageSpecifications()));
+    const auto missingExposureCapability = ConfigurationResolver::resolve(
+        equipmentWithoutExposureCapability,
+        targetCatalog,
+        request);
+    check(!missingExposureCapability.isResolved() &&
+          hasDiagnosticCode(
+              missingExposureCapability,
+              "configuration.camera.exposure_capability_missing"),
+          "requires explicit camera exposure-time capability data before accepting a profile preset");
+}
+
 void testResolverRejectsUnavailableCameraMode() {
     const auto fixture = makeConfigurationFixture();
     const auto request = makeRequest(
@@ -866,6 +1038,7 @@ int main() {
     testPhaseContrastRequiresMatchedPhasePlateAndAnnulus();
     testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms();
     testOpticalFunctionRequirementFactoriesAndSelections();
+    testProfileTargetsAreRetainedAndValidatedAgainstInstalledRanges();
     testResolverRejectsUnavailableCameraMode();
     testResolverReportsProfileConflictAndMissingPath();
     testResolverEnforcesPathCompatibilityAndIlluminationChannel();

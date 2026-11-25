@@ -126,9 +126,10 @@ double SlideCornerMeasurement::uncertaintyMicrometers()const noexcept{return unc
 
 SlideRegistration::SlideRegistration(
     SlideId id,DualSlideSlot s,SlideGeometry g,std::array<SlideCornerMeasurement,4> c,
-    std::array<double,6> t,std::array<double,4> residuals,double m,double r)
+    std::array<double,6> t,std::array<double,4> residuals,double cornerUncertainty,double m,double r)
     :slideId_(std::move(id)),slot_(s),geometry_(g),corners_(std::move(c)),
-     transform_(t),cornerResiduals_(residuals),maxResidual_(m),rmsResidual_(r) {}
+     transform_(t),cornerResiduals_(residuals),maximumCornerUncertainty_(cornerUncertainty),
+     maxResidual_(m),rmsResidual_(r) {}
 Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
     SlideId id,DualSlideSlot slot,SlideGeometry g,
     std::array<SlideCornerMeasurement,4> input,double maxAllowed) {
@@ -169,8 +170,10 @@ Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
     if(!std::isfinite(determinant) ||
        std::abs(determinant)<=std::numeric_limits<double>::epsilon()*std::max(1.0,scale)*64)
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::DegenerateTransform);
-    double sum=0,maxResidual=0;
+    double sum=0,maxResidual=0,maximumCornerUncertainty=0;
     std::array<double,4> residuals{};
+    for(const auto& corner:corners)
+        maximumCornerUncertainty=std::max(maximumCornerUncertainty,corner.uncertaintyMicrometers());
     for(int i=0;i<4;++i) {
         const double x=tx+ax*lx[i]+bx*ly[i];
         const double y=ty+ay*lx[i]+by*ly[i];
@@ -185,7 +188,7 @@ Result<SlideRegistration,SlideRegistrationError> SlideRegistration::create(
         return Result<SlideRegistration,SlideRegistrationError>::failure(SlideRegistrationError::FitResidualExceeded);
     return Result<SlideRegistration,SlideRegistrationError>::success(
         SlideRegistration(std::move(id),slot,g,std::move(corners),
-            {tx,ax,bx,ty,ay,by},residuals,maxResidual,std::sqrt(sum/4.0)));
+            {tx,ax,bx,ty,ay,by},residuals,maximumCornerUncertainty,maxResidual,std::sqrt(sum/4.0)));
 }
 const SlideId& SlideRegistration::slideId()const noexcept{return slideId_;}
 DualSlideSlot SlideRegistration::slot()const noexcept{return slot_;}
@@ -218,6 +221,32 @@ Result<SlideLocalPoint,SlideRegistrationError> SlideRegistration::toSlide(StageP
         return Result<SlideLocalPoint,SlideRegistrationError>::failure(SlideRegistrationError::NonFiniteLocalPoint);
     return Result<SlideLocalPoint,SlideRegistrationError>::success(mapped);
 }
+
+Result<SlidePositionEstimate,SlideRegistrationError>
+SlideRegistration::estimateSlidePosition(
+    StagePlanePoint p,double ex,double ey,
+    StagePositionEvidence hx,StagePositionEvidence hy,
+    ObservationSource sx,ObservationSource sy) const {
+    if(!std::isfinite(ex)||!std::isfinite(ey)||ex<0||ey<0)
+        return Result<SlidePositionEstimate,SlideRegistrationError>::failure(
+            SlideRegistrationError::NonFiniteStagePoint);
+    auto local=toSlide(p);
+    if(!local)return Result<SlidePositionEstimate,SlideRegistrationError>::failure(local.error());
+    const double det=std::abs(transform_[1]*transform_[5]-transform_[2]*transform_[4]);
+    const double registrationBound=maximumCornerUncertainty_+maxResidual_;
+    const double stageXBound=ex+registrationBound;
+    const double stageYBound=ey+registrationBound;
+    const double xBound=(std::abs(transform_[5])*stageXBound+
+                         std::abs(transform_[2])*stageYBound)/det;
+    const double yBound=(std::abs(transform_[4])*stageXBound+
+                         std::abs(transform_[1])*stageYBound)/det;
+    if(!std::isfinite(xBound)||!std::isfinite(yBound))
+        return Result<SlidePositionEstimate,SlideRegistrationError>::failure(
+            SlideRegistrationError::NonFiniteLocalPoint);
+    return Result<SlidePositionEstimate,SlideRegistrationError>::success(
+        SlidePositionEstimate{local.value(),xBound,yBound,hx,hy,sx,sy});
+}
+
 
 SlideSlotState::SlideSlotState(DualSlideSlot s,std::optional<SlideId> id,std::optional<SlideRegistration> r)
     :slot_(s),slideId_(std::move(id)),registration_(std::move(r)){}
@@ -283,6 +312,59 @@ Result<MoveAxesTo,SlideNavigationCommandError> DualSlideCarrierState::commandFor
     if(!stagePoint)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
         SlideNavigationCommandError::InvalidStageCoordinate);
     return specification_.moveTo(stagePoint.value());
+}
+
+namespace {
+double toMicrometers(double value,AxisCoordinateUnit unit) {
+    return unit==AxisCoordinateUnit::Millimeters?value*1000.0:value;
+}
+double errorToMicrometers(double value,AxisCoordinateUnit unit) {
+    return unit==AxisCoordinateUnit::Millimeters?value*1000.0:value;
+}
+}
+Result<SlidePositionEstimate,CurrentSlidePositionError>
+DualSlideCarrierState::currentSlidePosition(
+    const SlideId& slideId,const StageAxisPositionState& horizontal,
+    const StageAxisPositionState& transverse) const {
+    const auto* registration=registrationFor(slideId);
+    if(!registration) {
+        const bool loaded=(left_.slideId()&&*left_.slideId()==slideId)||
+                          (right_.slideId()&&*right_.slideId()==slideId);
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            loaded?CurrentSlidePositionError::SlideNotRegistered:
+                   CurrentSlidePositionError::SlideNotInCarrier);
+    }
+    if(horizontal.axisId()!=specification_.horizontalAxisId())
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            CurrentSlidePositionError::HorizontalAxisMismatch);
+    if(transverse.axisId()!=specification_.transverseAxisId())
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            CurrentSlidePositionError::TransverseAxisMismatch);
+    if(horizontal.unit()!=specification_.horizontalUnit_||
+       transverse.unit()!=specification_.transverseUnit_)
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            CurrentSlidePositionError::AxisUnitMismatch);
+    if(!horizontal.positionIsUsable()||!transverse.positionIsUsable()||
+       !horizontal.position()||!transverse.position())
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            CurrentSlidePositionError::PositionUnknown);
+    if(!horizontal.accumulatedPositionErrorBound()||
+       !transverse.accumulatedPositionErrorBound())
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            CurrentSlidePositionError::PositionUncertaintyUnknown);
+    const StagePlanePoint machinePoint{
+        toMicrometers(horizontal.position()->value(),horizontal.unit()),
+        toMicrometers(transverse.position()->value(),transverse.unit())};
+    auto estimate=registration->estimateSlidePosition(
+        machinePoint,
+        errorToMicrometers(*horizontal.accumulatedPositionErrorBound(),horizontal.unit()),
+        errorToMicrometers(*transverse.accumulatedPositionErrorBound(),transverse.unit()),
+        horizontal.evidence(),transverse.evidence(),horizontal.source(),transverse.source());
+    if(!estimate)
+        return Result<SlidePositionEstimate,CurrentSlidePositionError>::failure(
+            CurrentSlidePositionError::InvalidEstimate);
+    return Result<SlidePositionEstimate,CurrentSlidePositionError>::success(
+        std::move(estimate).value());
 }
 
 } // namespace microscope::core

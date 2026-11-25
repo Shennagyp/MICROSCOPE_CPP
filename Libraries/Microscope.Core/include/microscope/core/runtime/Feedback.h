@@ -280,6 +280,16 @@ private:
     TPayload payload_;
 };
 
+// The serialized runtime implements this non-throwing signal. Ingress
+// submission may call it concurrently from SDK/device callback threads.
+class IFeedbackRuntimeSignal {
+public:
+    virtual ~IFeedbackRuntimeSignal() = default;
+    virtual void feedbackAvailable() noexcept = 0;
+    virtual void feedbackLossDetected() noexcept = 0;
+    virtual void feedbackIngressClosed() noexcept = 0;
+};
+
 enum class FeedbackSubmitStatus {
     Enqueued,
     QueueFull,

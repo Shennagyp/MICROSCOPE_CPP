@@ -60,7 +60,7 @@ void convertsMicrometersIntoDeclaredAxisUnits() {
 }
 int main(){
  try { equipmentDefinitionOwnsCarrier(); convertsMicrometersIntoDeclaredAxisUnits(); }
- catch(const std::exception& e){std::cerr<<e.what()<<'\\n';return 1;}
+ catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
  int failures=0;auto check=[&](bool v,const char*m){if(!v){++failures;std::cerr<<"FAIL: "<<m<<'\n';}};
  auto st=stage();
  auto spec=DualSlideCarrierSpecification::create(st,id<StageAxisId>("x"),id<StageAxisId>("y"),CarrierHorizontalDirection::PositiveStageXFromLeftToRight);

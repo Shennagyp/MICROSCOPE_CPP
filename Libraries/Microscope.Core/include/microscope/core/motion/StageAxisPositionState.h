@@ -4,13 +4,6 @@
 
 namespace microscope::core {
 
-enum class StagePositionEvidence {
-    Unknown,
-    CommandDerivedEstimate,
-    ControllerReported,
-    EncoderMeasured,
-    ExternalMeasured
-};
 enum class StageMachineReferenceStatus { Unreferenced, Referenced };
 
 enum class StageAxisPositionStateError {
@@ -39,6 +32,8 @@ public:
     Result<StageAxisPositionState,StageAxisPositionStateError> afterCommandedDisplacement(
         const AxisDisplacement&,std::optional<double> additionalErrorBound) const;
 
+    Result<StageAxisPositionState,StageAxisPositionStateError> afterPositionObservation(
+        const AxisPositionObservation&,ObservationSource source) const;
     Result<StageAxisPositionState,StageAxisPositionStateError> afterPositionObservation(
         AxisPosition observedPosition,double observationErrorBound,
         StagePositionEvidence evidence,ObservationSource source) const;

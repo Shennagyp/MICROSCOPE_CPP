@@ -32,7 +32,7 @@ cmake -S Camera/GenTL -B build/gentl-genapi \
   -DGENAPI_ROOT=/path/to/GenApi-3.5.1-Mac64_Universal
 ```
 
-The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. It has not yet been compiled against the official SDK in CI.
+The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. It has not yet been compiled against the official SDK in CI. The current Swift Consumer packages also declare macOS 13.0 as the minimum runtime platform for the GenTL C ABI dylib.
 
 ## Current C++ API
 
@@ -83,7 +83,7 @@ The adapter exposes remote-port read/write and retrieves GenApi XML using:
 
 HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
 
-`GenApiPort` and `GenApiNodeMap` are optional source integrations. The next GenApi work is to compile them against the official SDK, load actual device XML, and expose typed GenApi nodes through the Common feature contract. A GenApi command/action adapter remains separate from feature read/write access.
+`GenApiPort`, `GenApiNodeMap` and `GenApiFeatureAccess` are optional source integrations. `GenApiFeatureAccess` maps implemented GenApi Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including current availability/readability/writability, numeric range/unit and currently available enumeration symbols. It moves the `DeviceSession` into the feature-access object so the remote port cannot be closed while the node map is connected. GenApi IntegerVector, ICommand and IRegister nodes are not presented as ordinary features; command/action access remains a separate API. These sources have not yet been compiled against the official SDK.
 
 ## Current implementation and evidence
 

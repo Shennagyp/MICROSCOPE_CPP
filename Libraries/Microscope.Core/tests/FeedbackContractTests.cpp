@@ -122,7 +122,7 @@ int main() {
               "feedback payload remains capability-typed");
     }
 
-    FeedbackEnvelope<SelectorFeedback> telemetry{
+    auto telemetry = FeedbackEnvelope<SelectorFeedback>::create(
         FeedbackMetadata::create(
             FeedbackCorrelation{
                 RuntimeDeviceCorrelation{

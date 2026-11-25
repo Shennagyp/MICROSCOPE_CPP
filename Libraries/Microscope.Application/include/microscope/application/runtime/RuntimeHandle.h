@@ -65,11 +65,29 @@ struct RuntimeSnapshot final {
     std::uint64_t revision = 0;
 };
 
-struct OperationView final {
-    OperationHandle handle;
-    core::OperationSnapshot snapshot;
+enum class OperationViewError {
+    RuntimeIdentityMismatch,
+    OperationIdentityMismatch
+};
 
-    [[nodiscard]] bool isConsistent() const noexcept;
+// A view can only be created when the Core snapshot and application handle
+// identify the same microscope, runtime incarnation and operation.
+class OperationView final {
+public:
+    [[nodiscard]] static core::Result<OperationView, OperationViewError> create(
+        OperationHandle handle,
+        core::OperationSnapshot snapshot);
+
+    [[nodiscard]] const OperationHandle& handle() const noexcept;
+    [[nodiscard]] const core::OperationSnapshot& snapshot() const noexcept;
+
+private:
+    OperationView(
+        OperationHandle handle,
+        core::OperationSnapshot snapshot);
+
+    OperationHandle handle_;
+    core::OperationSnapshot snapshot_;
 };
 
 } // namespace microscope::application

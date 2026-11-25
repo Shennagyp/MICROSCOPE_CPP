@@ -478,9 +478,10 @@ void testResolverAcceptsOneCompleteBrightfieldPath() {
 
     check(resolution.isResolved(),
           "resolves a compatible brightfield path with installed objective/camera/illumination specs");
-    check(resolution.resolvedRequest().has_value() &&
-          resolution.resolvedRequest()->objectiveComponentId() == fixture.objectiveId &&
-          resolution.resolvedRequest()->cameraModeId() == fixture.cameraModeId,
+    check(resolution.resolvedConfiguration().has_value() &&
+          resolution.resolvedConfiguration()->microscopeId() == fixture.microscopeId &&
+          resolution.resolvedConfiguration()->request().objectiveComponentId() == fixture.objectiveId &&
+          resolution.resolvedConfiguration()->request().cameraModeId() == fixture.cameraModeId,
           "returns the immutable selected request as the resolved value");
     check(resolution.diagnostics().empty(),
           "compatible brightfield resolution produces no error diagnostics");

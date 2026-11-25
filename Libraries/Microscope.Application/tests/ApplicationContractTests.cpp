@@ -80,6 +80,19 @@ int main() {
     check(!mismatchedView.isConsistent(),
           "application projection detects a mismatched Core snapshot identity");
 
+    const auto staleGenerationSnapshot = core::OperationSnapshot{
+        microscopeId,
+        runtimeId,
+        generation2,
+        operationId,
+        core::OperationStatus::Running,
+        6};
+    const auto staleGenerationView = application::OperationView{
+        operation,
+        staleGenerationSnapshot};
+    check(!staleGenerationView.isConsistent(),
+          "application projection rejects a snapshot from an earlier runtime generation");
+
     const auto secondRuntimeId =
         core::RuntimeId::create("runtime-002").value();
     const auto foreignRuntimeSnapshot = core::OperationSnapshot{

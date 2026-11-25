@@ -322,124 +322,56 @@ Do not reimplement GenApi, create a synthetic AmScope CTI Producer, or route
 AmScope through GenApi without a documented XML/register-port interface. The
 AmScope path remains on the native Amcam SDK.
 
-## One-command build and run
+## Non-Qt driver build and tests
 
-Requirements: macOS, Xcode command-line tools, CMake 3.21+ (either the
-CMake GUI application or its command-line distribution), and Qt 6 with Core
-and Widgets. The launcher detects the command-line executable inside the
-standard `/Applications/CMake.app` or `~/Applications/CMake.app` bundle,
-so a separate terminal installation of CMake is not required. For a custom
-app location, set `CMAKE_APP` to the CMake.app bundle path, or set
-`CMAKE_EXECUTABLE` to its full `Contents/bin/cmake` executable path.
+The Camera v2.0 driver and common contracts build without Qt or a GUI framework.
+Requirements: macOS, Xcode command-line tools, and CMake 3.21+.
 
-Install Qt 6 with Homebrew when it is not already present:
-
-```sh
-brew install qt@6
-```
-
-From the repository root, compile the driver, Qt adapter, and preview app, then
-launch the preview window with:
-
-```sh
-./scripts/run-amscope.sh
-```
-
-The script detects the current Mac architecture, selects the matching bundled
-Amcam dylib, discovers Homebrew Qt 6 (or uses CMAKE_PREFIX_PATH when supplied),
-configures CMake, builds, and launches Camera/Amscope/app/main.cpp's preview
-application.
-
-The fast launcher disables test executable builds by default so the first preview
-launch does not spend time compiling tests. Set `AMSCOPE_BUILD_TESTING=ON` to
-include the test executables in a local build; CI explicitly keeps testing enabled.
-
-
-To configure, build, and run the automated test suite without launching the
-preview window:
+Configure, build, and run the non-Qt test suite:
 
 ```sh
 cmake -S Camera/Amscope -B build/amscope \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
-  -DAMSCOPE_BUILD_QT_ADAPTER=ON \
-  -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+  -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
+  -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
+  -DAMSCOPE_BUILD_NATIVE_PROBE=ON \
+  -DAMSCOPE_BUILD_SDK_WAIT_PROBE=ON \
   -DBUILD_TESTING=ON
 cmake --build build/amscope --config Release --parallel
 ctest --test-dir build/amscope --output-on-failure
 ```
 
-The suite includes `amscope_session_primitives_tests`, which exercises the
-production callback-drain tracker, cache-flush obligation/retry behavior,
-and retained frame-pool leases. These are deterministic helper-level tests;
-they do not replace physical-camera regression or a complete injected SDK
-failure test seam.
+The normal CMake defaults are non-Qt. The two Qt options remain temporarily
+available only for the legacy adapter/preview source and default to OFF. They
+must not become transitive dependencies of the driver, common contracts,
+installed package, or external non-Qt consumers.
 
-The shared common layer also includes `camera_common_models_tests`, which
-tests backend-neutral discovery identity, resolution values, and the
-Unknown/Unsupported/Supported capability distinction.
-
-To run only the SDK camera-enumeration smoke check after building:
+For direct physical-camera acquisition diagnostics, use the production
+AmcamCamera callback-to-pull path:
 
 ```sh
-./scripts/run-amscope.sh --list-cameras
+bash scripts/run-amscope-native-probe.sh --seconds 60
 ```
 
-### Physical-camera performance test
-
-Run the dedicated test from the repository root:
+For an independent vendor SDK WaitImage reference path:
 
 ```sh
-AMSCOPE_BUILD_TESTING=ON ./scripts/run-amscope.sh \
-  --hardware-rate-test \
-  --resolution 640x480 \
-  --warmup 3 \
-  --duration 15 \
-  --target-fps 100
+bash scripts/run-amscope-vendor-wait-probe.sh --seconds 60
 ```
 
-The launcher builds the test executable and opens a small live preview window.
-Keep that window visible and do not minimize it during the measurement. The
-test selects the requested mode through the native `AmcamResolutionIndex`
-feature, verifies the feature readback, and restores the original resolution
-after Stop. It reports JSON to stdout with:
+Run these diagnostics separately. Each process must own the camera exclusively.
+Neither probe is a replacement production backend; production acquisition
+remains SDK callback → bounded event queue → one acquisition worker →
+`Amcam_PullImageV4`.
 
-- SDK image-event FPS.
-- Successful `Amcam_PullImageV4` FPS.
-- Frame callback/delivery FPS.
-- Preview timer ticks, host-frame submissions, Qt paint events, and frames actually painted.
-- Actual frame dimensions, sequence/timestamp metadata, per-frame exposure samples, and dropped frames.
-- Exposure-auto mode and exposure-time readbacks before Start, after Start, and at both ends of the timed measurement.
-- Stop, resolution-restoration, and Close results.
+### Legacy Qt preview and hardware-rate utility
 
-The test expects RGB24 live preview; it refuses to start when RAW sensor output
-is enabled because this test specifically measures the RGB preview/render path.
-Paint counting uses a host-side revision for every delivered frame, not the
-device-provided sequence field (some models may leave that field constant).
-The report samples `ExposureAuto` and `ExposureTime` before Start, after
-Start, and at the beginning and end of the timed measurement. An exposure FPS
-ceiling is emitted only when automatic exposure is Off at both measurement
-boundaries and the exposure readback is unchanged. A pre-Start exposure value
-alone is not treated as the active capture exposure. Preview polling,
-submissions, paint-event calls, and painted frames are reported separately so
-a low UI rate can be localized without conflating it with camera acquisition.
-The default device is index 0; use `--device-index N` when more than one camera
-is connected. The default target is 100 pulled frames per
-second. Exit code 0 means the operational checks passed and the pull-rate
-target was met; exit code 10 means the test ran and reported measurements but
-the target was not met; other non-zero codes indicate setup or operational
-failure.
+The Qt adapter, Widgets preview, and Qt-based hardware-rate presentation remain
+in source temporarily for historical comparison. They are not Camera v2.0
+deliverables and are disabled by default. The legacy launcher
+`scripts/run-amscope.sh` explicitly opts into them and requires Qt 6. Do not
+use that launcher as the Camera v2.0 build or acceptance path.
 
-This is a physical-camera test executable, deliberately not registered with
-CTest and not run by hosted CI (which has no camera attached).
-
-The preview UI lets you refresh the device list, open a selected camera, start
-or stop acquisition, close the session, and inspect/edit the currently available
-camera features through descriptor-generated controls. Settings use the common
-typed feature contract rather than AmScope-specific widget setters. Potentially
-blocking feature requests run off the UI thread; stale completions are ignored.
-The image path uses QLabel/QImage for a simple CPU preview; it is not the final
-GPU renderer or a zero-copy presentation path.
 
 ## Acquisition-isolation diagnostics
 
@@ -503,7 +435,7 @@ transport connection, and duration where possible.
 |---|---|---|
 | Stalls/faults | Stalls/faults | Investigate camera, firmware, USB/transport, SDK, or shared camera configuration first |
 | Stalls/faults | Stable | Investigate the production AmcamCamera setup, callback-to-pull path, and its lifecycle |
-| Stable | Stable | The native acquisition path is less likely to be the fault; isolate the Qt bridge and renderer next |
+| Stable | Stable | The native acquisition path is less likely to be the fault; isolate the application adapter or frame consumer next |
 | Stable | Stalls/faults | Investigate the vendor polling path's compatibility with this model/configuration; do not infer that production callback/pull is faulty |
 
 The vendor-only program is a reference diagnostic, not the application's
@@ -513,24 +445,18 @@ SDK callback -> bounded event queue -> one acquisition worker ->
 while excluding Qt; the vendor-only probe intentionally exercises the
 different `WaitImageV3` path to provide an independent SDK/device comparison.
 
-## Direct CMake build
+## CMake target policy
 
-The default build includes both the Qt 6 Core adapter and Qt Widgets preview:
+The default `Camera/Amscope` configure builds the native AmScope driver and
+common camera contracts without Qt. The legacy targets are opt-in only:
 
-```sh
-cmake -S Camera/Amscope -B build/amscope \
-  -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
-cmake --build build/amscope --config Release --parallel
-```
+- `AMSCOPE_BUILD_QT_ADAPTER=ON`: legacy Qt Core adapter.
+- `AMSCOPE_BUILD_PREVIEW_APP=ON`: legacy Qt Widgets preview; this also
+  requires the Qt adapter.
 
-To build only the non-Qt native driver:
+These options are disabled by default and are not part of the Camera v2.0
+package or external-consumer contract. New camera code must not depend on them.
 
-```sh
-cmake -S Camera/Amscope -B build/amscope \
-  -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
-  -DAMSCOPE_BUILD_PREVIEW_APP=OFF
-cmake --build build/amscope --parallel
-```
 
 ## macOS SDK selection
 
@@ -544,24 +470,19 @@ CMake selects based on the requested/native architecture. Override with
 The selected libamcam.dylib is copied beside libcamera_amscope_driver.dylib and the driver
 uses @loader_path for runtime resolution.
 
-## Qt frame handoff
+## Legacy Qt frame handoff — reference only
 
-Connect `QtAmcamCamera::frameAvailable()` to a slot on the consumer/render
-thread with `Qt::QueuedConnection`. In that slot call `takeLatestFrame()` and
-keep the returned `FramePtr` alive for the complete period in which the renderer
-reads its pixels, then release it.
+`QtAmcamCamera`, `Camera::Qt` and their QObject notification mechanism are
+legacy optional integration code. They are excluded from the Camera v2.0
+programmatic API and are not required to consume frames.
 
-`Camera::Qt` supplies the header-only `FrameStreamMailbox` mechanism. The
-AmScope adapter embeds it directly while keeping the QObject signal, queued
-notification, and consumer API on `QtAmcamCamera`.
+The supported camera-facing contract is the non-Qt `AmcamCamera` API:
+its `FrameCallback` receives an immutable `FramePtr` lease on the acquisition
+worker. Consumers must retain the lease for the complete period in which they
+read its pixel memory. They must not synchronously call start, stop, close or
+destroy the camera from the acquisition callback. The application owns
+notification scheduling and presentation.
 
-The mailbox is preview-oriented and freshness-first; it is not an ordered
-recording/processing queue. A later recording path needs its own bounded queue
-and explicit backpressure/drop policy.
-
-The bridge does not create a GPU context, convert frames to QImage, or claim
-zero-copy GPU upload. Those responsibilities belong to the application
-renderer and must be implemented against the selected Qt rendering API.
 
 ## Lifecycle
 
@@ -575,8 +496,8 @@ renderer and must be implemented against the selected Qt rendering API.
 Frame and error callbacks execute on the native acquisition worker. Do not call
 start, stop, close, or destroy AmcamCamera synchronously from either callback.
 Queue lifecycle changes and native camera destruction to the owning application/
-control thread. Destroy QtAmcamCamera on its owning Qt thread; its destructor
-stops and closes the session.
+control thread. The application must serialize these transitions and ensure
+the acquisition callback has returned before destroying the camera.
 
 ## Not included yet
 

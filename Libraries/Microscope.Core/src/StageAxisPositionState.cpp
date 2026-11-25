@@ -114,7 +114,7 @@ Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::afterPositionObservation(
     const AxisPositionObservation& observation,ObservationSource source) const {
     return afterPositionObservation(
-        observation.position(),observation.uncertaintyMicrometers(),
+        observation.position(),observation.uncertaintyInAxisUnit(),
         observation.evidence(),source);
 }
 

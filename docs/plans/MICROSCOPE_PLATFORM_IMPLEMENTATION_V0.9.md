@@ -200,16 +200,38 @@ The equipment definition now describes installed topology and static capabilitie
 **Phase 3A–3C exit:** satisfied and cross-platform validated. **Phase 3D source exit:** the deterministic adapter-neutral dependency DAG, safety root, verification sink, cycle checks and execution layers are implemented; final current-head cross-platform validation is pending. **Phase 3E source exit:** representative brightfield, phase, DIC and polarized-light profile cases are present; current-head CI is pending. Verified-state reconciliation and execution remain Phase 4.
 
 ### Phase 4 — Core operation runtime
-- Implement operation and step lifecycle.
-- Implement dependency-plan execution.
-- Implement typed command ports and normalized adapter feedback.
-- Correlate all feedback to operation/step/command/device identities.
-- Serialize event processing per runtime.
-- Implement timeouts, cancellation, stale feedback rejection, partial completion and reconciliation.
-- Test both feedback-rich and feedback-poor/manual devices.
 
-**Exit:** no operation is marked complete solely because a command was dispatched or accepted.
+**In progress — 4A lifecycle reducer implemented; cross-platform validation pending**
 
+**Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
+
+**Implementation sequence**
+1. **4A — Lifecycle semantics:** immutable operation/step state and pure legal-transition functions. Distinguish CommandDispatched, AdapterAccepted, DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and StepVerified. DeviceActionCompleted moves to AwaitingObservation; it never marks a step verified by itself.
+2. **4B — Command and port contracts:** define command correlation scope and capability-specific command values/ports. Keep logical DeviceId separate from SDK handles. The adapter's synchronous dispatch result reports only accepted/rejected responsibility; it is not device acknowledgement. Do not add a generic string-command API.
+3. **4C — Serialized runtime and ingress:** implement one single-writer operation runtime per microscope incarnation, thread-safe feedback ingress, bounded FIFO receipts and atomic Core-assigned ingress sequence. SDK callbacks enqueue only; they never mutate operation state directly.
+4. **4D — Plan execution:** execute ConfigurationTransitionPlan dependency layers through the relevant typed ports, retain command/step correlation and dispatch dependent work only when its prerequisites reach required state. Resource claims, not topological-layer membership alone, determine safe concurrency.
+5. **4E — Verification and failure lifecycle:** evaluate typed observations against step requirements and evidence policies; implement timeout, cancellation, adapter failure, stale generation/late feedback, queue overflow, partial completion and verified-state reconciliation.
+
+**4A committed source progress**
+- Added OperationLifecycleEvent and StepLifecycleEvent plus pure applyOperationLifecycleEvent / applyStepLifecycleEvent transitions.
+- Operation success is allowed only from Verifying. Cancellation remains requested until cancellation confirmation.
+- Command dispatch, adapter acceptance and device acknowledgement are separate step transitions.
+- DeviceActionCompleted moves a step to AwaitingObservation; DeviceStateObserved moves it to Verifying; only a Core VerificationSucceeded event marks it Verified.
+- Manual steps have an AwaitingOperator path. OperatorConfirmed enters Verifying and is not itself proof of completion.
+- Timeout, adapter failure/rejection, partial completion and terminal-state behavior have focused tests.
+- Current-head CI is pending in [run 124](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45639182251).
+
+**Implementation constraints**
+- Per-runtime state transitions have one logical owner. Adapter callbacks enqueue immutable feedback and never call the reducer directly from device/SDK threads.
+- Every operation-correlated feedback item must match MicroscopeId, RuntimeId, RuntimeGeneration, DeviceId, DeviceSessionGeneration, OperationId and StepId; CommandId is required where the fact is command-specific.
+- Unsolicited telemetry has no operation correlation and cannot satisfy an operation step.
+- A timeout/cancellation request is not evidence that hardware stopped. Late feedback is correlated and reconciled; it cannot silently revive a terminal operation.
+- Queue overflow must latch feedback loss and mark affected state unknown through a control path independent of the saturated feedback queue.
+- Core must not fabricate hardware feedback or promote operator confirmation/calibrated estimates into stronger evidence than the selected completion policy allows.
+- Current operation/step snapshots are runtime state, not event sourcing. Persist only the history required by recovery/audit use cases.
+- Existing camera acquisition workers, frame pool, leases and mailbox remain separate from the operation event channel.
+
+**Exit:** no operation is marked complete solely because a command was dispatched, accepted or reported action-complete. It succeeds only after every required step and the final desired configuration satisfy their explicit evidence predicates.
 ### Phase 5 — JSON and application composition
 - Define versioned microscope-definition JSON schema.
 - Define deployment JSON schema for adapter bindings.

@@ -93,13 +93,19 @@ int main(){
  check(current&&std::abs(current.value().position.xMicrometers-37500)<1e-6&&
        std::abs(current.value().position.yMicrometers-12500)<1e-6,
        "current machine position maps back to the selected slide-local coordinate");
- check(current&&std::abs(current.value().xErrorBoundMicrometers-1.0)<1e-6&&
-       std::abs(current.value().yErrorBoundMicrometers-1.5)<1e-6,
+ check(current&&std::abs(current.value().xErrorBoundMicrometers-1.25)<1e-6&&
+       std::abs(current.value().yErrorBoundMicrometers-1.75)<1e-6,
        "slide-local position carries propagated stage and registration uncertainty");
  auto unknownX=take(StageAxisPositionState::unknown(id<StageAxisId>("x"),AxisCoordinateUnit::Micrometers));
  auto unknownCurrent=carrier.currentSlidePosition(id<SlideId>("left"),unknownX,hy);
  check(!unknownCurrent&&unknownCurrent.error()==CurrentSlidePositionError::PositionUnknown,
        "unreferenced stage position cannot be presented as a slide coordinate");
+ auto outsideSlide=take(StageAxisPositionState::homed(
+     take(AxisPosition::create(id<StageAxisId>("x"),100000,AxisCoordinateUnit::Micrometers)),
+     0.1,StagePositionEvidence::EncoderMeasured,ObservationSource::HardwareReadback));
+ auto outsidePosition=carrier.currentSlidePosition(id<SlideId>("left"),outsideSlide,hy);
+ check(!outsidePosition&&outsidePosition.error()==CurrentSlidePositionError::PositionOutsideSlide,
+       "does not report a selected-slide position when the stage is physically outside that slide");
  auto wrongRight=registration("wrong-right",DualSlideSlot::Right,-95000);
  auto wrongRightState=take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("wrong-right"),wrongRight));
  auto wrongOrder=DualSlideCarrierState::create(spec.value(),

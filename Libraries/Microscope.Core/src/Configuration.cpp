@@ -849,24 +849,9 @@ ConfigurationResolution ConfigurationResolver::resolve(
         request.selectedAdditionalOpticalComponentIds().begin(),
         request.selectedAdditionalOpticalComponentIds().end());
 
-    std::set<EquipmentComponentId> distinctSelectedOpticalComponentIds;
-    for (const auto& selectedComponentId : selectedOpticalComponentIds) {
-        if (!distinctSelectedOpticalComponentIds.insert(selectedComponentId).second) {
-            continue;
-        }
-
-        const auto* component = findEquipmentComponent(
-            equipment, selectedComponentId);
-        if (component == nullptr ||
-            component->kind() != EquipmentComponentKind::OpticalElement) {
-            continue;
-        }
-
-        if (!selectedPaths.empty() &&
-            !containsOpticalPathComponent(selectedPaths, selectedComponentId)) {
-            continue;
-        }
-    }
+    std::set<EquipmentComponentId> distinctSelectedOpticalComponentIds(
+        selectedOpticalComponentIds.begin(),
+        selectedOpticalComponentIds.end());
 
     for (const auto& requirement : profile->requiredOpticalFunctions()) {
         std::uint32_t matchingComponentCount = 0;

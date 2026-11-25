@@ -129,6 +129,9 @@ Every adapter feedback item carries a runtime/device scope:
 - MicroscopeId
 - RuntimeId and RuntimeGeneration
 - logical DeviceId
+- DeviceSessionGeneration for the current open/reconnected session of that logical device
+
+Core creates a new DeviceSessionGeneration whenever a logical device session is opened/reopened within a runtime and supplies it to the adapter with the session binding. The adapter must associate each callback with the exact session generation that produced it; it must not stamp an old callback with the currently active generation. Feedback from an earlier device-session generation is stale even when RuntimeGeneration is unchanged.
 
 Feedback related to an active operation additionally carries one OperationCorrelation containing OperationId, StepId and optional CommandId. OperationId and StepId are an indivisible pair; a command correlation cannot exist without them. This avoids representing half-correlated work.
 

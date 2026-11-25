@@ -255,7 +255,7 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
                   let image = lease.createCGImage() else {
                 return
             }
-            // PULL FPS is updated above from the acquisition counter.
+            // FPS is updated above from the acquisition counter.
             // Image presentation does not affect that measurement.
             slideOnePane.display(image)
         case .slide2:

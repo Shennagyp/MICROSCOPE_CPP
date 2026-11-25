@@ -895,7 +895,7 @@ Workspace/
     └── indexes (rebuildable)
 ~~~
 
-This is a logical storage layout, not a Core API or a requirement that every adapter use directories. Image payload filenames/extensions and physical storage layout are adapter decisions. Metadata records use stable IDs and relative payload references so a Slide package can be moved without changing domain identity.
+This is a logical storage layout, not a Core API or a requirement that every adapter use directories. Braced ID directory names are conceptual storage keys, not permission to concatenate an opaque ID directly into a filesystem path. The storage adapter must deterministically encode IDs into safe portable path segments or maintain an explicit ID-to-storage-key mapping; it must prevent traversal, separator interpretation and collisions. The original ID remains in metadata and is not rewritten by path encoding. Image payload filenames/extensions and physical storage layout are also adapter decisions. Metadata records use stable IDs and relative payload references so a Slide package can be moved without changing domain identity.
 
 A Sample directory does not contain authoritative copies of its Slides. Slide packages are separate so that a slide can be moved, backed up or restored independently; Slide.SampleId preserves its source relationship. The catalog index can be rebuilt by scanning authoritative records or by an adapter-specific index rebuild.
 

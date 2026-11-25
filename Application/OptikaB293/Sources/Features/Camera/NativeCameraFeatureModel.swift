@@ -26,6 +26,8 @@ final class NativeCameraFeatureModel: ObservableObject {
     @Published private(set) var selectedPreviewResolutionSymbol: String?
 
     var onPreviewResolutionReadbackChanged: (() -> Void)?
+    var onFeatureDescriptorsAvailable: (() -> Void)?
+    var onCameraSessionEnded: (() -> Void)?
 
     init(
         bridge: AmscopeNativeCameraBridge,
@@ -69,6 +71,7 @@ final class NativeCameraFeatureModel: ObservableObject {
         featureErrors = [:]
         featureDrafts = [:]
         finishCameraOperation()
+        onCameraSessionEnded?()
     }
 
     func refreshFeatures() {
@@ -102,6 +105,7 @@ final class NativeCameraFeatureModel: ObservableObject {
                             $1.displayName
                         ) == .orderedAscending
                     }
+                self.onFeatureDescriptorsAvailable?()
 
                 // Start a fresh feature snapshot. Old values are not shown as if
                 // they still describe the current camera state.
@@ -264,6 +268,70 @@ final class NativeCameraFeatureModel: ObservableObject {
         }
     }
 
+    func applyExposureProfile(
+        _ profile: ObjectiveExposureProfile,
+        completion: ((Error?) -> Void)? = nil
+    ) {
+        guard let automaticDescriptor = featureDescriptors.first(where: {
+            $0.name == "ExposureAuto"
+        }), automaticDescriptor.isAvailable, automaticDescriptor.isWritable else {
+            completion?(nil)
+            return
+        }
+
+        let shouldWriteManualTime =
+            !profile.automaticExposureEnabled &&
+            profile.manualExposureTimeMicroseconds != nil
+        let automaticMode = profile.automaticExposureEnabled ? "Continuous" : "Off"
+
+        // The camera accepts ExposureTime only after ExposureAuto has been
+        // switched to Off. Keep both writes on the existing serialized queue.
+        writeFeature(
+            AmscopeCameraFeatureValue.enumerationFeatureValue(automaticMode),
+            for: automaticDescriptor,
+            refreshAfterWrite: !shouldWriteManualTime
+        ) { [weak self] error in
+            guard let self = self, error == nil else {
+                completion?(error)
+                return
+            }
+
+            guard shouldWriteManualTime,
+                  let requestedTime = profile.manualExposureTimeMicroseconds else {
+                completion?(nil)
+                return
+            }
+
+            guard let timeDescriptor = self.featureDescriptors.first(where: {
+                $0.name == "ExposureTime"
+            }), timeDescriptor.isAvailable else {
+                let unavailableError = NSError(
+                    domain: "OPTIKA-B293.Exposure",
+                    code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "The connected camera does not expose manual exposure time."
+                    ]
+                )
+                self.presentError(unavailableError)
+                self.refreshFeatures()
+                completion?(unavailableError)
+                return
+            }
+
+            // The cached descriptor may still say isWritable=false because it
+            // was built while automatic exposure was active. The driver rebuilds
+            // and validates the descriptor after the preceding Off write.
+            self.writeFeature(
+                AmscopeCameraFeatureValue.integerFeatureValue(requestedTime),
+                for: timeDescriptor,
+                allowTemporarilyNonWritable: true,
+                refreshAfterWrite: true,
+                completion: completion
+            )
+        }
+    }
+
     private func restoreDraft(for descriptor: AmscopeCameraFeatureDescriptor) {
         restoreDraft(forFeatureName: descriptor.name)
     }
@@ -275,14 +343,17 @@ final class NativeCameraFeatureModel: ObservableObject {
 
     private func writeFeature(
         _ value: AmscopeCameraFeatureValue,
-        for descriptor: AmscopeCameraFeatureDescriptor
+        for descriptor: AmscopeCameraFeatureDescriptor,
+        allowTemporarilyNonWritable: Bool = false,
+        refreshAfterWrite: Bool = true,
+        completion: ((Error?) -> Void)? = nil
     ) {
         let access = accessSnapshot()
         guard descriptor.name != Self.previewResolutionFeatureName &&
               access.canAccessFeatures &&
               !access.isCameraOperationPending &&
               descriptor.isAvailable &&
-              descriptor.isWritable &&
+              (descriptor.isWritable || allowTemporarilyNonWritable) &&
               !isFeatureWritePending &&
               !isFeatureSnapshotLoading else {
             return
@@ -300,11 +371,13 @@ final class NativeCameraFeatureModel: ObservableObject {
                     self.restoreDraft(forFeatureName: featureName)
                 }
 
-                // Enqueueing the write advanced the native feature-state generation.
-                // Reads from the previous generation may have been discarded even
-                // when the write failed, so every current-session completion needs
-                // a fresh descriptor/readback snapshot.
-                self.refreshFeatures()
+                // Enqueueing a write advances the native feature-state generation.
+                // Refresh after the final write in an ordered exposure update; on
+                // failure, refresh even when the caller requested a chained write.
+                if refreshAfterWrite || error != nil {
+                    self.refreshFeatures()
+                }
+                completion?(error)
             }
         }
     }

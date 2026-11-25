@@ -145,7 +145,7 @@ FeedbackReceipt is created through a factory that verifies its FeedbackIngressSe
 
 The initial fact categories are DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and AdapterFailure. They describe the kind of fact, not its provenance. For example, DeviceStateObserved may be based on a hardware readback or SDK status. CommandDispatched and TimeoutElapsed remain Core runtime facts and are not adapter feedback kinds.
 
-A present device timestamp is created with an explicit positive ticks-per-second value; zero is rejected. When the adapter cannot provide a valid timebase, it omits the timestamp rather than writing zero as an unknown sentinel.
+A present device timestamp is created with an explicit positive ticks-per-second value; zero is rejected. An explicitly empty clock-domain label is also rejected; an unidentified clock domain is represented by nullopt. When the adapter cannot provide a valid timebase, it omits the timestamp rather than writing zero as an unknown sentinel.
 
 When feedback enters Core, the runtime wraps it in Core-owned FeedbackReceipt metadata containing a monotonic steady-clock receipt time and a Core ingress sequence that starts at one and increases within the runtime generation. These are distinct from adapter source sequence and device timestamp. The steady-clock receipt value is runtime-local for ordering/deadline calculations and is not a durable wall-clock timestamp; a persisted audit timestamp, where required, is captured separately. Device timestamps are never compared directly with the Core monotonic clock without a documented clock mapping.
 

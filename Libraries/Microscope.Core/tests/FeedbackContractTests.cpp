@@ -57,6 +57,7 @@ int main() {
                     operationId,
                     stepId,
                     commandId}},
+            FeedbackKind::DeviceStateObserved,
             ObservationSource::HardwareReadback,
             std::uint64_t{91},
             DeviceTimestamp{1200, 1000, std::string("device-clock-A")}},
@@ -88,6 +89,8 @@ int main() {
         check(captured.metadata.correlation.runtimeDevice.microscopeId == microscopeId &&
               captured.metadata.correlation.runtimeDevice.runtimeId == runtimeId,
               "feedback retains runtime and microscope scope");
+        check(captured.metadata.kind == FeedbackKind::DeviceStateObserved,
+              "feedback preserves normalized fact kind");
         check(captured.metadata.source == ObservationSource::HardwareReadback,
               "feedback preserves observation provenance");
         check(captured.metadata.sourceSequence == std::optional<std::uint64_t>(91),
@@ -105,6 +108,7 @@ int main() {
                     generation,
                     deviceId},
                 std::nullopt},
+            FeedbackKind::DeviceProgress,
             ObservationSource::SdkStatus,
             std::nullopt,
             std::nullopt},
@@ -116,6 +120,9 @@ int main() {
     check(telemetryIngress.lastFeedback.has_value() &&
           !telemetryIngress.lastFeedback->metadata.correlation.operation.has_value(),
           "telemetry does not fabricate operation or step identities");
+    check(telemetryIngress.lastFeedback.has_value() &&
+          telemetryIngress.lastFeedback->metadata.kind == FeedbackKind::DeviceProgress,
+          "telemetry preserves its normalized fact category");
 
     if (failures != 0) {
         std::cerr << failures << " feedback contract test(s) failed.\n";

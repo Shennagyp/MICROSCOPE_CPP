@@ -222,6 +222,46 @@ int main() {
     check(signal.available.load()>=5&&signal.closed.load()==0,
           "runtime receives all accepted feedback wakeups without premature closure");
 
+    TestRuntimeSignal overflowSignal;
+    auto overflowRuntime=take(SerializedOperationRuntime<StageMotionFeedbackPayload>::create(
+        id<MicroscopeId>("scope"),id<RuntimeId>("runtime"),
+        take(RuntimeGeneration::create(8)),1,overflowSignal));
+    take(overflowRuntime->bindOwnerThread());
+    take(overflowRuntime->openDeviceSession(deviceSession(4)));
+    const auto overflowOperation=id<OperationId>("operation-overflow");
+    const auto overflowStep=id<StepId>("step-overflow");
+    const auto overflowCommand=id<CommandId>("command-overflow");
+    take(overflowRuntime->createOperation(overflowOperation));
+    take(overflowRuntime->startOperation(overflowOperation));
+    take(overflowRuntime->createStep(overflowOperation,overflowStep));
+    auto firstTelemetry=staleSessionFeedback(deviceSession(4));
+    auto droppedTelemetry=staleSessionFeedback(deviceSession(4));
+    check(overflowRuntime->feedbackIngress().submit(std::move(firstTelemetry))==
+          FeedbackSubmitStatus::Enqueued,
+          "overflow fixture fills the bounded feedback queue");
+    check(overflowRuntime->feedbackIngress().submit(std::move(droppedTelemetry))==
+          FeedbackSubmitStatus::QueueFull&&overflowRuntime->feedbackLossLatched(),
+          "dropped feedback latches runtime reconciliation state");
+    auto blockedDispatch=overflowRuntime->dispatchCommand(
+        overflowOperation,overflowStep,overflowCommand);
+    check(!blockedDispatch&&blockedDispatch.error()==
+          SerializedOperationRuntimeError::FeedbackLossUnresolved,
+          "runtime blocks new hardware dispatch while feedback loss is unresolved");
+    auto prematureAcknowledge=overflowRuntime->acknowledgeFeedbackLoss();
+    check(!prematureAcknowledge&&prematureAcknowledge.error()==
+          SerializedOperationRuntimeError::FeedbackLossUnresolved,
+          "runtime cannot clear feedback loss while queued pre-loss feedback remains");
+    auto drained=take(overflowRuntime->processNextFeedback());
+    check(drained&&drained->disposition==
+          FeedbackProcessingDisposition::UncorrelatedDeviceFeedback,
+          "runtime drains preserved feedback before reconciliation can complete");
+    check(bool(overflowRuntime->acknowledgeFeedbackLoss())&&
+          !overflowRuntime->feedbackLossLatched(),
+          "owner can acknowledge feedback loss after draining and reconciling");
+    check(overflowRuntime->dispatchCommand(
+          overflowOperation,overflowStep,overflowCommand).value()==StepStatus::Dispatched,
+          "command dispatch resumes after feedback loss reconciliation");
+
     if(failures) {
         std::cerr<<failures<<" serialized operation runtime test(s) failed\n";
         return 1;

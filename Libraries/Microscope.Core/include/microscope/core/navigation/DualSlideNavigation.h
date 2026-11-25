@@ -82,7 +82,7 @@ private:
 };
 
 enum class SlideRegistrationError {
-    InvalidResidualLimit,DuplicateCorner,MissingCorner,DegenerateTransform,
+    InvalidResidualLimit,InvalidSlot,DuplicateCorner,MissingCorner,DegenerateTransform,
     FitResidualExceeded,NonFiniteLocalPoint,LocalPointOutsideSlide,NonFiniteStagePoint
 };
 class SlideRegistration final {

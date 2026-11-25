@@ -2,8 +2,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest implementation checkpoint:** `89369b2402dd79c169c665764c5ae9e7e9f7ff2a`  
-**Latest CI-validated code checkpoint:** `03f674aa7c39ac5b80d6f4a2329b930cb5d81e8c` (9/9 CTest tests on both architectures; latest official GenApi SDK compile is pending) (earlier GenTL bridge/stream baseline; latest frame/command changes pending CI)  
+**Latest implementation checkpoint:** `f049f91d6afe1c9f785b60ce344d216b6d251a59`  
+**Latest CI-validated code checkpoint:** `f049f91d6afe1c9f785b60ce344d216b6d251a59` — official GenApi 3.5.1 CMake configure/build passed on Intel x86_64; Apple Silicon arm64 is still queued in workflow [#45688350553](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45688350553). The GenTL mock/frame/command contract suite separately passed 9/9 tests on both architectures at `03f674aa7c39ac5b80d6f4a2329b930cb5d81e8c` in [#45686459352](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45686459352).
 **CI:** GenTL C++ workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64. Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs at the CMake common-target checkpoint.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Review date:** 25 November 2026

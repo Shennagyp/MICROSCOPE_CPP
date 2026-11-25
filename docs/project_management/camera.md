@@ -3,7 +3,7 @@
 **Canonical project:** the reusable Camera Module in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Camera development branch:** `camera-v.2.0`  
-**Latest Camera status checkpoint:** `1b73a5ebca205ef6052c2f3950a016b6e078abac` (`docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md`).  
+**Latest Camera status checkpoint:** `f0fb9a9a16509ee4e620bbda1a69a95e083e218d` (`docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md`).  
 **Latest fully CI-validated code checkpoint:** `b9945dcb7435808f4315051f5af7214ffdac2143` — GenTL/GenApi workflow [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build/runtime tests, PFNC mapping, pending-event shutdown, `EventKill` fallback, shutdown-time invalid-handle cancellation, recursive nested-category feature/command access and moved-payload frame projection.  
 **Latest implementation checkpoint:** `b9945dcb7435808f4315051f5af7214ffdac2143` treats `GC_ERR_INVALID_HANDLE` as a normal cancellation only after stream shutdown begins, covering event-unregister races.  
 **CI:** Full GenTL/GenApi and official SDK validation is green on both architectures in [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214).  
@@ -303,7 +303,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** `1b73a5ebca205ef6052c2f3950a016b6e078abac`. **Latest implementation checkpoint:** `b9945dcb7435808f4315051f5af7214ffdac2143`. GenTL/GenApi, PFNC mapping, event cancellation/fallback, shutdown-time invalid-handle handling, recursive GenApi categories and move-aware payload transfer passed Intel x86_64 and Apple Silicon arm64 in [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214). The Swift C ABI pending-wait test is committed at `AMSCOPE_DRIVER:gentl-c-api-v.1.0` commit `0edf2d7`; the latest workflow commit `70d69d1` also failed before job steps in [#45703282802](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45703282802). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
+**Latest Camera status checkpoint:** `f0fb9a9a16509ee4e620bbda1a69a95e083e218d`. **Latest implementation checkpoint:** `b9945dcb7435808f4315051f5af7214ffdac2143`. GenTL/GenApi, PFNC mapping, event cancellation/fallback, shutdown-time invalid-handle handling, recursive GenApi categories and move-aware payload transfer passed Intel x86_64 and Apple Silicon arm64 in [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214). The Swift C ABI pending-wait test is committed at `AMSCOPE_DRIVER:gentl-c-api-v.1.0` commit `0edf2d7`; the latest workflow commit `70d69d1` also failed before job steps in [#45703282802](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45703282802). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

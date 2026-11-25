@@ -1,4 +1,20 @@
-# Development Continuation Handoff — AmScope Native Driver
+# Historical Development Handoff — AmScope Native Driver v0.7 (Superseded)
+
+> **This file is retained as historical v0.7 development evidence. It is not the
+> current Camera v2.0 continuation handoff.** Its branch names, phase numbers,
+> Qt adapter/UI tasks, and next-action instructions describe the former Qt
+> preview delivery and must not override the current non-Qt roadmap.
+
+**Current development branch:** [`camera-v.2.0`](https://github.com/Shennagyp/MICROSCOPE_CPP/tree/camera-v.2.0)  
+**Current development status and continuation plan:** [`CAMERA_V2_DEVELOPMENT_STATUS.md`](CAMERA_V2_DEVELOPMENT_STATUS.md)  
+**Historical original Phase 0–8 roadmap:** [`AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md`](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
+
+The Camera v2.0 product is a non-Qt programmatic camera library. Application GUI
+and presentation belong to consuming applications such as Optika. Do not
+continue the Qt preview/UI roadmap from this historical handoff.
+
+---
+
 
 **Last reviewed:** 24 November 2026  
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  

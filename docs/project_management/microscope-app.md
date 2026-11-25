@@ -18,6 +18,23 @@ The target architecture separates:
 
 The application frontend must not become the owner of microscope semantics or call vendor hardware APIs directly. Core must not depend on SwiftUI/AppKit, Qt, JSON, vendor SDKs or persistence implementations.
 
+
+### Separate development lines on the shared v0.9 branch
+
+The following lines share the `OPTIKA-B293-DUALSLIDE-APP-v.0.9` implementation branch but are not one undifferentiated feature stream:
+
+| Line | Owns | Does not own |
+|---|---|---|
+| Microscope application | Core/Application composition, product use cases, frontend integration and cross-capability orchestration | Vendor camera/controller sessions or image-processing implementation |
+| Camera | The single camera subsystem: device/session, capture and frame delivery | Microscope configuration, controller movement or scan-plan policy |
+| Controller / Motion / Stage | Controller provider/session/feedback, movement semantics and microscope-specific stage topology | Sample/Slide scan lifecycle or camera acquisition |
+| Slide Scanning | Sample/Slide workflow, per-Slide scan plan/run, coverage and acquisition provenance | Camera SDK, controller transport, stage movement implementation or image-processing algorithms |
+| ImageProcessing | Separate image-processing library in `Shennagyp/ImageProcessing` | Microscope hardware ownership or scan orchestration |
+
+The Controller and Slide Scanning lines are now continued in this OPTIKA v0.9 branch. Their earlier implementation/design history in the separate `MICROSCOPE` repository (`station-development` and `refactor-2`) remains reference material; it is not the active source location and must not be counted as already ported. A shared branch does not merge their milestones or acceptance criteria.
+
+The workstream records are maintained separately: [Controller/Motion/Stage](controller.md) and [Slide Scanning](slide-scanning.md). The application line integrates their contracts but does not absorb their responsibilities.
+
 ## 2. Development history
 
 ### Camera-driver foundation to reusable camera subsystem
@@ -87,6 +104,7 @@ The implementation is lifecycle semantics only. It is not yet a command executor
 - Earlier owner-reported macOS build and 15/15 CTest results validate their exact older app revisions.
 - The latest source branch is not yet evidence of a complete operational microscope workflow.
 - The latest workflow does not establish physical controller/stage movement, full scan execution, or current application GUI and hardware acceptance.
+- Slide presentation/geometry types are not a Sample/Slide persistence and scanning workflow. Stage specifications are not a controller/provider/motion runtime. Track those as separate workstreams in [Controller](controller.md) and [Slide Scanning](slide-scanning.md).
 - Do not attribute AmScope MU503 frame tests to controller or slide-scanning acceptance.
 
 ## 5. Architectural constraints
@@ -132,6 +150,7 @@ Do not implement the serialized operation runtime or plan executor as part of 4B
 5. Run the repository's applicable CI and record the exact commit/run. Do not infer a pass from a previous commit.
 6. Update this handoff and the implementation plan after each substantive slice.
 7. Keep application GUI and physical device acceptance as separate evidence gates.
+8. Update the Controller and/or Slide Scanning workstream record when their contracts or source change. Do not mark either line complete because an application-level integration compiles.
 
 ### Current blockers / non-completions
 

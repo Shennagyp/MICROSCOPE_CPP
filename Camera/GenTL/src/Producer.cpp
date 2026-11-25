@@ -107,7 +107,7 @@ std::string readPortUrlString(Invoke&& invoke, GenTL::PORT_HANDLE port,
         required == 0 || required > maximumStringBytes)
         throw std::runtime_error("GCGetPortURLInfo returned invalid string metadata.");
 
-    std::vector<char> bytes(required, '\\0');
+    std::vector<char> bytes(required, '\0');
     std::size_t capacity = bytes.size();
     status = invoke(Operation::gcGetPortURLInfo,
                     port, index, command, &type, bytes.data(), &capacity);
@@ -115,8 +115,8 @@ std::string readPortUrlString(Invoke&& invoke, GenTL::PORT_HANDLE port,
     if (type != GenTL::INFO_DATATYPE_STRING ||
         capacity == 0 || capacity > bytes.size())
         throw std::runtime_error("GCGetPortURLInfo returned an invalid string length.");
-    bytes.back() = '\\0';
-    const auto terminator = std::find(bytes.begin(), bytes.end(), '\\0');
+    bytes.back() = '\0';
+    const auto terminator = std::find(bytes.begin(), bytes.end(), '\0');
     if (terminator == bytes.end())
         throw std::runtime_error("GCGetPortURLInfo returned an unterminated string.");
     return std::string(bytes.begin(), terminator);
@@ -143,11 +143,11 @@ constexpr std::size_t genApiXmlReadChunkBytes = 1024 * 1024;
 
 std::uint64_t timeoutMillisecondsToNanoseconds(std::uint64_t milliseconds) {
     if (milliseconds == std::numeric_limits<std::uint64_t>::max()) {
-        return GenTL::GENTL_INFINITE;
+        return GENTL_INFINITE;
     }
     constexpr std::uint64_t nanosecondsPerMillisecond = 1000000ULL;
     if (milliseconds >
-        (GenTL::GENTL_INFINITE - 1) / nanosecondsPerMillisecond) {
+        (GENTL_INFINITE - 1) / nanosecondsPerMillisecond) {
         throw std::overflow_error("GenTL timeout exceeds the representable nanosecond range.");
     }
     return milliseconds * nanosecondsPerMillisecond;
@@ -955,7 +955,7 @@ void DataStreamSession::start() {
         Operation::dsStartAcquisition,
         impl_->stream,
         GenTL::ACQ_START_FLAGS_DEFAULT,
-        GenTL::GENTL_INFINITE),
+        GENTL_INFINITE),
         "DSStartAcquisition");
     impl_->started = true;
 }
@@ -1058,7 +1058,7 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
         if (!base || !*base || !filled || *filled > state->payloadBytes)
             throw std::runtime_error("The Producer returned invalid buffer memory metadata.");
 
-        const auto incomplete = readTypedInfo<GenTL::bool8_t>(
+        const auto incomplete = readTypedInfo<bool8_t>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(
                     Operation::dsGetBufferInfo,
@@ -1066,7 +1066,7 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
                     GenTL::BUFFER_INFO_IS_INCOMPLETE, type, value, size);
             },
             GenTL::INFO_DATATYPE_BOOL8, "DSGetBufferInfo(IS_INCOMPLETE)");
-        const auto imagePresent = readTypedInfo<GenTL::bool8_t>(
+        const auto imagePresent = readTypedInfo<bool8_t>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(
                     Operation::dsGetBufferInfo,

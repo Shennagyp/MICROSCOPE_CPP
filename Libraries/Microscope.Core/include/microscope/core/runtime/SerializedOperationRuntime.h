@@ -629,6 +629,13 @@ private:
                status==OperationStatus::Cancelled;
     }
 
+    static bool isTerminal(StepStatus status) noexcept {
+        return status==StepStatus::Verified||
+               status==StepStatus::Failed||
+               status==StepStatus::TimedOut||
+               status==StepStatus::Skipped;
+    }
+
     static bool canIncrementRevision(const OperationRecord& operation) noexcept {
         return operation.revision!=std::numeric_limits<std::uint64_t>::max();
     }

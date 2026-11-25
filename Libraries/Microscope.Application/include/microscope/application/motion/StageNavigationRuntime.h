@@ -393,7 +393,10 @@ public:
     }
 
     [[nodiscard]] Result processFeedback(const FeedbackResult& feedback) {
-        auto owner = requireOwnerThread();
+        // The first feedback callback may be the first stage-runtime callback
+        // on the worker thread. Bind here when necessary; SerializedOperationRuntime
+        // is already bound by SerializedRuntimeWorker before it invokes handlers.
+        auto owner = ownerThreadBound_ ? requireOwnerThread() : bindOwnerThread();
         if (!owner) {
             return Result::failure(owner.error());
         }

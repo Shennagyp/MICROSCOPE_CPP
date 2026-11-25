@@ -74,6 +74,16 @@ void testStrongIdentityTypes() {
     check(static_cast<bool>(opaquePathLikeValue),
           "opaque IDs are not restricted to filesystem path syntax");
 
+    auto whitespaceOnly = SampleId::create(" \\t\\n ");
+    check(!whitespaceOnly &&
+          whitespaceOnly.error().code == IdentityError::Code::WhitespaceOnlyValue,
+          "rejects an identifier consisting only of whitespace");
+
+    auto embeddedNull = SampleId::create(std::string("sample\\0suffix", 13));
+    check(!embeddedNull &&
+          embeddedNull.error().code == IdentityError::Code::EmbeddedNull,
+          "rejects an identifier containing an embedded NUL byte");
+
     auto emptyResult = SampleId::create("");
     check(!emptyResult, "rejects an empty persisted identity");
     if (!emptyResult) {

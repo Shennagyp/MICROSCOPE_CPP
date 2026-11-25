@@ -171,6 +171,7 @@ public:
 
         const bool requiresCommand =
             kind == FeedbackKind::DeviceAcknowledged ||
+            kind == FeedbackKind::DeviceActionCompleted ||
             kind == FeedbackKind::HomeReferenceEstablished;
         if (requiresCommand && !correlation.operation->commandId) {
             return Result<FeedbackMetadata, FeedbackMetadataError>::failure(

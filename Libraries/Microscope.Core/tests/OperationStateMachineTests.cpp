@@ -174,6 +174,17 @@ void testDeviceActionCompletionDoesNotVerifyStep() {
           secondAxisState &&
           secondAxisState.value() == StepStatus::Verifying,
           "multiple correlated axis observations may accumulate while the step remains Verifying");
+
+    const auto delayedAck = applyStepLifecycleEvent(
+        StepStatus::Verifying, StepLifecycleEvent::DeviceAcknowledged);
+    const auto delayedProgress = applyStepLifecycleEvent(
+        StepStatus::Verifying, StepLifecycleEvent::DeviceProgress);
+    const auto delayedCompletion = applyStepLifecycleEvent(
+        StepStatus::Verifying, StepLifecycleEvent::DeviceActionCompleted);
+    check(delayedAck && delayedAck.value() == StepStatus::Verifying &&
+          delayedProgress && delayedProgress.value() == StepStatus::Verifying &&
+          delayedCompletion && delayedCompletion.value() == StepStatus::Verifying,
+          "late acknowledgement, progress and action-completion facts cannot regress a step already collecting verification evidence");
 }
 
 void testManualAndFailurePathsRemainExplicit() {

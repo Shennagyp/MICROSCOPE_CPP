@@ -427,8 +427,12 @@ Result<
 
     case StepStatus::Verifying:
         // Verification can consume a sequence of observations (e.g. separate
-        // X and Y encoder readings). Evidence collection remains non-terminal.
-        if (event == StepLifecycleEvent::DeviceStateObserved ||
+        // X and Y encoder readings). Delayed acknowledgements/completion facts
+        // may arrive after position telemetry and must not regress this step.
+        if (event == StepLifecycleEvent::DeviceAcknowledged ||
+            event == StepLifecycleEvent::DeviceProgress ||
+            event == StepLifecycleEvent::DeviceActionCompleted ||
+            event == StepLifecycleEvent::DeviceStateObserved ||
             event == StepLifecycleEvent::HomeReferenceEstablished) {
             return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::Verifying);

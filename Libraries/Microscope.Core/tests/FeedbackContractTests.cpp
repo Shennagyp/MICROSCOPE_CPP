@@ -71,8 +71,8 @@ int main() {
         OperationCorrelation{operationId,stepId,commandId});
     check(activeStep.matches(OperationCorrelation{operationId,stepId,commandId}),
           "active operation step accepts its own command correlation");
-    check(activeStep.matches(OperationCorrelation{operationId,stepId,std::nullopt}),
-          "active operation step accepts step-correlated completion without a command ID");
+    check(!activeStep.matches(OperationCorrelation{operationId,stepId,std::nullopt}),
+          "active operation command binding rejects feedback without its command ID");
     check(!activeStep.matches(OperationCorrelation{
         operationId,StepId::create("step-old").value(),commandId}),
           "active operation step rejects feedback from a different step");
@@ -250,12 +250,24 @@ int main() {
               FeedbackMetadataError::MissingOperationCorrelation,
           "requires operation correlation for action completion");
 
-    const auto validActionCompletion = FeedbackMetadata::create(
+    const auto actionCompletionWithoutCommand = FeedbackMetadata::create(
         operationWithoutCommand,
         FeedbackKind::DeviceActionCompleted,
         ObservationSource::DeviceEvent);
+    check(!actionCompletionWithoutCommand &&
+          actionCompletionWithoutCommand.error() ==
+              FeedbackMetadataError::MissingCommandCorrelation,
+          "requires exact command correlation for device action completion");
+
+    const auto validActionCompletion = FeedbackMetadata::create(
+        FeedbackCorrelation{
+            RuntimeDeviceCorrelation{
+                microscopeId,runtimeId,generation,deviceSessionGeneration,deviceId},
+            OperationCorrelation{operationId,stepId,commandId}},
+        FeedbackKind::DeviceActionCompleted,
+        ObservationSource::DeviceEvent);
     check(static_cast<bool>(validActionCompletion),
-          "allows action completion correlated to an operation step without requiring a command ID");
+          "accepts action completion correlated to the exact operation step and command");
 
     const auto acknowledgementFromOperator = FeedbackMetadata::create(
         FeedbackCorrelation{
@@ -274,7 +286,10 @@ int main() {
           "operator confirmation cannot be represented as device acknowledgement");
 
     const auto completionFromEstimate = FeedbackMetadata::create(
-        operationWithoutCommand,
+        FeedbackCorrelation{
+            RuntimeDeviceCorrelation{
+                microscopeId,runtimeId,generation,deviceSessionGeneration,deviceId},
+            OperationCorrelation{operationId,stepId,commandId}},
         FeedbackKind::DeviceActionCompleted,
         ObservationSource::CalibratedEstimate);
     check(!completionFromEstimate &&

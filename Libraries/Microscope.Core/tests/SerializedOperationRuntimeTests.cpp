@@ -51,13 +51,13 @@ FeedbackEnvelope<StageMotionFeedbackPayload> acknowledgement(
 
 FeedbackEnvelope<StageMotionFeedbackPayload> actionCompleted(
     const RuntimeDeviceCorrelation& device,
-    const OperationId& operation,const StepId& step) {
+    const OperationId& operation,const StepId& step,const CommandId& command) {
     const auto axes=take(StageAxisSet::create({
         id<StageAxisId>("x"),id<StageAxisId>("y")}));
     const auto payload=take(StageMotionActionCompletion::create(
         StageMotionAction::MoveAxesTo,axes));
     const auto metadata=take(FeedbackMetadata::create(
-        FeedbackCorrelation{device,OperationCorrelation{operation,step,std::nullopt}},
+        FeedbackCorrelation{device,OperationCorrelation{operation,step,command}},
         FeedbackKind::DeviceActionCompleted,ObservationSource::HardwareReadback));
     return FeedbackEnvelope<StageMotionFeedbackPayload>::create(
         metadata,StageMotionFeedbackPayload{payload});
@@ -170,7 +170,7 @@ int main() {
               ackResult->receipt->feedback().payload()),
           "runtime returns the typed payload to the owner after lifecycle reduction");
 
-    auto completion=actionCompleted(session,operation,step);
+    auto completion=actionCompleted(session,operation,step,command);
     check(runtime->feedbackIngress().submit(std::move(completion))==FeedbackSubmitStatus::Enqueued,
           "device action completion is accepted with operation/step correlation");
     auto completionResult=take(runtime->processNextFeedback());

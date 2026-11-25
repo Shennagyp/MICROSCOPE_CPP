@@ -158,7 +158,8 @@ Current source:
 The original reusable UI phase remains in scope. Current reusable source includes:
 - `Camera/QtWidgets/FrameView`;
 - `Camera/QtWidgets/CameraControlPanel`;
-- `Camera/QtWidgets/ImageInfoBar`.
+- `Camera/QtWidgets/ImageInfoBar`;
+- `Camera/QtWidgets/CameraFeatureEditor` (descriptor-driven typed feature editing; host retains asynchronous scheduling and readback ownership).
 
 The preview executable is a composition/example, not the reusable library's ownership boundary. The Optika application already has its camera preview on the application branch; do not restart or duplicate that preview as Camera Module work.
 
@@ -179,20 +180,27 @@ Remaining work includes:
 This is the second-provider track, not permission to reimplement standards.
 
 Current implementation on `camera-v.2.0` under `Camera/GenTL`:
-- version-checked C++ dynamic bridge adapter for the Swift C ABI Consumer (`bridge ABI 1`, GenTL header 1.6);
+- version-checked C++ dynamic bridge adapter for the Swift C ABI Consumer (bridge ABI 1, GenTL header 1.6);
 - CTI initialization, TL/interface/device discovery, retained interface/device ownership and device opening;
-- data-stream ID enumeration, remote-port read/write, and GenApi XML retrieval from `LOCAL` register-map and `FILE` URL schemes;
-- optional `Camera::GenTLGenApi` source using the official GenApi 3.5.1 SDK, currently disabled and not compiled because the SDK is not installed in the build environment.
+- data-stream opening, `EVENT_NEW_BUFFER` registration, bounded buffer allocation/announcement/queueing, acquisition start/stop, event wait, payload/metadata copy, buffer requeue and ordered cleanup;
+- discovery/frame timeout conversion from public milliseconds to GenTL nanoseconds;
+- frame ID, timestamp, dimensions, pixel-format value and PFNC namespace preservation;
+- device and stream shared ownership, including stream lifetime beyond the public DeviceSession wrapper;
+- process-lifetime quarantine retention of the Consumer context and dynamic C ABI bridge after native cleanup failure;
+- remote-port read/write and GenApi XML retrieval from `LOCAL` register-map and `FILE` URL schemes;
+- optional `Camera::GenTLGenApi` target source using official GenApi 3.5.1; disabled and not compiled because the SDK is not installed in the build environment.
 
-The Swift C ABI package is on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0` at `7355158b1e174670d76ddd6c787873bb9d262f8c`. The C++ bridge tests use a mock C ABI library; they do not prove that the real Swift dylib builds or loads. Its latest workflow attempt did not execute build/test steps.
+C++ mock CI [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64. The test includes an injected `DSClose` failure and verifies that the Consumer bridge remains retained after public wrappers are released.
+
+The Swift C ABI source is on private `AMSCOPE_DRIVER:gentl-c-api-v.1.0` at `b2e88874a75be260309db9f4d412d638bf928016`. Its C ABI test now covers pointer/buffer marshalling, but workflow [#45679386729](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45679386729) was cancelled before build/test steps. The real dylib, Swift runtime packaging and operation mapping therefore remain unvalidated.
 
 Still required:
-- validate the actual Swift C ABI dylib and its Swift runtime packaging;
-- implement stream open/event/buffer/acquisition/frame delivery through the existing Consumer;
-- install and compile against the official GenApi 3.5.1 Mac64_Universal SDK, then map nodes to the Common feature model;
+- validate the actual Swift C ABI dylib and its runtime packaging;
+- compile the optional GenApi 3.5.1 target on both architectures and map typed GenApi nodes to the Common feature contract; commands remain a separate API;
+- map verified GenTL pixel layouts/stride into the Common immutable `camera::Frame` contract without guessing unsupported layouts;
 - acquire the actual camera-vendor CTI Producer and qualify on physical CTI hardware.
 
-Keep AmScope on the native Amcam SDK path. Do not fabricate an AmScope CTI Producer or GenApi nodes/registers. Phase 5 is **IN PROGRESS, not accepted**.
+Keep AmScope on the native Amcam SDK path. Do not fabricate an AmScope CTI Producer or GenApi nodes/registers. Phase 5 is **IN PROGRESS, not accepted**. See [Camera/GenTL README](https://github.com/Shennagyp/MICROSCOPE_CPP/blob/camera-v.2.0/Camera/GenTL/README.md).
 
 ### 3.8 Phase 6 — Complete feature, command, telemetry and model coverage
 
@@ -273,7 +281,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 | 2 | Partially implemented | Common models/frame contracts and 2.3 ownership decision exist. Physical common-frame/RAW qualification remains. |
 | 3 | In progress | `AmcamCamera` supplies the non-Qt control/session API; concrete `Camera::Qt::FrameStream` now owns Qt frame notification/handoff; `QtAmcamCamera` composes both while retaining the serialized provider operation queue. All four CI jobs pass (12/12 non-Qt and 18/18 Qt tests per architecture). Physical same-session regression and final boundary acceptance remain. |
 | 4 | Partially implemented | Reusable Qt widgets exist. Optika already has its camera preview; do not rebuild it. Reusable component coverage and external consumer validation remain. |
-| 5 | In progress | C++ bridge, GenTL 1.6 discovery/device/port layer and GenApi XML retrieval exist. Actual Swift C ABI, GenTL stream acquisition, official GenApi SDK compilation and physical CTI qualification remain. |
+| 5 | In progress | C++ bridge and mock-tested GenTL stream lifecycle/frame delivery exist. Real Swift C ABI validation, GenApi 3.5.1 compilation/feature mapping, Common-frame layout mapping and physical CTI qualification remain. |
 | 6 | Open | Broad implementation exists; reconcile every feature and model claim against source, tests and hardware. |
 | 7 | Open | Initial install rules and non-Qt header checks exist; exported package and clean non-Qt/Qt consumers remain. |
 | 8 | Not accepted | Full release-candidate hardware matrix and exact-commit records remain outstanding. |
@@ -286,6 +294,11 @@ This ledger separates source presence, automated evidence, physical evidence and
 - Source comparison found 307 files under `Camera/` identical between `OPTIKA-B293-DUALSLIDE-APP-v.0.9` and the initial `camera-v.2.0` baseline. No Camera subtree copy was missing.
 - Workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed at `e12d765f408c2b0be7100c64b2eb245de5a2aca4`: non-Qt 12/12 CTest tests on Intel and Apple Silicon; Qt 18/18 CTest tests on Intel and Apple Silicon. The Qt build includes the concrete `Camera::Qt` stream library, its handoff tests, reusable widgets, AmScope Qt request facade and preview composition. Installed non-Qt header checks and architecture/artifact verification also passed.
 - GenTL C++ workflow [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) passed at `3212b4b4d555b650ef7a4d6a97a4576a3c9b14c5`: 2/2 CTest tests on Apple Silicon arm64 and 2/2 on Intel x86_64, including architecture checks.
+- GenTL C++ workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed at `549433466098c5daeb63d72609776d958a35c2fe`: 2/2 CTest tests on Apple Silicon arm64 and 2/2 on Intel x86_64, with architecture checks. Coverage includes stream open/start/event wait, buffer announcement/queue/requeue, copied payload and frame metadata, PFNC namespace, timeout conversion, stream/device lifetime and cleanup-failure quarantine retention.
+- The GenTL workflow uses a mock C ABI bridge. It does not validate the Swift C ABI dylib, a vendor CTI Producer, actual camera acquisition, GenApi parsing/feature mapping or physical hardware.
+- Swift C ABI source is at `AMSCOPE_DRIVER:gentl-c-api-v.1.0`, commit `b2e88874a75be260309db9f4d412d638bf928016`; its latest workflow [#45679386729](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45679386729) was cancelled before build/test steps. The C ABI remains unvalidated.
+- Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four non-Qt/Qt Intel and Apple Silicon jobs after the Common CMake target was made independent of AmScope.
+
 - These tests use a mock C ABI bridge. They cover dynamic symbol/version checks, CTI/TL/interface/device discovery, retained session lifetime, stream-ID enumeration, remote-port read/write and mock `LOCAL` GenApi XML retrieval. They do not validate the real Swift C ABI dylib, a vendor CTI Producer, stream acquisition, GenApi parsing or physical hardware.
 - The optional `Camera::GenTLGenApi` target is gated by `OPTIKA_BUILD_GENTL_GENAPI=ON` and requires the official GenApi 3.5.1 Mac64_Universal SDK. Its source has not yet been compiled against that SDK.
 - No real CTI Producer or physical CTI camera has been qualified.

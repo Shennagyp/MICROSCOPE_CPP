@@ -123,7 +123,8 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     case 22:
     case 27:
-        if (argument_count != 3) return GC_ERR_INVALID_PARAMETER;
+        if (argument_count != 3 || arguments[2] != UINT64_C(2000000000))
+            return GC_ERR_INVALID_PARAMETER;
         *(bool8_t*)pointer(arguments[1]) = 1;
         return GC_ERR_SUCCESS;
     case 24:
@@ -342,6 +343,10 @@ int32_t gentl_consumer_invoke(
         }
         case BUFFER_INFO_PIXELFORMAT: {
             const uint64_t value = UINT64_C(0x01080001);
+            return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
+        }
+        case BUFFER_INFO_PIXELFORMAT_NAMESPACE: {
+            const uint64_t value = PIXELFORMAT_NAMESPACE_PFNC_32BIT;
             return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
         }
         case BUFFER_INFO_WIDTH:

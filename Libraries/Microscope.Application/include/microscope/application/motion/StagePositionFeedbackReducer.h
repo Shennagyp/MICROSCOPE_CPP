@@ -4,6 +4,7 @@
 #include "microscope/core/motion/StagePositionState.h"
 #include "microscope/core/runtime/SerializedOperationRuntime.h"
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 #include <variant>

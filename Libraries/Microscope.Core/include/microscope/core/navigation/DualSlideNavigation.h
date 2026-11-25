@@ -166,7 +166,7 @@ private:
 enum class DualSlideCarrierStateError { WrongLeftSlot,WrongRightSlot,DuplicateSlideId,SlideSlotOrderMismatch };
 enum class CurrentSlidePositionError {
     SlideNotInCarrier,SlideNotRegistered,HorizontalAxisMismatch,TransverseAxisMismatch,
-    PositionUnknown,PositionUncertaintyUnknown,AxisUnitMismatch,InvalidEstimate
+    PositionUnknown,PositionUncertaintyUnknown,PositionOutsideSlide,AxisUnitMismatch,InvalidEstimate
 };
 class DualSlideCarrierState final {
 public:

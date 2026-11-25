@@ -17,7 +17,7 @@ int failures = 0;
 void check(bool condition, const char* message) {
     if (!condition) {
         ++failures;
-        std::cerr << "FAIL: " << message << '\\n';
+        std::cerr << "FAIL: " << message << '\n';
     }
 }
 

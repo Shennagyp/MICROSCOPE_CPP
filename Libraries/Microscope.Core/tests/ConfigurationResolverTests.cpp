@@ -1,7 +1,9 @@
 #include "microscope/core/configuration/Configuration.h"
 
 #include <iostream>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 

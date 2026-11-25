@@ -2,11 +2,13 @@
 
 #include "microscope/core/runtime/Feedback.h"
 
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -99,7 +101,7 @@ public:
                     } else {
                         queue_.push_back(std::move(receipt).value());
                         nextSequence_=
-                            nextSequence_==UINT64_MAX?0:nextSequence_+1;
+                            nextSequence_==std::numeric_limits<std::uint64_t>::max()?0:nextSequence_+1;
                         status=FeedbackSubmitStatus::Enqueued;
                     }
                 }

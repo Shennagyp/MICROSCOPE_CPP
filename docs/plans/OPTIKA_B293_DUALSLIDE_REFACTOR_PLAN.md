@@ -19,7 +19,7 @@ reference on its original branch.
 | 2 — Functional core extraction | Extracted modules compiled; deterministic test coverage passed | Microscope calibration, automatic-resolution policy, slide-image geometry and slide overlay value models compiled in the application build. The 15-test CTest suite passed on 2026-11-25. Automatic-resolution readout semantics remain provisional and are not hardware-verified. |
 | 3 — Application composition and state ownership | Source split compiled; interactive lifecycle acceptance pending | The composition root constructs and injects the camera bridge, microscope configuration owner, resolution coordinator, workspace and gallery. Camera session lifecycle and generic feature snapshot/editor state have separate owners. The session model alone performs lifecycle and acquisition-affecting resolution mutations; generic editors cannot submit preview resolution. Feature-generation invalidation is reconciled after successful/failed writes and every lifecycle completion. Application termination also closes through the session owner, with a gate spanning previously queued operations. Microscope configuration/persistence and automatic-resolution coordination are separate optics feature owners. |
 | 4 — UI and preview refactoring | Initial UI implementation compiled; visual and camera-connected acceptance pending | Workspace, dock, preview router, pane, image view, image container and feature controls have separate source responsibilities. The preview consumes frames through a narrow `NativeCameraFrameFeed`; the concrete lifecycle bridge is no longer exposed to presentation. Each notification uses one feed call to obtain a `NativeCameraFrameSnapshot` containing counters and the newest lease. RGB/gray color spaces are cached, the mailbox moves its frame pointer into the slot without an extra shared-pointer copy, and frame-specific Core Graphics providers retain the source lease without copying pixel bytes. The Objective-C++ lease stores FramePtr inline, removing the separate per-frame heap holder. The source audit also records the four-slot live pool, discard-on-exhaustion policy and separate still-capture allocation. The single-slot latest-frame mailbox and coalesced notification semantics remain unchanged. Preserve the single frame consumer and verify every construction/update path statically. |
-| 5 — Capability expansion seams | Not started | Motion and ImageProcessing remain separate future capabilities. Do not create placeholder implementations or speculative universal interfaces. |
+| 5 — Capability expansion seams | Motion hardware modelling initiated; Motion runtime and ImageProcessing not started | The project owner confirms that the motorized stage has been manufactured. The as-built model is recorded in [OPTIKA B293 Motorized Stage Hardware Model](../architecture/OPTIKA_B293_MOTORIZED_STAGE_HARDWARE_MODEL.md). The inspected baseline still lacks verified axis count, actuator/transmission/controller details, sensors, travel, limits and measured performance. Record those facts before implementing controller-specific motion behavior. ImageProcessing remains a separate future capability. |
 | 6 — Migration acceptance and retirement | Build and deterministic tests passed; application/hardware acceptance pending | User-side configure/build and deterministic CTest verification have passed. Application behavior, camera acquisition and hardware workflows remain unverified. Do not retire migration references based on source movement or unit tests alone. |
 
 ### Current implementation constraints
@@ -49,7 +49,7 @@ The goal is lower conceptual and maintenance complexity, not artificially low li
 ## Constraints
 
 - Existing `Camera/Amscope` driver behavior and ownership remain stable.
-- No motorization or image-processing implementation is invented before its contracts and requirements are concrete.
+- The motorized stage is physically manufactured. Model its as-built mechanism from evidence before implementing Motion; do not invent axis count, motor/transmission, sensors, travel, limits or performance. ImageProcessing remains separate and is not introduced as part of stage modelling.
 - The new application is not nested under `Camera/`.
 - Camera, Motion and ImageProcessing are sibling capabilities.
 - UI does not call hardware APIs directly.
@@ -180,7 +180,16 @@ Exit criteria:
 
 ### Motion
 
-Define contracts only after stage hardware and operations are specified. Expected concepts include connection, axes, position, velocity, move, stop, home, limits, status and fault. Coordinate transforms and safety limits should be deterministic functions. Hardware-specific command execution belongs to the Motion implementation.
+**Status:** hardware modelling initiated after confirmation that the motorized stage has been manufactured. See [OPTIKA B293 Motorized Stage Hardware Model](../architecture/OPTIKA_B293_MOTORIZED_STAGE_HARDWARE_MODEL.md).
+
+The first deliverable is an evidence-based as-built model: physical assembly, axis count and arrangement, mounting and coordinate frames, actuator/transmission chain, controller, sensors, hard/soft/usable limits, stop and homing behavior, and measured motion performance. The currently inspected repository baseline does not establish those details. Do not infer them from the fact that the stage is motorized.
+
+Keep three layers separate:
+- Physical assembly and kinematics: the actual manufactured mechanism and its component relationships.
+- Core StageSpecification: installed axis capabilities and declared/measured performance; it intentionally contains no transmission design.
+- Runtime Motion capability: typed commands and feedback through the Core operation runtime and a hardware adapter.
+
+After the as-built record, implement capability-specific contracts for supported operations such as absolute/relative move, velocity constraints, stop, homing (only where supported), position/status observation, limits and faults. Coordinate transforms and software-limit evaluation should be deterministic. Motor-driver/controller details and physical I/O belong to the concrete Motion adapter.
 
 ### ImageProcessing
 

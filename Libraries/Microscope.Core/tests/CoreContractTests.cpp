@@ -134,22 +134,53 @@ void testResultAndStatus() {
 void testDiagnosticsAreSeparateValues() {
     using namespace microscope::core;
 
-    Diagnostic warning{
+    static_assert(!std::is_default_constructible<Diagnostic>::value,
+                  "Diagnostic must be created through its validator");
+
+    auto warningResult = Diagnostic::create(
         DiagnosticSeverity::Warning,
         "configuration.profile.incomplete",
         "The profile does not specify an exposure preset.",
         DiagnosticContext{
             std::string("ConfigurationProfile"),
             std::string("profile-001"),
-            std::string("camera.exposure")}};
+            std::string("camera.exposure")});
+    check(static_cast<bool>(warningResult),
+          "creates a diagnostic with valid severity/code/message");
+    if (warningResult) {
+        const auto& warning = warningResult.value();
+        check(warning.severity() == DiagnosticSeverity::Warning,
+              "diagnostic carries severity");
+        check(warning.code() == "configuration.profile.incomplete",
+              "diagnostic carries stable machine-readable code");
+        check(warning.context().has_value() &&
+              warning.context()->fieldPath ==
+                  std::optional<std::string>("camera.exposure"),
+              "diagnostic carries optional field context");
+    }
 
-    check(warning.severity == DiagnosticSeverity::Warning,
-          "diagnostic carries severity");
-    check(warning.code == "configuration.profile.incomplete",
-          "diagnostic carries stable machine-readable code");
-    check(warning.context.has_value() &&
-          warning.context->fieldPath == std::optional<std::string>("camera.exposure"),
-          "diagnostic carries optional field context");
+    auto emptyCode = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "",
+        "A message is present.");
+    check(!emptyCode && emptyCode.error() == DiagnosticError::EmptyCode,
+          "rejects a diagnostic without a machine-readable code");
+
+    auto emptyMessage = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        "configuration.profile.incomplete",
+        "");
+    check(!emptyMessage &&
+          emptyMessage.error() == DiagnosticError::EmptyMessage,
+          "rejects a diagnostic without a message");
+
+    auto invalidSeverity = Diagnostic::create(
+        static_cast<DiagnosticSeverity>(255),
+        "configuration.profile.incomplete",
+        "The severity value is invalid.");
+    check(!invalidSeverity &&
+          invalidSeverity.error() == DiagnosticError::InvalidSeverity,
+          "rejects an unknown diagnostic severity");
 }
 
 } // namespace

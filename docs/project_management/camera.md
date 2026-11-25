@@ -3,7 +3,9 @@
 **Canonical project:** the reusable Camera Module in [MICROSCOPE_CPP](https://github.com/Shennagyp/MICROSCOPE_CPP), under `Camera/`  
 **Management branch:** `project_manager`  
 **Camera development branch:** `camera-v.2.0`  
+**Latest Camera status checkpoint:** `8421f553d66b7a962bb02e0386cf148e519d2550`  
 **Last verified non-Qt code/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`  
+**Current workflow with Qt matrix:** [#45658538056](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45658538056) — pending  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9` at `c7bb4b4dc41441989d71ee800c6d33b51dc54abe`  
 **Optika application branch:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`  
 **Roadmap authority:** original Camera Module Phases 0–8, preserved for v2.0.
@@ -148,7 +150,7 @@ Current source:
 - The current Qt facade combines a serialized request worker with Qt frame notification; Phase 3 must reconcile this against the target responsibility split.
 - The Qt facade header is physically isolated under `Camera/Amscope/legacy/qt` and is exposed only by the optional Qt target. This is dependency isolation, not removal of the Qt deliverable.
 
-**Status:** In progress. Non-Qt CI is green. The separate Qt job has been added and must pass. Physical same-session control/streaming regression remains required by the original phase.
+**Status:** In progress. Non-Qt CI is green. The separate Qt job has been added; workflow #45658538056 is pending and must pass. Physical same-session control/streaming regression remains required by the original phase.
 
 ### 3.6 Phase 4 — Extract reusable Qt camera UI library
 
@@ -274,7 +276,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 - Separate MU503 short diagnostic runs reported approximately 91 FPS at 640 × 480 with zero reported drops. Do not conflate those with the separate 835-frame/60.722-second run or infer long-duration qualification.
 - Source comparison found 307 files under `Camera/` identical between `OPTIKA-B293-DUALSLIDE-APP-v.0.9` and the initial `camera-v.2.0` baseline. No Camera subtree copy was missing.
 - Non-Qt CI run [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539) passed on Intel x86_64 and Apple Silicon arm64 at code checkpoint `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`: 12/12 CTest, non-Qt header install, Qt facade absence and installed-header syntax compilation. This is software evidence, not physical-camera qualification.
-- A separate Qt streaming/UI job has been added to `.github/workflows/amscope-macos.yml`; its first run must be checked against its exact source revision before claiming Qt CI validation.
+- A separate Qt streaming/UI job has been added to `.github/workflows/amscope-macos.yml`. Workflow [#45658538056](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45658538056) is pending against `7ae8f6578370919145649a18858643c54e1e5b7f`; verify the non-Qt and Qt jobs independently. The prior non-Qt pass does not validate Qt.
 - Optika's Objective-C++ bridge, NativeCameraController and Swift frame feed are application-owned. They do not create a second AmScope SDK session.
 
 ### Unresolved risks and gaps
@@ -312,7 +314,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest confirmed non-Qt code/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`; workflow [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539).  
+**Latest Camera status checkpoint:** `8421f553d66b7a962bb02e0386cf148e519d2550`. **Latest confirmed non-Qt code/CI checkpoint:** `11ff79ac115e5f4ecbcbe95eb70f4391c48a21d8`; workflow [#45654331539](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45654331539). **Qt matrix:** pending in workflow [#45658538056](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45658538056).  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

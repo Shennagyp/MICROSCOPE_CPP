@@ -50,7 +50,7 @@ Use distinct strong types for at least:
 - OperationId, StepId and CommandId
 - A calibration identity/revision type when Phase 6 defines its lifecycle
 
-An identifier is opaque. It is not a label, display index, path, serial number or timestamp. Strong types must not implicitly convert to each other or to an untyped string. Serialization uses a stable textual representation without making its format part of domain meaning.
+An identifier is opaque. It is not a label, display index, path, serial number or timestamp. Its textual value must be non-empty, contain at least one non-whitespace character and contain no embedded NUL byte; internal spaces and path-like characters are otherwise not interpreted by Core. Strong types must not implicitly convert to each other or to an untyped string. Serialization uses a stable textual representation without making its format part of domain meaning.
 
 Persisted IDs remain stable across renames, folder moves, exports and imports. The boundary that creates an entity supplies its ID: Application/storage creation workflows supply IDs for persisted entities, while future Core runtime/operation creation receives an injected identity source when those workflows are implemented. Core does not generate UUIDs or depend on a UUID library. The supplied source must provide collision-resistant values in the relevant identity namespace, and persistence rejects collisions rather than overwriting records. The ID value is not a filesystem path segment: storage adapters must encode/map opaque IDs to safe portable storage keys and preserve the original ID in metadata.
 

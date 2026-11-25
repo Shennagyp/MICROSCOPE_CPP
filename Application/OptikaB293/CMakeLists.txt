@@ -21,6 +21,7 @@ set(OPTIKA_APP_SOURCES
     Sources/Features/Optics/MicroscopeOpticalConfiguration.swift
     Sources/Features/Optics/MicroscopeConfigurationModel.swift
     Sources/Features/Optics/MicroscopeResolutionCoordinator.swift
+    Sources/Features/Optics/ObjectiveExposureCoordinator.swift
     Sources/Features/Optics/MicroscopeConfigurationDraftStore.swift
     Sources/Features/Optics/NativeMicroscopeCalibration.swift
     Sources/Features/Optics/NativeAutomaticResolutionPolicy.swift
@@ -34,6 +35,7 @@ set(OPTIKA_APP_SOURCES
     Sources/Presentation/Camera/DockCameraFeatureControl.swift
     Sources/Presentation/Camera/NativeFeatureEditor.swift
     Sources/Presentation/Optics/MicroscopeConfigurationWindow.swift
+    Sources/Presentation/Optics/ObjectiveExposureSettingsWindow.swift
     Sources/Presentation/Workspace/MainWindowView.swift
     Sources/Presentation/Workspace/NativeWorkspaceDockResizeDivider.swift
     Sources/Presentation/Workspace/Dock/NativeWorkspaceDock.swift

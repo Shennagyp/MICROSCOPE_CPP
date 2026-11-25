@@ -207,7 +207,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 **Implementation sequence**
 1. **4A — Lifecycle semantics:** immutable operation/step state and pure legal-transition functions. Distinguish CommandDispatched, AdapterAccepted, DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and StepVerified. DeviceActionCompleted moves to AwaitingObservation; it never marks a step verified by itself.
-2. **4B — Command and port contracts:** define command correlation scope and capability-specific command values/ports. Keep logical DeviceId separate from SDK handles. The adapter's synchronous dispatch result reports only accepted/rejected responsibility; it is not device acknowledgement. Do not add a generic string-command API.
+2. **4B — Command and port contracts:** define command correlation scope and capability-specific command values/ports. Implement the typed stage-motion port (MoveAxesTo, MoveAxesBy, HomeAxes, StopAxes) in physical axis units. Keep logical DeviceId separate from SDK handles and controller-native steps/protocol values. The adapter's synchronous dispatch result reports only accepted/rejected responsibility; it is not device acknowledgement. Do not add a generic string-command API.
 3. **4C — Serialized runtime and ingress:** implement one single-writer operation runtime per microscope incarnation, thread-safe feedback ingress, bounded FIFO receipts and atomic Core-assigned ingress sequence. SDK callbacks enqueue only; they never mutate operation state directly.
 4. **4D — Plan execution:** execute ConfigurationTransitionPlan dependency layers through the relevant typed ports, retain command/step correlation and dispatch dependent work only when its prerequisites reach required state. Resource claims, not topological-layer membership alone, determine safe concurrency.
 5. **4E — Verification and failure lifecycle:** evaluate typed observations against step requirements and evidence policies; implement timeout, cancellation, adapter failure, stale generation/late feedback, queue overflow, partial completion and verified-state reconciliation.
@@ -242,14 +242,18 @@ The equipment definition now describes installed topology and static capabilitie
 
 **Exit:** application can load a JSON definition, resolve its adapter factories and create a validated Core runtime.
 
-### Phase 6 — Calibration
-- Implement nominal image scale from sensor and optical specifications.
-- Implement ruler-slide observation capture contract and measured X/Y scale fit.
-- Define optical calibration key and invalidation behavior.
-- Implement linear/rotary motion calibration and evidence quality.
-- Store immutable revisions through calibration persistence ports.
+### Phase 6 — Calibration and slide navigation
+- Implement nominal optical estimation and measured ruler calibration.
+- Define optical calibration keys and reuse/invalidation.
+- Implement linear/rotary physical-axis calibration and evidence quality, distinct from controller steps-per-unit configuration.
+- Define slide geometry and the OPTIKA dual-slide carrier's two horizontal slot positions.
+- Implement independent four-corner affine registration for each occupied slide; retain corner provenance, uncertainty and fit residuals.
+- Implement slide-local-to-stage-plane and inverse mapping, slide-boundary validation and stage-travel validation.
+- Define runtime position/reference state and an accumulated uncertainty budget. Unknown or unbounded position remains unknown.
+- Define re-homing recovery: preserve the target in (SlideId, slide-local X, slide-local Y), home the common stage, reconcile its machine reference, then restore the target only if that slide's registration remains valid.
+- Store immutable motion-calibration and slide-registration revisions through appropriate persistence ports.
 
-**Exit:** calibration is reused by matching configuration; no unnecessary per-slide calibration duplication or stage-to-slide registration.
+**Exit:** Core can navigate to any accepted point on either registered slide; the two slide maps remain independent; homing does not imply slide re-registration or erase motion-calibration error.
 
 ### Phase 7 — Sample, slides and persistence
 - Define distinct strong identity types for SampleId, SlideId and TileId; identifiers are opaque and independent of labels, paths and display order.
@@ -258,8 +262,9 @@ The equipment definition now describes installed topology and static capabilitie
 - Enforce the baseline relationship: each Slide references exactly one existing Sample; one Sample may have many Slides.
 - Make Slide.SampleId the authoritative relationship. Do not persist an authoritative SlideIds collection on Sample; provide reverse lookup through a query/index.
 - Define the Sample record fields: stable SampleId, SampleTypeId when classified, display label, optional external accession and source/collection metadata.
-- Define the Slide record fields: stable SlideId, required SampleId, SlideTypeId when classified, display label, versioned preparation snapshot and package reference.
-- Define Tile metadata: stable TileId/SlideId, optional display label/order hint and optional position evidence with provenance; never treat display order as physical coordinates.
+- Define the Slide record fields: stable SlideId, required SampleId, SlideTypeId when classified, display label, physical SlideGeometry, versioned preparation snapshot and package reference.
+- Persist each Slide's independent registration and four corner correspondences, fit residuals, provenance and calibration revision.
+- Define Tile metadata: stable TileId/SlideId, optional display label/order hint and optional slide-local/stage-machine position evidence; never treat display order as physical coordinates.
 - Define the versioned SlideConfigurationSnapshot and immutable Sample/Slide identity semantics.
 - Make Tile belong to one Slide; permit no physical position and do not interpret ordering/index as coordinates.
 - Define archive/deletion constraints: Sample archival does not cascade-delete slides or image data; a referenced Sample cannot be destructively deleted.
@@ -269,7 +274,7 @@ The equipment definition now describes installed topology and static capabilitie
 - Enforce mandatory active slide session in Core.
 - Support opening/browsing Sample and Slide packages without a microscope connected.
 
-**Exit:** identity and relationship invariants are enforced; one sample can have multiple slides; Slide-to-Sample ownership is unambiguous; folder moves do not change IDs; indexes can be rebuilt; invalid/missing active slide session blocks acquisition; archival cannot destroy referenced slide data.
+**Exit:** one sample can have many slides; the two carrier slots independently reference persistent Slide identities; registration does not change Slide/Sample ownership; unpositioned fields remain valid.
 
 ### Phase 8 — Acquisition
 - Define distinct AcquisitionPlanId, AcquisitionRunId and ImageFrameId identities.
@@ -318,6 +323,6 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 ## Immediate next implementation task
 
-The public contract review is recorded in ../architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
+Phase 4A is implemented and cross-platform validated. The initial Phase 4B source now defines the controller-independent stage-motion port and the OPTIKA dual-slide carrier/four-corner registration model. The next implementation slice is runtime stage-position ownership: current position per axis, reference validity, evidence provenance, accumulated uncertainty, homing/recovery decisions and restoration of a preserved (SlideId, slide-local X, slide-local Y) target.
 
-Phases 1 and 2 are closed. Phase 3A–3C are implemented and cross-platform validated. Phase 3D source is committed and awaiting its current-head macOS CI result. After Phase 3D acceptance, proceed to Phase 3E representative profile coverage. Do not introduce commands, executors or a universal workflow engine; those belong to Phase 4.
+STEP/DIR pulse generation and vendor-controller protocols remain in separate driver libraries, never in Microscope.Core.

@@ -106,6 +106,20 @@ public:
         return *feedbackInbox_;
     }
 
+    // Host shutdown may close ingress from its lifecycle thread. The runtime
+    // signal wakes the owner so it can drain or retire its current work.
+    void closeFeedbackIngress() noexcept {
+        feedbackInbox_->close();
+    }
+
+    bool feedbackIngressClosed() const {
+        return feedbackInbox_->isClosed();
+    }
+
+    std::size_t pendingFeedbackCount() const {
+        return feedbackInbox_->pendingCount();
+    }
+
     Result<bool,SerializedOperationRuntimeError> openDeviceSession(
         RuntimeDeviceCorrelation session) {
         auto owner=requireOwnerThread();

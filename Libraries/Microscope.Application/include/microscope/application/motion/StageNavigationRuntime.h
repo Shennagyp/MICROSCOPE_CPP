@@ -268,6 +268,55 @@ public:
         return core::Result<bool, StageNavigationRuntimeError>::success(newlyBound);
     }
 
+    // Application-control entry point. It validates the requested slide
+    // target before allocating operation state, then creates the operation and
+    // its first Pending step on the serialized owner thread.
+    [[nodiscard]] Result beginRequest(
+        const core::SlideId& slideId,
+        core::SlideLocalPoint destination,
+        StageNavigationOperationIdentity identities) {
+        auto owner = requireOwnerThread();
+        if (!owner) {
+            return Result::failure(owner.error());
+        }
+        if (active_) {
+            return failure(StageNavigationRuntimeErrorCode::NavigationAlreadyActive);
+        }
+
+        auto plan = core::StageNavigationPlanner::planToSlidePoint(
+            carrier_, slideId, destination, position_, homingPolicy_);
+        if (!plan) {
+            return failure(
+                StageNavigationRuntimeErrorCode::PlanningRejected,
+                plan.error());
+        }
+
+        auto created = operationRuntime_->createOperation(identities.operationId);
+        if (!created) {
+            return failure(
+                StageNavigationRuntimeErrorCode::ExecutionRejected,
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, created.error());
+        }
+        auto started = operationRuntime_->startOperation(identities.operationId);
+        if (!started) {
+            return failure(
+                StageNavigationRuntimeErrorCode::ExecutionRejected,
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, started.error());
+        }
+        auto step = operationRuntime_->createStep(
+            identities.operationId, identities.initialStepId);
+        if (!step) {
+            return failure(
+                StageNavigationRuntimeErrorCode::ExecutionRejected,
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, step.error());
+        }
+
+        return beginNavigation(slideId, destination, std::move(identities));
+    }
+
     // operationId must already be Running and initialStepId must already be
     // Pending in the supplied serialized operation runtime.
     [[nodiscard]] Result beginNavigation(

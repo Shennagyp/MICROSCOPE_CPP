@@ -53,6 +53,15 @@ int main() {
         bool reachedRequestedPosition;
     };
 
+    static_assert(!std::is_default_constructible<FeedbackMetadata>::value,
+                  "FeedbackMetadata must be created through its validator");
+    static_assert(!std::is_default_constructible<DeviceTimestamp>::value,
+                  "DeviceTimestamp must be created through its validated factory");
+    static_assert(!std::is_default_constructible<FeedbackIngressSequence>::value,
+                  "FeedbackIngressSequence must carry a valid scope and positive value");
+    static_assert(!std::is_default_constructible<FeedbackReceipt<SelectorFeedback>>::value,
+                  "FeedbackReceipt must be created through its scope validator");
+
     FeedbackEnvelope<SelectorFeedback> feedback{
         FeedbackMetadata::create(
             FeedbackCorrelation{

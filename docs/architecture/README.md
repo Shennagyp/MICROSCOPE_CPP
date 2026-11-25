@@ -6,6 +6,10 @@
 - [Microscope Core and Application Contracts v0.9](MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md) — Phase 1 public contract conventions for identities, results, feedback correlation, adapter ports, runtime/API boundaries and compatibility with Camera::Common.
 - [Microscope Platform Implementation Plan v0.9](../plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md) — incremental migration phases and acceptance criteria.
 
+## Library implementation guide
+
+- [C++ libraries README](../../Libraries/README.md) — standalone CMake configuration, target names and current implementation boundary.
+
 ## Existing implementation references
 
 - [OPTIKA B293 Dual-Slide Application Architecture](OPTIKA_B293_DUALSLIDE_APPLICATION_ARCHITECTURE.md) — retained reference for the existing native macOS application's composition, current camera/preview pipeline and implementation-specific performance invariants. Where it conflicts with the platform architecture above on target ownership (Core/Application, microscope behavior, JSON definitions, operation feedback or frontend boundaries), the platform architecture is authoritative.

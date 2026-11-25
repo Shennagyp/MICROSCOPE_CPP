@@ -89,6 +89,7 @@ int main(int argc, char** argv) {
             frame->timestampNanoseconds != 123456789 ||
             frame->pixelFormat != UINT64_C(0x01080001) ||
             frame->pixelFormatNamespace != GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
+            frame->pixelEndianness != GenTL::PIXELENDIANNESS_LITTLE ||
             frame->width != 4 || frame->height != 4 ||
             frame->deliveredImageHeight != 4 ||
             frame->imageOffset != 0 || frame->xPadding != 0 ||
@@ -100,6 +101,7 @@ int main(int argc, char** argv) {
         const auto commonFrame = camera::gentl::makeCommonFrame(*frame);
         if (!commonFrame ||
             (*commonFrame)->pixelFormat != camera::PixelFormat::Raw8 ||
+            (*commonFrame)->pixelByteOrder != camera::PixelByteOrder::NotApplicable ||
             (*commonFrame)->width != 4 || (*commonFrame)->height != 4 ||
             (*commonFrame)->strideBytes != 4 ||
             (*commonFrame)->significantBitsPerPixel != 8 ||

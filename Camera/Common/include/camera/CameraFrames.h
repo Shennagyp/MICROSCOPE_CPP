@@ -18,6 +18,15 @@ enum class PixelFormat : std::uint8_t {
     Raw16
 };
 
+// Byte order is meaningful for multi-byte sample containers. It is explicitly
+// separate from significant bit depth and from the pixel-format identifier.
+enum class PixelByteOrder : std::uint8_t {
+    Unknown,
+    NotApplicable,
+    LittleEndian,
+    BigEndian
+};
+
 // A format identifier is meaningful only inside its declared scheme.
 // Examples: "amcam.fourcc" and "pfnc". The common layer never translates
 // values between schemes unless an explicit, verified mapping exists.
@@ -52,6 +61,7 @@ struct Frame {
     std::uint32_t height = 0;
     std::uint32_t strideBytes = 0;
     PixelFormat pixelFormat = PixelFormat::Unknown;
+    PixelByteOrder pixelByteOrder = PixelByteOrder::Unknown;
     std::optional<PixelFormatIdentifier> pixelFormatIdentifier;
     std::uint8_t significantBitsPerPixel = 0;
     std::uint8_t storageBitsPerPixel = 0;

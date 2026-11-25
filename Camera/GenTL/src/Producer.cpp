@@ -163,7 +163,8 @@ std::optional<T> readTypedInfo(
     std::size_t size = sizeof(T);
     const auto status = operation(&actualType, &value, &size);
     if (status == GenTL::GC_ERR_NOT_AVAILABLE ||
-        status == GenTL::GC_ERR_NOT_IMPLEMENTED) {
+        status == GenTL::GC_ERR_NOT_IMPLEMENTED ||
+        status == GenTL::GC_ERR_INVALID_PARAMETER) {
         return std::nullopt;
     }
     check(status, operationName);
@@ -1151,6 +1152,16 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
             },
             GenTL::INFO_DATATYPE_UINT64,
             "DSGetBufferInfo(PIXELFORMAT_NAMESPACE)");
+        frame.pixelEndianness =
+            readTypedInfo<GenTL::PIXELENDIANNESS_ID>(
+                [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                    return context->consumer.invoke(
+                        Operation::dsGetBufferInfo,
+                        streamHandle, eventData.BufferHandle,
+                        GenTL::BUFFER_INFO_PIXEL_ENDIANNESS, type, value, size);
+                },
+                GenTL::INFO_DATATYPE_INT32,
+                "DSGetBufferInfo(PIXEL_ENDIANNESS)");
         frame.width = readTypedInfo<std::size_t>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(

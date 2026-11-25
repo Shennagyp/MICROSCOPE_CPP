@@ -473,6 +473,10 @@ int32_t gentl_consumer_invoke(
             const uint64_t value = PIXELFORMAT_NAMESPACE_PFNC_32BIT;
             return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
         }
+        case BUFFER_INFO_PIXEL_ENDIANNESS: {
+            const PIXELENDIANNESS_ID value = PIXELENDIANNESS_LITTLE;
+            return write_scalar(type, output, size, INFO_DATATYPE_INT32, &value, sizeof(value));
+        }
         case BUFFER_INFO_WIDTH:
         case BUFFER_INFO_HEIGHT: {
             const size_t value = 4;

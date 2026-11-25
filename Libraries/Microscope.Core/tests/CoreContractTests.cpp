@@ -1,6 +1,7 @@
 #include "microscope/core/diagnostics/Diagnostic.h"
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
+#include "microscope/core/runtime/OperationState.h"
 
 #include <cstdlib>
 #include <optional>

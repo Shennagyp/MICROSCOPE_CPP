@@ -439,31 +439,6 @@ final class NativeSlidePreviewPane: NSView {
         plate.translatesAutoresizingMaskIntoConstraints = false
     }
 
-    private func updateImageSizingButton() {
-        let isResizable = imageView.sizingMode == .resizable
-        let symbolName = isResizable ? "lock.open" : "lock.fill"
-        let description = isResizable
-            ? "Lock current image scale"
-            : "Resume automatic image resizing"
-        if #available(macOS 11.0, *) {
-            imageSizingButton.image = NSImage(
-                systemSymbolName: symbolName,
-                accessibilityDescription: description
-            )
-            imageSizingButton.imagePosition = .imageOnly
-        } else {
-            imageSizingButton.image = nil
-            imageSizingButton.imagePosition = .noImage
-            imageSizingButton.title = isResizable ? "Lock" : "Auto"
-        }
-        imageSizingButton.toolTip = isResizable
-            ? "Lock Current Scale: preserve the current image scale when this viewer is resized."
-            : "Auto Resize: resume resizing the image automatically with this viewer."
-        imageSizingButton.setAccessibilityLabel(description)
-        imageSizingButton.isEnabled = imageView.hasImage
-        fullResolutionButton.isEnabled = imageView.hasImage
-    }
-
     func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
         let previousInputRate = inputFrameRateMeter.framesPerSecond
         let previousDroppedCount = droppedFrameCount
@@ -588,12 +563,10 @@ final class NativeSlidePreviewPane: NSView {
 
     @objc private func toggleImageSizingModeAction(_ sender: NSButton) {
         imageView.toggleSizingMode()
-        updateImageSizingButton()
     }
 
     @objc private func showFullResolutionAction(_ sender: NSButton) {
         imageView.showFullResolution()
-        updateImageSizingButton()
     }
 
     @objc private func toggleMaximizeAction(_ sender: NSButton) {

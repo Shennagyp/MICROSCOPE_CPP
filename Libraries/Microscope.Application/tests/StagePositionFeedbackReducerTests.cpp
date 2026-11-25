@@ -1,4 +1,5 @@
 #include "microscope/application/motion/StagePositionFeedbackReducer.h"
+#include "microscope/application/runtime/RuntimeWakeSignal.h"
 
 #include <cmath>
 #include <iostream>

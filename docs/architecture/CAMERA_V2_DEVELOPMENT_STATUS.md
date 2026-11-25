@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest source checkpoint:** `b92969fb335ee6f49ec4c8fc330b6259c94a7d1a`  
+**Latest source checkpoint:** `ac532619924ab30c9cdf26e2a5ba6eb524db34d0`  
 **Latest CI-validated code checkpoint:** `549433466098c5daeb63d72609776d958a35c2fe`  
 **CI:** GenTL C++ workflow [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203) passed 2/2 tests on Intel x86_64 and Apple Silicon arm64. Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs at the CMake common-target checkpoint.  
 **Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
@@ -147,7 +147,7 @@ The mock bridge tests cover dynamic-library symbol/version checks, CTI/TL/interf
 
 These tests use a mock C ABI bridge. They do **not** validate the actual Swift C ABI dylib, a vendor CTI Producer, actual camera acquisition, GenApi XML parsing, GenApi feature mapping or physical hardware.
 
-The Swift C ABI source is on private repository branch `Shennagyp/AMSCOPE_DRIVER:gentl-c-api-v.1.0` at `b2e88874a75be260309db9f4d412d638bf928016`. A pointer/buffer-marshalling C ABI test was added, but workflow [#45679386729](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45679386729) was cancelled before its build/test steps. Therefore the real C ABI dylib and its operation mapping remain unvalidated. Do not treat the C++ mock bridge as proof that the Swift dylib loads or behaves correctly.
+The Swift C ABI source and tests are on private repository branch `Shennagyp/AMSCOPE_DRIVER:gentl-c-api-v.1.0` at `2f8f82d1e4b645a1191bf68021f9803ac6843121`. The tests now cover typed pointer/buffer marshalling, event registration/read/unregister and buffer-info forwarding. The workflow now attempts separate x86_64/arm64 builds and universal dylib assembly, but workflow [#45684107190](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45684107190) was cancelled before any build/test steps. The Swift GenTL packages currently declare macOS 13.0 as their minimum deployment target. Therefore the real C ABI dylib, its operation mapping and universal packaging remain unvalidated. Do not treat the C++ mock bridge as proof that the Swift dylib loads or behaves correctly.
 
 Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four non-Qt/Qt Intel and Apple Silicon jobs after the Common CMake target was moved to the root project. The earlier GenTL-only run [#45678105743](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45678105743) is superseded by the later stream-acquisition matrix.
 

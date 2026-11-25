@@ -112,6 +112,14 @@ StageAxisPositionState::afterCommandedDisplacement(
 
 Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::afterPositionObservation(
+    const AxisPositionObservation& observation,ObservationSource source) const {
+    return afterPositionObservation(
+        observation.position(),observation.uncertaintyMicrometers(),
+        observation.evidence(),source);
+}
+
+Result<StageAxisPositionState,StageAxisPositionStateError>
+StageAxisPositionState::afterPositionObservation(
     AxisPosition observed,double uncertainty,StagePositionEvidence evidence,
     ObservationSource source) const {
     if(observed.axisId()!=axisId_)

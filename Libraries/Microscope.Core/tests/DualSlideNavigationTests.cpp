@@ -16,7 +16,7 @@ SlideRegistration registration(const char*s,DualSlideSlot slot,double x,const ch
  auto tr=take(SlideCornerMeasurement::create(SlideCorner::TopRight,{x+75000,20000},src,0.5));
  auto br=take(SlideCornerMeasurement::create(SlideCorner::BottomRight,{x+75000,45000},src,0.5));
  auto bl=take(SlideCornerMeasurement::create(SlideCorner::BottomLeft,{x,45000},src,0.5));
- return take(SlideRegistration::create(id<SlideId>(s),id<CalibrationRevisionId>(std::string(s)+"-registration-"+revision),slot,g,{tl,tr,br,bl},1.0));
+ return take(SlideRegistration::create(id<SlideId>(s),take(CalibrationRevisionId::create(std::string(s)+"-registration-"+revision)),slot,g,{tl,tr,br,bl},1.0));
 }
 void equipmentDefinitionOwnsCarrier() {
  auto s=stage();
@@ -113,7 +113,7 @@ int main(){
  auto rightCommand=carrier.commandFor(rightTarget);
  check(leftCommand&&rightCommand&&leftCommand.value().targets()[0].value()!=rightCommand.value().targets()[0].value(),"navigation resolves the selected SlideId through its own registration");
  auto changedLeft=registration("left",DualSlideSlot::Left,6000,"v2");
- auto changedCarrier=take(DualSlideCarrierState::create(spec,
+ auto changedCarrier=take(DualSlideCarrierState::create(spec.value(),
      take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("left"),changedLeft)),
      take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right"),right))));
  auto staleCommand=changedCarrier.commandFor(leftTarget);

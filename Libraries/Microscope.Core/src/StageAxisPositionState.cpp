@@ -26,7 +26,7 @@ bool observationEvidence(StagePositionEvidence e) noexcept {
 }
 bool usableSource(ObservationSource s) noexcept {
     return s==ObservationSource::HardwareReadback||s==ObservationSource::DeviceEvent||
-           s==ObservationSource::SdkStatus||s==ObservationSource::CalibratedEstimate;
+           s==ObservationSource::SdkStatus;
 }
 bool validError(std::optional<double> v) noexcept {
     return !v||(std::isfinite(*v)&&*v>=0.0);

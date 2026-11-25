@@ -29,9 +29,11 @@ int main(){
  auto third=take(second.afterCommandedDisplacement(
    take(AxisDisplacement::create(x,1000,AxisCoordinateUnit::Micrometers)),5.0));
  check(third.requiresHoming(10),"threshold crossing requests homing");
- auto controller=take(third.afterPositionObservation(
+ auto controllerObservation=take(AxisPositionObservation::create(
    take(AxisPosition::create(x,4000,AxisCoordinateUnit::Micrometers)),0.2,
-   StagePositionEvidence::ControllerReported,ObservationSource::SdkStatus));
+   StagePositionEvidence::ControllerReported));
+ auto controller=take(third.afterPositionObservation(
+   controllerObservation,ObservationSource::SdkStatus));
  check(controller.accumulatedPositionErrorBound().value()>=11.0,
        "controller-reported coordinate does not erase accumulated open-loop error");
  auto encoderObservation=take(AxisPositionObservation::create(

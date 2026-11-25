@@ -69,9 +69,34 @@ jobs:
           if [ -z "$GENAPI_HEADER" ]; then
             echo "GenApi SDK candidates in official package:"
             find build/genicam-package -type f | grep -Ei 'GenApi|Mac64_Universal' | head -n 100 || true
-            SDK_ARCHIVE="$(find build/genicam-package -type f \\
-              \\( -iname '*Mac64*SDK*.zip' -o -iname '*Mac64*SDK*.tar.gz' -o -iname '*Mac64*SDK*.tgz' \\) \\
-              -print -quit)"
+            SDK_ARCHIVE="$(find build/genicam-package -type f | grep -Ei 'Mac64.*SDK.*(zip|tar[.]gz|tgz)
+            test -n "$SDK_ARCHIVE"
+            case "$SDK_ARCHIVE" in
+              *.zip) unzip -q "$SDK_ARCHIVE" -d build/genapi-sdk ;;
+              *.tar.gz|*.tgz) tar -xzf "$SDK_ARCHIVE" -C build/genapi-sdk ;;
+            esac
+            GENAPI_HEADER="$(find build/genapi-sdk -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
+          fi
+          test -n "$GENAPI_HEADER"
+          GENAPI_ROOT="${GENAPI_HEADER%/library/CPP/include/GenApi/GenApi.h}"
+          echo "GENAPI_ROOT=$GENAPI_ROOT" >> "$GITHUB_ENV"
+
+      - name: Configure official GenApi integration
+        run: |
+          cmake -S Camera/GenTL -B build/gentl-genapi \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
+            -DBUILD_TESTING=OFF \
+            -DCAMERA_GENTL_ENABLE_GENAPI=ON \
+            -DGENAPI_ROOT="$GENAPI_ROOT"
+
+      - name: Build official GenApi integration
+        run: cmake --build build/gentl-genapi --config Release --parallel
+
+      - name: Verify GenApi architecture
+        run: |
+          lipo build/gentl-genapi/libcamera_gentl_genapi.a -verify_arch "${{ matrix.architecture }}"
+ | head -n 1 || true)"
             test -n "$SDK_ARCHIVE"
             case "$SDK_ARCHIVE" in
               *.zip) unzip -q "$SDK_ARCHIVE" -d build/genapi-sdk ;;

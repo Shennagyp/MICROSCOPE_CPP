@@ -46,7 +46,7 @@ The Optika GUI is implemented with **SwiftUI/AppKit**, not Qt. Its camera-facing
 - `Application/OptikaB293/Sources/Adapters/Camera/NativeCameraController.cpp/.h` — application adapter/controller and serialized command execution;
 - `Application/OptikaB293/Sources/Adapters/Camera/NativeCameraFrameFeed.swift` — narrow latest-frame consumption protocol.
 
-The Optika application target links `Amscope::Driver` and native Apple frameworks. Its application shell and presentation are not supplied by the Camera Module. That does not remove the reusable Qt UI deliverable: other Qt consumers may use `Camera::QtWidgets`, and the preview application remains a reference composition.
+The Optika application target links `Amscope::Driver` and native Apple frameworks. Its application shell and presentation are not supplied by the Camera Module. The Optika application owns its presentation. No reusable Qt UI or preview deliverable remains in the active Camera Module scope.
 
 Ownership remains layered:
 1. `AmcamCamera` is the sole owner of the AmScope SDK handle/session and native acquisition.
@@ -54,7 +54,7 @@ Ownership remains layered:
 3. The Objective-C++ bridge translates the application boundary and retains frame leases as required.
 4. SwiftUI/AppKit models and views own Optika presentation state only. They do not own the SDK session or pull frames directly from the vendor SDK.
 5. The frame feed is a narrow consumer surface. It does not become a second acquisition engine or a second frame-history queue.
-6. Reusable Camera Qt widgets remain backend-neutral at their common component boundary; an application composes them or uses another UI technology.
+6. Camera remains presentation-agnostic; UI and preview are application responsibilities.
 
 ## 3. Governing roadmap — original Camera Module Phases 0–8
 
@@ -131,49 +131,17 @@ Semantic ownership is conservative:
 
 ### 3.5 Phase 3 — Qt streaming (excluded from active scope)
 
-Required responsibility boundaries:
+The original Phase 3 proposed a Qt streaming adapter. The project owner has removed Qt from active Camera v2.0 scope. Keep the existing non-Qt `AmcamCamera` programmatic control/session API as the active boundary. Existing `Camera/Qt` and `QtAmcamCamera` source is retained as legacy code; do not extend, refactor, qualify or make it a release dependency.
 
-| Library | Responsibility | Ownership |
-|---|---|---|
-| `camera_amscope_driver` / `Amscope::Driver` | Native SDK discovery, session, lifecycle, acquisition/recovery and native frame production | Sole AmScope `HAmcam` owner |
-| Non-Qt programmatic control surface | Validated feature reads/writes, commands and telemetry | Uses the existing driver/session; never opens another handle |
-| `Camera::Common` | Backend-neutral values, frame contracts and Qt-independent mailbox primitive | No session, SDK or UI ownership |
-| `camera_amscope_streaming_qt` / Qt adapter | Qt notification/thread handoff and latest-frame delivery | Observes the same driver session; no second acquisition |
-| `camera_ui_qt` | Reusable widgets | Common UI boundary; no SDK calls |
-
-The names and target boundaries may vary, but the ownership semantics are mandatory. Do not add a forwarding-only `camera_amscope_control` wrapper if `AmcamCamera` already provides the non-Qt programmatic API. Do not leave all control/streaming semantics hidden in a single Qt-only public API.
-
-Current source:
-- `AmcamCamera` is a non-Qt C++ API and sole session owner.
-- `Camera::Common` owns a non-Qt latest-frame mailbox.
-- `Camera::Qt` is now a concrete Qt Core library. Its backend-neutral `camera::qt::FrameStream` wraps the Common mailbox and owns coalesced QObject-affinity notification, latest-frame retrieval and clearing.
-- `QtAmcamCamera` composes one `AmcamCamera` session with one `FrameStream`. Its provider-specific serialized operation/lifecycle request queue and generation rules remain; generic frame notification has moved out of the AmScope facade.
-- `AmcamCamera` implements the common `ICameraFeatureAccess` contract and exposes its non-Qt provider command/telemetry API; no forwarding-only control wrapper is required.
-- The optional AmScope Qt facade header is exposed only by the optional Qt target, not by the non-Qt installed header set.
-
-**Status:** Excluded by owner decision. The existing non-Qt `AmcamCamera` programmatic API remains active. Existing Qt code/CI history is retained but is not a current deliverable or acceptance gate.
+**Status:** Excluded by owner decision. It is not a current deliverable or acceptance gate.
 
 ### 3.6 Phase 4 — Reusable Qt camera UI (excluded from active scope)
 
-The original reusable UI phase remains in scope. Current reusable source includes:
-- `Camera/QtWidgets/FrameView`;
-- `Camera/QtWidgets/CameraControlPanel`;
-- `Camera/QtWidgets/ImageInfoBar`;
-- `Camera/QtWidgets/CameraFeatureEditor` (descriptor-driven typed feature editing; host retains asynchronous scheduling and readback ownership).
+The original Phase 4 proposed reusable Qt widgets and preview composition. The owner has removed UI/preview work from active scope. The Optika application already owns its SwiftUI/AppKit preview. Existing `Camera/QtWidgets` and `amscope_preview` code is retained as legacy source only.
 
-The preview executable is a composition/example, not the reusable library's ownership boundary. The Optika application already has its camera preview on the application branch; do not restart or duplicate that preview as Camera Module work.
+**Status:** Excluded by owner decision. Do not implement UI widgets, preview applications or UI consumer integration.
 
-Remaining work includes:
-- generic discovery and lifecycle controls;
-- descriptor-driven feature editors with current-value loading and unsupported/unavailable states;
-- separate command/action controls;
-- explicit telemetry presentation and units;
-- capability/availability presentation;
-- still-capture interaction and truthful RAW presentation;
-- backend-neutral common widgets with backend-specific extensions where justified;
-- external Qt consumer composition.
-
-**Status:** Excluded by owner decision. Do not extend reusable widgets, preview applications or UI consumer integration.
+`Camera/Qt`, `Camera/QtWidgets`, `QtAmcamCamera` and `amscope_preview` must not be treated as required release components. Their historical CI records remain evidence for the code that existed at those commits, not an obligation to continue those workstreams.
 
 ### 3.7 Phase 5 — Integrate existing GenTL/GenApi implementation
 
@@ -244,8 +212,7 @@ Mapping of its phase labels to the original governing roadmap:
 - release Phase 0 → original Phase 0;
 - release Phase 1 → original Phase 1;
 - release Phase 2 → original Phase 2;
-- release Phase 3 → original Phase 3;
-- release Phase 4 (reusable Qt UI) → original Phase 4;
+- release Phases 3 and 4 (Qt streaming/UI) → excluded from active scope by owner decision;
 - separate GenTL/GenApi follow-on → original Phase 5;
 - release Phase 5 (feature/model coverage) → original Phase 6;
 - release Phase 6 (packaging) → original Phase 7;
@@ -337,7 +304,7 @@ This ledger separates source presence, automated evidence, physical evidence and
 
 **Governing roadmap:** original Camera Module Phases 0–8 from `amscope-native-driver-v.0.2`.  
 **Current Camera development branch:** `camera-v.2.0`.  
-**Latest Camera status checkpoint:** `c90441275f390ea625ad7a331fc4d21856e8fe28`. **Latest implementation checkpoint:** `f049f91d6afe1c9f785b60ce344d216b6d251a59`. The GenTL mock/frame/command contract suite passed 9/9 tests on both architectures at `03f674aa7c39ac5b80d6f4a2329b930cb5d81e8c`; workflow [#45686459352](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45686459352). The official GenApi 3.5.1 SDK compile now configures and builds successfully on Intel x86_64 in workflow [#45688350553](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45688350553); Apple Silicon arm64 remains queued. The earlier bridge/stream baseline `549433466098c5daeb63d72609776d958a35c2fe` passed both architectures in [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203). Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs.  
+**Latest Camera status checkpoint:** to be updated from `camera-v.2.0`. **Latest implementation checkpoint:** `682724d04e9abaea4f91e73d7e3de57136421045`. The official GenApi 3.5.1 SDK build passed Intel and Apple Silicon in [#45688350553](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45688350553). The empty-payload frame-adapter regression run [#45690108087](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45690108087) is pending Apple Silicon completion. The earlier bridge/stream baseline `549433466098c5daeb63d72609776d958a35c2fe` passed both architectures in [#45682828203](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45682828203). Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed all four jobs; Qt/UI is now excluded from active scope.  
 **Current application integration baseline:** `OPTIKA-B293-DUALSLIDE-APP` at `4c278aed3af29e51b7485a2902080d84314af73b`.  
 **Management branch:** `project_manager`.
 

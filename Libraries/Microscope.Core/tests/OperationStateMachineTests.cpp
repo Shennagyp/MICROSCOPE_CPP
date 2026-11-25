@@ -162,6 +162,18 @@ void testDeviceActionCompletionDoesNotVerifyStep() {
           homeReferenceAfterIdle &&
           homeReferenceAfterIdle.value() == StepStatus::Verifying,
           "a later explicit home-reference fact remains admissible after generic Idle feedback began verification");
+
+    auto firstAxisState = applyStepLifecycleEvent(
+        StepStatus::AdapterAccepted,
+        StepLifecycleEvent::DeviceStateObserved);
+    auto secondAxisState = applyStepLifecycleEvent(
+        firstAxisState.value(),
+        StepLifecycleEvent::DeviceStateObserved);
+    check(firstAxisState &&
+          firstAxisState.value() == StepStatus::Verifying &&
+          secondAxisState &&
+          secondAxisState.value() == StepStatus::Verifying,
+          "multiple correlated axis observations may accumulate while the step remains Verifying");
 }
 
 void testManualAndFailurePathsRemainExplicit() {

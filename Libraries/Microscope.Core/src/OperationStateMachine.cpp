@@ -426,9 +426,14 @@ Result<
         break;
 
     case StepStatus::Verifying:
-        // A generic state observation may already have started verification.
-        // A later, command-correlated home-reference fact remains admissible.
-        if (event == StepLifecycleEvent::HomeReferenceEstablished) {
+        // Verification can consume a sequence of observations (e.g. separate
+        // X and Y encoder readings). Evidence collection remains non-terminal.
+        if (event == StepLifecycleEvent::DeviceStateObserved ||
+            event == StepLifecycleEvent::HomeReferenceEstablished) {
+            return Result<StepStatus, StepLifecycleError>::success(
+                StepStatus::Verifying);
+        }
+        if (event == StepLifecycleEvent::VerificationSucceeded) {
             return Result<StepStatus, StepLifecycleError>::success(
                 StepStatus::Verifying);
         }

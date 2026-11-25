@@ -344,6 +344,8 @@ int32_t gentl_consumer_invoke(
     case 9: // GCUnregisterEvent
         if (argument_count != 2 || arguments[0] != 0x5555 ||
             arguments[1] != EVENT_NEW_BUFFER) return GC_ERR_INVALID_PARAMETER;
+        if (getenv("MOCK_GENTL_FAIL_EVENT_UNREGISTER"))
+            return GC_ERR_INVALID_PARAMETER;
         atomic_store_explicit(&event_unregistered, 1, memory_order_release);
         return GC_ERR_SUCCESS;
     case 10: { // EventGetData
@@ -377,8 +379,10 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     }
     case 14: // EventKill
-        return argument_count == 1 && arguments[0] == 0x6666
-            ? GC_ERR_SUCCESS : GC_ERR_INVALID_HANDLE;
+        if (argument_count != 1 || arguments[0] != 0x6666)
+            return GC_ERR_INVALID_HANDLE;
+        atomic_store_explicit(&event_unregistered, 1, memory_order_release);
+        return GC_ERR_SUCCESS;
     case 33: // DevOpenDataStream
         if (argument_count != 3 || arguments[0] != 0x3333 ||
             strcmp((const char*)pointer(arguments[1]), "stream0") != 0)

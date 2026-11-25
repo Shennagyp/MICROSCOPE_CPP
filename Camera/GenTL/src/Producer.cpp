@@ -832,6 +832,8 @@ struct DataStreamSession::Impl {
     void close() noexcept {
         std::shared_ptr<DeviceSessionState> owner;
         GenTL::DS_HANDLE streamHandle = nullptr;
+        GenTL::EVENT_HANDLE eventHandle = nullptr;
+        std::size_t activeCallCount = 0;
         bool wasStarted = false;
         bool wasRegistered = false;
 
@@ -846,6 +848,8 @@ struct DataStreamSession::Impl {
             stopping = true;
             owner = device;
             streamHandle = stream;
+            eventHandle = event;
+            activeCallCount = activeCalls;
             wasStarted = started;
             wasRegistered = eventRegistered;
         }
@@ -876,6 +880,14 @@ struct DataStreamSession::Impl {
                 if (status != GenTL::GC_ERR_SUCCESS) {
                     context->quarantineLocked();
                     safeToRelease = false;
+
+                    // Unregistration normally aborts all pending EventGetData
+                    // calls. If the Producer rejects it, EventKill is the
+                    // specified fallback for this stream's single waiter.
+                    if (activeCallCount != 0 && eventHandle) {
+                        (void)context->consumer.invoke(
+                            Operation::eventKill, eventHandle);
+                    }
                 }
             }
 

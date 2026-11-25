@@ -190,7 +190,6 @@ int runProducerTests(int argc, char** argv) {
 
         waitStream.stop();
         waiter.join();
-        dlclose(mockLibrary);
         if (waitFailed || waitedFrame.has_value() || waitStream) {
             std::fprintf(stderr, "wait cancellation: failed=%d frame=%d stream=%d\\n",
                 waitFailed ? 1 : 0, waitedFrame.has_value() ? 1 : 0,
@@ -198,6 +197,55 @@ int runProducerTests(int argc, char** argv) {
             return 29;
         }
         waitDevice.close();
+
+        // If a Producer rejects GCUnregisterEvent, EventKill must still
+        // release the one permitted waiter. The native context is quarantined
+        // because its normal event/stream teardown did not complete.
+        auto fallbackProducer = camera::gentl::Producer::open(bridge, ctiPath);
+        const auto fallbackDevices = fallbackProducer.discover();
+        if (fallbackDevices.size() != 1) {
+            dlclose(mockLibrary);
+            return 30;
+        }
+        auto fallbackDevice = fallbackProducer.openDevice(fallbackDevices.front());
+        auto fallbackStream = fallbackDevice.openDataStream("stream0", 3);
+        fallbackStream.start();
+
+        std::optional<camera::gentl::DataStreamFrame> fallbackFrame;
+        bool fallbackWaitFailed = false;
+        std::thread fallbackWaiter([&] {
+            try {
+                fallbackFrame = fallbackStream.nextFrame(5000);
+            } catch (...) {
+                fallbackWaitFailed = true;
+            }
+        });
+
+        const auto fallbackDeadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(2);
+        while (!waitEntered() &&
+               std::chrono::steady_clock::now() < fallbackDeadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (!waitEntered()) {
+            fallbackStream.stop();
+            fallbackWaiter.join();
+            dlclose(mockLibrary);
+            return 31;
+        }
+
+        if (setenv("MOCK_GENTL_FAIL_EVENT_UNREGISTER", "1", 1) != 0) {
+            fallbackStream.stop();
+            fallbackWaiter.join();
+            dlclose(mockLibrary);
+            return 32;
+        }
+        fallbackStream.stop();
+        unsetenv("MOCK_GENTL_FAIL_EVENT_UNREGISTER");
+        fallbackWaiter.join();
+        dlclose(mockLibrary);
+        if (fallbackWaitFailed || fallbackFrame.has_value() || fallbackStream)
+            return 33;
+        fallbackDevice.close();
 
         // A failed DSClose quarantines the native context. Its Consumer and
         // dynamically loaded C ABI bridge must outlive all public wrappers.

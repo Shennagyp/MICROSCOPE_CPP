@@ -68,6 +68,7 @@ namespace {
     case StepLifecycleEvent::AdapterFailure:
     case StepLifecycleEvent::OperatorActionRequested:
     case StepLifecycleEvent::OperatorConfirmed:
+    case StepLifecycleEvent::VerificationStarted:
     case StepLifecycleEvent::VerificationSucceeded:
     case StepLifecycleEvent::VerificationFailed:
     case StepLifecycleEvent::TimeoutElapsed:
@@ -409,7 +410,8 @@ Result<
         break;
 
     case StepStatus::AwaitingObservation:
-        if (event == StepLifecycleEvent::DeviceStateObserved ||
+        if (event == StepLifecycleEvent::VerificationStarted ||
+            event == StepLifecycleEvent::DeviceStateObserved ||
             event == StepLifecycleEvent::HomeReferenceEstablished ||
             event == StepLifecycleEvent::OperatorConfirmed) {
             return Result<StepStatus, StepLifecycleError>::success(

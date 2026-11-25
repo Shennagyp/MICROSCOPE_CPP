@@ -28,7 +28,7 @@ SlideRegistration registration(const char* slide,DualSlideSlot slot,double origi
     auto br=take(SlideCornerMeasurement::create(SlideCorner::BottomRight,{originX+75000,45000},source,0.25));
     auto bl=take(SlideCornerMeasurement::create(SlideCorner::BottomLeft,{originX,45000},source,0.25));
     return take(SlideRegistration::create(
-        id<SlideId>(slide),id<CalibrationRevisionId>("position-test-registration"),slot,
+        id<SlideId>(slide),take(CalibrationRevisionId::create(std::string(slide)+"-registration-v1")),slot,
         geometry,{tl,tr,br,bl},0.5));
 }
 AxisPositionObservation observation(const char* axis,double position,double uncertainty,
@@ -99,7 +99,6 @@ int main() {
         spec,
         take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("left-slide"),left)),
         take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("right-slide"),right))));
-    auto target=take(carrier.createTarget(id<SlideId>("left-slide"),{20000,10000}));
     auto targetState=take(StagePositionState::create(spec));
     targetState=take(targetState.afterVerifiedHomingObservation(
         observation("x",0,0.5,StagePositionEvidence::ControllerReported),ObservationSource::SdkStatus));
@@ -108,14 +107,23 @@ int main() {
     auto current=targetState.currentSlidePosition(carrier,id<SlideId>("left-slide"));
     check(!current&&current.error()==CurrentSlidePositionError::PositionOutsideSlide,
           "selected slide position is not reported when machine reference is at its home origin outside the slide");
+    auto positioned=take(targetState.afterCommandedPosition(
+        take(AxisPosition::create(id<StageAxisId>("x"),42500,AxisCoordinateUnit::Micrometers)),1.0));
+    positioned=take(positioned.afterCommandedPosition(
+        take(AxisPosition::create(id<StageAxisId>("y"),32500,AxisCoordinateUnit::Micrometers)),1.0));
+    auto mapped=positioned.currentSlidePosition(carrier,id<SlideId>("left-slide"));
+    check(mapped&&std::abs(mapped.value().position.xMicrometers-37500)<1e-6&&
+          std::abs(mapped.value().position.yMicrometers-12500)<1e-6,
+          "coherent stage X/Y state maps back to the selected slide-local coordinate");
+    check(mapped&&mapped.value().xErrorBoundMicrometers>0&&
+          mapped.value().yErrorBoundMicrometers>0,
+          "slide-local result retains propagated machine and registration uncertainty");
 
     const auto foreignSpec=take(DualSlideCarrierSpecification::create(
         take(StageSpecification::create(id<EquipmentComponentId>("other-stage"),{axis("x"),axis("y")})),
         id<StageAxisId>("x"),id<StageAxisId>("y"),
         CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
     const auto foreignState=take(StagePositionState::create(foreignSpec));
-    auto wrongCarrier=carrier;
-    (void)wrongCarrier;
     auto wrongStage=foreignState.currentSlidePosition(carrier,id<SlideId>("left-slide"));
     check(!wrongStage&&wrongStage.error()==CurrentSlidePositionError::StageComponentMismatch,
           "one stage aggregate cannot be mapped through another stage's slide registration");

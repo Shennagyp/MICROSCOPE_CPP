@@ -5,6 +5,7 @@
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -28,6 +29,38 @@ enum class ExposurePolicy {
     Unknown
 };
 
+enum class OpticalFunctionRequirementError {
+    InvalidFunction,
+    ZeroMinimumComponentCount
+};
+
+// A profile can require one or more installed optical functions. A compatibility
+// identity binds mating components (e.g. phase plate and matching phase annulus).
+class OpticalFunctionRequirement final {
+public:
+    [[nodiscard]] static Result<
+        OpticalFunctionRequirement,
+        OpticalFunctionRequirementError> create(
+            OpticalElementFunction function,
+            std::optional<OpticalCompatibilityId> compatibilityId = std::nullopt,
+            std::uint32_t minimumComponentCount = 1);
+
+    [[nodiscard]] OpticalElementFunction function() const noexcept;
+    [[nodiscard]] const std::optional<OpticalCompatibilityId>&
+    compatibilityId() const noexcept;
+    [[nodiscard]] std::uint32_t minimumComponentCount() const noexcept;
+
+private:
+    OpticalFunctionRequirement(
+        OpticalElementFunction function,
+        std::optional<OpticalCompatibilityId> compatibilityId,
+        std::uint32_t minimumComponentCount);
+
+    OpticalElementFunction function_;
+    std::optional<OpticalCompatibilityId> compatibilityId_;
+    std::uint32_t minimumComponentCount_;
+};
+
 enum class ConfigurationProfileError {
     InvalidContrastMethod,
     EmptyCompatibilitySet,
@@ -36,7 +69,8 @@ enum class ConfigurationProfileError {
     DuplicateOpticalPath,
     DuplicateCamera,
     DuplicateIllumination,
-    DuplicateRequiredComponent
+    DuplicateRequiredComponent,
+    DuplicateOpticalFunctionRequirement
 };
 
 // A profile is declarative compatibility data for one instrument definition.
@@ -53,7 +87,8 @@ public:
             std::vector<OpticalPathId> compatibleOpticalPathIds,
             std::vector<EquipmentComponentId> compatibleCameraIds,
             std::vector<EquipmentComponentId> compatibleIlluminationIds,
-            std::vector<EquipmentComponentId> requiredPathComponentIds = {});
+            std::vector<EquipmentComponentId> requiredPathComponentIds = {},
+            std::vector<OpticalFunctionRequirement> requiredOpticalFunctions = {});
 
     [[nodiscard]] const ConfigurationProfileId& id() const noexcept;
     [[nodiscard]] ContrastMethod contrastMethod() const noexcept;
@@ -69,6 +104,8 @@ public:
     compatibleIlluminationIds() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponentId>&
     requiredPathComponentIds() const noexcept;
+    [[nodiscard]] const std::vector<OpticalFunctionRequirement>&
+    requiredOpticalFunctions() const noexcept;
 
 private:
     ConfigurationProfile(
@@ -79,7 +116,8 @@ private:
         std::vector<OpticalPathId> compatibleOpticalPathIds,
         std::vector<EquipmentComponentId> compatibleCameraIds,
         std::vector<EquipmentComponentId> compatibleIlluminationIds,
-        std::vector<EquipmentComponentId> requiredPathComponentIds);
+        std::vector<EquipmentComponentId> requiredPathComponentIds,
+        std::vector<OpticalFunctionRequirement> requiredOpticalFunctions);
 
     ConfigurationProfileId id_;
     ContrastMethod contrastMethod_;
@@ -89,6 +127,7 @@ private:
     std::vector<EquipmentComponentId> compatibleCameraIds_;
     std::vector<EquipmentComponentId> compatibleIlluminationIds_;
     std::vector<EquipmentComponentId> requiredPathComponentIds_;
+    std::vector<OpticalFunctionRequirement> requiredOpticalFunctions_;
 };
 
 enum class ConfigurationProfileCatalogError {
@@ -115,7 +154,8 @@ enum class ConfigurationRequestError {
     InvalidContrastMethod,
     InvalidExposurePolicy,
     EmptyOpticalPathSet,
-    DuplicateOpticalPath
+    DuplicateOpticalPath,
+    DuplicateAdditionalOpticalComponent
 };
 
 // An immutable selection request. It names concrete installed components and
@@ -134,13 +174,16 @@ public:
             CameraModeId cameraModeId,
             EquipmentComponentId illuminationComponentId,
             IlluminationChannelId illuminationChannelId,
-            ExposurePolicy exposurePolicy);
+            ExposurePolicy exposurePolicy,
+            std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds = {});
 
     [[nodiscard]] const ConfigurationProfileId& profileId() const noexcept;
     [[nodiscard]] ContrastMethod contrastMethod() const noexcept;
     [[nodiscard]] const EquipmentComponentId& objectiveComponentId() const noexcept;
     [[nodiscard]] const EquipmentComponentId& condenserComponentId() const noexcept;
     [[nodiscard]] const std::vector<OpticalPathId>& opticalPathIds() const noexcept;
+    [[nodiscard]] const std::vector<EquipmentComponentId>&
+    selectedAdditionalOpticalComponentIds() const noexcept;
     [[nodiscard]] const EquipmentComponentId& cameraComponentId() const noexcept;
     [[nodiscard]] const CameraModeId& cameraModeId() const noexcept;
     [[nodiscard]] const EquipmentComponentId& illuminationComponentId() const noexcept;
@@ -158,7 +201,8 @@ private:
         CameraModeId cameraModeId,
         EquipmentComponentId illuminationComponentId,
         IlluminationChannelId illuminationChannelId,
-        ExposurePolicy exposurePolicy);
+        ExposurePolicy exposurePolicy,
+        std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds);
 
     ConfigurationProfileId profileId_;
     ContrastMethod contrastMethod_;
@@ -170,6 +214,7 @@ private:
     EquipmentComponentId illuminationComponentId_;
     IlluminationChannelId illuminationChannelId_;
     ExposurePolicy exposurePolicy_;
+    std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds_;
 };
 
 class ConfigurationResolution final {

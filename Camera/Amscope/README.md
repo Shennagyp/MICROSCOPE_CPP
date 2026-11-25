@@ -1,9 +1,11 @@
 # Amscope native camera driver
 
-This is the application-side C++ driver for the bundled Amcam SDK. Vendor
-headers, libraries, documentation, and original samples remain under
-Camera/VendorSDK/AmscopeVendorSDK. This directory contains the application
-integration and does not modify vendor sample code.
+This is the reusable, non-Qt C++ AmScope camera provider for the bundled
+Amcam SDK. Vendor headers, libraries, documentation, and original samples
+remain under `Camera/VendorSDK/AmscopeVendorSDK`. This directory contains the
+Camera Module's native provider integration; consuming applications build
+their own adapters and presentation without taking ownership of the SDK
+session. Vendor sample code is not modified.
 
 ## Development roadmap
 

@@ -167,8 +167,8 @@ final class NativeSlideImageView: NSView {
     }
 
     /// Largest aspect-preserving scale that keeps the complete source image
-    /// inside the viewer viewport. Diagnostic content is never cropped just
-    /// to eliminate margins. Upscaling beyond native 1:1 is not permitted.
+    /// inside the viewer viewport. Automatic fit never enlarges beyond native
+    /// 1:1; explicit user zoom may enlarge the live or frozen image separately.
     private var automaticFitScale: CGFloat {
         guard let image = currentImage else { return actualPixelScale }
         return SlideImageGeometry.automaticFitScale(

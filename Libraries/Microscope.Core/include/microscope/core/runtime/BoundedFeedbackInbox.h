@@ -6,13 +6,13 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace microscope::core {
 
@@ -71,7 +71,7 @@ public:
                     notifyFeedbackLoss=true;
                 }
                 status=FeedbackSubmitStatus::Closed;
-            } else if(queue_.size()>=capacity_) {
+            } else if(count_>=capacity_) {
                 if(!feedbackLossLatched_) {
                     feedbackLossLatched_=true;
                     notifyFeedbackLoss=true;
@@ -99,7 +99,9 @@ public:
                         }
                         status=FeedbackSubmitStatus::Closed;
                     } else {
-                        queue_.push_back(std::move(receipt).value());
+                        slots_[tail_].emplace(std::move(receipt).value());
+                        tail_=(tail_+1)%capacity_;
+                        ++count_;
                         nextSequence_=
                             nextSequence_==std::numeric_limits<std::uint64_t>::max()?0:nextSequence_+1;
                         status=FeedbackSubmitStatus::Enqueued;
@@ -121,22 +123,26 @@ public:
 
     [[nodiscard]] std::optional<FeedbackReceipt<TPayload>> tryPop() {
         std::lock_guard<std::mutex> lock(mutex_);
-        if(queue_.empty())
+        if(count_==0)
             return std::nullopt;
         auto result=std::optional<FeedbackReceipt<TPayload>>(
-            std::move(queue_.front()));
-        queue_.pop_front();
+            std::move(*slots_[head_]));
+        slots_[head_].reset();
+        head_=(head_+1)%capacity_;
+        --count_;
         return result;
     }
 
     [[nodiscard]] std::optional<FeedbackReceipt<TPayload>> waitAndPop() {
         std::unique_lock<std::mutex> lock(mutex_);
-        available_.wait(lock,[this]{return closed_||!queue_.empty();});
-        if(queue_.empty())
+        available_.wait(lock,[this]{return closed_||count_!=0;});
+        if(count_==0)
             return std::nullopt;
         auto result=std::optional<FeedbackReceipt<TPayload>>(
-            std::move(queue_.front()));
-        queue_.pop_front();
+            std::move(*slots_[head_]));
+        slots_[head_].reset();
+        head_=(head_+1)%capacity_;
+        --count_;
         return result;
     }
 
@@ -167,7 +173,7 @@ public:
 
     [[nodiscard]] std::size_t pendingCount() const {
         std::lock_guard<std::mutex> lock(mutex_);
-        return queue_.size();
+        return count_;
     }
 
 private:
@@ -179,7 +185,8 @@ private:
          runtimeId_(std::move(runtimeId)),
          runtimeGeneration_(runtimeGeneration),
          capacity_(capacity),
-         onFeedbackLoss_(std::move(onFeedbackLoss)) {}
+         onFeedbackLoss_(std::move(onFeedbackLoss)),
+         slots_(capacity) {}
 
     MicroscopeId microscopeId_;
     RuntimeId runtimeId_;
@@ -189,7 +196,10 @@ private:
 
     mutable std::mutex mutex_;
     std::condition_variable available_;
-    std::deque<FeedbackReceipt<TPayload>> queue_;
+    std::vector<std::optional<FeedbackReceipt<TPayload>>> slots_;
+    std::size_t head_{0};
+    std::size_t tail_{0};
+    std::size_t count_{0};
     std::uint64_t nextSequence_{1};
     bool closed_{false};
     bool feedbackLossLatched_{false};

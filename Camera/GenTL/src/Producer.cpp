@@ -1191,7 +1191,7 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
                     GenTL::BUFFER_INFO_YPADDING, type, value, size);
             },
             GenTL::INFO_DATATYPE_SIZET, "DSGetBufferInfo(YPADDING)");
-        frame.payloadType = readTypedInfo<std::uint64_t>(
+        frame.payloadType = readTypedInfo<std::size_t>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(
                     Operation::dsGetBufferInfo,
@@ -1202,6 +1202,16 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
 
         if (incomplete) frame.incomplete = *incomplete != 0;
         if (imagePresent) frame.imagePresent = *imagePresent != 0;
+        const auto containsChunkData = readTypedInfo<bool8_t>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetBufferInfo,
+                    streamHandle, eventData.BufferHandle,
+                    GenTL::BUFFER_INFO_CONTAINS_CHUNKDATA, type, value, size);
+            },
+            GenTL::INFO_DATATYPE_BOOL8, "DSGetBufferInfo(CONTAINS_CHUNKDATA)");
+        if (containsChunkData)
+            frame.containsChunkData = *containsChunkData != 0;
 
         frame.payload.resize(*filled);
         if (*filled != 0)

@@ -109,10 +109,10 @@ static const char mock_xml[] =
     "    <ToolTip>Default device port</ToolTip>\n" \
     "  </Port>\n" \
     "</RegisterDescription>\n";
-static uint8_t* stream_memory[8];
-static BUFFER_HANDLE stream_handles[8];
+static uint8_t* stream_memory[16];
+static BUFFER_HANDLE stream_handles[16];
 static size_t stream_buffer_count;
-static BUFFER_HANDLE queued_buffers[8];
+static BUFFER_HANDLE queued_buffers[16];
 static size_t queued_buffer_count;
 static atomic_int event_wait_entered = 0;
 static atomic_int event_unregistered = 0;
@@ -387,7 +387,7 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     case 37: { // DSAllocAndAnnounceBuffer
         if (argument_count != 4 || arguments[0] != 0x5555 ||
-            arguments[1] != 64 || stream_buffer_count >= 8)
+            arguments[1] != 64 || stream_buffer_count >= 16)
             return GC_ERR_INVALID_PARAMETER;
         const size_t index = stream_buffer_count++;
         stream_memory[index] = (uint8_t*)malloc(64);
@@ -439,7 +439,7 @@ int32_t gentl_consumer_invoke(
     }
     case 45: { // DSQueueBuffer
         if (argument_count != 2 || arguments[0] != 0x5555 ||
-            queued_buffer_count >= 8) return GC_ERR_INVALID_PARAMETER;
+            queued_buffer_count >= 16) return GC_ERR_INVALID_PARAMETER;
         const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
         size_t index = 0;
         while (index < stream_buffer_count && stream_handles[index] != handle) ++index;

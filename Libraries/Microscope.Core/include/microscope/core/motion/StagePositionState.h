@@ -2,6 +2,7 @@
 
 #include "microscope/core/motion/StageAxisPositionState.h"
 #include "microscope/core/navigation/DualSlideNavigation.h"
+#include <optional>
 
 namespace microscope::core {
 

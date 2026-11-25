@@ -253,13 +253,17 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     std::vector<OpticalConnection> connections,
     std::vector<OpticalPath> opticalPaths,
     std::vector<ObjectiveSpecification> objectiveSpecifications,
-    std::vector<CameraSpecification> cameraSpecifications)
+    std::vector<CameraSpecification> cameraSpecifications,
+    std::vector<CondenserSpecification> condenserSpecifications,
+    std::vector<IlluminationSpecification> illuminationSpecifications)
     : microscopeId_(std::move(microscopeId)),
       components_(std::move(components)),
       connections_(std::move(connections)),
       opticalPaths_(std::move(opticalPaths)),
       objectiveSpecifications_(std::move(objectiveSpecifications)),
-      cameraSpecifications_(std::move(cameraSpecifications)) {}
+      cameraSpecifications_(std::move(cameraSpecifications)),
+      condenserSpecifications_(std::move(condenserSpecifications)),
+      illuminationSpecifications_(std::move(illuminationSpecifications)) {}
 
 Result<
     MicroscopeEquipmentDefinition,
@@ -269,7 +273,9 @@ Result<
         std::vector<OpticalConnection> connections,
         std::vector<OpticalPath> opticalPaths,
         std::vector<ObjectiveSpecification> objectiveSpecifications,
-        std::vector<CameraSpecification> cameraSpecifications) {
+        std::vector<CameraSpecification> cameraSpecifications,
+        std::vector<CondenserSpecification> condenserSpecifications,
+        std::vector<IlluminationSpecification> illuminationSpecifications) {
     if (components.empty()) {
         return Result<
             MicroscopeEquipmentDefinition,
@@ -345,6 +351,54 @@ Result<
                 MicroscopeEquipmentDefinition,
                 EquipmentDefinitionError>::failure(
                     EquipmentDefinitionError::CameraComponentWrongKind);
+        }
+    }
+
+    std::set<EquipmentComponentId> condenserComponentIds;
+    for (const auto& condenser : condenserSpecifications) {
+        if (!condenserComponentIds.insert(condenser.componentId()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateCondenserSpecification);
+        }
+
+        const auto component = componentIndex.find(condenser.componentId());
+        if (component == componentIndex.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::CondenserReferencesUnknownComponent);
+        }
+        if (component->second->kind() != EquipmentComponentKind::OpticalElement) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::CondenserComponentWrongKind);
+        }
+    }
+
+    std::set<EquipmentComponentId> illuminationComponentIds;
+    for (const auto& illumination : illuminationSpecifications) {
+        if (!illuminationComponentIds.insert(illumination.componentId()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateIlluminationSpecification);
+        }
+
+        const auto component = componentIndex.find(illumination.componentId());
+        if (component == componentIndex.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::IlluminationReferencesUnknownComponent);
+        }
+        if (component->second->kind() != EquipmentComponentKind::IlluminationDevice) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::IlluminationComponentWrongKind);
         }
     }
 
@@ -527,7 +581,9 @@ Result<
                 std::move(connections),
                 std::move(opticalPaths),
                 std::move(objectiveSpecifications),
-                std::move(cameraSpecifications)));
+                std::move(cameraSpecifications),
+                std::move(condenserSpecifications),
+                std::move(illuminationSpecifications)));
 }
 
 const MicroscopeId& MicroscopeEquipmentDefinition::microscopeId() const noexcept {
@@ -558,6 +614,17 @@ MicroscopeEquipmentDefinition::objectiveSpecifications() const noexcept {
 const std::vector<CameraSpecification>&
 MicroscopeEquipmentDefinition::cameraSpecifications() const noexcept {
     return cameraSpecifications_;
+}
+
+
+const std::vector<CondenserSpecification>&
+MicroscopeEquipmentDefinition::condenserSpecifications() const noexcept {
+    return condenserSpecifications_;
+}
+
+const std::vector<IlluminationSpecification>&
+MicroscopeEquipmentDefinition::illuminationSpecifications() const noexcept {
+    return illuminationSpecifications_;
 }
 
 } // namespace microscope::core

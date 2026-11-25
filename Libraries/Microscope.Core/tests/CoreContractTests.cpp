@@ -3,6 +3,7 @@
 #include "microscope/core/result/Result.h"
 
 #include <cstdlib>
+#include <optional>
 #include <iostream>
 #include <string>
 #include <type_traits>

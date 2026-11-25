@@ -976,7 +976,7 @@ Each physical microscope has one active controlling runtime at a time.
 - Adapter callbacks enqueue normalized events; they do not mutate Core state directly on device threads.
 - Conflicting operations declare resource claims and are serialized or rejected.
 - The stage has one runtime machine-position owner. Slide-local position is derived through the selected slide's valid registration and is not maintained as a competing position authority.
-- Position evidence distinguishes sensor measurement, controller-reported state and command-derived estimates. Accumulated uncertainty is tracked; exceeding policy or losing the machine reference may trigger homing and restoration of a saved slide-local target, only while that slide registration remains valid.
+- Position evidence distinguishes encoder/external measurement, controller-reported state and command-derived estimates. StageAxisPositionState retains the machine-reference status and a conservative accumulated error bound. A controller-reported coordinate does not erase an open-loop error budget; independent encoder/external measurement may reset it to the measurement uncertainty. Unknown/unbounded error requires homing. Restoration of a saved slide-local target is permitted only while that slide registration remains valid.
 - Independent operations may execute concurrently only when their dependencies and resource claims allow it.
 - Existing camera acquisition workers, bounded queues, frame leases and latest-frame mailbox remain owned by the camera implementation and are not replaced by the Core operation event mechanism.
 - Live image payload delivery uses a separate frame-stream contract, not the ordinary operation event channel.

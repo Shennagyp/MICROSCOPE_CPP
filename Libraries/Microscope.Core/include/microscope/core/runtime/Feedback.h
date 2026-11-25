@@ -108,7 +108,8 @@ struct FeedbackCorrelation final {
 
 enum class FeedbackMetadataError {
     MissingOperationCorrelation,
-    MissingCommandCorrelation
+    MissingCommandCorrelation,
+    InvalidObservationSource
 };
 
 // Metadata is created through a validator so fact categories cannot omit
@@ -134,6 +135,23 @@ public:
             !correlation.operation->commandId) {
             return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
                 FeedbackMetadataError::MissingCommandCorrelation);
+        }
+
+        const bool acknowledgementSource =
+            source == ObservationSource::DeviceEvent ||
+            source == ObservationSource::SdkStatus;
+        if (kind == FeedbackKind::DeviceAcknowledged && !acknowledgementSource) {
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::InvalidObservationSource);
+        }
+
+        const bool actionCompletionSource =
+            source == ObservationSource::HardwareReadback ||
+            source == ObservationSource::DeviceEvent ||
+            source == ObservationSource::SdkStatus;
+        if (kind == FeedbackKind::DeviceActionCompleted && !actionCompletionSource) {
+            return Result<FeedbackMetadata, FeedbackMetadataError>::failure(
+                FeedbackMetadataError::InvalidObservationSource);
         }
 
         return Result<FeedbackMetadata, FeedbackMetadataError>::success(

@@ -13,6 +13,7 @@ private struct NativeSlidePreviewToolbarState: Equatable {
 final class NativeSlidePreviewPane: NSView {
     private let slide: NativeSlideID
     private let imageView: NativeSlideImageView
+    private var showsPullRate: Bool { slide == .slide1 }
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
     private let pullFrameRateLabel = NSTextField(labelWithString: "PULL FPS 0.0")
@@ -196,7 +197,9 @@ final class NativeSlidePreviewPane: NSView {
         annotationStack.translatesAutoresizingMaskIntoConstraints = false
         annotationStack.addArrangedSubview(titleLabel)
         annotationStack.addArrangedSubview(statusLabel)
-        annotationStack.addArrangedSubview(pullFrameRateLabel)
+        if showsPullRate {
+            annotationStack.addArrangedSubview(pullFrameRateLabel)
+        }
 
         actionStack.orientation = .horizontal
         actionStack.alignment = .centerY
@@ -272,7 +275,9 @@ final class NativeSlidePreviewPane: NSView {
             )
         ])
         synchronizeToolbarState()
-        startFrameRateRefreshTimer()
+        if showsPullRate {
+            startFrameRateRefreshTimer()
+        }
     }
 
     private func configureIconButton(
@@ -438,6 +443,7 @@ final class NativeSlidePreviewPane: NSView {
     }
 
     func updatePullRate(pulledFrames: UInt64) {
+        guard showsPullRate else { return }
         let previousPullRate = pullFrameRateMeter.framesPerSecond
         pullFrameRateMeter.record(
             pulledFrames,

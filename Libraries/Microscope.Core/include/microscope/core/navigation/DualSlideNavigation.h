@@ -1,6 +1,7 @@
 #pragma once
 #include "microscope/core/equipment/StageSpecifications.h"
 #include "microscope/core/runtime/Feedback.h"
+#include "microscope/core/motion/StageMotionPort.h"
 #include <array>
 #include <optional>
 
@@ -9,6 +10,8 @@ namespace microscope::core {
 // OPTIKA dual-slide carrier: two side-by-side slides on one horizontal X/Y
 // stage plane. The transverse in-plane axis is not a vertical slide-stack axis.
 enum class DualSlideSlot { Left, Right };
+enum class SlideNavigationCommandError { InvalidStageCoordinate, SlideNotInCarrier, SlideNotRegistered };
+struct StagePlanePoint;
 enum class CarrierHorizontalDirection {
     PositiveStageXFromLeftToRight,
     NegativeStageXFromLeftToRight
@@ -27,12 +30,15 @@ public:
     const StageAxisId& horizontalAxisId() const noexcept;
     const StageAxisId& transverseAxisId() const noexcept;
     CarrierHorizontalDirection horizontalDirection() const noexcept;
+    Result<MoveAxesTo, SlideNavigationCommandError> moveTo(const StagePlanePoint&) const;
 private:
     DualSlideCarrierSpecification(EquipmentComponentId,StageAxisId,StageAxisId,CarrierHorizontalDirection);
     EquipmentComponentId stageComponentId_;
     StageAxisId horizontalAxisId_;
     StageAxisId transverseAxisId_;
     CarrierHorizontalDirection direction_;
+    AxisCoordinateUnit horizontalUnit_;
+    AxisCoordinateUnit transverseUnit_;
 };
 
 enum class SlideGeometryError { NonFiniteDimension, NonPositiveDimension };
@@ -87,17 +93,19 @@ public:
     const std::array<SlideCornerMeasurement,4>& cornerMeasurements() const noexcept;
     double maximumFitResidualMicrometers() const noexcept;
     double rmsFitResidualMicrometers() const noexcept;
+    const std::array<double,4>& cornerFitResidualsMicrometers() const noexcept;
     Result<StagePlanePoint,SlideRegistrationError> toStage(SlideLocalPoint) const;
     Result<SlideLocalPoint,SlideRegistrationError> toSlide(StagePlanePoint) const;
 private:
     SlideRegistration(SlideId,DualSlideSlot,SlideGeometry,
-        std::array<SlideCornerMeasurement,4>,std::array<double,6>,double,double);
+        std::array<SlideCornerMeasurement,4>,std::array<double,6>,std::array<double,4>,double,double);
     SlideId slideId_;
     DualSlideSlot slot_;
     SlideGeometry geometry_;
     std::array<SlideCornerMeasurement,4> corners_;
     // X=a0+a1*x+a2*y; Y=b0+b1*x+b2*y.
     std::array<double,6> transform_;
+    std::array<double,4> cornerResiduals_;
     double maxResidual_;
     double rmsResidual_;
 };
@@ -127,6 +135,7 @@ public:
     const SlideSlotState& left() const noexcept;
     const SlideSlotState& right() const noexcept;
     const SlideRegistration* registrationFor(const SlideId&) const noexcept;
+    Result<MoveAxesTo, SlideNavigationCommandError> commandFor(const SlideId&, SlideLocalPoint) const;
 private:
     DualSlideCarrierState(DualSlideCarrierSpecification,SlideSlotState,SlideSlotState);
     DualSlideCarrierSpecification specification_;

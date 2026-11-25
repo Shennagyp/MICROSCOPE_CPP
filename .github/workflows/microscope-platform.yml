@@ -1,0 +1,64 @@
+name: Microscope platform libraries
+
+on:
+  push:
+    branches:
+      - OPTIKA-B293-DUALSLIDE-APP-v.0.9
+    paths:
+      - "CMakeLists.txt"
+      - "Libraries/**"
+      - "docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md"
+      - ".github/workflows/microscope-platform.yml"
+  pull_request:
+    paths:
+      - "CMakeLists.txt"
+      - "Libraries/**"
+      - "docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md"
+      - ".github/workflows/microscope-platform.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: microscope-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  platform-libraries:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu GCC
+            runner: ubuntu-latest
+            compiler: gcc
+          - name: macOS Clang
+            runner: macos-latest
+            compiler: clang
+          - name: Windows MSVC
+            runner: windows-latest
+            compiler: msvc
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure platform-only project
+        run: |
+          cmake -S . -B build/platform \
+            -DOPTIKA_BUILD_AMSCOPE=OFF \
+            -DOPTIKA_BUILD_NATIVE_APP=OFF \
+            -DBUILD_TESTING=ON
+        shell: bash
+
+      - name: Build Core and Application
+        run: cmake --build build/platform --config Release --parallel
+        shell: bash
+
+      - name: Run platform contract tests
+        run: ctest --test-dir build/platform -C Release --output-on-failure
+        shell: bash

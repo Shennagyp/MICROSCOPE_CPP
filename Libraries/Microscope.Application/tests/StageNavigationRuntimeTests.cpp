@@ -321,6 +321,11 @@ void testOpenLoopBoundedEstimateCompletesNavigation() {
           std::abs(navigation.position().horizontal().position()->value() - 25000.0) < 1e-9 &&
           std::abs(navigation.position().horizontal().accumulatedPositionErrorBound().value() - 0.3) < 1e-9,
           "main stage state retains the command-derived coordinate and accumulated calibration bound");
+    const auto slidePosition = take(navigation.currentSlidePosition(
+        id<core::SlideId>("slide-left")));
+    check(std::abs(slidePosition.position.xMicrometers - 20000.0) < 1e-9 &&
+          std::abs(slidePosition.position.yMicrometers - 10000.0) < 1e-9,
+          "the same owner maps current machine coordinates back into selected slide-local coordinates");
 }
 
 void testControllerPositionObservationsVerifyNavigation() {

@@ -10,7 +10,7 @@ namespace microscope::application::motion {
 
 enum class StageMotionDispatchErrorCode {
     RuntimeDispatchRejected,
-    AdapterSubmissionThrew,
+    AdapterSubmissionOutcomeUnknown,
     RuntimeRejectedSubmissionResult
 };
 
@@ -111,12 +111,11 @@ private:
         try {
             submission.emplace(submit(runtime.feedbackIngress()));
         } catch (...) {
-            auto rejected = runtime.recordAdapterRejected(
-                operation.operationId, operation.stepId);
+            // The port may have handed work to the controller before throwing.
+            // Preserve Dispatched: exception is not proof of adapter rejection.
             return Result::failure(StageMotionDispatchError{
-                StageMotionDispatchErrorCode::AdapterSubmissionThrew,
-                rejected ? std::nullopt
-                         : std::optional<core::SerializedOperationRuntimeError>(rejected.error())});
+                StageMotionDispatchErrorCode::AdapterSubmissionOutcomeUnknown,
+                std::nullopt});
         }
 
         if (submission->status() == core::StageMotionSubmissionStatus::Accepted) {

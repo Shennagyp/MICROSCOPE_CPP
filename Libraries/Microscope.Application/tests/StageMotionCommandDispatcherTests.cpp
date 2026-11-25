@@ -201,11 +201,14 @@ int main() {
         throwingContext, command, throwingPort, *throwingFixture.runtime);
     check(!threw &&
           threw.error().code ==
-              application::motion::StageMotionDispatchErrorCode::AdapterSubmissionThrew &&
+              application::motion::StageMotionDispatchErrorCode::AdapterSubmissionOutcomeUnknown &&
           throwingFixture.runtime->stepStatus(
               id<core::OperationId>("throw-operation"),
-              id<core::StepId>("throw-step")).value() == core::StepStatus::Failed,
-          "a throwing adapter submission is converted into a correlated runtime failure");
+              id<core::StepId>("throw-step")).value() == core::StepStatus::Dispatched &&
+          throwingFixture.runtime->operationSnapshot(
+              id<core::OperationId>("throw-operation")).value().status() ==
+              core::OperationStatus::Running,
+          "a throwing adapter submission remains indeterminate and is not mislabeled as rejection");
 
     RuntimeFixture wrongSessionFixture;
     auto wrongContext = wrongSessionFixture.prepare(

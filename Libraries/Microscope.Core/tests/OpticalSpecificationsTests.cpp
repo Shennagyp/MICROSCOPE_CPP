@@ -2,9 +2,12 @@
 #include "microscope/core/equipment/OpticalSpecifications.h"
 
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
+#include <limits>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>

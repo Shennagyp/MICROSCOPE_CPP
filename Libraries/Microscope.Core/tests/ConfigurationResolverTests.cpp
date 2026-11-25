@@ -675,6 +675,55 @@ void testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms() {
           "rejects a DIC configuration missing its second required prism");
 }
 
+void testPolarizedLightProfileRequiresMatchedPolarizerAndAnalyzer() {
+    const auto fixture = makeConfigurationFixture();
+    const auto compatibilityId =
+        makeId<OpticalCompatibilityId>("dic-compatibility-1");
+    const auto profile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-polarized-light"),
+        ContrastMethod::PolarizedLight,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::Polarizer, compatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::Analyzer, compatibilityId))}));
+    const auto catalog = take(ConfigurationProfileCatalog::create({profile}));
+    const auto polarizerId = makeId<EquipmentComponentId>("polarizer");
+    const auto analyzerId = makeId<EquipmentComponentId>("analyzer");
+    const auto validRequest = makeRequest(
+        fixture,
+        {fixture.illuminationPathId, fixture.imagingPathId},
+        fixture.cameraModeId,
+        ContrastMethod::PolarizedLight,
+        profile.id(),
+        {polarizerId, analyzerId});
+
+    const auto valid = ConfigurationResolver::resolve(
+        fixture.equipment, catalog, validRequest);
+    check(valid.isResolved(),
+          "accepts polarized light with a compatible polarizer and analyzer across separate optical paths");
+
+    const auto missingAnalyzerRequest = makeRequest(
+        fixture,
+        {fixture.illuminationPathId, fixture.imagingPathId},
+        fixture.cameraModeId,
+        ContrastMethod::PolarizedLight,
+        profile.id(),
+        {polarizerId});
+    const auto missingAnalyzer = ConfigurationResolver::resolve(
+        fixture.equipment, catalog, missingAnalyzerRequest);
+    check(!missingAnalyzer.isResolved() &&
+          hasDiagnosticCode(
+              missingAnalyzer,
+              "configuration.optical_function.requirement_not_satisfied"),
+          "rejects polarized light when the matching analyzer is not selected");
+}
+
 void testOpticalFunctionRequirementFactoriesAndSelections() {
     const auto fixture = makeConfigurationFixture();
     auto zeroCount = OpticalFunctionRequirement::create(
@@ -1067,6 +1116,102 @@ void testTransitionPlannerProducesTypedRequirementsAndDependencyLayers() {
     }
 }
 
+void testTransitionPlannerIncludesAdditionalOpticalSelections() {
+    const auto fixture = makeConfigurationFixture();
+    const auto compatibilityId =
+        makeId<OpticalCompatibilityId>("dic-compatibility-1");
+    const auto profile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-dic-transition"),
+        ContrastMethod::DifferentialInterferenceContrast,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::Polarizer, compatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::Analyzer, compatibilityId)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::DifferentialInterferencePrism,
+             compatibilityId,
+             2))}));
+    const auto catalog = take(ConfigurationProfileCatalog::create({profile}));
+    const std::vector<EquipmentComponentId> additionalComponents{
+        makeId<EquipmentComponentId>("polarizer"),
+        makeId<EquipmentComponentId>("dic-prism-one"),
+        makeId<EquipmentComponentId>("dic-prism-two"),
+        makeId<EquipmentComponentId>("analyzer")};
+    const auto request = makeRequest(
+        fixture,
+        {fixture.illuminationPathId, fixture.imagingPathId},
+        fixture.cameraModeId,
+        ContrastMethod::DifferentialInterferenceContrast,
+        profile.id(),
+        additionalComponents);
+    const auto resolution = ConfigurationResolver::resolve(
+        fixture.equipment, catalog, request);
+    check(resolution.isResolved(),
+          "precondition: valid DIC selection resolves before transition planning");
+    if (!resolution.resolvedConfiguration()) {
+        return;
+    }
+
+    const auto plan = take(ConfigurationTransitionPlanner::plan(
+        *resolution.resolvedConfiguration()));
+    const ConfigurationTransitionStep* cameraMode = nullptr;
+    const ConfigurationTransitionStep* illuminationChannel = nullptr;
+    std::vector<const ConfigurationTransitionStep*> additionalSteps;
+
+    for (const auto& step : plan.steps()) {
+        if (std::holds_alternative<CameraOutputModeMustMatch>(step.requirement())) {
+            cameraMode = &step;
+        } else if (std::holds_alternative<IlluminationChannelMustMatch>(
+                       step.requirement())) {
+            illuminationChannel = &step;
+        } else if (const auto* additional =
+                       std::get_if<AdditionalOpticalComponentSelectionMustMatch>(
+                           &step.requirement())) {
+            additionalSteps.push_back(&step);
+            check(std::find(
+                      additionalComponents.begin(),
+                      additionalComponents.end(),
+                      additional->componentId) != additionalComponents.end(),
+                  "additional optical transition node retains its selected component identity");
+        }
+    }
+
+    check(additionalSteps.size() == additionalComponents.size(),
+          "emits one typed transition requirement for every selected additional optical component");
+
+    if (cameraMode && illuminationChannel) {
+        for (const auto* additional : additionalSteps) {
+            const bool precedesCamera = std::any_of(
+                plan.dependencies().begin(),
+                plan.dependencies().end(),
+                [additional, cameraMode](
+                    const ConfigurationTransitionDependency& edge) {
+                    return edge.prerequisiteStepId() == additional->id() &&
+                           edge.dependentStepId() == cameraMode->id();
+                });
+            const bool precedesIllumination = std::any_of(
+                plan.dependencies().begin(),
+                plan.dependencies().end(),
+                [additional, illuminationChannel](
+                    const ConfigurationTransitionDependency& edge) {
+                    return edge.prerequisiteStepId() == additional->id() &&
+                           edge.dependentStepId() == illuminationChannel->id();
+                });
+            check(precedesCamera && precedesIllumination,
+                  "orders downstream camera and illumination requirements after every additional optical selection");
+        }
+    } else {
+        check(false,
+              "transition plan contains camera and illumination requirement nodes");
+    }
+}
+
 void testTransitionPlanFactoriesRejectMalformedDependencyGraphs() {
     const auto fixture = makeConfigurationFixture();
     const auto resolution = ConfigurationResolver::resolve(
@@ -1311,9 +1456,11 @@ int main() {
     testPhaseContrastRequiresMatchedPhasePlateAndAnnulus();
     testAdditionalOpticalComponentMustSatisfyProfileRequirement();
     testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms();
+    testPolarizedLightProfileRequiresMatchedPolarizerAndAnalyzer();
     testOpticalFunctionRequirementFactoriesAndSelections();
     testProfileTargetsAreRetainedAndValidatedAgainstInstalledRanges();
     testTransitionPlannerProducesTypedRequirementsAndDependencyLayers();
+    testTransitionPlannerIncludesAdditionalOpticalSelections();
     testTransitionPlanFactoriesRejectMalformedDependencyGraphs();
     testResolverRejectsUnavailableCameraMode();
     testResolverReportsProfileConflictAndMissingPath();

@@ -13,6 +13,8 @@ namespace microscope::core {
 struct IdentityError final {
     enum class Code {
         EmptyValue,
+        WhitespaceOnlyValue,
+        EmbeddedNull,
         ZeroGeneration
     };
 

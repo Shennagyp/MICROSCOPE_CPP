@@ -2,13 +2,14 @@ import SwiftUI
 
 struct NativeMicroscopePaneControls: View {
     @ObservedObject var model: NativeCameraModel
+    @ObservedObject var features: NativeCameraFeatureModel
     @ObservedObject var workspace: NativeWorkspaceModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
     @ObservedObject var resolutionCoordinator: MicroscopeResolutionCoordinator
     let slide: NativeSlideID
 
     private var resolutionDescriptor: AmscopeCameraFeatureDescriptor? {
-        model.features.previewResolutionDescriptor
+        features.previewResolutionDescriptor
     }
 
     private var isLiveTarget: Bool {
@@ -40,11 +41,11 @@ struct NativeMicroscopePaneControls: View {
                 Picker(
                     "Resolution",
                     selection: Binding(
-                        get: { model.features.selectedPreviewResolutionSymbol ?? "" },
+                        get: { features.selectedPreviewResolutionSymbol ?? "" },
                         set: { resolutionCoordinator.selectManualPreviewResolution(to: $0) }
                     )
                 ) {
-                    if model.features.selectedPreviewResolutionSymbol == nil {
+                    if features.selectedPreviewResolutionSymbol == nil {
                         Text("Select…").tag("")
                     }
                     ForEach(descriptor.enumerationValues, id: \.self) { symbol in
@@ -76,8 +77,8 @@ struct NativeMicroscopePaneControls: View {
             .disabled(resolutionDescriptor == nil ||
                       !model.canAccessFeatures ||
                       model.isCameraOperationPending ||
-                      model.features.isFeatureWritePending ||
-                      model.features.isFeatureSnapshotLoading)
+                      features.isFeatureWritePending ||
+                      features.isFeatureSnapshotLoading)
             .help(resolutionCoordinator.automaticResolutionHelp)
 
             Button {

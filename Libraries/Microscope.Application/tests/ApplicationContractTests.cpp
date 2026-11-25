@@ -48,6 +48,9 @@ int main() {
           "operation handle preserves the stable operation ID");
 
     const auto coreSnapshot = core::OperationSnapshot{
+        microscopeId,
+        runtimeId,
+        generation1,
         operationId,
         core::OperationStatus::Running,
         4};
@@ -68,11 +71,29 @@ int main() {
     const auto mismatchedView = application::OperationView{
         operation,
         core::OperationSnapshot{
+            microscopeId,
+            runtimeId,
+            generation1,
             differentOperationId,
             core::OperationStatus::Running,
             5}};
     check(!mismatchedView.isConsistent(),
           "application projection detects a mismatched Core snapshot identity");
+
+    const auto secondRuntimeId =
+        core::RuntimeId::create("runtime-002").value();
+    const auto foreignRuntimeSnapshot = core::OperationSnapshot{
+        microscopeId,
+        secondRuntimeId,
+        generation1,
+        operationId,
+        core::OperationStatus::Running,
+        6};
+    const auto foreignRuntimeView = application::OperationView{
+        operation,
+        foreignRuntimeSnapshot};
+    check(!foreignRuntimeView.isConsistent(),
+          "application projection rejects a snapshot from another runtime even when OperationId matches");
 
     if (failures != 0) {
         std::cerr << failures << " Application contract test(s) failed.\n";

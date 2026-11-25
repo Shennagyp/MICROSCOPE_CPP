@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
         fail("Boolean false readback was not represented correctly.");
         return EXIT_FAILURE;
     }
-    booleanInput->setChecked(true);
+    booleanInput->click();
     if (!booleanWrite || !*booleanWrite) {
         fail("Boolean editor did not emit the requested true value.");
         return EXIT_FAILURE;

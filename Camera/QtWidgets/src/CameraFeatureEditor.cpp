@@ -237,7 +237,10 @@ void CameraFeatureEditor::rebuildEditor() {
             control->setTristate(true);
             control->setCheckState(Qt::PartiallyChecked);
         }
-        connect(control, &QCheckBox::toggled, this, [this](bool) {
+        // clicked() represents an operator action even when a tri-state
+        // checkbox moves from PartiallyChecked to Checked (where the derived
+        // boolean may remain true and toggled() need not fire).
+        connect(control, &QCheckBox::clicked, this, [this](bool) {
             submitEditedValue();
         });
         editor_ = control;

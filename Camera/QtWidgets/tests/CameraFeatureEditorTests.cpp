@@ -364,9 +364,16 @@ int main(int argc, char** argv) {
         fail("Write-only boolean did not represent its current value as unset.");
         return EXIT_FAILURE;
     }
-    writeOnlyBooleanInput->setCheckState(Qt::Checked);
-    if (!writeOnlyBooleanValue || !*writeOnlyBooleanValue) {
-        fail("Write-only boolean did not submit an explicit selected state.");
+    writeOnlyBooleanInput->click();
+    if (writeOnlyBooleanInput->checkState() != Qt::Checked ||
+        !writeOnlyBooleanValue || !*writeOnlyBooleanValue) {
+        fail("Write-only boolean did not submit an explicit On state after click.");
+        return EXIT_FAILURE;
+    }
+    writeOnlyBooleanInput->click();
+    if (writeOnlyBooleanInput->checkState() != Qt::Unchecked ||
+        !writeOnlyBooleanValue || *writeOnlyBooleanValue) {
+        fail("Write-only boolean did not submit an explicit Off state after click.");
         return EXIT_FAILURE;
     }
 

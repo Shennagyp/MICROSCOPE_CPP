@@ -144,21 +144,34 @@ int main() {
     check(static_cast<bool>(validDeviceTimestamp),
           "accepts a device timestamp with an explicit positive tick rate");
 
-    const auto zeroIngressSequence = FeedbackIngressSequence::create(0);
+    const auto zeroIngressSequence =
+        FeedbackIngressSequence::create(runtimeId, generation, 0);
     check(!zeroIngressSequence,
           "rejects a zero Core feedback ingress sequence");
-    const auto validIngressSequence = FeedbackIngressSequence::create(17);
-    const auto laterIngressSequence = FeedbackIngressSequence::create(18);
+    const auto validIngressSequence =
+        FeedbackIngressSequence::create(runtimeId, generation, 17);
+    const auto laterIngressSequence =
+        FeedbackIngressSequence::create(runtimeId, generation, 18);
     check(static_cast<bool>(validIngressSequence),
           "accepts a positive Core feedback ingress sequence");
-    check(validIngressSequence.value() < laterIngressSequence.value(),
-          "Core ingress sequences preserve receive order");
-    check(validIngressSequence.value() != laterIngressSequence.value(),
-          "distinct ingress sequence values compare unequal");
+    check(validIngressSequence.value().precedes(laterIngressSequence.value()).value(),
+          "Core ingress sequences preserve receive order within one runtime generation");
+    check(validIngressSequence.value().belongsTo(runtimeId, generation),
+          "Core ingress sequence retains its runtime scope");
+    const auto otherRuntimeId =
+        RuntimeId::create("runtime-other").value();
+    const auto otherRuntimeSequence =
+        FeedbackIngressSequence::create(otherRuntimeId, generation, 19).value();
+    const auto crossRuntimeOrder =
+        validIngressSequence.value().precedes(otherRuntimeSequence);
+    check(!crossRuntimeOrder &&
+          crossRuntimeOrder.error() ==
+              FeedbackIngressSequenceError::DifferentRuntimeScope,
+          "rejects ordering ingress sequences from different runtimes");
 
     const auto receiptTime = std::chrono::steady_clock::time_point{
         std::chrono::steady_clock::duration{1234}};
-    FeedbackReceipt<SelectorFeedback> received{
+    auto receivedResult = FeedbackReceipt<SelectorFeedback>::create(
         FeedbackEnvelope<SelectorFeedback>{
             FeedbackMetadata{
                 FeedbackCorrelation{
@@ -177,16 +190,42 @@ int main() {
                 std::uint64_t{92},
                 DeviceTimestamp::create(1500, 1000, std::string("device-clock-A")).value()},
             SelectorFeedback{true}},
-        FeedbackReceiptMetadata{
-            receiptTime,
-            FeedbackIngressSequence::create(17).value()}};
-    check(received.receipt.receivedAt == receiptTime,
-          "Core receipt time uses a separate monotonic-clock field");
-    check(received.feedback.metadata.deviceTimestamp.has_value() &&
-          received.feedback.metadata.deviceTimestamp->ticks() == 1500,
-          "device timestamp remains separate from Core receipt time");
-    check(received.receipt.ingressSequence.value() == 17,
-          "Core ingress sequence is independent of adapter source sequence");
+        receiptTime,
+        FeedbackIngressSequence::create(runtimeId, generation, 17).value());
+    check(static_cast<bool>(receivedResult),
+          "creates a feedback receipt when ingress sequence and feedback runtime match");
+    if (receivedResult) {
+        const auto& received = receivedResult.value();
+        check(received.receipt().receivedAt == receiptTime,
+              "Core receipt time uses a separate monotonic-clock field");
+        check(received.feedback().metadata.deviceTimestamp.has_value() &&
+              received.feedback().metadata.deviceTimestamp->ticks() == 1500,
+              "device timestamp remains separate from Core receipt time");
+        check(received.receipt().ingressSequence.value() == 17,
+              "Core ingress sequence is independent of adapter source sequence");
+    }
+
+    auto mismatchedReceipt = FeedbackReceipt<SelectorFeedback>::create(
+        FeedbackEnvelope<SelectorFeedback>{
+            FeedbackMetadata{
+                FeedbackCorrelation{
+                    RuntimeDeviceCorrelation{
+                        microscopeId,
+                        runtimeId,
+                        generation,
+                        deviceSessionGeneration,
+                        deviceId},
+                    std::nullopt},
+                FeedbackKind::DeviceProgress,
+                ObservationSource::SdkStatus,
+                std::nullopt,
+                std::nullopt},
+            SelectorFeedback{false}},
+        receiptTime,
+        FeedbackIngressSequence::create(otherRuntimeId, generation, 20).value());
+    check(!mismatchedReceipt &&
+          mismatchedReceipt.error() == FeedbackReceiptError::RuntimeScopeMismatch,
+          "rejects a receipt whose ingress sequence belongs to another runtime");
 
     if (failures != 0) {
         std::cerr << failures << " feedback contract test(s) failed.\n";

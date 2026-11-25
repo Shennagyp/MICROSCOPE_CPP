@@ -79,24 +79,11 @@ jobs:
           fi
           test -n "$GENAPI_HEADER"
           GENAPI_ROOT="$(cd "${GENAPI_HEADER%/library/CPP/include/GenApi/GenApi.h}" && pwd)"
+          GENAPI_CMAKE_DIR="$GENAPI_ROOT/cmake/Mac64_Universal"
           test -f "$GENAPI_ROOT/library/CPP/include/GenApi/GenApi.h"
-          echo "GenApi SDK files:"
-          find "$GENAPI_ROOT" -type f | grep -Ei 'GenApi|GCBase' | sort | head -n 100 || true
-          echo "GenApi SDK frameworks:"
-          find "$GENAPI_ROOT" -type d | grep -Ei '/(GenApi|GCBase)[.]framework' || true
-          GENAPI_LIBRARY="$(find "$GENAPI_ROOT" -type d -name 'GenApi.framework' -print -quit)"
-          GCBASE_LIBRARY="$(find "$GENAPI_ROOT" -type d -name 'GCBase.framework' -print -quit)"
-          if [ -z "$GENAPI_LIBRARY" ]; then
-            GENAPI_LIBRARY="$(find "$GENAPI_ROOT" -type f | grep -Ei '/(lib)?GenApi[^/]*[.](dylib|a|so)' | head -n 1 || true)"
-          fi
-          if [ -z "$GCBASE_LIBRARY" ]; then
-            GCBASE_LIBRARY="$(find "$GENAPI_ROOT" -type f | grep -Ei '/(lib)?GCBase[^/]*[.](dylib|a|so)' | head -n 1 || true)"
-          fi
-          test -n "$GENAPI_LIBRARY"
-          test -n "$GCBASE_LIBRARY"
+          test -f "$GENAPI_CMAKE_DIR/GenApiConfig.cmake"
           echo "GENAPI_ROOT=$GENAPI_ROOT" >> "$GITHUB_ENV"
-          echo "GENAPI_LIBRARY=$GENAPI_LIBRARY" >> "$GITHUB_ENV"
-          echo "GCBASE_LIBRARY=$GCBASE_LIBRARY" >> "$GITHUB_ENV"
+          echo "GENAPI_CMAKE_DIR=$GENAPI_CMAKE_DIR" >> "$GITHUB_ENV"
 
       - name: Configure official GenApi integration
         run: |
@@ -106,9 +93,7 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DCAMERA_GENTL_ENABLE_GENAPI=ON \
             -DGENAPI_ROOT="$GENAPI_ROOT" \
-            -DGENAPI_INCLUDE_DIR="$GENAPI_ROOT/library/CPP/include" \
-            -DGENAPI_LIBRARY="$GENAPI_LIBRARY" \
-            -DGCBASE_LIBRARY="$GCBASE_LIBRARY"
+            -DGenApi_DIR="$GENAPI_CMAKE_DIR"
 
       - name: Build official GenApi integration
         run: cmake --build build/gentl-genapi --config Release --parallel

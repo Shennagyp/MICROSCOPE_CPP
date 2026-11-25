@@ -7,7 +7,6 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
-#include <utility>
 
 namespace {
 using namespace microscope::core;
@@ -18,6 +17,16 @@ T take(Result<T,E> result) {
     return std::move(result).value();
 }
 template<class T>T id(const char* value){return take(T::create(value));}
+
+class TestRuntimeSignal final : public IFeedbackRuntimeSignal {
+public:
+    void feedbackAvailable() noexcept override { available.fetch_add(1); }
+    void feedbackLossDetected() noexcept override { loss.fetch_add(1); }
+    void feedbackIngressClosed() noexcept override { closed.fetch_add(1); }
+    std::atomic<int> available{0};
+    std::atomic<int> loss{0};
+    std::atomic<int> closed{0};
+};
 
 RuntimeDeviceCorrelation runtimeDevice(
     const char* microscope,const char* runtime,std::uint64_t generation,
@@ -46,33 +55,28 @@ int main() {
         if(!value){++failures;std::cerr<<"FAIL: "<<message<<'\n';}
     };
 
+    TestRuntimeSignal zeroCapacitySignal;
     auto zeroCapacity=BoundedFeedbackInbox<StageMotionFeedbackPayload>::create(
         id<MicroscopeId>("scope"),id<RuntimeId>("runtime"),
-        take(RuntimeGeneration::create(1)),0,[]{});
+        take(RuntimeGeneration::create(1)),0,zeroCapacitySignal);
     check(!zeroCapacity&&zeroCapacity.error()==
         BoundedFeedbackInboxCreationError::ZeroCapacity,
         "zero-capacity feedback inbox rejected");
 
-    auto noControlPath=BoundedFeedbackInbox<StageMotionFeedbackPayload>::create(
-        id<MicroscopeId>("scope"),id<RuntimeId>("runtime"),
-        take(RuntimeGeneration::create(1)),2,{});
-    check(!noControlPath&&noControlPath.error()==
-        BoundedFeedbackInboxCreationError::MissingFeedbackLossCallback,
-        "feedback inbox requires an independent loss notification path");
-
-    std::atomic<int> lossNotifications{0};
+    TestRuntimeSignal signal;
     auto inbox=take(BoundedFeedbackInbox<StageMotionFeedbackPayload>::create(
         id<MicroscopeId>("scope"),id<RuntimeId>("runtime"),
-        take(RuntimeGeneration::create(1)),1,
-        [&lossNotifications]{lossNotifications.fetch_add(1);}));
+        take(RuntimeGeneration::create(1)),1,signal));
 
     auto first=feedbackFor(runtimeDevice("scope","runtime",1),"x");
     auto second=feedbackFor(runtimeDevice("scope","runtime",1),"y");
     check(inbox->submit(std::move(first))==FeedbackSubmitStatus::Enqueued,
           "first feedback is accepted");
+    check(signal.available.load()==1&&signal.loss.load()==0,
+          "successful enqueue wakes the runtime without reporting data loss");
     check(inbox->submit(std::move(second))==FeedbackSubmitStatus::QueueFull,
           "full queue rejects feedback without blocking the producer");
-    check(inbox->feedbackLossLatched()&&lossNotifications.load()==1,
+    check(inbox->feedbackLossLatched()&&signal.loss.load()==1,
           "queue overflow latches feedback loss and signals the independent control path");
     check(inbox->pendingCount()==1,
           "queue retains the already-enqueued item after overflow");
@@ -94,26 +98,26 @@ int main() {
     auto foreign=feedbackFor(runtimeDevice("other-scope","runtime",1),"x");
     check(inbox->submit(std::move(foreign))==FeedbackSubmitStatus::WrongRuntimeScope,
           "feedback from another microscope scope is rejected");
-    check(lossNotifications.load()==1&&!inbox->feedbackLossLatched(),
-          "wrong-scope feedback does not masquerade as queue overflow");
+    check(signal.available.load()==2&&signal.loss.load()==1&&!inbox->feedbackLossLatched(),
+          "wrong-scope feedback does not masquerade as accepted data or queue overflow");
 
     inbox->close();
-    check(inbox->isClosed(),"close disposes the feedback ingress");
+    check(inbox->isClosed()&&signal.closed.load()==1,
+          "close disposes the feedback ingress and signals the runtime owner");
     auto afterClose=feedbackFor(runtimeDevice("scope","runtime",1),"x");
     check(inbox->submit(std::move(afterClose))==FeedbackSubmitStatus::Closed,
           "closed ingress rejects later driver feedback");
     check(!inbox->waitAndPop(),"closed and drained ingress wakes a waiting consumer");
 
-    std::atomic<int> concurrentLossNotifications{0};
+    TestRuntimeSignal concurrentSignal;
     auto concurrentInbox=take(BoundedFeedbackInbox<StageMotionFeedbackPayload>::create(
         id<MicroscopeId>("scope-concurrent"),id<RuntimeId>("runtime-concurrent"),
-        take(RuntimeGeneration::create(2)),100,
-        [&concurrentLossNotifications]{concurrentLossNotifications.fetch_add(1);}));
+        take(RuntimeGeneration::create(2)),100,concurrentSignal));
     std::atomic<int> enqueueFailures{0};
     std::vector<std::thread> producers;
     for(int producer=0;producer<4;++producer) {
         producers.emplace_back([&] {
-            for(int i=0;i<25;++i) {
+            for(int j=0;j<25;++j) {
                 auto event=feedbackFor(runtimeDevice("scope-concurrent","runtime-concurrent",2),"x");
                 if(concurrentInbox->submit(std::move(event))!=FeedbackSubmitStatus::Enqueued)
                     enqueueFailures.fetch_add(1);
@@ -130,8 +134,9 @@ int main() {
               "Core ingress sequence follows FIFO insertion order across producers");
         ++expectedSequence;
     }
-    check(expectedSequence==101&&concurrentLossNotifications.load()==0,
-          "concurrent enqueue sequence is gap-free when no feedback is dropped");
+    check(expectedSequence==101&&concurrentSignal.loss.load()==0&&
+          concurrentSignal.available.load()==100,
+          "concurrent enqueue sequence is gap-free and every accepted receipt wakes the runtime");
 
     if(failures!=0) {
         std::cerr<<failures<<" feedback inbox test(s) failed\n";

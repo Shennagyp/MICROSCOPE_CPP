@@ -18,6 +18,12 @@ int main(){
  auto start=take(StageAxisPositionState::homed(
    stage,homeObservation,ObservationSource::SdkStatus));
  check(start.positionIsUsable()&&!start.requiresHoming(5)&&start.stageComponentId()==stage,"homing establishes a referenced position scoped to its installed stage");
+ auto absolute=take(start.afterCommandedPosition(
+   take(AxisPosition::create(x,2000,AxisCoordinateUnit::Micrometers)),2.0));
+ check(absolute.position()&&absolute.position()->value()==2000&&
+       absolute.accumulatedPositionErrorBound().value()==3.0,
+       "completed absolute move updates the machine estimate and accumulates its calibrated error");
+
  auto first=take(start.afterCommandedDisplacement(
    take(AxisDisplacement::create(x,1000,AxisCoordinateUnit::Micrometers)),2.0));
  check(first.position()&&first.position()->value()==1000&&first.accumulatedPositionErrorBound().value()==3.0,

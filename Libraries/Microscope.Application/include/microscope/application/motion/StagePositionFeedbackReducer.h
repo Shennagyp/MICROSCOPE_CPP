@@ -114,10 +114,9 @@ public:
     [[nodiscard]] static Result applyVerifiedHomeReference(
         const core::StagePositionState& current,
         const FeedbackResult& feedback,
-        const core::StageAxisSet& requestedAxes,
-        const core::SerializedOperationRuntime<core::StageMotionFeedbackPayload>& runtime,
-        const core::OperationId& operationId,
-        const core::StepId& stepId) {
+        const core::StageMotionCommandContext& homeCommandContext,
+        const core::HomeAxes& requestedHome,
+        const core::SerializedOperationRuntime<core::StageMotionFeedbackPayload>& runtime) {
         if (runtime.feedbackLossLatched()) {
             return Result::failure(StagePositionFeedbackReducerError{
                 StagePositionFeedbackReducerErrorCode::FeedbackLossUnresolved,
@@ -141,21 +140,30 @@ public:
 
         const auto& envelope = feedback.receipt->feedback();
         const auto& metadata = envelope.metadata();
+        const auto& actualDevice = metadata.correlation().runtimeDevice;
+        const auto& expectedDevice = homeCommandContext.runtimeDevice();
         const auto& operation = metadata.correlation().operation;
+        const auto& expectedOperation = homeCommandContext.operation();
         if (metadata.kind() != core::FeedbackKind::HomeReferenceEstablished ||
+            actualDevice.microscopeId != expectedDevice.microscopeId ||
+            actualDevice.runtimeId != expectedDevice.runtimeId ||
+            actualDevice.runtimeGeneration != expectedDevice.runtimeGeneration ||
+            actualDevice.deviceId != expectedDevice.deviceId ||
+            actualDevice.deviceSessionGeneration != expectedDevice.deviceSessionGeneration ||
             !operation ||
-            operation->operationId != operationId ||
-            operation->stepId != stepId ||
-            !operation->commandId ||
-            feedback.operationId != std::optional<core::OperationId>(operationId) ||
-            feedback.stepId != std::optional<core::StepId>(stepId)) {
+            operation->operationId != expectedOperation.operationId ||
+            operation->stepId != expectedOperation.stepId ||
+            operation->commandId != expectedOperation.commandId ||
+            feedback.operationId != std::optional<core::OperationId>(expectedOperation.operationId) ||
+            feedback.stepId != std::optional<core::StepId>(expectedOperation.stepId)) {
             return Result::failure(StagePositionFeedbackReducerError{
                 StagePositionFeedbackReducerErrorCode::InvalidHomeReferenceFact,
                 std::nullopt,
                 std::nullopt});
         }
 
-        auto stepStatus = runtime.stepStatus(operationId, stepId);
+        auto stepStatus = runtime.stepStatus(
+            expectedOperation.operationId, expectedOperation.stepId);
         if (!stepStatus) {
             return Result::failure(StagePositionFeedbackReducerError{
                 StagePositionFeedbackReducerErrorCode::RuntimeStepQueryFailed,
@@ -178,7 +186,7 @@ public:
                 std::nullopt});
         }
 
-        const auto& axes = requestedAxes.axes();
+        const auto& axes = requestedHome.axes().axes();
         if (axes.size() != 2 ||
             std::find(axes.begin(), axes.end(), current.horizontal().axisId()) == axes.end() ||
             std::find(axes.begin(), axes.end(), current.transverse().axisId()) == axes.end()) {
@@ -187,7 +195,7 @@ public:
                 std::nullopt,
                 std::nullopt});
         }
-        if (!homeReference->matchesAxes(requestedAxes)) {
+        if (!homeReference->matchesAxes(requestedHome.axes())) {
             return Result::failure(StagePositionFeedbackReducerError{
                 StagePositionFeedbackReducerErrorCode::HomeReferenceAxisSetMismatch,
                 std::nullopt,

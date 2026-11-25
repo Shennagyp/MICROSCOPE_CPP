@@ -197,6 +197,7 @@ final class NativeSlideImageView: NSView {
     func toggleImageFreeze() {
         guard currentImage != nil else { return }
         isImageFrozen.toggle()
+        imageContainer.setHighQualityInterpolation(isImageFrozen)
         if !isImageFrozen {
             // Resuming a moving image returns the pointer to pan mode. A
             // measurement tool must be selected again, which freezes the
@@ -220,6 +221,7 @@ final class NativeSlideImageView: NSView {
         previewMeasurement = nil
         if mode != .pan && currentImage != nil && !isImageFrozen {
             isImageFrozen = true
+            imageContainer.setHighQualityInterpolation(true)
             onFreezeStateChanged?()
         }
         updateOverlayRendering()

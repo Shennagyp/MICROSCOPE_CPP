@@ -2,6 +2,7 @@ import AppKit
 
 final class NativeSlideImageContainerView: NSView {
     private var currentImage: CGImage?
+    private var usesHighQualityInterpolation = false
     private var measurements: [SlideDistanceMeasurement] = []
     private var previewMeasurement: SlideDistanceMeasurement?
     private var annotations: [SlideTextAnnotation] = []
@@ -18,6 +19,14 @@ final class NativeSlideImageContainerView: NSView {
     // a second display request when geometry changes on the same update.
     func setImage(_ image: CGImage) {
         currentImage = image
+    }
+
+    /// Smooth interpolation is reserved for a stable frozen image. Live
+    /// preview uses unsmoothed scaling to avoid resampling every delivered frame.
+    func setHighQualityInterpolation(_ enabled: Bool) {
+        guard usesHighQualityInterpolation != enabled else { return }
+        usesHighQualityInterpolation = enabled
+        needsDisplay = true
     }
 
     func updateOverlays(
@@ -44,7 +53,9 @@ final class NativeSlideImageContainerView: NSView {
         )
         let displayedScale = bounds.width / max(CGFloat(image.width), 1)
         context.interpolationQuality =
-            displayedScale < physicalScale * 0.999 ? .high : .none
+            usesHighQualityInterpolation && displayedScale < physicalScale * 0.999
+                ? .high
+                : .none
         context.draw(
             image,
             in: CGRect(origin: .zero, size: bounds.size)

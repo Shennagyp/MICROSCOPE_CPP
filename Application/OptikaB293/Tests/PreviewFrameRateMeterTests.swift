@@ -4,6 +4,8 @@ import Foundation
 struct PreviewFrameRateMeterTests {
     static func main() {
         testMeasuresPresentedFramesPerSecond()
+        testMeasuresCoalescedInputFrameDeltas()
+        testResetClearsPreviousSession()
         testRateRemainsZeroUntilFirstMeasurementWindow()
         testRateResetsAfterAStall()
         testMeasurementRestartsAfterAStall()
@@ -15,6 +17,31 @@ struct PreviewFrameRateMeterTests {
         var meter = PreviewFrameRateMeter()
         for frame in 0...5 {
             meter.recordFrame(at: Double(frame) * 0.1)
+        }
+        precondition(abs(meter.framesPerSecond - 10.0) < 0.000001)
+    }
+
+    private static func testMeasuresCoalescedInputFrameDeltas() {
+        var meter = PreviewFrameRateMeter()
+        meter.recordFrames(1, at: 0.0)
+        meter.recordFrames(2, at: 0.1)
+        meter.recordFrames(1, at: 0.2)
+        meter.recordFrames(1, at: 0.3)
+        meter.recordFrames(1, at: 0.5)
+        precondition(abs(meter.framesPerSecond - 10.0) < 0.000001)
+    }
+
+    private static func testResetClearsPreviousSession() {
+        var meter = PreviewFrameRateMeter()
+        for frame in 0...5 {
+            meter.recordFrame(at: Double(frame) * 0.1)
+        }
+        precondition(meter.framesPerSecond > 0)
+        meter.reset()
+        precondition(meter.framesPerSecond == 0)
+
+        for frame in 0...5 {
+            meter.recordFrame(at: 2.0 + Double(frame) * 0.1)
         }
         precondition(abs(meter.framesPerSecond - 10.0) < 0.000001)
     }

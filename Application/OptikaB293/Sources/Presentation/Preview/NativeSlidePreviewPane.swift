@@ -6,7 +6,7 @@ final class NativeSlidePreviewPane: NSView {
     private let imageView: NativeSlideImageView
     private let titleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "STANDBY")
-    private let frameStatisticsLabel = NSTextField(labelWithString: "FPS 0.0 · DROPS 0")
+    private let frameStatisticsLabel = NSTextField(labelWithString: "VIEW 0.0 · INPUT 0.0 · DROPS 0")
     private let imageSizingButton = NSButton(title: "", target: nil, action: nil)
     private let fullResolutionButton = NSButton(title: "1:1", target: nil, action: nil)
     private let maximizeButton = NSButton(title: "", target: nil, action: nil)
@@ -32,7 +32,9 @@ final class NativeSlidePreviewPane: NSView {
     var isImageFrozen: Bool { imageView.isImageFrozen }
 
     private var droppedFrameCount: UInt64 = 0
-    private var frameRateMeter = PreviewFrameRateMeter()
+    private var lastPulledFrameCount: UInt64?
+    private var inputFrameRateMeter = PreviewFrameRateMeter()
+    private var previewFrameRateMeter = PreviewFrameRateMeter()
     private var frameRateRefreshTimer: Timer?
     private var currentIsActiveTarget = false
     private var currentIsMaximized = false
@@ -69,7 +71,7 @@ final class NativeSlidePreviewPane: NSView {
         frameStatisticsLabel.textColor = OptikaPalette.nsSecondaryText
         frameStatisticsLabel.lineBreakMode = .byTruncatingTail
         frameStatisticsLabel.toolTip =
-            "FPS: new images assigned to this preview pane per second (measured over half-second windows; resets to zero after one second without a frame). DROPS: cumulative driver-reported dropped frames. FPS is the displayed preview rate, not the sensor's nominal frame rate."
+            "VIEW: images assigned to this slide preview per second. INPUT: successful SDK image pulls per second, sampled from the driver's monotonic pull counter. DROPS: cumulative driver frame-pool drops. Both rates use half-second windows and reset after one second without progress."
         frameStatisticsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         imageSizingButton.bezelStyle = .texturedRounded
@@ -379,8 +381,17 @@ final class NativeSlidePreviewPane: NSView {
         fullResolutionButton.isEnabled = imageView.hasImage
     }
 
-    func updateAcquisitionCounters(dropped: UInt64) {
-        guard droppedFrameCount != dropped else { return }
+    func updateAcquisitionCounters(pulled: UInt64, dropped: UInt64) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let previous = lastPulledFrameCount {
+            if pulled >= previous {
+                inputFrameRateMeter.recordFrames(pulled - previous, at: now)
+            } else {
+                // The native cumulative counter resets at the start of a run.
+                inputFrameRateMeter.reset()
+            }
+        }
+        lastPulledFrameCount = pulled
         droppedFrameCount = dropped
         updateFrameStatisticsLabel()
     }
@@ -433,12 +444,11 @@ final class NativeSlidePreviewPane: NSView {
         microscopeControlsPlate.isHidden = bounds.width < OptikaLayout.microscopeControlsMinimumWidth
     }
 
-    func display(_ image: CGImage, dropped: UInt64) {
+    func display(_ image: CGImage) {
         let hadImage = imageView.hasImage
         let hadOverlays = imageView.hasOverlays
 
-        droppedFrameCount = dropped
-        frameRateMeter.recordFrame(at: ProcessInfo.processInfo.systemUptime)
+        previewFrameRateMeter.recordFrame(at: ProcessInfo.processInfo.systemUptime)
         imageView.display(image)
 
         // Update control availability only when the pane receives its first
@@ -458,7 +468,9 @@ final class NativeSlidePreviewPane: NSView {
         guard frameRateRefreshTimer == nil else { return }
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            self.frameRateMeter.refresh(at: ProcessInfo.processInfo.systemUptime)
+            let now = ProcessInfo.processInfo.systemUptime
+            self.inputFrameRateMeter.refresh(at: now)
+            self.previewFrameRateMeter.refresh(at: now)
             self.updateFrameStatisticsLabel()
         }
         frameRateRefreshTimer = timer
@@ -466,8 +478,9 @@ final class NativeSlidePreviewPane: NSView {
     }
 
     private func updateFrameStatisticsLabel() {
-        let framesPerSecond = String(format: "%.1f", frameRateMeter.framesPerSecond)
-        let value = "FPS \(framesPerSecond) · DROPS \(droppedFrameCount)"
+        let previewFPS = String(format: "%.1f", previewFrameRateMeter.framesPerSecond)
+        let inputFPS = String(format: "%.1f", inputFrameRateMeter.framesPerSecond)
+        let value = "VIEW \(previewFPS) · INPUT \(inputFPS) · DROPS \(droppedFrameCount)"
         guard frameStatisticsLabel.stringValue != value else { return }
         frameStatisticsLabel.stringValue = value
     }

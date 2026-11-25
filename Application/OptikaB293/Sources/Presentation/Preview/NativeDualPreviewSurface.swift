@@ -239,15 +239,18 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
         // value snapshot does not copy image bytes or create another frame queue.
         let snapshot = frameFeed.takeLatestFrameSnapshot()
 
-        func updateBothPaneDropCounters() {
-            slideOnePane.updateAcquisitionCounters(dropped: snapshot.droppedFrames)
-            slideTwoPane.updateAcquisitionCounters(dropped: snapshot.droppedFrames)
-        }
+        // Pull count deltas are converted to INPUT FPS by each pane. The UI
+        // does not display lifetime pull totals.
+        slideOnePane.updateAcquisitionCounters(
+            pulled: snapshot.framesPulled,
+            dropped: snapshot.droppedFrames
+        )
+        slideTwoPane.updateAcquisitionCounters(
+            pulled: snapshot.framesPulled,
+            dropped: snapshot.droppedFrames
+        )
 
-        guard let lease = snapshot.lease else {
-            updateBothPaneDropCounters()
-            return
-        }
+        guard let lease = snapshot.lease else { return }
 
         // A frozen destination still consumes/releases the newest lease, but
         // does not allocate a color space, provider or CGImage for a frame it
@@ -259,18 +262,16 @@ final class NativeDualPreviewNSView: NSView, NSSplitViewDelegate {
                 updateBothPaneDropCounters()
                 return
             }
-            // The active pane updates its counters and pane-frame count together,
-            // so its statistics label is written only once for this frame.
-            slideOnePane.display(image, dropped: snapshot.droppedFrames)
-            slideTwoPane.updateAcquisitionCounters(dropped: snapshot.droppedFrames)
+            // INPUT FPS is already updated above. This records only an image
+            // actually assigned to the visible preview.
+            slideOnePane.display(image)
         case .slide2:
             guard !slideTwoPane.isImageFrozen,
                   let image = lease.createCGImage() else {
                 updateBothPaneDropCounters()
                 return
             }
-            slideTwoPane.display(image, dropped: snapshot.droppedFrames)
-            slideOnePane.updateAcquisitionCounters(dropped: snapshot.droppedFrames)
+            slideTwoPane.display(image)
         }
 
         // Frozen panes keep acquisition counters current without replacing

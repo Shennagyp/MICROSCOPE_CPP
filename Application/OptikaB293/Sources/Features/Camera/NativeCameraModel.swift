@@ -78,6 +78,12 @@ final class NativeCameraModel: ObservableObject {
         cameraState == .open || cameraState == .streaming
     }
 
+    /// The automatic-resolution preference remains editable while feature
+    /// reads or resolution writes are pending. Applying it can wait for them.
+    var canConfigureAutomaticResolution: Bool {
+        canAccessFeatures && !isCameraOperationPending
+    }
+
     var canChangePreviewResolution: Bool {
         canAccessFeatures &&
             !isCameraOperationPending &&

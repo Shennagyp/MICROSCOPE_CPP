@@ -1,7 +1,8 @@
 import Foundation
 
-/// Measures the rate at which fresh images are assigned to a preview pane.
-/// It deliberately measures presentation delivery, not SDK pulls or sensor timing.
+/// Measures a frame rate from timestamped frame arrivals.
+/// recordFrames(_:) accepts a delta count so coalesced notifications still
+/// account for every successful SDK pull between notifications.
 struct PreviewFrameRateMeter {
     private let sampleInterval: TimeInterval = 0.5
     private let staleInterval: TimeInterval = 1.0
@@ -12,32 +13,34 @@ struct PreviewFrameRateMeter {
     private var sampleFrameCount: UInt64 = 0
 
     mutating func recordFrame(at timestamp: TimeInterval) {
-        guard timestamp.isFinite, timestamp >= 0 else { return }
+        recordFrames(1, at: timestamp)
+    }
+
+    mutating func recordFrames(_ count: UInt64, at timestamp: TimeInterval) {
+        guard count > 0, timestamp.isFinite, timestamp >= 0 else { return }
 
         guard let lastFrameAt = lastFrameAt else {
-            beginSample(at: timestamp)
+            beginSample(at: timestamp, frameCount: count)
             return
         }
         guard timestamp > lastFrameAt else { return }
 
         if timestamp - lastFrameAt > staleInterval {
             framesPerSecond = 0
-            beginSample(at: timestamp)
+            beginSample(at: timestamp, frameCount: count)
             return
         }
 
-        sampleFrameCount &+= 1
+        sampleFrameCount &+= count
         let sampleStart = sampleStartedAt ?? timestamp
         let elapsed = timestamp - sampleStart
-        guard elapsed >= sampleInterval else {
-            self.lastFrameAt = timestamp
-            return
-        }
+        self.lastFrameAt = timestamp
+        guard elapsed >= sampleInterval else { return }
 
-        // N frames spanning an interval contain N-1 frame intervals.
-        let measuredRate = Double(sampleFrameCount - 1) / elapsed
+        // N arrivals spanning an interval contain N-1 frame intervals.
+        let measuredRate = Double(sampleFrameCount > 0 ? sampleFrameCount - 1 : 0) / elapsed
         framesPerSecond = measuredRate.isFinite ? measuredRate : 0
-        beginSample(at: timestamp)
+        beginSample(at: timestamp, frameCount: 1)
     }
 
     mutating func refresh(at timestamp: TimeInterval) {
@@ -46,17 +49,20 @@ struct PreviewFrameRateMeter {
               timestamp >= lastFrameAt else {
             return
         }
-
         guard timestamp - lastFrameAt > staleInterval else { return }
+        reset()
+    }
+
+    mutating func reset() {
         framesPerSecond = 0
-        self.lastFrameAt = nil
         sampleStartedAt = nil
+        lastFrameAt = nil
         sampleFrameCount = 0
     }
 
-    private mutating func beginSample(at timestamp: TimeInterval) {
+    private mutating func beginSample(at timestamp: TimeInterval, frameCount: UInt64) {
         sampleStartedAt = timestamp
         lastFrameAt = timestamp
-        sampleFrameCount = 1
+        sampleFrameCount = frameCount
     }
 }

@@ -124,10 +124,7 @@ struct NativeCameraControlsDock: View {
                         )
                     )
                     .font(.system(size: 12))
-                    .disabled(!model.canAccessFeatures ||
-                              model.isCameraOperationPending ||
-                              model.features.isFeatureWritePending ||
-                              model.features.isFeatureSnapshotLoading)
+                    .disabled(!model.canConfigureAutomaticResolution)
                     .help(resolutionCoordinator.automaticResolutionHelp)
 
                     Spacer(minLength: 4)

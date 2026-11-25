@@ -20,9 +20,9 @@ final class MicroscopeResolutionCoordinator: ObservableObject {
     init(camera: NativeCameraModel, microscope: MicroscopeConfigurationModel) {
         self.camera = camera
         self.microscope = microscope
-        isAutomaticResolutionEnabled = UserDefaults.standard.bool(
-            forKey: Self.automaticResolutionDefaultsKey
-        )
+        isAutomaticResolutionEnabled =
+            (UserDefaults.standard.object(forKey: Self.automaticResolutionDefaultsKey) as? Bool)
+            ?? true
         camera.features.onPreviewResolutionReadbackChanged = { [weak self] in
             self?.reconcileAutomaticResolution()
         }

@@ -96,8 +96,10 @@ add_custom_command(TARGET amscope_driver POST_BUILD
         "$<TARGET_FILE_DIR:amscope_driver>/libamcam.dylib"
     VERBATIM)
 
-option(AMSCOPE_BUILD_QT_ADAPTER "Build the Qt 6 Core adapter" ON)
-option(AMSCOPE_BUILD_PREVIEW_APP "Build the Qt Widgets preview application" ON)
+# Legacy Qt integration targets. Camera v2.0 is a non-Qt library; these
+# optional targets are retained temporarily for historical consumers only.
+option(AMSCOPE_BUILD_QT_ADAPTER "Build the legacy Qt 6 Core adapter" OFF)
+option(AMSCOPE_BUILD_PREVIEW_APP "Build the legacy Qt Widgets preview application" OFF)
 # Standalone diagnostics. These tools intentionally use different acquisition
 # paths and are never part of the production camera session or Qt preview.
 option(AMSCOPE_BUILD_NATIVE_PROBE

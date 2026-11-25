@@ -59,7 +59,10 @@ struct NativeMicroscopePaneControls: View {
                 .disabled(!model.canChangePreviewResolution)
                 .help("Choose a resolution. Manual selection disables automatic resolution.")
             } else {
-                Text(model.canAccessFeatures ? "Unavailable" : "—")
+                let resolutionStatus = !model.canAccessFeatures
+                    ? "—"
+                    : (features.isFeatureSnapshotLoading ? "Loading…" : "Unavailable")
+                Text(resolutionStatus)
                     .font(.system(size: 9))
                     .foregroundColor(OptikaPalette.secondaryText)
                     .frame(width: 84, height: 20, alignment: .leading)

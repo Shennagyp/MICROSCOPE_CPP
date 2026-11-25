@@ -84,6 +84,7 @@ struct RuntimeDeviceCorrelation final {
     MicroscopeId microscopeId;
     RuntimeId runtimeId;
     RuntimeGeneration runtimeGeneration;
+    DeviceSessionGeneration deviceSessionGeneration;
     DeviceId deviceId;
 };
 

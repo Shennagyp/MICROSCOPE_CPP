@@ -31,8 +31,9 @@ namespace {
     case ExposurePolicy::Manual:
     case ExposurePolicy::Automatic:
     case ExposurePolicy::ConstrainedAutomatic:
-    case ExposurePolicy::Unknown:
         return true;
+    case ExposurePolicy::Unknown:
+        return false;
     }
     return false;
 }

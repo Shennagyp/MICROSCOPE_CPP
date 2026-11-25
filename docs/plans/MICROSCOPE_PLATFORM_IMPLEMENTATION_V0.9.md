@@ -145,6 +145,7 @@ The implementation bullets below define the full Phase 1 intent; the committed s
 - Define archive/deletion constraints: Sample archival does not cascade-delete slides or image data; a referenced Sample cannot be destructively deleted.
 - Define independent Sample and Slide package persistence. Slide packages retain SampleId and remain independently movable; the Sample record is not duplicated inside the Slide package as another authority.
 - Define portable relative payload references and a rebuildable workspace catalog/index.
+- Define deterministic safe storage-key encoding/mapping for opaque IDs; do not use raw IDs as filesystem path segments.
 - Enforce mandatory active slide session in Core.
 - Support opening/browsing Sample and Slide packages without a microscope connected.
 

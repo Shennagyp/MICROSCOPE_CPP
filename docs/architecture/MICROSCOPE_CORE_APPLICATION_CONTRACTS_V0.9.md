@@ -173,6 +173,17 @@ On QueueFull, the Core ingress implementation itself atomically latches feedback
 
 Do not create a universal IDevice.Execute(DeviceCommand) port merely to avoid defining real capabilities. Factor shared mechanics only when real ports have identical semantics and lifecycle requirements.
 
+The stage-motion port is capability-specific. Its initial command vocabulary is MoveAxesTo, MoveAxesBy, HomeAxes and StopAxes. Values use the coordinate unit declared by the referenced StageAxisSpecification; controller-native steps, pulse timing, GRBL command strings, Zaber device units and vendor SDK structures do not cross the Core boundary.
+
+A multi-axis MoveAxesTo/MoveAxesBy value represents one coordinated movement request. The adapter must preserve coordination or reject it; silently issuing sequential movements changes the request. HomeAxes delegates the controller-specific reference procedure to the driver. StopAxes requests a controlled stop and is not a safety-rated emergency-stop path.
+
+A STEP/DIR driver performs calibrated physical-unit-to-step conversion and deterministic pulse execution. An intelligent-controller driver sends engineering coordinates and delegates configured axis scaling/trajectory execution to the controller. The active chain has exactly one authority for controller-coordinate conversion. Core retains independent physical motion calibration and position evidence.
+
+The OPTIKA B293 dual-slide carrier is declared against one StageSpecification and two distinct linear axes in the horizontal stage plane. It has exactly Left and Right slots. Each occupied physical Slide has its own SlideGeometry and four-corner SlideRegistration. The four measured correspondences are fitted to an affine 2D transform, and maximum residual is checked against an explicit acceptance threshold. Both registrations map into the same stage machine-coordinate plane; slide-local coordinates are never inferred from tile order or the other slide's registration.
+
+Carrier occupancy and registration are runtime state, separate from static equipment definition and persistent Slide identity. Re-homing the stage does not restore a slide registration if the physical slide moved in its slot.
+
+
 ### 5.5 Runtime state and notifications
 
 Core owns operation and step state. Initial operation states:

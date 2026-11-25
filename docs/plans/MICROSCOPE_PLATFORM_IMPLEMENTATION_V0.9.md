@@ -201,7 +201,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 4 — Core operation runtime
 
-**In progress — 4A lifecycle reducer validated; 4B stage-motion/navigation contracts implemented; 4C bounded feedback ingress implemented, serialized runtime/reconciliation remain next**
+**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C bounded ingress and freshness gates implemented, serialized runtime/reconciliation remain next**
 
 **Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
 
@@ -229,10 +229,13 @@ The equipment definition now describes installed topology and static capabilitie
 - Added independent SlideGeometry/SlideRegistration values. Four measured corners are fitted to an affine mapping; individual residuals and maximum/RMS fit residuals are retained and an acceptance threshold gates registration.
 - Added DualSlideCarrierState with left/right occupancy and separate SlideId registrations. A requested SlideId/local point resolves through its own registration to a common stage-plane target, converts micrometers into the declared X/Y axis units and rejects targets outside installed stage travel.
 - Added StageAxisPositionState. Command-derived movement accumulates a conservative error bound; controller-reported coordinates do not reset open-loop uncertainty; encoder/external measurements may reset it to their measurement uncertainty; invalid reference or unknown/exceeded error requires homing.
+- Added StagePositionState, an immutable aggregate for the carrier's in-plane X/Y position. It updates absolute/relative commanded positions, measurement observations and verified homing observations per axis; reference invalidation applies to both axes as one plane. It maps current machine coordinates back to slide-local coordinates only for the same installed stage.
+
 - Bound every StageAxisPositionState to its installed EquipmentComponentId and StageAxisId; planning and slide position estimation reject cross-stage state even where two microscopes reuse the same axis identifiers.
 - Retain the registration's configured fit-residual acceptance threshold with the CalibrationRevisionId, alongside actual per-corner, maximum and RMS residual evidence.
 - Added CalibrationRevisionId to each SlideRegistration and SlideNavigationTarget to preserve the exact slide placement used by a navigation request.
-- Implemented BoundedFeedbackInbox<TPayload> as a fixed-capacity thread-safe ring with Core-assigned FIFO sequences, runtime-scope rejection, explicit close and an independent overflow control callback. QueueFull does not consume a sequence; overflow remains latched until the runtime acknowledges reconciliation.
+- Implemented BoundedFeedbackInbox<TPayload> as a fixed-capacity thread-safe ring with Core-assigned FIFO sequences, runtime-scope rejection, explicit close and an IFeedbackRuntimeSignal control path. The noexcept signal distinguishes successful enqueue, feedback loss and ingress closure. QueueFull does not consume a sequence; overflow remains latched until the runtime acknowledges reconciliation.
+- Added RuntimeDeviceSessionBinding and ActiveOperationStepBinding to reject feedback from prior device-session generations and superseded operation-step/command identities before state reduction.
 - Added tests for capacity/closure, queue overflow and loss callback, runtime-scope rejection, gap-free sequence assignment and concurrent multi-producer FIFO order.
 - Added StageNavigationPlanner and StageHomingPolicy. It validates the target and registration before planning, selects direct coordinated X/Y movement while within both error thresholds, or homes both axes otherwise. After verified homing it re-resolves the saved slide-local point only if the registration revision is unchanged.
 - Propagates slide-registration uncertainty through the inverse affine transform with the rectangular affine interpolation L1 bound and refuses slide-local position estimates outside the selected slide geometry.

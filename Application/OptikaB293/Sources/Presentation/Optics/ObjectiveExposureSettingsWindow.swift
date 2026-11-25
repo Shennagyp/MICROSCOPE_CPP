@@ -233,7 +233,8 @@ struct ObjectiveExposureSettingsWindow: View {
                             }
                         )
                     )
-                    .disabled(!autoDescriptor.isWritable ||
+                    .disabled(exposureMode == nil ||
+                              !autoDescriptor.isWritable ||
                               model.isCameraOperationPending ||
                               features.isFeatureWritePending ||
                               features.isFeatureSnapshotLoading)
@@ -277,6 +278,7 @@ struct ObjectiveExposureSettingsWindow: View {
                             )
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .disabled(exposureMode != "Off" ||
+                                      exposureTimeDescriptor?.isAvailable != true ||
                                       model.isCameraOperationPending ||
                                       features.isFeatureWritePending ||
                                       features.isFeatureSnapshotLoading)

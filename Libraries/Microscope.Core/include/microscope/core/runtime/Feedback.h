@@ -238,8 +238,9 @@ private:
     std::optional<DeviceTimestamp> deviceTimestamp_;
 };
 
-// The payload is a capability-specific Core value. This envelope deliberately
-// does not define a universal device-state bag or depend on vendor SDK types.
+// TPayload is a concrete Core value for the capability/fact semantics that
+// produced it; do not instantiate this with a bare bool/string or a universal
+// state bag. The envelope is independent of vendor SDK types.
 template <typename TPayload>
 struct FeedbackEnvelope final {
     FeedbackMetadata metadata;

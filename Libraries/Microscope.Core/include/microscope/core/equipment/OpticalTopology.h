@@ -1,6 +1,7 @@
 #pragma once
 
 #include "microscope/core/equipment/IlluminationSpecifications.h"
+#include "microscope/core/equipment/StageSpecifications.h"
 #include "microscope/core/equipment/OpticalSpecifications.h"
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
@@ -207,7 +208,8 @@ public:
             std::vector<ObjectiveSpecification> objectiveSpecifications = {},
             std::vector<CameraSpecification> cameraSpecifications = {},
             std::vector<CondenserSpecification> condenserSpecifications = {},
-            std::vector<IlluminationSpecification> illuminationSpecifications = {});
+            std::vector<IlluminationSpecification> illuminationSpecifications = {},
+            std::vector<StageSpecification> stageSpecifications = {});
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponent>& components() const noexcept;
@@ -221,6 +223,8 @@ public:
     condenserSpecifications() const noexcept;
     [[nodiscard]] const std::vector<IlluminationSpecification>&
     illuminationSpecifications() const noexcept;
+    [[nodiscard]] const std::vector<StageSpecification>&
+    stageSpecifications() const noexcept;
 
 private:
     MicroscopeEquipmentDefinition(
@@ -231,7 +235,8 @@ private:
         std::vector<ObjectiveSpecification> objectiveSpecifications,
         std::vector<CameraSpecification> cameraSpecifications,
         std::vector<CondenserSpecification> condenserSpecifications,
-        std::vector<IlluminationSpecification> illuminationSpecifications);
+        std::vector<IlluminationSpecification> illuminationSpecifications,
+        std::vector<StageSpecification> stageSpecifications);
 
     MicroscopeId microscopeId_;
     std::vector<EquipmentComponent> components_;
@@ -241,6 +246,7 @@ private:
     std::vector<CameraSpecification> cameraSpecifications_;
     std::vector<CondenserSpecification> condenserSpecifications_;
     std::vector<IlluminationSpecification> illuminationSpecifications_;
+    std::vector<StageSpecification> stageSpecifications_;
 };
 
 } // namespace microscope::core

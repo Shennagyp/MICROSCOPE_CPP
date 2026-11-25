@@ -4,7 +4,6 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
-#include <map>
 #include <mutex>
 #include <set>
 #include <stdexcept>
@@ -161,7 +160,7 @@ public:
         if (quarantined) return;
 
         for (auto it = interfaces.rbegin(); it != interfaces.rend(); ++it) {
-            const auto status = consumer.invoke(Operation::ifClose, it->second.handle);
+            const auto status = consumer.invoke(Operation::ifClose, it->handle);
             if (status != GenTL::GC_ERR_SUCCESS) {
                 quarantined = true;
                 return;
@@ -194,7 +193,7 @@ public:
     bool initialized = false;
     bool quarantined = false;
     mutable std::mutex mutex;
-    std::map<std::string, InterfaceState> interfaces;
+    std::vector<InterfaceState> interfaces;
 };
 
 Producer::Producer(std::shared_ptr<ProducerContext> context) noexcept
@@ -263,7 +262,9 @@ std::vector<DeviceDescriptor> Producer::discover(
             throw std::runtime_error("The Producer returned a duplicate interface ID.");
         }
 
-        auto interface = context_->interfaces.find(interfaceId);
+        auto interface = std::find_if(
+            context_->interfaces.begin(), context_->interfaces.end(),
+            [&](const auto& retained) { return retained.id == interfaceId; });
         if (interface == context_->interfaces.end()) {
             GenTL::IF_HANDLE handle = nullptr;
             check(context_->consumer.invoke(
@@ -274,12 +275,12 @@ std::vector<DeviceDescriptor> Producer::discover(
                 throw std::runtime_error(
                     "TLOpenInterface succeeded without returning an IF_HANDLE.");
             }
-            interface = context_->interfaces.emplace(
-                interfaceId,
-                ProducerContext::InterfaceState{handle, interfaceId}).first;
+            context_->interfaces.push_back(
+                ProducerContext::InterfaceState{handle, interfaceId});
+            interface = std::prev(context_->interfaces.end());
         }
 
-        const auto interfaceHandle = interface->second.handle;
+        const auto interfaceHandle = interface->handle;
         const auto interfaceDisplayName = readOptionalInfoString(
             [&](GenTL::INFO_DATATYPE* type, void* buffer, std::size_t* size) {
                 return context_->consumer.invoke(
@@ -375,7 +376,9 @@ DeviceSession Producer::openDevice(
     if (context_->quarantined || !context_->system) {
         throw std::runtime_error("The GenTL Producer context is unavailable.");
     }
-    const auto interface = context_->interfaces.find(descriptor.interfaceId);
+    const auto interface = std::find_if(
+        context_->interfaces.begin(), context_->interfaces.end(),
+        [&](const auto& retained) { return retained.id == descriptor.interfaceId; });
     if (interface == context_->interfaces.end()) {
         throw std::invalid_argument(
             "The device descriptor references an interface that is no longer retained.");
@@ -384,7 +387,7 @@ DeviceSession Producer::openDevice(
     GenTL::DEV_HANDLE device = nullptr;
     check(context_->consumer.invoke(
         Operation::ifOpenDevice,
-        interface->second.handle, descriptor.deviceId.c_str(),
+        interface->handle, descriptor.deviceId.c_str(),
         access, &device),
         "IFOpenDevice");
     if (!device) {

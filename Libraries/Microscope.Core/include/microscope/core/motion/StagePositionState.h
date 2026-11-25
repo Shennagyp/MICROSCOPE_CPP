@@ -21,6 +21,8 @@ public:
     // contribution is supplied by the active axis motion calibration.
     Result<StagePositionState,StageAxisPositionStateError> afterCommandedDisplacement(
         const AxisDisplacement&,std::optional<double> additionalErrorBound) const;
+    Result<StagePositionState,StageAxisPositionStateError> afterCommandedPosition(
+        const AxisPosition&,std::optional<double> additionalErrorBound) const;
 
     Result<StagePositionState,StageAxisPositionStateError> afterPositionObservation(
         const AxisPositionObservation&,ObservationSource source) const;

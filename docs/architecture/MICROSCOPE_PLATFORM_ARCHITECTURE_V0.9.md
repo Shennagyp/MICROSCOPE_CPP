@@ -365,6 +365,9 @@ Every adapter feedback item carries a runtime/device scope:
 - MicroscopeId.
 - RuntimeId and RuntimeGeneration.
 - Logical DeviceId.
+- DeviceSessionGeneration for the currently bound/open logical-device session.
+
+Core issues a new DeviceSessionGeneration for each device open/reopen within a runtime and passes it to the adapter. Adapters preserve the generation associated with the callback's originating session. Feedback from an earlier device session is rejected even if the enclosing microscope runtime remains active.
 
 Feedback associated with an active operation additionally carries OperationId and StepId as one indivisible correlation, plus CommandId where related to a dispatched command. Unsolicited telemetry has no operation correlation; it cannot satisfy an active operation's completion predicate.
 

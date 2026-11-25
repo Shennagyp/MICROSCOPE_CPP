@@ -27,10 +27,10 @@ public:
     std::atomic<int> closed{0};
 };
 
-RuntimeDeviceCorrelation deviceSession(std::uint64_t sessionGeneration=4) {
+RuntimeDeviceCorrelation deviceSession(std::uint64_t sessionGeneration=4,std::uint64_t runtimeGeneration=2) {
     return RuntimeDeviceCorrelation{
         id<MicroscopeId>("scope"),id<RuntimeId>("runtime"),
-        take(RuntimeGeneration::create(2)),
+        take(RuntimeGeneration::create(runtimeGeneration)),
         take(DeviceSessionGeneration::create(sessionGeneration)),
         id<DeviceId>("stage")};
 }
@@ -227,14 +227,14 @@ int main() {
         id<MicroscopeId>("scope"),id<RuntimeId>("runtime"),
         take(RuntimeGeneration::create(8)),1,overflowSignal));
     take(overflowRuntime->bindOwnerThread());
-    take(overflowRuntime->openDeviceSession(deviceSession(4)));
+    take(overflowRuntime->openDeviceSession(deviceSession(4,8)));
     const auto overflowOperation=id<OperationId>("operation-overflow");
     const auto overflowStep=id<StepId>("step-overflow");
     const auto overflowCommand=id<CommandId>("command-overflow");
     take(overflowRuntime->createOperation(overflowOperation));
     take(overflowRuntime->startOperation(overflowOperation));
     take(overflowRuntime->createStep(overflowOperation,overflowStep));
-    auto firstTelemetry=staleSessionFeedback(deviceSession(4));
+    auto firstTelemetry=staleSessionFeedback(deviceSession(4,8));
     auto droppedTelemetry=staleSessionFeedback(deviceSession(4));
     check(overflowRuntime->feedbackIngress().submit(std::move(firstTelemetry))==
           FeedbackSubmitStatus::Enqueued,

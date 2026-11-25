@@ -24,6 +24,7 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
     private var mainWindowController: NSWindowController?
     private var cameraControlsWindowController: NSWindowController?
     private var microscopeConfigurationWindowController: NSWindowController?
+    private var objectiveExposureSettingsWindowController: NSWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
@@ -119,6 +120,33 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @objc private func openObjectiveExposureSettings(_ sender: Any?) {
+        if let existingController = objectiveExposureSettingsWindowController {
+            existingController.showWindow(sender)
+            existingController.window?.makeKeyAndOrderFront(sender)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hostingController = NSHostingController(
+            rootView: ObjectiveExposureSettingsWindow(
+                model: cameraModel,
+                microscope: composition.microscope
+            )
+        )
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Objective Exposure Settings"
+        window.setContentSize(NSSize(width: 580, height: 620))
+        window.minSize = NSSize(width: 500, height: 420)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.center()
+
+        let windowController = NSWindowController(window: window)
+        objectiveExposureSettingsWindowController = windowController
+        windowController.showWindow(sender)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func showMainWindow() {
         let hostingController = NSHostingController(
             rootView: MainWindowView(
@@ -200,6 +228,14 @@ final class OptikaB293ApplicationDelegate: NSObject, NSApplicationDelegate {
         )
         microscopeConfigurationItem.target = self
         fileMenu.addItem(microscopeConfigurationItem)
+
+        let objectiveExposureItem = NSMenuItem(
+            title: "Objective Exposure Settings…",
+            action: #selector(openObjectiveExposureSettings(_:)),
+            keyEquivalent: ""
+        )
+        objectiveExposureItem.target = self
+        fileMenu.addItem(objectiveExposureItem)
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(NSMenuItem(
             title: "Close Window",

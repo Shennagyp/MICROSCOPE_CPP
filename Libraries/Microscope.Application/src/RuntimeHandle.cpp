@@ -64,14 +64,14 @@ core::Result<OperationView, OperationViewError> OperationView::create(
     OperationHandle handle,
     core::OperationSnapshot snapshot) {
     const auto& runtime = handle.runtime();
-    if (runtime.microscopeId() != snapshot.microscopeId ||
-        runtime.runtimeId() != snapshot.runtimeId ||
-        runtime.generation() != snapshot.runtimeGeneration) {
+    if (runtime.microscopeId() != snapshot.microscopeId() ||
+        runtime.runtimeId() != snapshot.runtimeId() ||
+        runtime.generation() != snapshot.runtimeGeneration()) {
         return core::Result<OperationView, OperationViewError>::failure(
             OperationViewError::RuntimeIdentityMismatch);
     }
 
-    if (handle.operationId() != snapshot.operationId) {
+    if (handle.operationId() != snapshot.operationId()) {
         return core::Result<OperationView, OperationViewError>::failure(
             OperationViewError::OperationIdentityMismatch);
     }

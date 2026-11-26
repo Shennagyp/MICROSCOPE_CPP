@@ -5,9 +5,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `026c0870c10caf6c6853c09c068df365e65cb09b`  
-**Latest CI:** [workflow #45746856752](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45746856752) — non-Qt and Qt builds passed on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 23/23 CTest passed per architecture.  
-**Phase status:** Phase 3 accepted; Phase 4 source implementation complete pending visual/physical UI acceptance; Phase 5 complete by owner direction; Phase 6 follows Phase 4. Recheck the live branch tip before each session.
+**Latest reviewed implementation checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
+**Latest CI:** [workflow #45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949) — non-Qt and Qt builds passed on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 24/24 CTest passed per architecture, including the offscreen application composition/dock-state smoke.  
+**Phase status:** Phase 3 accepted; Phase 4 source and offscreen composition checks complete, pending visual/physical UI acceptance; Phase 5 complete by owner direction; Phase 6 follows Phase 4. Recheck the live branch tip before each session.
 
 ---
 
@@ -76,9 +76,11 @@ Phase 4 now includes CameraFeatureEditor in the preview feature tabs,
 ImageInfoBar in the status bar, CameraCapabilityPanel in Camera Properties,
 and the generic CameraCommandPanel for ICameraCommandAccess commands. The
 AmScope preview's parameterized commands remain host-owned. The current Qt CI
-checkpoint builds amscope_preview and passes 23/23 CTest tests on both
-architectures. Only application visual/workspace inspection and current-
-revision physical MU503 UI smoke remain; CI is not a substitute.
+checkpoint builds amscope_preview and passes 24/24 CTest tests on both
+architectures. An application-level offscreen test also checks the document,
+dock, status-bar, Output and capability-panel composition plus dock-state
+save/restore. Only human visual inspection and current-revision physical
+MU503 UI smoke remain; CI is not a substitute.
 
 After Phase 4 acceptance, continue Phase 6 from
 [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
@@ -165,10 +167,11 @@ Phase 8 remains responsible for exact-commit hardware records, supported provide
 
 ## 9. Immediate next action
 
-Complete the Phase 4 acceptance gate for the existing amscope_preview:
-inspect the document-centric workspace, dock move/tabify/float/close/restore,
-layout persistence, Output pane, status-bar information strip and selected-
-model capability panel; then run the physical MU503 discover/open/preview/live-
-feature-readback/stop/close smoke. Do not mark Phase 4 complete from CI alone.
-After that, continue Phase 6 from the recorded audit. Do not add a public SDK
-interface, change session ownership, or modify the completed GenTL integration.
+Complete the remaining Phase 4 owner acceptance: perform human visual
+inspection of the existing amscope_preview workspace and run the current-
+revision physical MU503 discover/open/preview/live-feature-readback/stop/close
+smoke. The offscreen CTest already checks composition and dock-state
+save/restore, but it cannot verify visual quality or physical camera behavior.
+Do not mark Phase 4 complete from CI alone. After owner acceptance, continue
+Phase 6 from the recorded audit. Do not add a public SDK interface, change
+session ownership, or modify the completed GenTL integration.

@@ -2,10 +2,10 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `026c0870c10caf6c6853c09c068df365e65cb09b` — reusable command/capability presentation added and model capability panel integrated into the AmScope preview.  
-**Latest CI-validated checkpoint:** `026c0870c10caf6c6853c09c068df365e65cb09b` — workflow [#45746856752](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45746856752) passed non-Qt and Qt builds/tests on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 23/23 Qt CTest tests passed on each architecture.  
+**Latest reviewed implementation checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2` — offscreen application-composition smoke added for the existing AmScope preview.  
+**Latest CI-validated checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2` — workflow [#45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949) passed non-Qt and Qt builds/tests on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 24/24 Qt CTest tests passed on each architecture, including the application composition/dock-state smoke.  
 **Review date:** 26 November 2026.  
-**Phase status:** Phase 3 accepted; Phase 4 reusable Qt UI remains in progress pending visual and physical UI acceptance; Phase 5 GenTL/GenApi implementation is owner-confirmed complete; Phase 6 follows Phase 4.  
+**Phase status:** Phase 3 accepted; Phase 4 source implementation and offscreen composition checks are complete, pending visual and physical UI acceptance; Phase 5 GenTL/GenApi implementation is owner-confirmed complete; Phase 6 follows Phase 4.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
 
 ## 0. Immediate continuation instruction
@@ -89,7 +89,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 1 | Stabilize and qualify native AmScope driver | **Accepted by owner historically; post-acceptance hardening remains.** Single-session ownership, callback/queue/worker/pull path, frame pool and lifecycle primitives exist. Full injected SDK lifecycle tests and proof of callback quiescence around terminal Close remain open. |
 | 2 | Finalize backend-neutral camera models | **Partially implemented.** Slice 2.1 discovery/capability models and 2.2 frame/layout models exist with automated tests and prior cross-architecture CI. The 2.3 semantic ownership audit is documented: common feature-access errors remain common, while AmScope lifecycle/command errors remain provider-specific. Physical common-frame/RAW validation remains open, so Phase 2 is not accepted. |
 | 3 | Separate driver, programmatic control and Qt streaming libraries | **ACCEPTED BY OWNER.** AmcamCamera remains the single native session owner; Amscope::Qt composes it for QObject request scheduling and frame delivery. Camera::Qt provides the extracted frame-stream boundary. Owner-confirmed physical Qt-to-MU503 streaming smoke evidence is recorded in the subordinate release plan. Qt remains optional to non-Qt consumers. |
-| 4 | Extract reusable Qt camera UI library | **IN PROGRESS.** Camera::QtWidgets now contains FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel. The AmScope preview uses the feature editor, telemetry strip and selected-model capability panel. The command panel is for no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned. Workflow #45746856752 built amscope_preview and passed 23/23 Qt CTest tests on both architectures. Remaining gates are application visual/workspace inspection and current-revision physical MU503 UI smoke. |
+| 4 | Extract reusable Qt camera UI library | **IN PROGRESS — SOURCE AND OFFSCREEN CHECKS COMPLETE.** Camera::QtWidgets contains FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel. The AmScope preview uses the feature editor, telemetry strip and selected-model capability panel. The command panel is for no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned. Workflow #45749181949 built amscope_preview and passed 24/24 Qt CTest tests on both architectures, including an application-level offscreen composition and dock-state restore test. Remaining gates are human visual/workspace inspection and current-revision physical MU503 UI smoke. |
 | 5 | Integrate existing GenTL/GenApi implementation | **COMPLETE — owner-confirmed implementation milestone.** The GenTL Producer/device/stream lifecycle, buffer acquisition, frame metadata projection, remote-port access, XML retrieval and GenApi 3.5.1 feature/command integration are implemented and covered by cross-architecture CI. Do not reopen or reimplement Phase 5. Vendor CTI/device and physical-camera qualification are external integration/release evidence and must be tracked separately; they do not authorize restarting the completed implementation milestone. |
 | 6 | Complete capability, feature, command and model coverage | **OPEN — preliminary work committed ahead of the phase sequence.** The initial provider source-to-test audit is recorded; RAW bit-depth SDK error classification and PixelFormatSelection profile enforcement are corrected. Full AmScope provider-level feature/command tests, GenApi negative/failure tests and GenTL common-discovery mapping decision remain. Start this phase after Phase 4 acceptance. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
 | 7 | Release packaging and external-consumer integration | **Open.** Initial install rules exist and native public headers install/compile. An exported CMake package/config/version flow and clean native/GenTL external consumers remain. Qt consumers must be included as an optional exported target, not excluded. |
@@ -136,18 +136,20 @@ Active continuation order: 0 → 1 → 2 → 3 → **4 (current phase)** → 5 �
 | `3d207c3` | Test command state semantics | Covers availability/executability, retries, disabled states and independent completion reporting. |
 | `0f6465c` | Add model capability presentation | Adds CameraCapabilityPanel and integrates it into the AmScope Camera Properties dock using the selected discovery result. |
 | `28a9710`, `9c3362e` | Report discovery selection safely | Adds a selection-changed callback and resets selection on a new discovery snapshot; opaque enumeration IDs are not persisted as stable camera identity. |
+| `587ee5e` | Add preview composition smoke | Adds `--self-test-ui` to the existing preview executable; verifies document/dock composition, status bar, Output pane, tri-state capability table and dock save/restore without discovery or user settings. |
+| `37a9b54` | Verify nested widget ownership | Uses QWidget ancestry checks for nested dock contents; the offscreen smoke passes in cross-architecture CI. |
 
-### Current Qt and non-Qt CI — checkpoint 026c087
+### Current Qt and non-Qt CI — checkpoint 37a9b54
 
-Workflow [#45746856752](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45746856752)
-passed at exact checkpoint 026c0870c10caf6c6853c09c068df365e65cb09b:
+Workflow [#45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949)
+passed at exact checkpoint 37a9b544dd30aac2acd6aac349c399d2617477c2:
 
 - Non-Qt Intel x86_64 and Apple Silicon arm64 builds, CTest, install-surface checks, public-header syntax checks and architecture checks passed.
 - Qt Intel x86_64 and Apple Silicon arm64 builds compiled the Qt adapter, reusable widgets, amscope_preview and the hardware-rate test executable.
-- 23/23 CTest tests passed on each Qt architecture, including Common contracts, Qt frame-stream tests, reusable-widget tests and AmScope Qt request tests.
+- 24/24 CTest tests passed on each Qt architecture, including the application-level `amscope_preview_ui_composition_tests` which verifies dock/document composition, status-bar widgets, the model capability table and dock-state save/restore.
 - Artifact and architecture checks passed for the driver, Qt adapter, vendor SDK, preview application and hardware-rate test executable.
 
-This is software/CI evidence only. It does not perform the preview application's visual inspection, test dock persistence interactively, or verify a physical camera.
+The offscreen test suppresses discovery and user QSettings; it does not perform human visual inspection, exercise dock persistence interactively, or verify a physical camera.
 
 ### CI evidence
 
@@ -231,7 +233,7 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 8. Next development sequence
 
-1. Complete Phase 4 application visual smoke: inspect the amscope_preview workspace; exercise dock move/tabify/float/close/restore and persisted layout; verify the status-bar information strip, Model Capabilities panel and Output pane.
+1. Complete human visual inspection of amscope_preview: inspect the workspace; exercise dock move/tabify/float/close/restore and persisted layout; verify the status-bar information strip, Model Capabilities panel and Output pane. The offscreen CTest already checks composition and save/restore mechanics, but not visual quality or interactive persistence.
 2. Run the current-revision MU503 UI smoke: discover/select, Open/Start, verify changing frames, test supported live Exposure/Color edits with backend readback, verify stopped-only controls remain disabled while Streaming, then Stop and Close.
 3. After Phase 4 acceptance, continue Phase 6 from CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md: AmScope provider-level feature/command tests, GenApi negative/failure tests and the GenTL discovery-to-Common projection decision.
 4. Export native, GenTL and optional Qt CMake packages and verify clean external consumers under Phase 7.

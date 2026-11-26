@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
 **Reviewed provider checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b`  
-**Current Qt/UI checkpoint:** `026c0870c10caf6c6853c09c068df365e65cb09b`  
+**Current Qt/UI checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
 **Review date:** 26 November 2026  
 **Status:** Preliminary Phase 6 source-to-test audit complete; Phase 6 remains open and follows Phase 4 in the governing sequence.
 
@@ -65,7 +65,7 @@ presentation are now implemented.
 | GenTL GenApi features | Boolean, Integer, Float, String and Enumeration nodes; Root-category traversal; dynamic availability/access modes; units/ranges/enumeration symbols; validated writes with GenApi verification | XML-backed tests cover all five scalar kinds, nested categories, internal-register exclusion, dynamic availability, read-only access and readback | Positive-path coverage is meaningful |
 | GenTL GenApi commands | `ICommand` discovery, issue and `IsDone` polling through common command contract | XML-backed tests cover root/nested commands, internal command-register rejection, issue and incomplete→complete transition; read-only command rejection | Positive-path coverage is meaningful; malformed/failure cases remain |
 | Cross-backend discovery semantics | AmScope discovery exposes common `CameraDeviceInfo`; GenTL discovery exposes `DeviceDescriptor`; GenApi features/commands use common access contracts | No shared provider/discovery abstraction or explicit GenTL→Common projection appears in the current public headers | **API alignment decision required**, not permission to restart Phase 5 |
-| Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor, ImageInfoBar and CameraCapabilityPanel are integrated into the preview; CameraCommandPanel represents no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned | Workflow [#45746856752](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45746856752) built the preview and passed 23/23 Qt CTest tests on both architectures | Phase 4 remains open for visual/workspace and physical MU503 UI smoke. Widget presence is not evidence of provider hardware capability |
+| Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor, ImageInfoBar and CameraCapabilityPanel are integrated into the preview; CameraCommandPanel represents no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned | Workflow [#45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949) built the preview and passed 24/24 Qt CTest tests on both architectures, including the offscreen composition/dock-state smoke | Phase 4 remains open for human visual inspection and physical MU503 UI smoke. The offscreen composition test is not hardware qualification. Widget presence is not evidence of provider hardware capability |
 
 ### 3.1 AmScope feature inventory accounting
 

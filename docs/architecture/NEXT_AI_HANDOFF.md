@@ -5,7 +5,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Latest package implementation commit:** `58f379045a51d1cb12768e673a8d70b7ab6e57b0`  
+**Latest package implementation commit:** `49cc11e430a8fcf2d62b28f861fb03439992e047`  
 **Latest prior implementation CI:** [workflow #45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 open but blocked by the AmScope freeze; Phase 7 active by explicit owner authorization on 26 November 2026. Package CI is pending.
 
@@ -37,7 +37,7 @@ If older documents conflict with this owner direction or the current status ledg
 | 4 — Reusable Qt UI | **SOURCE/OFFSCREEN COMPLETE; OWNER ACCEPTANCE PENDING** | FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel exist; the AmScope preview uses the feature editor, telemetry strip and model capability panel. CI passes 24/24 tests per architecture, including the application-level offscreen composition/dock-state smoke. Visual/workspace acceptance remains pending; physical MU503 UI test is postponed. Do not mark Phase 4 accepted, but do not block Phase 6 software work on it. |
 | 5 — GenTL/GenApi integration | **Complete by owner direction** | Do not restart, duplicate, or replace the integration. External device qualification is separate Phase 8 evidence. |
 | 6 — Capability, feature, command and model coverage | **OPEN; BLOCKED AT FROZEN AMSCOPE TESTS** | Provider-neutral GenTL/GenApi work and discovery/vector decisions are complete for the current public contract. AmScope provider-level feature/command/model tests remain blocked. Do not modify AmScope provider source, tests, contracts or behavior; do not mark Phase 6 complete. |
-| 7 — Packaging and external consumers | **ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026)** | Commits `643319a` and `58f3790` add the package entry point, exports, component-aware config, relocation consumers, runtime API use and a two-architecture workflow. CI is pending. Installed-artifact physical AmScope and GenTL smoke tests remain required by Phase 7. Keep the AmScope freeze intact. |
+| 7 — Packaging and external consumers | **ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026)** | Commits `643319a`, `58f3790` and `49cc11e` add the package entry point, exports, component-aware config, relocation consumers, runtime API use, non-Qt dependency isolation and a two-architecture workflow. CI is pending. Installed-artifact physical AmScope and GenTL smoke tests remain required by Phase 7. Keep the AmScope freeze intact. |
 | 8 — Hardware qualification and release | Open | Preserve as a separate evidence/release milestone. |
 
 The immediate task is Phase 7 packaging and external-consumer verification on `camera-v.2.0`. Preserve the existing preview and reusable UI. Keep Phase 4 visual acceptance pending and physical MU503 testing postponed. Phase 6 remains open at the frozen AmScope provider-test boundary; do not modify AmScope provider source, tests, contracts or runtime behavior.

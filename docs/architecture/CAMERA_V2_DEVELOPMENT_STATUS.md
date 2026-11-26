@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `58f379045a51d1cb12768e673a8d70b7ab6e57b0` — external consumers now instantiate the AmScope/GenTL/Qt APIs, and CI runs the relocated executables plus inspects installed runtime link paths. Package CI pending.  
+**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `49cc11e430a8fcf2d62b28f861fb03439992e047` — package options now imply their required Qt adapter dependencies, GenApi package exports require imported SDK targets, and non-Qt consumers explicitly disable Qt package discovery. Package CI pending.  
 **Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64 (10/10 bridge tests and 11/11 official GenApi tests per architecture).  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 remains open but blocked at the frozen AmScope provider-test boundary; Phase 7 is active by explicit owner authorization on 26 November 2026.  
@@ -104,8 +104,9 @@ AmScope Phase 6 provider tests stay blocked by the existing AmScope freeze.
 This is a sequencing authorization, not a declaration that Phase 6 is complete.
 
 The reusable package entry point is `Camera/CMakeLists.txt`, distinct from
-the application-oriented repository root. Commit `643319a` introduces
-namespaced exports for `Camera::Common`, `Camera::GenTLConsumerBridge`,
+the application-oriented repository root. Commits `643319a`, `58f3790` and `49cc11e` introduce the package entry
+point, runtime consumer checks, dependency isolation and namespaced exports
+for `Camera::Common`, `Camera::GenTLConsumerBridge`,
 optional `Camera::GenTLGenApi`, `Amscope::Driver`, optional
 `Amscope::Qt`, and optional `Camera::Qt` / `Camera::QtWidgets`.
 

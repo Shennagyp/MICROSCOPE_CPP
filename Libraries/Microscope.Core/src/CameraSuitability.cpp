@@ -562,8 +562,9 @@ bool CameraSuitabilityAssessor::shouldRecommendBefore(
         }
     }
 
-    return leftCamera.componentId().value() <
-           rightCamera.componentId().value();
+    // Equal suitability is a real tie. The caller must ask the user rather
+    // than silently choosing by identifier or catalog insertion order.
+    return false;
 }
 
 } // namespace microscope::core

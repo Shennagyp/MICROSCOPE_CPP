@@ -88,7 +88,7 @@ if(BUILD_TESTING)
     add_executable(microscope_application_sample_slide_store_tests
         tests/SampleSlideSqliteStoreTests.cpp)
     target_link_libraries(microscope_application_sample_slide_store_tests
-        PRIVATE Microscope::Application)
+        PRIVATE Microscope::Application SQLite::SQLite3)
     set_target_properties(microscope_application_sample_slide_store_tests PROPERTIES
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED YES

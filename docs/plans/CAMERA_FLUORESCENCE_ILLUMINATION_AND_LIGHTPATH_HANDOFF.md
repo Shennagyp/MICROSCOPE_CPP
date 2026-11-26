@@ -59,7 +59,8 @@ If a future acquisition contract explicitly requires global shutter (for example
 
 - `Libraries/Microscope.Core/include/microscope/core/equipment/OpticalSpecifications.h` and `src/OpticalSpecifications.cpp`
   - Core-side camera sensor characteristics attach to the installed camera's `CameraSpecification`.
-  - `OpticalFilterSpecification` models excitation, emission, dichroic, neutral-density and other filter roles with ordered wavelength-dependent response samples.
+  - `OpticalFilterSpecification` models excitation, emission, dichroic, neutral-density and other filter roles with ordered wavelength-dependent response samples and bounded linear transmission/reflection interpolation.
+  - `FluorescenceEmissionSpectrum` represents relative spectral photon-flux density for a fluorophore/task profile.
 - `Libraries/Microscope.Core/include/microscope/core/equipment/IlluminationSpecifications.h` and `src/IlluminationSpecifications.cpp`
   - Source technologies include LED, halogen, xenon arc, mercury arc, metal-halide arc and laser.
   - An illumination channel can carry a spectral power distribution. This describes relative spectral shape, not absolute specimen irradiance.
@@ -68,7 +69,8 @@ If a future acquisition contract explicitly requires global shutter (for example
   - The earlier LightPath topology remains the owner of route membership; filters still need to be validated against the selected LightPath during resolver integration.
 - `Libraries/Microscope.Core/include/microscope/core/configuration/CameraSuitability.h` and `src/CameraSuitability.cpp`
   - `CameraSuitabilityAssessor` returns warning diagnostics and advisory ranking for fluorescence requests.
-  - When a fluorophore emission spectrum, dichroic and emission-filter specifications are supplied, it integrates emission × dichroic transmission × emission-filter transmission × camera QE. It partitions at all input sample knots and applies three-point Gauss–Legendre quadrature to the product of piecewise-linear curves.
+  - When a fluorophore emission spectrum, dichroic and emission-filter specifications are supplied, it integrates emission × dichroic transmission × emission-filter transmission × camera QE. It partitions at all input sample knots and applies three-point Gauss–Legendre quadrature to the product of piecewise-linear curves (degree at most four on each interval).
+  - It does not combine dichroic/emission filters with different non-null compatibility identities.
   - It requires all curves to cover the full requested emission band; there is no extrapolation. The previous unweighted band mean is only a warned fallback when the spectral inputs are absent.
 - `FluorescenceEmissionSpectrum` is now a Core value type for a relative spectral photon-flux distribution, distinct from source spectral power distribution. `OpticalFilterSpecification` exposes bounded linear transmission/reflection interpolation.
 - `Libraries/Microscope.Core/src/Configuration.cpp`

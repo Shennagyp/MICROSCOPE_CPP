@@ -274,6 +274,16 @@ double SlideRectangleDefinition2D::constrainedWidthMicrometers() const noexcept 
 const SlideGeometry2D& SlideRectangleDefinition2D::geometry() const noexcept { return geometry_; }
 const SlidePlacement2D& SlideRectangleDefinition2D::placement() const noexcept { return placement_; }
 
+SlideNavigationTarget2D::SlideNavigationTarget2D(
+    SlideId slideId, SlidePoint2D point, CalibrationRevisionId revision)
+    : slideId_(std::move(slideId)), point_(point),
+      registrationRevision_(std::move(revision)) {}
+const SlideId& SlideNavigationTarget2D::slideId() const noexcept { return slideId_; }
+const SlidePoint2D& SlideNavigationTarget2D::point() const noexcept { return point_; }
+const CalibrationRevisionId& SlideNavigationTarget2D::registrationRevision() const noexcept {
+    return registrationRevision_;
+}
+
 StageWorkingSurface2D::StageWorkingSurface2D(EquipmentComponentId stage, StageAxisId x,
     StageAxisId y, AxisCoordinateUnit xu, AxisCoordinateUnit yu,
     StagePoint2D minimum, StagePoint2D maximum, StageTravelRange2D travelRange,
@@ -452,6 +462,45 @@ const SlidePlacement2D* StageWorkingSurface2D::placementFor(const SlideId& id) c
 bool StageWorkingSurface2D::contains(const StagePoint2D& p) const noexcept {
     return finite(p) && inside(p, minimumBoundary_, maximumBoundary_);
 }
+Result<SlideNavigationTarget2D, SlideNavigationTarget2DError>
+StageWorkingSurface2D::createNavigationTarget(
+    const SlideId& slideId, const SlidePoint2D& point) const {
+    const auto* rectangle = rectangleFor(slideId);
+    if (rectangle == nullptr)
+        return Result<SlideNavigationTarget2D, SlideNavigationTarget2DError>::failure(
+            SlideNavigationTarget2DError::SlideNotFound);
+    if (!rectangle->geometry().contains(point))
+        return Result<SlideNavigationTarget2D, SlideNavigationTarget2DError>::failure(
+            SlideNavigationTarget2DError::SlidePointOutsideGeometry);
+    return Result<SlideNavigationTarget2D, SlideNavigationTarget2DError>::success(
+        SlideNavigationTarget2D(slideId, point, rectangle->registrationRevision()));
+}
+
+Result<StagePoint2D, SlideNavigationTarget2DError>
+StageWorkingSurface2D::resolveNavigationTarget(
+    const SlideNavigationTarget2D& target) const {
+    const auto* rectangle = rectangleFor(target.slideId());
+    if (rectangle == nullptr)
+        return Result<StagePoint2D, SlideNavigationTarget2DError>::failure(
+            SlideNavigationTarget2DError::SlideNotFound);
+    if (rectangle->registrationRevision() != target.registrationRevision())
+        return Result<StagePoint2D, SlideNavigationTarget2DError>::failure(
+            SlideNavigationTarget2DError::RegistrationChanged);
+    if (!rectangle->geometry().contains(target.point()))
+        return Result<StagePoint2D, SlideNavigationTarget2DError>::failure(
+            SlideNavigationTarget2DError::SlidePointOutsideGeometry);
+    const auto mapped = rectangle->placement().toStage(target.point());
+    if (!mapped)
+        return Result<StagePoint2D, SlideNavigationTarget2DError>::failure(
+            mapped.error() == SlidePlacement2DError::SlidePointOutsideGeometry
+                ? SlideNavigationTarget2DError::SlidePointOutsideGeometry
+                : SlideNavigationTarget2DError::InvalidStageCoordinate);
+    if (!contains(mapped.value()))
+        return Result<StagePoint2D, SlideNavigationTarget2DError>::failure(
+            SlideNavigationTarget2DError::OutsideWorkingSurface);
+    return Result<StagePoint2D, SlideNavigationTarget2DError>::success(mapped.value());
+}
+
 Result<StagePoint2D, SlidePlacement2DError> StageWorkingSurface2D::toStage(
     const SlideId& id, const SlidePoint2D& p) const {
     const auto* placement = placementFor(id);

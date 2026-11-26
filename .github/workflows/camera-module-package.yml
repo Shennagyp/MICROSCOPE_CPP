@@ -126,8 +126,10 @@ jobs:
           lipo build/consumer-amscope/camera_module_amscope_consumer -verify_arch "${{ matrix.architecture }}"
           lipo build/consumer-genapi/camera_module_genapi_consumer -verify_arch "${{ matrix.architecture }}"
           lipo build/consumer-qt/camera_module_qt_consumer -verify_arch "${{ matrix.architecture }}"
+          SIMULATOR_CTI="$(find build/camera-module -type f -name gentl_test_simulator.cti -print -quit)"
+          test -n "$SIMULATOR_CTI"
           build/consumer-common/camera_module_common_consumer
-          build/consumer-gentl/camera_module_gentl_consumer
+          build/consumer-gentl/camera_module_gentl_consumer "$SIMULATOR_CTI"
           build/consumer-amscope/camera_module_amscope_consumer
           build/consumer-genapi/camera_module_genapi_consumer
           QT_QPA_PLATFORM=offscreen build/consumer-qt/camera_module_qt_consumer

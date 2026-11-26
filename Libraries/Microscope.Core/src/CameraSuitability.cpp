@@ -200,28 +200,45 @@ namespace {
             }),
         wavelengths.end());
 
+    // On each interval every input curve is piecewise linear because all
+    // sample knots from emission, QE and both filters are included above.
+    // Their product (emission × transmissions × QE) is a polynomial of
+    // degree at most four. Three-point Gauss-Legendre quadrature integrates
+    // that polynomial exactly over the interval.
+    constexpr double node = 0.77459666924148337704; // sqrt(3/5)
+    constexpr double outerWeight = 0.55555555555555555556; // 5/9
+    constexpr double centerWeight = 0.88888888888888888889; // 8/9
+
     double numerator = 0.0;
     double denominator = 0.0;
     for (std::size_t index = 0; index + 1 < wavelengths.size(); ++index) {
         const double leftWavelength = wavelengths[index];
         const double rightWavelength = wavelengths[index + 1];
-        const auto leftWeight = detectedWeightAt(leftWavelength);
-        const auto rightWeight = detectedWeightAt(rightWavelength);
-        const auto leftQe =
-            interpolateQuantumEfficiency(qeSamples, leftWavelength);
-        const auto rightQe =
-            interpolateQuantumEfficiency(qeSamples, rightWavelength);
+        const double halfWidth = (rightWavelength - leftWavelength) * 0.5;
+        const double center = (rightWavelength + leftWavelength) * 0.5;
+        const double quadratureWavelengths[] = {
+            center - halfWidth * node,
+            center,
+            center + halfWidth * node};
+        const double quadratureWeights[] = {
+            outerWeight, centerWeight, outerWeight};
 
-        // Every contributing curve must cover the complete requested band.
-        // Do not clamp or extrapolate a spectral response at its edge.
-        if (!leftWeight || !rightWeight || !leftQe || !rightQe) {
-            return std::nullopt;
+        for (std::size_t sample = 0; sample < 3; ++sample) {
+            const double wavelength = quadratureWavelengths[sample];
+            const auto detectedWeight = detectedWeightAt(wavelength);
+            const auto qe = interpolateQuantumEfficiency(qeSamples, wavelength);
+
+            // Every contributing curve must cover the complete requested band.
+            // Do not clamp or extrapolate a spectral response at its edge.
+            if (!detectedWeight || !qe) {
+                return std::nullopt;
+            }
+
+            const double weight =
+                halfWidth * quadratureWeights[sample];
+            denominator += weight * *detectedWeight;
+            numerator += weight * *detectedWeight * *qe;
         }
-
-        const double width = rightWavelength - leftWavelength;
-        denominator += width * (*leftWeight + *rightWeight) * 0.5;
-        numerator += width *
-            ((*leftWeight * *leftQe) + (*rightWeight * *rightQe)) * 0.5;
     }
 
     if (!std::isfinite(numerator) ||

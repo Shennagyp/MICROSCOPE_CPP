@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `49cc11e430a8fcf2d62b28f861fb03439992e047` — package options imply required Qt adapters, GenApi exports require official imported SDK targets, and non-Qt consumers disable Qt discovery. **Latest package CI definition:** `c0f50da0916cc3a74fe361ef27ee2583910e1350` — adds installed GenApi consumer, runtime/architecture checks, and verifies the base GenTL component configures with both Qt and GenApi package discovery disabled. Package CI pending.  
+**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `75768c18ab77edad49373823b83e7d74797ab0db` — AmScope vendor runtime bundling is an explicit opt-in, default OFF for the reusable package; the installed config exposes whether it was included. **Latest package CI definition:** `bdd39bd218e1f10a80266c7ea677d4f416f15aba` — tests explicit runtime inclusion for ephemeral CI and the default-off install contract. Package CI pending.  
 **Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64 (10/10 bridge tests and 11/11 official GenApi tests per architecture).  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 remains open but blocked at the frozen AmScope provider-test boundary; Phase 7 is active by explicit owner authorization on 26 November 2026.  
@@ -104,7 +104,7 @@ AmScope Phase 6 provider tests stay blocked by the existing AmScope freeze.
 This is a sequencing authorization, not a declaration that Phase 6 is complete.
 
 The reusable package entry point is `Camera/CMakeLists.txt`, distinct from
-the application-oriented repository root. Commits `643319a`, `58f3790`, `49cc11e`, `fc3be40`, `22ee34f` and `c0f50da`
+the application-oriented repository root. Commits `643319a`, `58f3790`, `49cc11e`, `fc3be40`, `22ee34f`, `c0f50da`, `75768c1` and `bdd39bd`
 introduce the package entry point, runtime consumer checks, Qt/GenApi
 dependency isolation, official GenApi external consumer, installed
 architecture checks and namespaced exports
@@ -115,9 +115,15 @@ optional `Camera::GenTLGenApi`, `Amscope::Driver`, optional
 Package components load dependencies selectively. Common, GenTL and native
 AmScope consumers must not acquire Qt. GenApi exports must resolve the
 official GenApi 3.5.1 CMake package rather than embedding machine-specific SDK
-paths. The AmScope vendor runtime is installed beside its driver; SDK
-redistribution approval remains a Phase 8 gate. GenTL packages do not bundle
-a CTI Producer or the separate C ABI bridge runtime.
+paths. The reusable package defaults `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF`.
+The checked-in vendor SDK tree contains no license/notice/EULA file. The
+[AmScope software downloads page](https://amscope.com/pages/software-downloads)
+points to software licensing terms, but the applicable SDK redistribution
+grant is not captured in this repository. Package CI enables bundling only
+for ephemeral internal validation. Do not publish AmScope-linked binaries or
+bundle the vendor runtime until the actual SDK terms or written permission
+are reviewed. GenTL packages do not bundle a CTI Producer or the separate C ABI
+bridge runtime.
 
 Acceptance requires clean consumer projects for Common, GenTL, AmScope and
 optional Qt to run `find_package(CameraModule CONFIG)` against an installed

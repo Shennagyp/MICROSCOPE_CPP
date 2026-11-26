@@ -361,6 +361,121 @@ CameraModelEnrichmentResult CameraModelDiscoveryEnricher::enrich(
     return result;
 }
 
+CameraModelEnrichmentResult CameraModelDiscoveryEnricher::enrichBoundDevice(
+    const ::camera::CameraDeviceInfo& discoveredDevice,
+    const ::camera::CameraModelCatalog& catalog,
+    const core::EquipmentComponentId& cameraComponentId,
+    const ::camera::CameraModelKey& expectedModelKey,
+    std::uint64_t expectedProfileRevision) {
+    CameraModelEnrichmentResult result;
+    result.deviceInfo = discoveredDevice;
+    result.equipmentComponentId = cameraComponentId;
+
+    const auto normalizedExpectedManufacturer =
+        ::camera::detail::normalizeCameraModelText(expectedModelKey.manufacturer);
+    const auto normalizedExpectedModel =
+        ::camera::detail::normalizeCameraModelText(expectedModelKey.model);
+    const auto normalizedExpectedVariant = expectedModelKey.variant
+        ? ::camera::detail::normalizeCameraModelText(*expectedModelKey.variant)
+        : std::string{};
+
+    if (normalizedExpectedManufacturer.empty() ||
+        normalizedExpectedModel.empty() ||
+        expectedProfileRevision == 0) {
+        result.status = CameraModelEnrichmentStatus::BoundProfileNotFound;
+        addWarning(
+            result.warnings,
+            "camera.model_binding.expected_profile_invalid",
+            "The installed camera component binding does not contain a valid manufacturer/model identity and profile revision.");
+        return result;
+    }
+
+    const auto identityMatches = [&](const std::optional<std::string>& actual,
+                                     const std::string& expected) {
+        if (!actual) {
+            return true;
+        }
+        const auto normalizedActual =
+            ::camera::detail::normalizeCameraModelText(*actual);
+        return normalizedActual.empty() || normalizedActual == expected;
+    };
+
+    if (!identityMatches(
+            discoveredDevice.identity.manufacturer,
+            normalizedExpectedManufacturer) ||
+        !identityMatches(
+            discoveredDevice.identity.model,
+            normalizedExpectedModel)) {
+        result.status = CameraModelEnrichmentStatus::BoundProfileIdentityMismatch;
+        addWarning(
+            result.warnings,
+            "camera.model_binding.runtime_identity_conflict",
+            "The connected camera reports a manufacturer or model identity that conflicts with the persisted model binding for this installed camera component.");
+        return result;
+    }
+
+    if (discoveredDevice.identity.modelVariant &&
+        !::camera::detail::normalizeCameraModelText(
+             *discoveredDevice.identity.modelVariant).empty()) {
+        const auto normalizedActualVariant =
+            ::camera::detail::normalizeCameraModelText(
+                *discoveredDevice.identity.modelVariant);
+        if (normalizedActualVariant != normalizedExpectedVariant) {
+            result.status = CameraModelEnrichmentStatus::BoundProfileIdentityMismatch;
+            addWarning(
+                result.warnings,
+                "camera.model_binding.runtime_variant_conflict",
+                "The connected camera reports a model variant that conflicts with the persisted model binding for this installed camera component.");
+            return result;
+        }
+    }
+
+    ::camera::CameraIdentity boundIdentity;
+    boundIdentity.manufacturer = expectedModelKey.manufacturer;
+    boundIdentity.model = expectedModelKey.model;
+    boundIdentity.modelVariant = expectedModelKey.variant;
+
+    const auto* profile = catalog.findExact(boundIdentity);
+    if (profile == nullptr) {
+        result.status = CameraModelEnrichmentStatus::BoundProfileNotFound;
+        addWarning(
+            result.warnings,
+            "camera.model_binding.catalog_profile_not_found",
+            "The exact camera model profile referenced by the installed component binding is not present in the loaded catalog.");
+        return result;
+    }
+
+    if (profile->profileRevision() != expectedProfileRevision) {
+        result.status = CameraModelEnrichmentStatus::BoundProfileRevisionMismatch;
+        addWarning(
+            result.warnings,
+            "camera.model_binding.catalog_profile_revision_mismatch",
+            "The installed camera component binding references a different profile revision than the currently loaded shared catalog. The model profile was not applied.");
+        return result;
+    }
+
+    auto boundDevice = discoveredDevice;
+    boundDevice.identity.manufacturer = expectedModelKey.manufacturer;
+    boundDevice.identity.model = expectedModelKey.model;
+    if (!normalizedExpectedVariant.empty()) {
+        boundDevice.identity.modelVariant = expectedModelKey.variant;
+    }
+
+    auto enriched = enrich(boundDevice, catalog);
+    enriched.equipmentComponentId = cameraComponentId;
+    if (enriched.status != CameraModelEnrichmentStatus::ExactProfileApplied &&
+        enriched.status != CameraModelEnrichmentStatus::ExactProfileAppliedWithConflicts) {
+        // Do not downgrade a validated persistent binding into an unrelated
+        // candidate selection result. The exact profile was already checked.
+        enriched.status = CameraModelEnrichmentStatus::BoundProfileNotFound;
+        addWarning(
+            enriched.warnings,
+            "camera.model_binding.profile_application_failed",
+            "The persisted camera model binding resolved to an exact catalog profile, but that profile could not be applied to the connected device.");
+    }
+    return enriched;
+}
+
 std::optional<core::CameraSensorCharacteristics>
 CameraModelDiscoveryEnricher::toCoreSensorCharacteristics(
     const ::camera::CameraDeviceInfo& enrichedDevice) {

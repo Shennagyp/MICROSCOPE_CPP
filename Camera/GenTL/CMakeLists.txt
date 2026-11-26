@@ -286,6 +286,8 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
             PRIVATE Camera::GenTLGenApi)
         add_test(NAME camera_gentl_genapi_tests
             COMMAND camera_gentl_genapi_tests
-                "$<TARGET_FILE:gentl_consumer_bridge_fixture>")
+                "$<TARGET_FILE:gentl_native_consumer_bridge_fixture>"
+                "$<TARGET_FILE:gentl_test_simulator_cti>")
+        set_tests_properties(camera_gentl_genapi_tests PROPERTIES TIMEOUT 120)
     endif()
 endif()

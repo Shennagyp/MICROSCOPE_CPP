@@ -1818,6 +1818,202 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
           "rejects evaluation when the Sample was created against another SampleType revision");
 }
 
+void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
+    const auto fixture = makeConfigurationFixture();
+    const auto lightPathId =
+        makeId<LightPathId>("sample-assessment-brightfield-light-path");
+    const auto lightPath = take(LightPath::create(
+        lightPathId,
+        "Transmitted brightfield",
+        {fixture.fullPathId}));
+
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.equipment.microscopeId(),
+        fixture.equipment.components(),
+        fixture.equipment.connections(),
+        fixture.equipment.opticalPaths(),
+        fixture.equipment.objectiveSpecifications(),
+        fixture.equipment.cameraSpecifications(),
+        fixture.equipment.condenserSpecifications(),
+        fixture.equipment.illuminationSpecifications(),
+        fixture.equipment.stageSpecifications(),
+        fixture.equipment.dualSlideCarrierSpecifications(),
+        {lightPath},
+        fixture.equipment.filterSpecifications(),
+        fixture.equipment.revision()));
+
+    const auto operationModeId =
+        makeId<OperationModeId>("sample-assessment-brightfield-mode");
+    const auto calibrationId =
+        makeId<CalibrationRevisionId>("sample-assessment-brightfield-cal-r1");
+    const auto modeSetting = take(LightPathModeSetting::create(
+        fixture.microscopeId,
+        equipment.revision(),
+        operationModeId,
+        1,
+        lightPathId,
+        calibrationId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        {fixture.objectiveId, fixture.condenserId},
+        100.0));
+    const auto operationMode = take(OperationMode::create(
+        fixture.microscopeId,
+        operationModeId,
+        1,
+        "Blood film brightfield 40x",
+        ContrastMethod::Brightfield,
+        {modeSetting}));
+
+    const auto cameraResolution = LightPathCameraResolver::resolve(
+        equipment,
+        operationMode,
+        lightPathId,
+        fixture.cameraId,
+        fixture.cameraModeId);
+    check(cameraResolution.isResolved(),
+          "resolves the camera through the mode's selected LightPath");
+    if (!cameraResolution.isResolved()) {
+        return;
+    }
+
+    const auto request = take(LightPathConfigurationRequestFactory::create(
+        equipment,
+        operationMode,
+        lightPathId,
+        cameraResolution,
+        fixture.brightfieldProfileId,
+        fixture.objectiveId,
+        fixture.condenserId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        ExposurePolicy::Manual));
+    const auto configuration = ConfigurationResolver::resolve(
+        equipment, fixture.profiles, request);
+    check(configuration.isResolved(),
+          "resolves the equipment configuration carrying the exact mode/LightPath binding");
+    if (!configuration.resolvedConfiguration()) {
+        return;
+    }
+
+    const auto condenserRequirements =
+        take(CondenserMicroscopyRequirements::create(
+            0.70,
+            0.90,
+            {CondenserDesign::Abbe},
+            {CondenserImmersionMedium::Air}));
+    const auto illuminationRequirements =
+        take(IlluminationMicroscopyRequirements::create(
+            80.0,
+            120.0));
+    const auto compatibleRequirements = take(MicroscopyRequirements::create(
+        {{ContrastMethod::Brightfield,
+          MicroscopyTechniqueConstraintKind::Required}},
+        std::nullopt,
+        std::nullopt,
+        false,
+        condenserRequirements,
+        illuminationRequirements));
+    const auto sampleType = take(SampleType::create(
+        makeId<SampleTypeId>("sample-type-calibrated-blood-film"),
+        1,
+        "Peripheral blood film",
+        SampleMaterialClass::Biological,
+        compatibleRequirements));
+    const auto sample = take(Sample::create(
+        makeId<SampleId>("sample-calibrated-blood-film"),
+        1,
+        sampleType.id(),
+        sampleType.revision(),
+        "Blood film 001",
+        "Fixed peripheral blood smear"));
+    const auto preparation = take(SpecimenPreparation::create(
+        SpecimenPreparationMethod::Smear,
+        SpecimenFixationState::Fixed,
+        std::nullopt,
+        170.0));
+    const auto specimen = take(Specimen::create(
+        makeId<SpecimenId>("specimen-calibrated-blood-film"),
+        1,
+        sample.id(),
+        sample.revision(),
+        "Stained smear on glass",
+        preparation));
+
+    const auto compatible = SampleMicroscopyRequirementAssessor::assess(
+        equipment,
+        sampleType,
+        sample,
+        specimen,
+        *configuration.resolvedConfiguration(),
+        &operationMode);
+    check(compatible.isCompatible(),
+          "accepts condenser capability and the mode's 100 µW/mm² specimen-plane target inside the sample range");
+
+    const auto strictIlluminationRequirements =
+        take(IlluminationMicroscopyRequirements::create(120.0, 180.0));
+    const auto strictRequirements = take(MicroscopyRequirements::create(
+        {{ContrastMethod::Brightfield,
+          MicroscopyTechniqueConstraintKind::Required}},
+        std::nullopt,
+        std::nullopt,
+        false,
+        condenserRequirements,
+        strictIlluminationRequirements));
+    const auto strictSampleType = take(SampleType::create(
+        makeId<SampleTypeId>("sample-type-high-irradiance"),
+        1,
+        "High irradiance specimen",
+        SampleMaterialClass::Biological,
+        strictRequirements));
+    const auto strictSample = take(Sample::create(
+        makeId<SampleId>("sample-high-irradiance"),
+        1,
+        strictSampleType.id(),
+        strictSampleType.revision(),
+        "High irradiance sample",
+        "Light-sensitive prepared material"));
+    const auto strictSpecimen = take(Specimen::create(
+        makeId<SpecimenId>("specimen-high-irradiance"),
+        1,
+        strictSample.id(),
+        strictSample.revision(),
+        "High irradiance preparation",
+        preparation));
+    const auto incompatible = SampleMicroscopyRequirementAssessor::assess(
+        equipment,
+        strictSampleType,
+        strictSample,
+        strictSpecimen,
+        *configuration.resolvedConfiguration(),
+        &operationMode);
+    check(!incompatible.isCompatible() &&
+          std::any_of(
+              incompatible.diagnostics().begin(),
+              incompatible.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "sample.microscopy.specimen_irradiance_below_minimum";
+              }),
+          "rejects a mode whose calibrated specimen-plane irradiance falls below the sample requirement");
+
+    const auto missingMode = SampleMicroscopyRequirementAssessor::assess(
+        equipment,
+        sampleType,
+        sample,
+        specimen,
+        *configuration.resolvedConfiguration());
+    check(!missingMode.isCompatible() &&
+          std::any_of(
+              missingMode.diagnostics().begin(),
+              missingMode.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "sample.microscopy.operation_mode_missing";
+              }),
+          "does not infer specimen irradiance when its authoritative OperationMode is unavailable");
+}
+
 void testProfileRequiredComponentMustBeOnSelectedPaths() {
     const auto fixture = makeConfigurationFixture();
     const auto missingRequiredComponent =
@@ -1872,6 +2068,7 @@ int main() {
     testResolverRejectsCameraNotConnectedToSelectedImagingPath();
     testLightPathCameraDiagnosticsSurviveConfigurationResolution();
     testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarnings();
+    testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance();
     testProfileRequiredComponentMustBeOnSelectedPaths();
 
     if (failures != 0) {

@@ -193,9 +193,9 @@ Persistence is implemented in the Application layer:
 - `SampleSlideSqliteStore` uses independent, namespaced schema metadata and append-only `sample_type_revision` and `slide_revision` tables.
 - `sample_type_current` and `slide_current` pointers are updated in the same `BEGIN IMMEDIATE` transaction as the revision insert.
 - `slide_revision` has a composite foreign key to the exact `(sample_type_id, sample_type_revision)` row. A Slide cannot be saved against merely the latest SampleType when its pinned revision is absent.
-- Revision writes use compare-and-swap `expectedCurrentRevision`; revision rows reject direct UPDATE and DELETE through database triggers.
+- Revision writes use compare-and-swap `expectedCurrentRevision`; database triggers enforce sequential revision insertion, monotonic current-pointer advancement, and reject direct UPDATE/DELETE of history or deletion/rewind of current pointers.
 - Versioned, bounded little-endian payload codecs round-trip complete objective/camera/condenser/illumination/technique/preparation requirements, Slide geometry and measured preparation, fluorescent excitation/emission metadata, emission spectrum, filter-set compatibility identity and optional OriginLabId.
-- Tests cover historical revision retrieval, full model round-trip, exact-revision foreign-key rejection, stale writers across independent connections, direct SQL mutation/deletion rejection, reopen/recovery and no partial Slide record on failed writes.
+- Tests cover historical revision retrieval, full model round-trip, exact-revision foreign-key rejection, stale writers across independent connections, direct SQL mutation/deletion/gap-insertion/rewind rejection, reopen/recovery and no partial Slide record on failed writes.
 
 Still outstanding:
 - Native workspace loading/editing and application-level save/dirty lifecycle for Slides and SampleType definitions; the store is not yet wired into Swift composition.

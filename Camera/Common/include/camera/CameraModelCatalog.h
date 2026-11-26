@@ -154,8 +154,43 @@ public:
         return revision_;
     }
 
-    // Exact manufacturer/model/variant matching only. No fuzzy match and no
-    // inference from serial number or opaque runtime enumeration ID.
+    // Candidate matching supports backends that disclose only a model
+    // string. Missing manufacturer/variant broadens the result set; it never
+    // silently selects one of several profiles.
+    [[nodiscard]] std::vector<const CameraModelProfile*> findCandidates(
+        const CameraIdentity& identity) const {
+        std::vector<const CameraModelProfile*> candidates;
+        if (!identity.model) {
+            return candidates;
+        }
+
+        const auto model = detail::normalizeCameraModelText(*identity.model);
+        const auto manufacturer = identity.manufacturer
+            ? detail::normalizeCameraModelText(*identity.manufacturer)
+            : std::string{};
+        const auto variant = identity.modelVariant
+            ? detail::normalizeCameraModelText(*identity.modelVariant)
+            : std::string{};
+
+        for (const auto& profile : profiles_) {
+            const auto& key = profile.key();
+            if (detail::normalizeCameraModelText(key.model) != model) {
+                continue;
+            }
+            if (!manufacturer.empty() &&
+                detail::normalizeCameraModelText(key.manufacturer) != manufacturer) {
+                continue;
+            }
+            if (!variant.empty() &&
+                detail::normalizeCameraModelText(key.variant.value_or("")) != variant) {
+                continue;
+            }
+            candidates.push_back(&profile);
+        }
+        return candidates;
+    }
+
+    // Exact manufacturer/model/variant matching only.
     [[nodiscard]] const CameraModelProfile* findExact(
         const CameraIdentity& identity) const noexcept {
         if (!identity.manufacturer || !identity.model) {

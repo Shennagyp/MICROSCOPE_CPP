@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -37,6 +38,7 @@ int main(int argc, char** argv) {
                 "Could not configure the GenTL Producer search path.");
         }
 
+        {
         // This executable is built against the installed and relocated
         // CameraModule package, not the source-tree target.
         auto catalog = camera::gentl::ProducerCatalog::discoverDevices(5000);
@@ -64,7 +66,7 @@ int main(int argc, char** argv) {
 
         auto stream = device.openDataStream(streamIds.front(), 3);
         stream.start();
-        const auto frame = stream.nextFrame(5000);
+        auto frame = stream.nextFrame(5000);
         if (!frame || frame->incomplete || frame->payload.empty()) {
             throw std::runtime_error(
                 "The installed consumer did not receive a complete frame.");
@@ -87,6 +89,7 @@ int main(int argc, char** argv) {
                   << (*commonFrame)->width << 'x' << (*commonFrame)->height
                   << " frame delivered and projected.\n";
 
+        }
         if (savedSearchPath)
             setenv("GENICAM_GENTL64_PATH", savedSearchPath->c_str(), 1);
         else

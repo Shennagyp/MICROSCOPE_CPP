@@ -504,9 +504,9 @@ CameraSuitabilityReport CameraSuitabilityAssessor::assessFluorescence(
 }
 
 bool CameraSuitabilityAssessor::shouldRecommendBefore(
-    const CameraSpecification& leftCamera,
+    const CameraSpecification&,
     const CameraSuitabilityReport& left,
-    const CameraSpecification& rightCamera,
+    const CameraSpecification&,
     const CameraSuitabilityReport& right,
     const FluorescenceCameraRequirements& requirements) noexcept {
     if (left.knownPreferenceFailures != right.knownPreferenceFailures) {

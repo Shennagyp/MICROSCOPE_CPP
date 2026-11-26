@@ -18,6 +18,8 @@ The workspace origin is not automatically the stop-point origin of any slide. Ea
 
 The initial canvas has no implicit slide count, default slide geometry or pre-populated rectangle. The empty workspace still has a valid machine-coordinate area and X/Y axis binding; slide-local projection is unavailable until a slide rectangle has been added.
 
+The current slide CAD orientation is axis-aligned: slide length is assigned to stage X or stage Y, and the initial handle selects the positive/negative direction on each axis. Slide rectangles may touch at an edge or corner, but positive-area overlap is rejected. No additional clearance margin is implied; a positive gap requirement must be represented as an explicit physical holder constraint.
+
 It does not own or store:
 - Z datum or slide height.
 - Slide thickness.

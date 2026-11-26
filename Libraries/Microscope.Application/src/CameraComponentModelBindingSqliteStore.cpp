@@ -186,10 +186,10 @@ private:
         if (normalizedManufacturer.empty() ||
             normalizedModel.empty() ||
             invalidVariant ||
-            binding.modelKey.manufacturer.find('\\0') != std::string::npos ||
-            binding.modelKey.model.find('\\0') != std::string::npos ||
+            binding.modelKey.manufacturer.find('\0') != std::string::npos ||
+            binding.modelKey.model.find('\0') != std::string::npos ||
             (binding.modelKey.variant &&
-             binding.modelKey.variant->find('\\0') != std::string::npos)) {
+             binding.modelKey.variant->find('\0') != std::string::npos)) {
             return failureStatus(makeError(
                 StoreErrorCode::InvalidModelKey,
                 nullptr,

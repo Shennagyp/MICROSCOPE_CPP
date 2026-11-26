@@ -311,6 +311,20 @@ void testCameraComponentModelBindingRoundTripAndRevisionControl() {
                   wrongEndpoint.error().code ==
                       microscope::application::camera_support::InstalledCameraModelEnrichmentErrorCode::CameraNotConnectedToLightPath,
                   "rejects applying a camera model binding to a non-camera component on the selected route");
+
+            const auto newerEquipment = makeEquipment(8);
+            const auto staleBindingSetUse =
+                microscope::application::camera_support::InstalledCameraModelEnricher::enrich(
+                    newerEquipment,
+                    catalog1,
+                    loaded.value(),
+                    makeId<microscope::core::LightPathId>("camera-main-light-path"),
+                    makeId<microscope::core::EquipmentComponentId>("camera-main"),
+                    makeDiscoveredCameraDevice());
+            check(!staleBindingSetUse &&
+                  staleBindingSetUse.error().code ==
+                      microscope::application::camera_support::InstalledCameraModelEnrichmentErrorCode::BindingSetEquipmentRevisionMismatch,
+                  "does not reuse a cached camera binding set against another equipment revision");
         }
         check(loaded && loaded.value().bindingRevision == 1,
               "restores the binding-set revision for this equipment revision");
@@ -361,25 +375,6 @@ void testCameraComponentModelBindingRoundTripAndRevisionControl() {
               "loads the newly accepted binding/profile revision");
 
         const auto newerEquipment = makeEquipment(8);
-        const auto staleBindingSetUse =
-            loaded
-                ? microscope::application::camera_support::InstalledCameraModelEnricher::enrich(
-                      newerEquipment,
-                      catalog2,
-                      loaded.value(),
-                      makeId<microscope::core::LightPathId>("camera-main-light-path"),
-                      makeId<microscope::core::EquipmentComponentId>("camera-main"),
-                      makeDiscoveredCameraDevice())
-                : microscope::core::Result<
-                      microscope::application::camera_support::InstalledCameraModelEnrichment,
-                      microscope::application::camera_support::InstalledCameraModelEnrichmentError>::failure(
-                          {microscope::application::camera_support::InstalledCameraModelEnrichmentErrorCode::BindingSetEquipmentRevisionMismatch,
-                           std::nullopt, std::nullopt, {}});
-        check(!staleBindingSetUse &&
-              staleBindingSetUse.error().code ==
-                  microscope::application::camera_support::InstalledCameraModelEnrichmentErrorCode::BindingSetEquipmentRevisionMismatch,
-              "does not reuse a cached camera binding set against another equipment revision");
-
         const auto noBindingsForNewEquipmentRevision =
             store->loadBindings(newerEquipment, catalog2);
         check(noBindingsForNewEquipmentRevision &&

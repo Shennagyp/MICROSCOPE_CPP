@@ -415,12 +415,14 @@ CameraSuitabilityReport CameraSuitabilityAssessor::assessFluorescence(
     }
 
     if (!report.meanQuantumEfficiencyInEmissionBand) {
-        ++report.unknownPreferenceData;
-        addWarning(
-            report,
-            camera,
-            "camera.fluorescence.qe_unknown_in_emission_band",
-            "The camera QE curve does not cover the complete requested emission band; spectral sensitivity is unknown for this acquisition.");
+        if (!hasCompleteSpectralDetectionInput) {
+            ++report.unknownPreferenceData;
+            addWarning(
+                report,
+                camera,
+                "camera.fluorescence.qe_unknown_in_emission_band",
+                "The camera QE curve does not cover the complete requested emission band; spectral sensitivity is unknown for this acquisition.");
+        }
     } else if (requirements.minimumMeanQuantumEfficiency &&
                *report.meanQuantumEfficiencyInEmissionBand <
                    *requirements.minimumMeanQuantumEfficiency) {

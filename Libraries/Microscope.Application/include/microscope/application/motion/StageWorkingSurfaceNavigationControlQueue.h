@@ -34,7 +34,7 @@ struct StageWorkingSurfaceNavigationControlRequestOutcome final {
     std::optional<StageWorkingSurfaceNavigationRuntimeError> error;
 };
 
-struct StageNavigationControlDrainResult final {
+struct StageWorkingSurfaceNavigationControlDrainResult final {
     std::vector<StageWorkingSurfaceNavigationControlRequestOutcome> outcomes;
     std::optional<StageWorkingSurfaceNavigationRuntimeUpdate> healthUpdate;
     bool queueClosed;
@@ -88,17 +88,17 @@ public:
     // already executing, queued requests remain in FIFO order for the next
     // owner-thread iteration after that navigation reaches a terminal result.
     [[nodiscard]] core::Result<
-        StageNavigationControlDrainResult,
+        StageWorkingSurfaceNavigationControlDrainResult,
         StageWorkingSurfaceNavigationRuntimeError> drain(StageWorkingSurfaceNavigationRuntime& navigation) {
         auto bound = navigation.bindOwnerThread();
         if (!bound) {
-            return core::Result<StageNavigationControlDrainResult,
+            return core::Result<StageWorkingSurfaceNavigationControlDrainResult,
                 StageWorkingSurfaceNavigationRuntimeError>::failure(bound.error());
         }
 
         auto health = navigation.synchronizeFeedbackLoss();
         if (!health) {
-            return core::Result<StageNavigationControlDrainResult,
+            return core::Result<StageWorkingSurfaceNavigationControlDrainResult,
                 StageWorkingSurfaceNavigationRuntimeError>::failure(health.error());
         }
         std::optional<StageWorkingSurfaceNavigationRuntimeUpdate> healthUpdate;
@@ -106,11 +106,11 @@ public:
             StageWorkingSurfaceNavigationRuntimeDisposition::FeedbackLossDetected) {
             healthUpdate = health.value();
         }
-        StageNavigationControlDrainResult result{
+        StageWorkingSurfaceNavigationControlDrainResult result{
             {}, std::move(healthUpdate), isClosed(), pendingCount()};
         if (navigation.feedbackLossUnresolved()) {
             result.pendingCount = pendingCount();
-            return core::Result<StageNavigationControlDrainResult,
+            return core::Result<StageWorkingSurfaceNavigationControlDrainResult,
                 StageWorkingSurfaceNavigationRuntimeError>::success(std::move(result));
         }
 
@@ -135,7 +135,7 @@ public:
 
         result.queueClosed = isClosed();
         result.pendingCount = pendingCount();
-        return core::Result<StageNavigationControlDrainResult,
+        return core::Result<StageWorkingSurfaceNavigationControlDrainResult,
             StageWorkingSurfaceNavigationRuntimeError>::success(std::move(result));
     }
 

@@ -5,7 +5,7 @@
 **Reviewed provider checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713`  
 **Current Qt/UI checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
 **Review date:** 26 November 2026  
-**Status:** Phase 6 remains open and is the active software workstream by owner direction. Phase 4 visual/physical acceptance remains pending; the owner postponed the physical MU503 test and explicitly directed continued Phase 6 work.
+**Status:** Phase 6 remains open but is blocked at the frozen AmScope provider-test boundary. Provider-neutral GenTL/GenApi work is complete for the current public contract. On 26 November 2026 the owner explicitly authorized Phase 7 packaging to proceed without lifting the AmScope freeze. Phase 4 visual/physical acceptance remains pending; the physical MU503 test is postponed.
 
 ## 1. Authority and scope
 
@@ -16,7 +16,7 @@ Phase 5 GenTL/GenApi integration is complete by owner direction. This audit
 does not reopen it. Original Phases 3 and 4 remain in scope: Phase 3 is accepted,
 and Phase 4 reusable Qt UI source/offscreen work is complete with visual and
 physical owner acceptance still pending. On 26 November 2026 the owner
-postponed the physical MU503 test and directed continued Phase 6 development.
+postponed the physical MU503 test and later authorized Phase 7 packaging on 26 November 2026. Phase 6 remains open at the frozen AmScope provider-test boundary.
 This is a sequencing instruction, not a claim that Phase 4 has been accepted.
 Phase 4 acceptance remains pending and does not block Phase 6 software work.
 AmScope source/tests/contracts/behavior are frozen and must not be modified.
@@ -212,32 +212,37 @@ original Phase 3/4 deliverable, tracked separately from this provider audit;
 widget existence must never be used as evidence that a camera feature is
 supported or hardware-qualified.
 
-## 7. Next work package
+## 7. Phase 6 boundary and Phase 7 authorization
 
-1. Continue Phase 6 software work now, as explicitly directed by the owner.
-   Phase 4 visual/workspace acceptance remains pending and physical MU503
-   testing is postponed; neither blocks Phase 6. Do not mark Phase 4 accepted.
-2. Preserve the AmScope freeze. The known provider-level AmScope feature and
-   command test gaps remain documented but must not be addressed by modifying
-   AmScope source, tests, public contracts or behavior.
-3. GenApi malformed XML, unsupported public IRegister, feature read/write
-   failure recovery and command execution failure recovery tests are complete
-   at `85dd6af`; workflow #45770024248 passed Intel x86_64 and Apple Silicon
-   arm64 with the official GenApi 3.5.1 integration.
-4. Retain provider-specific GenTL `DeviceDescriptor` for now. It carries the
-   Producer/interface/device routing identity needed by `openDevice`; the
-   Producer tests reject foreign Producer paths and stale interface IDs.
-   There is no established generic multi-provider discovery consumer that
-   justifies a lossy Common projection. Revisit only when such a consumer exists.
-5. Preserve the vector decision: the reusable editor uses `elementCount` for
-   cardinality guidance and Common validation rejects wrong vector lengths;
-   providers retain per-field semantics. Defer per-element labels/ranges until
-   a concrete generic consumer requires them.
-6. No additional provider-neutral Phase 6 source gap is currently identified.
-   Do not invent work or modify AmScope to close the remaining blocked tests.
-   Hold this boundary until the owner changes the AmScope freeze or directs
-   Phase 7. Keep vendor CTI, vendor GenApi XML and physical camera qualification
-   as Phase 8 evidence; mock/XML CI is not hardware verification.
+1. The provider-neutral Phase 6 work is complete for the current public
+   contract: GenTL discovery routing, GenApi unsupported/failure recovery,
+   and the discovery-projection/vector-descriptor decisions are recorded.
+   No additional unblocked provider-neutral Phase 6 source gap is identified.
+2. The remaining AmScope provider-level feature, command and model-mapping
+   tests remain open and blocked by the explicit AmScope freeze. Do not modify
+   AmScope provider source, tests, public contracts or runtime behavior.
+3. On 26 November 2026 the owner explicitly authorized Phase 7 package and
+   external-consumer work. This is a sequencing decision only; it does not
+   waive or complete Phase 6. Continue on the package workstream documented
+   in [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
+4. Keep Phase 4 visual/workspace acceptance pending and physical MU503 UI
+   testing postponed. Neither blocks the authorized Phase 7 software work.
+5. The official GenApi 3.5.1 negative/failure coverage is CI-verified at
+   `85dd6af` in workflow #45770024248. The later GenTL CMake packaging
+   changes at `49cc11e` also passed the GenTL/GenApi workflow on both
+   Intel x86_64 and Apple Silicon arm64 in #45777372439.
+6. Retain provider-specific GenTL `DeviceDescriptor`: it carries
+   Producer/interface/device routing identity required by `openDevice`.
+   Do not introduce a lossy Common projection without a concrete generic
+   multi-provider consumer.
+7. Preserve the vector decision: the reusable editor uses `elementCount`
+   for cardinality guidance and Common validation rejects wrong vector
+   lengths; providers retain per-field semantics. Defer per-element
+   labels/ranges until a concrete generic consumer requires them.
+8. Phase 7 requires baseline physical smoke using installed AmScope
+   non-Qt/Qt consumers and an installed GenTL consumer with a physical CTI
+   camera. Phase 8 expands to the declared provider/model qualification
+   matrix and release evidence. Mock/XML CI is not hardware verification.
 
 **No local build/test/debug run or physical-camera test was performed for this
 audit.** The CI results above are the exact remote workflow evidence.

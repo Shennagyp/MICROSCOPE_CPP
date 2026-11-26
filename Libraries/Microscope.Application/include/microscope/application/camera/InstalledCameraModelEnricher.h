@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <optional>
 #include <vector>
 
 namespace microscope::application::camera_support {
@@ -12,6 +13,7 @@ namespace microscope::application::camera_support {
 enum class InstalledCameraModelEnrichmentErrorCode {
     BindingSetMicroscopeMismatch,
     BindingSetEquipmentRevisionMismatch,
+    InvalidBindingSetRevision,
     LightPathNotInstalled,
     CameraNotConnectedToLightPath,
     BindingNotFound,

@@ -170,9 +170,16 @@ Owner authorization is explicit. Do not ask again whether Phase 7 may start.
    Do not modify AmScope provider source, tests, public contracts or runtime
    behavior. Phase 7 CMake packaging metadata is the only AmScope-area change
    authorized by this scope.
-7. Keep Phase 4 visual/workspace acceptance pending and physical MU503 testing
-   postponed. Phase 8 physical/provider qualification and SDK redistribution
-   review remain separate.
+7. Keep Phase 4 visual/workspace acceptance pending and physical MU503 UI
+   testing postponed; do not mark Phase 4 accepted.
+8. Phase 7 also requires installed-artifact physical smoke: non-Qt AmScope
+   enumerate/open/read-setting/start/frame/stop/close; Qt AmScope preview and
+   descriptor-driven controls; and a GenTL installed consumer with a physical
+   CTI camera. Document vendor SDK redistribution requirements before
+   publication.
+9. Phase 8 expands qualification across the declared provider/model matrix,
+   long-duration and recovery cases, deployment configurations and release
+   acceptance.
 
 Package exports and runtime consumer smoke do not qualify physical camera
 operation. Before Phase 7 can close, run the installed non-Qt AmScope consumer

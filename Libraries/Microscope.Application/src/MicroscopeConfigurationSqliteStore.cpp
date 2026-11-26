@@ -416,6 +416,18 @@ core::Status<MicroscopeConfigurationStoreError>
 MicroscopeConfigurationSqliteStore::saveCalibration(
     const core::LightPathCalibration& calibration) {
     std::lock_guard<std::mutex> lock(mutex_);
+
+    if (calibration.equipmentDefinitionRevision() == 0 ||
+        calibration.equipmentDefinitionRevision() > kMaximumSqliteInteger ||
+        calibration.operationModeRevision() == 0 ||
+        calibration.operationModeRevision() > kMaximumSqliteInteger ||
+        calibration.points().size() > kMaximumSqliteInteger) {
+        return failureStatus(makeError(
+            StoreErrorCode::InvalidRevision,
+            database_,
+            "Calibration revisions or point count exceed the persistent SQLite representation."));
+    }
+
     Transaction transaction(database_);
     if (!transaction.active()) {
         return failureStatus(makeError(
@@ -581,7 +593,7 @@ MicroscopeConfigurationSqliteStore::loadCalibrationUnlocked(
     {
         Statement pointRows(
             database_,
-            "SELECT drive_value, irradiance_uw_per_mm2, relative_uncertainty_percent "
+            "SELECT point_index, drive_value, irradiance_uw_per_mm2, relative_uncertainty_percent "
             "FROM light_path_calibration_point "
             "WHERE microscope_id = ? AND calibration_revision_id = ? "
             "ORDER BY point_index");
@@ -594,6 +606,7 @@ MicroscopeConfigurationSqliteStore::loadCalibrationUnlocked(
                     makeError(StoreErrorCode::SqliteOperationFailed, database_));
         }
 
+        std::size_t expectedPointIndex = 0;
         for (;;) {
             const int step = sqlite3_step(pointRows.get());
             if (step == SQLITE_DONE) {
@@ -605,10 +618,23 @@ MicroscopeConfigurationSqliteStore::loadCalibrationUnlocked(
                     MicroscopeConfigurationStoreError>::failure(
                         makeError(StoreErrorCode::SqliteOperationFailed, database_));
             }
+            const sqlite3_int64 storedPointIndex =
+                sqlite3_column_int64(pointRows.get(), 0);
+            if (storedPointIndex < 0 ||
+                static_cast<std::uint64_t>(storedPointIndex) != expectedPointIndex) {
+                return core::Result<
+                    std::optional<core::LightPathCalibration>,
+                    MicroscopeConfigurationStoreError>::failure(
+                        makeError(
+                            StoreErrorCode::InvalidPersistedRecord,
+                            database_,
+                            "Calibration point indices are not contiguous from zero."));
+            }
             points.push_back({
-                sqlite3_column_double(pointRows.get(), 0),
                 sqlite3_column_double(pointRows.get(), 1),
-                sqlite3_column_double(pointRows.get(), 2)});
+                sqlite3_column_double(pointRows.get(), 2),
+                sqlite3_column_double(pointRows.get(), 3)});
+            ++expectedPointIndex;
         }
     }
 
@@ -725,6 +751,13 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
     }
 
     for (const auto& setting : operationMode.lightPathSettings()) {
+        if (setting.equipmentDefinitionRevision() == 0 ||
+            setting.equipmentDefinitionRevision() > kMaximumSqliteInteger) {
+            return failureStatus(makeError(
+                StoreErrorCode::InvalidRevision,
+                database_,
+                "An operation mode setting has an equipment revision outside the SQLite integer range."));
+        }
         auto calibration = loadCalibrationUnlocked(
             operationMode.microscopeId(),
             setting.calibrationRevisionId());

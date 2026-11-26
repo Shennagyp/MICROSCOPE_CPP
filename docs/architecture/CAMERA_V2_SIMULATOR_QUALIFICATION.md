@@ -75,7 +75,9 @@ This boundary must be resolved before claiming simulator-backed integration of t
 ## 4. Bounded implementation proposal
 
 1. **Implemented in source:** a test-only native C ABI shim around the existing `GenTLProducerLibrary`, exporting the five symbols expected by `ConsumerBridge`. It is not installed or exported and does not change production runtime selection.
-2. **Implemented in source:** `camera_gentl_simulator_smoke`, which accepts explicit bridge and CTI paths, uses the existing `Producer` API, selects the first discovered device/stream, and checks GenApi XML plus five complete frames and orderly stop/close. CMake registers it with CTest only when `CAMERA_GENTL_SIMULATOR_CTI` is supplied.
+2. **Implemented in source:** `camera_gentl_simulator_smoke`, which accepts explicit bridge and CTI paths, uses the existing `Producer` API, selects the first discovered device/stream, and checks GenApi XML, five complete frames, invocation of the Common frame
+projection adapter, and orderly stop/close. Unsupported pixel layouts are
+reported as opaque rather than treated as CTI failures. CMake registers it with CTest only when `CAMERA_GENTL_SIMULATOR_CTI` is supplied.
 3. Exercise the actual `Producer`, `DeviceSession`, `DataStreamSession`, `GenTLFrameAdapter`, and, where the simulator's XML permits, the official GenApi adapter.
 4. Record discovered device descriptors, Producer version, simulator version, CTI path/hash, feature descriptors, frame dimensions/format/payload length, frame count, and teardown result. Treat unsupported simulator features as capability observations, not test failures.
 5. Prefer an opt-in/manual CI job or a separately provisioned runner if vendor download/license conditions prevent safe automatic installation. Do not make normal package CI depend on a vendor installer.

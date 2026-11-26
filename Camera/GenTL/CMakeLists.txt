@@ -134,7 +134,8 @@ if(BUILD_TESTING)
     add_test(NAME camera_gentl_inrepo_simulator_smoke
         COMMAND camera_gentl_simulator_smoke
             "$<TARGET_FILE:gentl_native_consumer_bridge_fixture>"
-            "$<TARGET_FILE:gentl_test_simulator_cti>")
+            "$<TARGET_FILE:gentl_test_simulator_cti>"
+            "--verify-two-device-isolation")
     set_tests_properties(camera_gentl_inrepo_simulator_smoke PROPERTIES
         TIMEOUT 120)
 

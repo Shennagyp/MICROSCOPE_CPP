@@ -284,9 +284,9 @@ public:
         return core::Result<bool, StageWorkingSurfaceNavigationRuntimeError>::success(newlyBound);
     }
 
-    // Front-end entry point. The immutable target carries the registration
-    // revision captured when the user selected the slide point. This long-lived
-    // object allocates operation identities and owns the operation lifecycle.
+    // A user submits a target captured from a specific slide-registration
+    // revision. This persistent owner plans once, allocates operation identity,
+    // owns the operation lifecycle and dispatches through the retained driver.
     [[nodiscard]] Result beginRequest(
         const core::SlideNavigationTarget2D& target) {
         auto owner = requireOwnerThread();
@@ -299,46 +299,27 @@ public:
             return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::FeedbackLossUnresolved);
         }
 
-        const auto plan = core::StageWorkingSurfaceNavigationPlanner::plan(
+        auto plan = core::StageWorkingSurfaceNavigationPlanner::plan(
             surface_, target, position_, homingPolicy_);
         if (!plan) {
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::PlanningRejected,
                 plan.error());
         }
+
         auto identities = allocateNavigationIdentity();
         if (!identities) return Result::failure(identities.error());
-        return beginRequest(target, std::move(identities).value());
+
+        return beginNavigation(
+            std::move(plan).value(), std::move(identities).value());
     }
 
 private:
-    // Internal lifecycle entry. Only this stateful owner allocates and consumes
-    // operation/step/command identities.
-    [[nodiscard]] Result beginRequest(
-        const core::SlideNavigationTarget2D& target,
+    // Internal operation lifecycle. The accepted plan is passed through intact:
+    // no second layout lookup, target transform or homing decision is performed.
+    [[nodiscard]] Result beginNavigation(
+        core::StageWorkingSurfaceNavigationPlan plan,
         NavigationIdentity identities) {
-        auto owner = requireOwnerThread();
-        if (!owner) return Result::failure(owner.error());
-        if (active_)
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::NavigationAlreadyActive);
-        if (operationRuntime_->feedbackLossLatched()) {
-            position_ = position_.invalidateMachineReference();
-            feedbackLossObserved_ = true;
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::FeedbackLossUnresolved);
-        }
-        if (identities.initialStepId == identities.restoredMoveStepId ||
-            identities.initialCommandId == identities.restoredMoveCommandId) {
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected);
-        }
-
-        const auto plan = core::StageWorkingSurfaceNavigationPlanner::plan(
-            surface_, target, position_, homingPolicy_);
-        if (!plan) {
-            return failure(
-                StageWorkingSurfaceNavigationRuntimeErrorCode::PlanningRejected,
-                plan.error());
-        }
-
         auto created = operationRuntime_->createOperation(identities.operationId);
         if (!created) {
             return failure(
@@ -346,6 +327,7 @@ private:
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
                 std::nullopt, created.error());
         }
+
         auto started = operationRuntime_->startOperation(identities.operationId);
         if (!started) {
             return failure(
@@ -353,6 +335,7 @@ private:
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
                 std::nullopt, started.error());
         }
+
         auto step = operationRuntime_->createStep(
             identities.operationId, identities.initialStepId);
         if (!step) {
@@ -361,65 +344,9 @@ private:
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
                 std::nullopt, step.error());
         }
-        return beginNavigation(target, std::move(identities));
-    }
-
-    // operationId must already be Running and initialStepId must already be
-    // Pending in the supplied serialized operation runtime.
-    // Lower-level continuation for a caller that already owns an operation
-    // and Pending step in this same persistent SerializedOperationRuntime.
-    // Normal application commands use beginRequest(target).
-    [[nodiscard]] Result beginNavigation(
-        const core::SlideNavigationTarget2D& target,
-        NavigationIdentity identities) {
-        auto owner = requireOwnerThread();
-        if (!owner) {
-            return Result::failure(owner.error());
-        }
-        if (active_) {
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::NavigationAlreadyActive);
-        }
-        if (operationRuntime_->feedbackLossLatched()) {
-            position_ = position_.invalidateMachineReference();
-            feedbackLossObserved_ = true;
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::FeedbackLossUnresolved);
-        }
-        if (identities.initialStepId == identities.restoredMoveStepId ||
-            identities.initialCommandId == identities.restoredMoveCommandId) {
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected);
-        }
-
-        auto operation = operationRuntime_->operationSnapshot(identities.operationId);
-        if (!operation || operation.value().status() != core::OperationStatus::Running) {
-            return failure(
-                StageWorkingSurfaceNavigationRuntimeErrorCode::OperationNotRunning,
-                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                operation ? std::nullopt :
-                    std::optional<core::SerializedOperationRuntimeError>(operation.error()));
-        }
-        auto restoredStep = operationRuntime_->stepStatus(
-            identities.operationId, identities.restoredMoveStepId);
-        if (restoredStep) {
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected);
-        }
-        if (restoredStep.error() != core::SerializedOperationRuntimeError::UnknownStep) {
-            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
-                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                std::nullopt, restoredStep.error());
-        }
-
-        auto step = operationRuntime_->stepStatus(
-            identities.operationId, identities.initialStepId);
-        if (!step || step.value() != core::StepStatus::Pending) {
-            return failure(
-                StageWorkingSurfaceNavigationRuntimeErrorCode::InitialStepNotPending,
-                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                step ? std::nullopt :
-                    std::optional<core::SerializedOperationRuntimeError>(step.error()));
-        }
 
         auto execution = StageWorkingSurfaceNavigationExecutor::begin(
-            surface_, target, position_, homingPolicy_, runtimeDevice_,
+            std::move(plan), runtimeDevice_,
             identities.operationId, identities.initialStepId,
             identities.initialCommandId, *port_, *operationRuntime_);
         if (!execution) {
@@ -427,8 +354,7 @@ private:
                 identities.operationId, identities.initialStepId);
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
-                execution.error().planningError,
-                execution.error().code, std::nullopt, std::nullopt,
+                std::nullopt, execution.error().code, std::nullopt, std::nullopt,
                 std::nullopt,
                 preDispatchFailure
                     ? execution.error().runtimeError
@@ -447,10 +373,10 @@ private:
                     ? StageWorkingSurfaceNavigationRuntimeDisposition::HomingDispatched
                     : StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched);
         }
+
         if (dispatch == DispatchDisposition::Rejected) {
-            // Every known rejection means no motion command was accepted by the
-            // adapter/runtime. Close the Pending step rather than orphaning a
-            // Running operation. Indeterminate submissions are handled above.
+            // A known adapter/runtime rejection means no command was accepted.
+            // Close the pending step and operation instead of orphaning Running work.
             auto failed = operationRuntime_->recordPreDispatchFailure(
                 active_->identities.operationId,
                 active_->execution.commandContext.operation().stepId);
@@ -468,9 +394,8 @@ private:
                                     : std::nullopt);
         }
 
-        // The adapter may have received the command before the submission call
-        // failed. Keep the correlation context and invalidate position instead
-        // of claiming that the stage stayed still.
+        // Submission outcome is indeterminate: the adapter may have received
+        // the command. Retain correlation/active operation and invalidate XY.
         position_ = position_.invalidateXYReference();
         return success(StageWorkingSurfaceNavigationRuntimeDisposition::SubmissionIndeterminate);
     }

@@ -246,6 +246,33 @@ void emptyCanvasSupportsImmutableSlideRectangleEdits() {
         "rejects removal of a slide that is not on the canvas");
 }
 
+void xyReferenceInvalidationPreservesIndependentFocusReference() {
+    const auto stage = stageSpecification();
+    const auto surface = take(StageWorkingSurface2D::createEmpty(
+        stage, id<StageAxisId>("x"), id<StageAxisId>("y"), {0,0},
+        take(StageTravelRange2D::create(200'000, 60'000))));
+    auto position = take(StagePosition3D::unknown(
+        surface, stage, id<StageAxisId>("z-focus")));
+    position = take(position.afterCalibratedReference(
+        id<StageAxisId>("z-focus"), 12'500.0, 2.0));
+
+    const auto xyInvalidated = position.invalidateXYReference();
+    check(!xyInvalidated.x().positionIsUsable() &&
+        !xyInvalidated.y().positionIsUsable(),
+        "an XY operation fault invalidates both in-plane position references");
+    check(xyInvalidated.z().positionIsUsable() &&
+        xyInvalidated.z().position() &&
+        xyInvalidated.z().position()->value() == 12'500.0 &&
+        xyInvalidated.z().evidence() == StagePositionEvidence::CalibratedEstimate,
+        "an XY operation fault preserves the independent focus-Z calibration");
+
+    const auto allInvalidated = position.invalidateMachineReference();
+    check(!allInvalidated.x().positionIsUsable() &&
+        !allInvalidated.y().positionIsUsable() &&
+        !allInvalidated.z().positionIsUsable(),
+        "a whole-device feedback-loss event still invalidates every machine axis");
+}
+
 void zFocusIsIndependentFromSlidePlane() {
     const auto stage = stageSpecification();
     const auto surface = workingSurface(stage);
@@ -364,6 +391,7 @@ int main() {
     cadRectanglesAreXYOnlyAndVariableCount();
     emptyCanvasUsesUserOriginAndTravelRange();
     emptyCanvasSupportsImmutableSlideRectangleEdits();
+    xyReferenceInvalidationPreservesIndependentFocusReference();
     zFocusIsIndependentFromSlidePlane();
     physicalEndstopStillUsesItsSwitch();
     zWithoutEndstopUsesSafeFullRangeSweepFromUnknownPosition();

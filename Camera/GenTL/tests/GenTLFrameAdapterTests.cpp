@@ -105,6 +105,86 @@ void testUnpackedMono10Mono12Mono14Projection() {
     }
 }
 
+void testBayerMosaicFormatsPreservePatternAndRawSamples() {
+    struct FormatCase {
+        std::uint64_t format;
+        camera::PixelColorFilterArray pattern;
+        std::uint8_t significantBits;
+    };
+    const FormatCase formats[] = {
+        {UINT64_C(0x01080008), camera::PixelColorFilterArray::GRBG, 8},
+        {UINT64_C(0x0110000C), camera::PixelColorFilterArray::GRBG, 10},
+        {UINT64_C(0x01100010), camera::PixelColorFilterArray::GRBG, 12},
+        {UINT64_C(0x01100109), camera::PixelColorFilterArray::GRBG, 14},
+        {UINT64_C(0x0110002E), camera::PixelColorFilterArray::GRBG, 16},
+        {UINT64_C(0x01080009), camera::PixelColorFilterArray::RGGB, 8},
+        {UINT64_C(0x0110000D), camera::PixelColorFilterArray::RGGB, 10},
+        {UINT64_C(0x01100011), camera::PixelColorFilterArray::RGGB, 12},
+        {UINT64_C(0x0110010A), camera::PixelColorFilterArray::RGGB, 14},
+        {UINT64_C(0x0110002F), camera::PixelColorFilterArray::RGGB, 16},
+        {UINT64_C(0x0108000A), camera::PixelColorFilterArray::GBRG, 8},
+        {UINT64_C(0x0110000E), camera::PixelColorFilterArray::GBRG, 10},
+        {UINT64_C(0x01100012), camera::PixelColorFilterArray::GBRG, 12},
+        {UINT64_C(0x0110010B), camera::PixelColorFilterArray::GBRG, 14},
+        {UINT64_C(0x01100030), camera::PixelColorFilterArray::GBRG, 16},
+        {UINT64_C(0x0108000B), camera::PixelColorFilterArray::BGGR, 8},
+        {UINT64_C(0x0110000F), camera::PixelColorFilterArray::BGGR, 10},
+        {UINT64_C(0x01100013), camera::PixelColorFilterArray::BGGR, 12},
+        {UINT64_C(0x0110010C), camera::PixelColorFilterArray::BGGR, 14},
+        {UINT64_C(0x01100031), camera::PixelColorFilterArray::BGGR, 16}
+    };
+
+    for (const auto& format : formats) {
+        auto source = validMono8Frame();
+        source.pixelFormat = format.format;
+        source.payload.assign(format.significantBits == 8 ? 6 : 12, 0x5A);
+        source.pixelEndianness = GenTL::PIXELENDIANNESS_BIG;
+
+        const auto result = camera::gentl::makeCommonFrame(std::move(source));
+        require(result.has_value(), "A supported Bayer payload was rejected.");
+        const auto& frame = **result;
+        require(frame.pixelColorFilterArray == format.pattern,
+                "The Bayer mosaic pattern was not preserved.");
+        require(frame.significantBitsPerPixel == format.significantBits,
+                "The Bayer significant bit depth was not preserved.");
+        require(frame.storageBitsPerPixel ==
+                    (format.significantBits == 8 ? 8 : 16),
+                "The Bayer sample storage width was incorrect.");
+        require(frame.pixelFormat ==
+                    (format.significantBits == 8
+                        ? camera::PixelFormat::Raw8
+                        : camera::PixelFormat::Raw16),
+                "Bayer samples were not retained in the expected RAW container.");
+        require(frame.strideBytes ==
+                    (format.significantBits == 8 ? 3U : 6U),
+                "Bayer row stride was incorrect.");
+        require(frame.pixelByteOrder ==
+                    (format.significantBits == 8
+                        ? camera::PixelByteOrder::NotApplicable
+                        : camera::PixelByteOrder::BigEndian),
+                "Bayer byte order was not preserved.");
+        require(frame.pixels == std::vector<std::uint8_t>(
+                    format.significantBits == 8 ? 6 : 12, 0x5A),
+                "Bayer payload samples were modified.");
+    }
+}
+
+void testBayer16WithoutKnownByteOrderPreservesOnlyMosaicMetadata() {
+    auto source = validMono8Frame();
+    source.pixelFormat = UINT64_C(0x0110002F); // PFNC BayerRG16
+    source.payload.assign(12, 0x44);
+    source.pixelEndianness = GenTL::PIXELENDIANNESS_UNKNOWN;
+
+    const auto result = camera::gentl::makeCommonFrame(source);
+    require(result.has_value(), "Unknown-endian Bayer16 payload was discarded.");
+    require((*result)->pixelColorFilterArray ==
+                camera::PixelColorFilterArray::RGGB,
+            "Bayer mosaic identity was lost when byte order was unavailable.");
+    require((*result)->pixelFormat == camera::PixelFormat::Unknown &&
+                (*result)->strideBytes == 0,
+            "Bayer16 storage layout was inferred without a known byte order.");
+}
+
 void testMono16WithoutKnownByteOrderRemainsOpaque() {
     auto source = validMono8Frame();
     source.pixelFormat = UINT64_C(0x01100007);
@@ -306,6 +386,8 @@ int main() {
         testRvalueProjectionTransfersPayload();
         testMono16ProjectionUsesReportedByteOrder();
         testUnpackedMono10Mono12Mono14Projection();
+        testBayerMosaicFormatsPreservePatternAndRawSamples();
+        testBayer16WithoutKnownByteOrderPreservesOnlyMosaicMetadata();
         testMono16WithoutKnownByteOrderRemainsOpaque();
         testRgb8Projection();
         testPfnc16NamespaceMappings();

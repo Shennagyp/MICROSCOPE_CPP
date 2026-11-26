@@ -93,8 +93,8 @@ int main(int argc, char** argv) {
             discoveredProducers.insert(device.producerPath);
         }
         if (discoveredProducers.size() != 2 ||
-            !discoveredProducers.contains(std::filesystem::canonical(firstCti).string()) ||
-            !discoveredProducers.contains(std::filesystem::canonical(secondCti).string())) {
+            discoveredProducers.count(std::filesystem::canonical(firstCti).string()) == 0 ||
+            discoveredProducers.count(std::filesystem::canonical(secondCti).string()) == 0) {
             return 8;
         }
     } catch (...) {

@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
         for (const auto& entry : report.producers) {
             if (!entry.producer || entry.devices.size() != 2) return 9;
             for (const auto& device : entry.devices) {
-                if (device.producerPath != entry.producer.ctiPath().string() ||
+                if (device.producerPath != entry.producer.ctiPath() ||
                     device.interfaceId.empty() || device.deviceId.empty()) return 10;
                 discoveredProducers.insert(device.producerPath);
                 ++discoveredDeviceCount;

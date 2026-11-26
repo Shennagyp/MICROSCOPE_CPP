@@ -135,7 +135,8 @@ private:
 enum class StageWorkingSurface2DError {
     NonFiniteBoundary, InvalidBoundary, NonFiniteOrigin, TravelRangeNotRepresentable,
     DuplicateSlideIdentity, SlideNotFound, SlideOutsideWorkingSurface,
-    SlideRectanglesOverlap, DuplicateStageAxis, MissingStageAxis, NonLinearStageAxis,
+    SlideRectanglesOverlap, RegistrationRevisionMustChange,
+    DuplicateStageAxis, MissingStageAxis, NonLinearStageAxis,
     UnsupportedStageAxisUnit, WorkingSurfaceOutsideAxisRange
 };
 

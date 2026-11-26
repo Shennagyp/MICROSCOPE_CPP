@@ -250,6 +250,13 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
     set_target_properties(amscope_preview PROPERTIES
         BUILD_RPATH "@loader_path")
 
+    if(BUILD_TESTING)
+        add_test(NAME amscope_preview_ui_composition_tests
+            COMMAND amscope_preview --self-test-ui)
+        set_tests_properties(amscope_preview_ui_composition_tests PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
+
     # Physical-camera performance test. Intentionally not registered with
     # CTest because hosted CI has no camera attached.
     add_executable(amscope_hardware_rate_test app/hardware_rate_test.cpp)

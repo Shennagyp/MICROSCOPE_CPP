@@ -36,6 +36,7 @@
 #include <QPlainTextEdit>
 #include <QSaveFile>
 #include <QStatusBar>
+#include <QTableWidget>
 #include <QTime>
 #include <QToolBar>
 #include <QSettings>
@@ -200,7 +201,7 @@ int listCameras() {
 
 class PreviewWindow final : public QMainWindow {
 public:
-    PreviewWindow() {
+    explicit PreviewWindow(bool uiSmokeMode = false) {
         setWindowTitle("AmScope Imaging Workbench");
         resize(1440, 900);
         setDockNestingEnabled(true);
@@ -646,28 +647,112 @@ public:
             showStatusMessage(message);
         });
 
-        QSettings settings;
-        const QByteArray savedGeometry =
-            settings.value(QStringLiteral("window/geometry")).toByteArray();
-        if (!savedGeometry.isEmpty()) {
-            restoreGeometry(savedGeometry);
-        }
-        const QByteArray savedDockLayout =
-            settings.value(QStringLiteral("window/dock-layout")).toByteArray();
-        const bool layoutRestored =
-            !savedDockLayout.isEmpty() && restoreState(savedDockLayout, 2);
-        if (!layoutRestored) {
+        if (uiSmokeMode) {
+            // Keep CI composition checks deterministic and independent of
+            // user QSettings state.
             resetWorkspaceLayout();
+        } else {
+            QSettings settings;
+            const QByteArray savedGeometry =
+                settings.value(QStringLiteral("window/geometry")).toByteArray();
+            if (!savedGeometry.isEmpty()) {
+                restoreGeometry(savedGeometry);
+            }
+            const QByteArray savedDockLayout =
+                settings.value(QStringLiteral("window/dock-layout")).toByteArray();
+            const bool layoutRestored =
+                !savedDockLayout.isEmpty() && restoreState(savedDockLayout, 2);
+            if (!layoutRestored) {
+                resetWorkspaceLayout();
+            }
         }
 
         updateControls(camera_.state());
         updateFrameInfoLabel();
-        QTimer::singleShot(0, this, [this]() {
-            if (!cameraControlsDock_->isHidden() &&
-                camera_.state() == amscope::CameraState::Closed) {
-                refreshCameras();
+        if (!uiSmokeMode) {
+            QTimer::singleShot(0, this, [this]() {
+                if (!cameraControlsDock_->isHidden() &&
+                    camera_.state() == amscope::CameraState::Closed) {
+                    refreshCameras();
+                }
+            });
+        }
+    }
+
+    bool verifyUiComposition(QString* failureMessage = nullptr) {
+        const auto fail = [failureMessage](const QString& message) {
+            if (failureMessage)
+                *failureMessage = message;
+            return false;
+        };
+
+        if (centralWidget() != documentTabs_ ||
+            documentTabs_->count() != 1 ||
+            documentTabs_->widget(0) != preview_ ||
+            documentTabs_->tabText(0) != QStringLiteral("Live Preview")) {
+            return fail(QStringLiteral("Live Preview document composition is incorrect."));
+        }
+        if (!cameraControlsDock_ || !cameraPropertiesDock_ || !outputDock_ ||
+            cameraControlsDock_->objectName() != QStringLiteral("cameraExplorerDock") ||
+            cameraPropertiesDock_->objectName() != QStringLiteral("cameraPropertiesDock") ||
+            outputDock_->objectName() != QStringLiteral("outputDock")) {
+            return fail(QStringLiteral("Expected dock widgets or stable dock identities are missing."));
+        }
+        if (cameraControlsDock_->findChild<camera::qtwidgets::CameraControlPanel*>() !=
+                cameraControls_ ||
+            cameraPropertiesDock_->findChild<camera::qtwidgets::CameraCapabilityPanel*>() !=
+                capabilityPanel_ ||
+            !capabilityGroup_ || capabilityGroup_->title() !=
+                QStringLiteral("Model capabilities")) {
+            return fail(QStringLiteral("Reusable discovery or capability presentation is not composed into the expected dock."));
+        }
+        if (!outputLog_ || outputDock_->widget() != outputLog_ ||
+            !outputLog_->isReadOnly() || outputLog_->maximumBlockCount() != 2000) {
+            return fail(QStringLiteral("Output tool window configuration is incorrect."));
+        }
+        if (!imageInfoBar_ || imageInfoBar_->parentWidget() != statusBar() ||
+            !cameraStateIndicator_ ||
+            cameraStateIndicator_->parentWidget() != statusBar()) {
+            return fail(QStringLiteral("Status-bar telemetry or lifecycle indicator is missing."));
+        }
+        auto* capabilityTable = capabilityPanel_->findChild<QTableWidget*>(
+            QStringLiteral("cameraCapabilityTable"));
+        if (!capabilityTable ||
+            capabilityTable->rowCount() !=
+                static_cast<int>(camera::CameraCapabilities::count) ||
+            capabilityTable->columnCount() != 2) {
+            return fail(QStringLiteral("Model capability table is incomplete."));
+        }
+        for (int row = 0; row < capabilityTable->rowCount(); ++row) {
+            const auto* name = capabilityTable->item(row, 0);
+            const auto* state = capabilityTable->item(row, 1);
+            if (!name || name->text().isEmpty() || !state ||
+                state->text() != QStringLiteral("Unknown")) {
+                return fail(QStringLiteral("Initial model capabilities must remain explicitly Unknown."));
             }
-        });
+        }
+
+        // Verify that QMainWindow can serialize and restore the document/dock
+        // arrangement without changing the identities or losing a dock.
+        const QByteArray originalLayout = saveState(2);
+        if (originalLayout.isEmpty())
+            return fail(QStringLiteral("QMainWindow produced an empty dock-layout state."));
+
+        addDockWidget(Qt::LeftDockWidgetArea, cameraControlsDock_);
+        addDockWidget(Qt::TopDockWidgetArea, cameraPropertiesDock_);
+        addDockWidget(Qt::RightDockWidgetArea, outputDock_);
+        if (!restoreState(originalLayout, 2))
+            return fail(QStringLiteral("QMainWindow could not restore the saved workspace state."));
+        if (dockWidgetArea(cameraControlsDock_) != Qt::RightDockWidgetArea ||
+            dockWidgetArea(cameraPropertiesDock_) != Qt::RightDockWidgetArea ||
+            dockWidgetArea(outputDock_) != Qt::BottomDockWidgetArea ||
+            cameraControlsDock_->isFloating() ||
+            cameraPropertiesDock_->isFloating() ||
+            outputDock_->isFloating()) {
+            return fail(QStringLiteral("Restored dock areas do not match the default workspace."));
+        }
+
+        return true;
     }
 
     ~PreviewWindow() override {
@@ -3465,11 +3550,22 @@ int main(int argc, char* argv[]) {
         return listCameras();
     }
 
+    const bool uiSmokeMode =
+        argc > 1 && std::string(argv[1]) == "--self-test-ui";
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("AmScopeNative"));
     QCoreApplication::setApplicationName(QStringLiteral("AmScope Camera"));
     applyProfessionalStyle(application);
-    PreviewWindow window;
+    PreviewWindow window(uiSmokeMode);
+    if (uiSmokeMode) {
+        QString failure;
+        if (!window.verifyUiComposition(&failure)) {
+            std::cerr << "Preview UI composition smoke failed: "
+                      << failure.toStdString() << '\\n';
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
     window.show();
     return application.exec();
 }

@@ -61,6 +61,21 @@ bool mergeOptionalDouble(
     return false;
 }
 
+[[nodiscard]] bool isKnownTechnology(
+    ::camera::CameraSensorTechnology value) noexcept {
+    return value != ::camera::CameraSensorTechnology::Unknown;
+}
+
+[[nodiscard]] bool isKnownShutter(
+    ::camera::CameraShutterType value) noexcept {
+    return value != ::camera::CameraShutterType::Unknown;
+}
+
+[[nodiscard]] bool isKnownColorMode(
+    ::camera::CameraColorMode value) noexcept {
+    return value != ::camera::CameraColorMode::Unknown;
+}
+
 [[nodiscard]] bool sameResolution(
     const ::camera::ImageResolution& left,
     const ::camera::ImageResolution& right) noexcept {
@@ -126,9 +141,15 @@ void mergeSensorCharacteristics(
 
     const auto runtimeGlobalShutter =
         runtimeCapabilities.status(::camera::CameraCapability::GlobalShutter);
+    const bool hasKnownModelShutter =
+        modelSensor.shutterType &&
+        isKnownShutter(*modelSensor.shutterType);
+    const bool hasKnownModelColorMode =
+        modelSensor.colorMode &&
+        isKnownColorMode(*modelSensor.colorMode);
     const bool globalShutterConflict =
         runtimeGlobalShutter != ::camera::CapabilityStatus::Unknown &&
-        modelSensor.shutterType.has_value() &&
+        hasKnownModelShutter &&
         ((runtimeGlobalShutter == ::camera::CapabilityStatus::Supported) !=
          (*modelSensor.shutterType == ::camera::CameraShutterType::Global));
 
@@ -143,7 +164,7 @@ void mergeSensorCharacteristics(
         runtimeCapabilities.status(::camera::CameraCapability::MonochromeSensor);
     const bool colorModeConflict =
         runtimeMonochrome != ::camera::CapabilityStatus::Unknown &&
-        modelSensor.colorMode.has_value() &&
+        hasKnownModelColorMode &&
         ((runtimeMonochrome == ::camera::CapabilityStatus::Supported) !=
          (*modelSensor.colorMode == ::camera::CameraColorMode::Monochrome));
 
@@ -154,24 +175,48 @@ void mergeSensorCharacteristics(
             "The persisted sensor color mode conflicts with the live monochrome capability; the model color mode was not substituted.");
     }
 
+    if (merged.technology &&
+        !isKnownTechnology(*merged.technology)) {
+        merged.technology.reset();
+    }
+    const auto knownModelTechnology =
+        modelSensor.technology && isKnownTechnology(*modelSensor.technology)
+            ? modelSensor.technology
+            : std::optional<::camera::CameraSensorTechnology>{};
     usedModelData |= mergeOptionalValue(
         merged.technology,
-        modelSensor.technology,
+        knownModelTechnology,
         warnings,
         "sensor technology");
 
+    if (merged.shutterType &&
+        !isKnownShutter(*merged.shutterType)) {
+        merged.shutterType.reset();
+    }
     if (!globalShutterConflict) {
+        const auto knownModelShutter =
+            hasKnownModelShutter
+                ? modelSensor.shutterType
+                : std::optional<::camera::CameraShutterType>{};
         usedModelData |= mergeOptionalValue(
             merged.shutterType,
-            modelSensor.shutterType,
+            knownModelShutter,
             warnings,
             "shutter type");
     }
 
+    if (merged.colorMode &&
+        !isKnownColorMode(*merged.colorMode)) {
+        merged.colorMode.reset();
+    }
     if (!colorModeConflict) {
+        const auto knownModelColorMode =
+            hasKnownModelColorMode
+                ? modelSensor.colorMode
+                : std::optional<::camera::CameraColorMode>{};
         usedModelData |= mergeOptionalValue(
             merged.colorMode,
-            modelSensor.colorMode,
+            knownModelColorMode,
             warnings,
             "sensor color mode");
     }

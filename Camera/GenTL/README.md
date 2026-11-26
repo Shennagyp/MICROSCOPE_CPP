@@ -133,9 +133,10 @@ ctest --test-dir build/gentl-simulator \
 The opt-in smoke selects the first discovered device and first data stream. It
 checks CTI loading, TL/interface/device discovery, device open, non-empty
 GenApi XML retrieval, stream start, five complete non-empty image buffers,
-stream stop and device close. It prints the device identity and available
-frame metadata. It does not assume a particular vendor's feature names or
-pixel format.
+invocation of the Common frame projection adapter, stream stop and device
+close. It prints the device identity, projection outcome and available frame
+metadata. Unsupported layouts remain opaque rather than failing the CTI smoke.
+It does not assume a particular vendor's feature names or pixel format.
 
 The test bridge and smoke executable are test-only; neither is installed or
 exported by the Camera package. Normal CTest/package runs do not require a

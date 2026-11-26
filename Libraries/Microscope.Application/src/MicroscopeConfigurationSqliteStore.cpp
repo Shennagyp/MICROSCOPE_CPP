@@ -720,7 +720,6 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (expectedCurrentRevision >= kMaximumSqliteInteger ||
-        operationMode.revision() != expectedCurrentRevision + 1 ||
         operationMode.revision() > kMaximumSqliteInteger) {
         return failureStatus(makeError(
             StoreErrorCode::InvalidRevision,
@@ -748,6 +747,12 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
             StoreErrorCode::RevisionConflict,
             database_,
             "The operation mode changed since it was loaded."));
+    }
+    if (operationMode.revision() != expectedCurrentRevision + 1) {
+        return failureStatus(makeError(
+            StoreErrorCode::InvalidRevision,
+            database_,
+            "OperationMode revision must advance exactly one from the current revision."));
     }
 
     for (const auto& setting : operationMode.lightPathSettings()) {

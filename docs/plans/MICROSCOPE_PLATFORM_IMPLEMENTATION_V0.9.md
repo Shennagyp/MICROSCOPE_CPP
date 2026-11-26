@@ -221,7 +221,7 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 
 **3H — Objective constraints and camera sampling**
 - Add an objective requirement with minimum NA and optional requested magnification. If magnification is omitted, choose the lowest magnification that satisfies the NA and image-sampling constraints.
-- Evaluate the selected camera's physical pixel pitch and actual CameraOutputMode sensor-to-delivered-pixel mapping, including binning/ROI/resampling.
+- Evaluate the selected camera's physical pixel pitch and CameraOutputMode sampling, including binning, sensor ROI, decimation/downscaling and delivered dimensions. Upscaling/interpolation must not be counted as additional independent sensor samples.
 - Use the declared reference wavelength and total image-forming magnification (objective plus magnification-affecting relay optics) to test the configured sampling factor. The default policy for this use case is 2.3 delivered pixels per Rayleigh separation in both axes.
 - Treat missing wavelength, relay magnification or pixel mapping as unknown/insufficient evidence, not as a passing constraint. Add the required relay-optic magnification data to the installed equipment model before claiming total magnification is known.
 - Rank candidates using declared preferences from a specimen/task imaging profile and/or microscope-specific mode binding. For example, an H&E task may prefer 0.75 NA over 0.4 NA when both meet the hard constraints. No sample-specific hard-coded branch is permitted.
@@ -236,7 +236,7 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 - For two 20× objectives with NA 0.4 and 0.75, an H&E imaging preference ranks 0.75 higher when both otherwise satisfy the request.
 - When magnification is unspecified, the lowest objectively adequate magnification is selected only after both NA and the 2.3-Rayleigh sampling condition have been evaluated; the required total magnification is calculated from both sensor axes and output-pixel mapping.
 - Missing mandatory intent such as a minimum objective NA may produce InputRequired; null magnification by itself does not.
-- Tests cover non-square pixel pitch, binned and unbinned output modes, insufficient sampling, missing wavelength, absent relay-magnification metadata and the candidate alternatives/selection-required states.
+- Tests cover non-square pixel pitch, binned and unbinned output modes, decimation/downscaling, upscaling that must not improve sampling, insufficient sampling, missing wavelength, absent relay-magnification metadata and the candidate alternatives/selection-required/input-required states.
 
 ### Phase 4 — Core operation runtime
 

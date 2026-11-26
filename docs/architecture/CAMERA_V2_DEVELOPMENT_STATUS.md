@@ -377,7 +377,7 @@ qualification track. The test-only native CTI bridge shim and
 smoke only when `CAMERA_GENTL_SIMULATOR_CTI` is configured. The harness uses
 the existing `ConsumerBridge` and `Producer` APIs and checks CTI loading,
 discovery, device open, GenApi XML retrieval, five complete image buffers,
-stream stop and device close. It is not installed or exported.
+Common frame-projection invocation, stream stop and device close. It is not installed or exported.
 
 No local build/test/debug run has been performed. No simulator has been
 executed and no CI result for this increment is yet established. The next

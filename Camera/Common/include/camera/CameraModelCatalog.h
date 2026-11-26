@@ -251,12 +251,23 @@ public:
             *identity.manufacturer,
             *identity.model,
             identity.modelVariant};
-        for (const auto& profile : profiles_) {
-            if (detail::sameCameraModelKey(profile.key(), query)) {
-                return &profile;
+        if (identity.modelVariant) {
+            for (const auto& profile : profiles_) {
+                if (detail::sameCameraModelKey(profile.key(), query)) {
+                    return &profile;
+                }
             }
+            return nullptr;
         }
-        return nullptr;
+
+        // A generic (no-variant) profile is exact only when no more specific
+        // variants exist for the same manufacturer/model. Otherwise the
+        // catalog must leave the selection ambiguous.
+        const auto candidates = findCandidates(identity);
+        if (candidates.size() != 1 || candidates.front()->key().variant) {
+            return nullptr;
+        }
+        return candidates.front();
     }
 
 private:

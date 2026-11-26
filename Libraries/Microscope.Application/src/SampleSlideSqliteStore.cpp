@@ -754,6 +754,10 @@ void encodeSampleTypePayload(
 void encodeSlidePayload(const Slide& slide, std::vector<std::uint8_t>& payload) {
     BinaryWriter writer;
     writer.string(slide.name());
+    writer.boolean(slide.originLabId().has_value());
+    if (slide.originLabId()) {
+        writer.string(slide.originLabId()->value());
+    }
     writer.real(slide.geometry().widthMicrometers());
     writer.real(slide.geometry().heightMicrometers());
 
@@ -795,11 +799,12 @@ void encodeSlidePayload(const Slide& slide, std::vector<std::uint8_t>& payload) 
     std::uint64_t revision,
     const SampleTypeId& sampleTypeId,
     std::uint64_t sampleTypeRevision,
-    std::optional<OriginLabId> originLabId,
     const void* data,
     std::size_t size) {
     BinaryReader reader(data, size);
     std::string name;
+    bool hasOriginLabId = false;
+    std::optional<OriginLabId> originLabId;
     double width = 0.0;
     double height = 0.0;
     SpecimenPreparationMethod method = SpecimenPreparationMethod::Unknown;
@@ -808,8 +813,21 @@ void encodeSlidePayload(const Slide& slide, std::vector<std::uint8_t>& payload) 
     std::optional<double> coverglassThickness;
     std::optional<std::string> mountingMedium;
     std::optional<double> refractiveIndex;
-    if (!reader.string(name) ||
-        !reader.real(width) ||
+    if (!reader.string(name) || !reader.boolean(hasOriginLabId)) {
+        return std::nullopt;
+    }
+    if (hasOriginLabId) {
+        std::string rawOriginLabId;
+        if (!reader.string(rawOriginLabId)) {
+            return std::nullopt;
+        }
+        auto createdOriginLabId = OriginLabId::create(rawOriginLabId);
+        if (!createdOriginLabId) {
+            return std::nullopt;
+        }
+        originLabId = std::move(createdOriginLabId).value();
+    }
+    if (!reader.real(width) ||
         !reader.real(height) ||
         !reader.enumeration(method) ||
         !reader.enumeration(fixation) ||
@@ -1533,19 +1551,11 @@ SampleSlideSqliteStore::loadSlideRevisionUnlocked(
                 StoreErrorCode::InvalidPersistedRecord, database_));
     }
 
-    std::optional<OriginLabId> originLabId;
-    // OriginLabId is encoded within the payload metadata extension in codec
-    // version 2. Version 1 stores it in the payload trailer, read below.
-    // This implementation keeps the identity alongside the other Slide
-    // fields in the version-1 payload to avoid lossy reconstruction.
-    (void)originLabId;
-
     auto decoded = decodeSlidePayload(
         slideId,
         revision,
         std::move(sampleTypeId).value(),
         static_cast<std::uint64_t>(sampleTypeRevisionRaw),
-        std::move(originLabId),
         payload,
         static_cast<std::size_t>(payloadBytes));
     if (!decoded) {

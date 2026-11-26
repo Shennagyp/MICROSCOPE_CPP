@@ -42,9 +42,10 @@ struct StageWorkingSurfaceNavigationControlDrainResult final {
 };
 
 // The wake signal is non-owning and must outlive this queue. A bounded,
-// stage-specific producer/consumer queue. Front-end threads submit
-// immutable slide-local requests; the SerializedRuntimeWorker control drain is
-// the sole consumer and dispatches at most one active navigation at a time.
+// stage-specific producer/consumer queue. Front-end threads submit immutable,
+// revision-bound target values. They do not allocate operation IDs or mutate
+// stage state. The persistent owner-thread runtime is the sole consumer and
+// creates operation/step/command identities when it accepts a target.
 class StageWorkingSurfaceNavigationControlQueue final {
 public:
     using Pointer = std::unique_ptr<StageWorkingSurfaceNavigationControlQueue>;

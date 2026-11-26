@@ -236,8 +236,11 @@ hardware gates.
 
 ## Simulator continuation decision
 
-The next technical investigation should compare two lawful routes before adding more production-facing code:
-1. Obtain written vendor permission and a current CTI package for a genuine simulator (TIS first for Linux x86_64 or a compatible macOS 26 runner; Hikrobot only after confirming exact package and architecture).
-2. Build a first-party, test-only GenTL 1.6 simulated CTI fixture that exports the required Producer symbols and deterministic GenApi XML/frame buffers. It must exercise the existing GenTLProducerLibrary -> native test shim -> ConsumerBridge -> Producer path, stay under Camera/GenTL/tests, never install/export, and be labelled an in-repo simulator rather than vendor interoperability evidence.
+The first-party, test-only CTI simulator is now implemented in source:
+- `MockConsumerBridge.c` is built as `gentl_test_simulator.cti` with a simulator-only compile definition.
+- The ordinary mock bridge target retains its strict timeout and pending-wait cancellation behavior.
+- CMake registers `camera_gentl_inrepo_simulator_smoke` whenever `BUILD_TESTING=ON`.
+- The smoke uses the native test shim and actual `GenTLProducerLibrary` dynamic loader, then calls the existing `ConsumerBridge` and `Producer` API.
+- It currently represents one deterministic mock camera and repeated Mono8 frames; it is not vendor interoperability evidence.
 
-Before implementing route 2, enumerate every GenTL operation and data contract invoked by Producer, DeviceSession and DataStreamSession. Keep the fixture minimal but standards-correct: module/handle lifetimes, two-call info queries, port URL/XML, event registration/wait/kill, buffer announce/queue/requeue, complete frame metadata and deterministic payload. Do not modify AmScope, the Optika app, Phase 4/5, or run local builds/tests/debuggers. Require GitHub CI for source validation.
+**Next:** inspect the CI result for the exact source commit. If it fails, diagnose from workflow logs only; do not run local builds/tests/debuggers. If it passes, record that the in-repository CTI integration path is validated, then decide whether to obtain written vendor permission and a current external CTI for separate interoperability testing. Do not modify AmScope, the Optika app, Phase 4/5, or physical-camera gates.

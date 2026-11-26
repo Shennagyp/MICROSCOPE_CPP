@@ -1,5 +1,6 @@
 #include "microscope/application/motion/StagePosition3DFeedbackReducer.h"
 #include "microscope/application/runtime/RuntimeWakeSignal.h"
+#include "microscope/core/stage/SlideRectangleDefinition2D.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -23,19 +24,16 @@ core::StageWorkingSurface3D surface(){
     auto spec=take(core::StageSpecification::create(id<core::EquipmentComponentId>("stage"),
         {axis("x",-10'000,410'000),axis("y",-10'000,70'000),axis("z",-100,2'000)}));
     auto makeSlide=[](const char* name,double x,double y){
-        auto geometry=take(core::SlideGeometry3D::create(75'000,25'000,1'000));
         const auto revision=std::string(name)+"-v1";
-        return take(core::SlidePlacement3D::create(id<core::SlideId>(name),id<core::CalibrationRevisionId>(revision.c_str()),
-            geometry,{x,y,0},{1,0,0},{0,1,0},{0,0,1},0.5));
+        return take(core::SlideRectangleDefinition2D::create(id<core::SlideId>(name),
+            id<core::CalibrationRevisionId>(revision.c_str()),{x,y},{x+75'000,y+25'000},
+            core::SlideRectangleLengthAxis::StageX,75'000,25'000,0,1'000,0.01,0.5));
     };
-    core::StageWorkingSurface3D::SlidePlacements slides{
-        makeSlide("s01",0,0),makeSlide("s02",80'000,0),makeSlide("s03",160'000,0),
-        makeSlide("s04",240'000,0),makeSlide("s05",320'000,0),makeSlide("s06",0,30'000),
-        makeSlide("s07",80'000,30'000),makeSlide("s08",160'000,30'000),
-        makeSlide("s09",240'000,30'000),makeSlide("s10",320'000,30'000)};
+    core::StageWorkingSurface3D::SlideRectangles slides{
+        makeSlide("s01",0,0),makeSlide("s02",80'000,0),makeSlide("s03",160'000,0)};
     return take(core::StageWorkingSurface3D::create(spec,id<core::StageAxisId>("x"),
         id<core::StageAxisId>("y"),id<core::StageAxisId>("z"),
-        {0,0,0},{400'000,60'000,2'000},std::move(slides)));
+        {0,0,0},{250'000,60'000,2'000},std::move(slides)));
 }
 core::AxisPositionObservation observation(const char* axis,double value,double uncertainty,
     core::StagePositionEvidence evidence){

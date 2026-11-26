@@ -3,8 +3,8 @@
 #include <cmath>
 #include <utility>
 
-namespace microscope::core {
-namespace {
+namespace microscope::core{
+namespace{
 constexpr double tolerance=1.0e-6;
 bool finite(const StagePoint3D&p)noexcept{return std::isfinite(p.xMicrometers)&&std::isfinite(p.yMicrometers)&&std::isfinite(p.zMicrometers);}
 bool finite(const SlidePoint3D&p)noexcept{return std::isfinite(p.xMicrometers)&&std::isfinite(p.yMicrometers)&&std::isfinite(p.zMicrometers);}
@@ -77,11 +77,11 @@ Result<SlidePoint3D,SlidePlacement3DError> SlidePlacement3D::toSlide(const Stage
 }
 
 StageWorkingSurface3D::StageWorkingSurface3D(EquipmentComponentId stage,StageAxisId x,StageAxisId y,StageAxisId z,
-    AxisCoordinateUnit xu,AxisCoordinateUnit yu,AxisCoordinateUnit zu,StagePoint3D lo,StagePoint3D hi,SlidePlacements p)noexcept
+    AxisCoordinateUnit xu,AxisCoordinateUnit yu,AxisCoordinateUnit zu,StagePoint3D lo,StagePoint3D hi,SlideRectangles p)noexcept
     :stageComponentId_(std::move(stage)),xAxisId_(std::move(x)),yAxisId_(std::move(y)),zAxisId_(std::move(z)),
-     xUnit_(xu),yUnit_(yu),zUnit_(zu),minimumBoundary_(lo),maximumBoundary_(hi),placements_(std::move(p)){}
+     xUnit_(xu),yUnit_(yu),zUnit_(zu),minimumBoundary_(lo),maximumBoundary_(hi),rectangles_(std::move(p)){}
 Result<StageWorkingSurface3D,StageWorkingSurface3DError> StageWorkingSurface3D::create(
-    const StageSpecification&stage,StageAxisId x,StageAxisId y,StageAxisId z,StagePoint3D lo,StagePoint3D hi,SlidePlacements p){
+    const StageSpecification&stage,StageAxisId x,StageAxisId y,StageAxisId z,StagePoint3D lo,StagePoint3D hi,SlideRectangles p){
     if(!finite(lo)||!finite(hi))return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::NonFiniteBoundary);
     if(lo.xMicrometers>=hi.xMicrometers||lo.yMicrometers>=hi.yMicrometers||lo.zMicrometers>=hi.zMicrometers)
         return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::InvalidBoundary);
@@ -92,19 +92,24 @@ Result<StageWorkingSurface3D,StageWorkingSurface3DError> StageWorkingSurface3D::
         return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::NonLinearStageAxis);
     if(!linearUnit(xa->coordinateUnit())||!linearUnit(ya->coordinateUnit())||!linearUnit(za->coordinateUnit()))
         return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::UnsupportedStageAxisUnit);
-    const auto fits=[](const AxisSpecification&a,double lo,double hi){
-        const auto& r=a.operatingRange();return lo>=toMicrometers(r.minimum(),a.coordinateUnit())&&hi<=toMicrometers(r.maximum(),a.coordinateUnit());
+    const auto fits=[](const AxisSpecification&a,double minimum,double maximum){
+        const auto& r=a.operatingRange();return minimum>=toMicrometers(r.minimum(),a.coordinateUnit())&&maximum<=toMicrometers(r.maximum(),a.coordinateUnit());
     };
     if(!fits(*xa,lo.xMicrometers,hi.xMicrometers)||!fits(*ya,lo.yMicrometers,hi.yMicrometers)||!fits(*za,lo.zMicrometers,hi.zMicrometers))
         return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::WorkingVolumeOutsideAxisRange);
+
     for(std::size_t i=0;i<p.size();++i){
-        for(std::size_t j=i+1;j<p.size();++j)if(p[i].slideId()==p[j].slideId())
-            return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::DuplicateSlideIdentity);
-        const auto&g=p[i].geometry();
+        for(std::size_t j=i+1;j<p.size();++j){
+            if(p[i].slideId()==p[j].slideId())
+                return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::DuplicateSlideIdentity);
+        }
+        const auto& placement=p[i].placement();
+        const auto& g=placement.geometry();
         for(unsigned mask=0;mask<8;++mask){
-            SlidePoint3D c{(mask&1U)?g.lengthMicrometers():0.0,(mask&2U)?g.widthMicrometers():0.0,(mask&4U)?g.thicknessMicrometers():0.0};
-            auto mapped=p[i].toStage(c);
-            if(!mapped||!inside(mapped.value(),lo,hi))return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::SlideOutsideWorkingVolume);
+            SlidePoint3D corner{(mask&1U)?g.lengthMicrometers():0.0,(mask&2U)?g.widthMicrometers():0.0,(mask&4U)?g.thicknessMicrometers():0.0};
+            auto mapped=placement.toStage(corner);
+            if(!mapped||!inside(mapped.value(),lo,hi))
+                return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::failure(StageWorkingSurface3DError::SlideOutsideWorkingVolume);
         }
     }
     return Result<StageWorkingSurface3D,StageWorkingSurface3DError>::success(
@@ -120,10 +125,13 @@ AxisCoordinateUnit StageWorkingSurface3D::yAxisUnit()const noexcept{return yUnit
 AxisCoordinateUnit StageWorkingSurface3D::zAxisUnit()const noexcept{return zUnit_;}
 const StagePoint3D& StageWorkingSurface3D::minimumBoundary()const noexcept{return minimumBoundary_;}
 const StagePoint3D& StageWorkingSurface3D::maximumBoundary()const noexcept{return maximumBoundary_;}
-const StageWorkingSurface3D::SlidePlacements& StageWorkingSurface3D::slidePlacements()const noexcept{return placements_;}
+const StageWorkingSurface3D::SlideRectangles& StageWorkingSurface3D::slideRectangles()const noexcept{return rectangles_;}
+const SlideRectangleDefinition2D* StageWorkingSurface3D::rectangleFor(const SlideId&id)const noexcept{
+    const auto it=std::find_if(rectangles_.begin(),rectangles_.end(),[&](const auto&r){return r.slideId()==id;});
+    return it==rectangles_.end()?nullptr:&*it;
+}
 const SlidePlacement3D* StageWorkingSurface3D::placementFor(const SlideId&id)const noexcept{
-    const auto it=std::find_if(placements_.begin(),placements_.end(),[&](const auto&p){return p.slideId()==id;});
-    return it==placements_.end()?nullptr:&*it;
+    const auto* rectangle=rectangleFor(id);return rectangle?&rectangle->placement():nullptr;
 }
 bool StageWorkingSurface3D::contains(const StagePoint3D&p)const noexcept{return finite(p)&&inside(p,minimumBoundary_,maximumBoundary_);}
 Result<StagePoint3D,SlidePlacement3DError> StageWorkingSurface3D::toStage(const SlideId&id,const SlidePoint3D&p)const{
@@ -134,6 +142,7 @@ Result<SlidePosition3D,SlidePlacement3DError> StageWorkingSurface3D::toSlide(con
     const auto* placement=placementFor(id);if(!placement)return Result<SlidePosition3D,SlidePlacement3DError>::failure(SlidePlacement3DError::SlideNotFound);
     auto local=placement->toSlide(p);if(!local)return Result<SlidePosition3D,SlidePlacement3DError>::failure(local.error());
     return Result<SlidePosition3D,SlidePlacement3DError>::success(
-        {placement->slideId(),placement->registrationRevision(),local.value(),placement->geometry().contains(local.value()),contains(p)});
+        {placement->slideId(),placement->registrationRevision(),local.value(),
+         placement->geometry().contains(local.value()),contains(p)});
 }
 } // namespace microscope::core

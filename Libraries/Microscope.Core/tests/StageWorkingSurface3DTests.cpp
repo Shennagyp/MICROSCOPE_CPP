@@ -1,6 +1,7 @@
 #include "microscope/core/stage/StageAxisReference.h"
 #include "microscope/core/stage/StagePosition3D.h"
 #include "microscope/core/stage/StageWorkingSurface3D.h"
+#include "microscope/core/stage/SlideRectangleDefinition2D.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -31,29 +32,24 @@ StageSpecification stageSpecification(){
         linearAxis("x",-10'000,410'000),linearAxis("y",-10'000,70'000),
         linearAxis("z",-100,2'000,AxisPositionFeedbackCapability::None)}));
 }
-SlidePlacement3D placement(const char* name,double x,double y,double z,
-    Direction3D ax={1,0,0},Direction3D ay={0,1,0},Direction3D az={0,0,1},double datumError=0.5){
-    auto g=take(SlideGeometry3D::create(75'000,25'000,1'000));
+SlideRectangleDefinition2D placement(const char* name,double x,double y,double z,double datumError=0.5){
     const auto rev=std::string(name)+"-registration-v1";
-    return take(SlidePlacement3D::create(id<SlideId>(name),id<CalibrationRevisionId>(rev.c_str()),
-        g,{x,y,z},ax,ay,az,datumError));
+    return take(SlideRectangleDefinition2D::create(id<SlideId>(name),id<CalibrationRevisionId>(rev.c_str()),
+        {x,y},{x+75'000,y+25'000},SlideRectangleLengthAxis::StageX,
+        75'000,25'000,z,1'000,0.01,datumError));
 }
 StageWorkingSurface3D workingSurface(){
-    StageWorkingSurface3D::SlidePlacements slides{
-        placement("s01",0,0,0),placement("s02",80'000,0,0),placement("s03",160'000,0,0),
-        placement("s04",240'000,0,0),placement("s05",320'000,0,0),
-        placement("s06",0,30'000,0),placement("s07",80'000,30'000,0),placement("s08",160'000,30'000,0),
-        placement("s09",240'000,30'000,0),placement("s10",320'000,30'000,0)};
+    StageWorkingSurface3D::SlideRectangles slides{
+        placement("s01",0,0,0),placement("s02",80'000,0,0),placement("s03",160'000,0,0)};
     return take(StageWorkingSurface3D::create(stageSpecification(),
         id<StageAxisId>("x"),id<StageAxisId>("y"),id<StageAxisId>("z"),
-        {0,0,0},{400'000,60'000,2'000},std::move(slides)));
+        {0,0,0},{250'000,60'000,2'000},std::move(slides)));
 }
 
-void fixedTenSlideMap(){
+void userDefinedSlideMap(){
     auto surface=workingSurface();
-    static_assert(StageWorkingSurfaceSlideCount==10,"fixed ten-slide mechanical layout");
-    check(surface.slidePlacements().size()==10&&surface.placementFor(id<SlideId>("s10"))!=nullptr,
-        "stores and resolves ten fixed physical slide placements");
+    check(surface.slideRectangles().size()==3&&surface.placementFor(id<SlideId>("s03"))!=nullptr,
+        "stores a user-defined number of slide rectangles rather than a fixed slot count");
     check(surface.xAxisId()==id<StageAxisId>("x")&&surface.yAxisId()==id<StageAxisId>("y")&&
         surface.zAxisId()==id<StageAxisId>("z"),"binds the working volume to explicit installed X/Y/Z axis identities");
     auto p=take(surface.toSlide(id<SlideId>("s01"),{10'000,5'000,500}));
@@ -69,6 +65,40 @@ void fixedTenSlideMap(){
     check(std::abs(stage.xMicrometers-90'000)<1e-9,
         "maps a slide-local point from its mechanical stop datum to the stage frame");
 }
+
+void cadRectangleConstraints(){
+    auto rectangle=take(SlideRectangleDefinition2D::create(
+        id<SlideId>("cad-slide"),id<CalibrationRevisionId>("cad-v1"),
+        {1000,2000},{76000,27000},SlideRectangleLengthAxis::StageX,
+        75000,25000,300,1000,0.01,0.4));
+    check(rectangle.stopPointEndpoint().xMicrometers==1000&&
+        rectangle.stopPointEndpoint().yMicrometers==2000&&
+        rectangle.oppositeEndpoint().xMicrometers==76000,
+        "retains original CAD endpoints with the first endpoint as stop datum");
+    check(rectangle.constrainedLengthMicrometers()==75000&&
+        rectangle.constrainedWidthMicrometers()==25000,
+        "retains explicit parametric length and width constraints");
+    auto mapped=take(rectangle.placement().toStage({75000,25000,1000}));
+    check(std::abs(mapped.xMicrometers-76000)<1e-9&&
+        std::abs(mapped.yMicrometers-27000)<1e-9&&
+        std::abs(mapped.zMicrometers-1300)<1e-9,
+        "derives the 3D slide transform from the constrained CAD rectangle");
+    auto mismatch=SlideRectangleDefinition2D::create(
+        id<SlideId>("bad-cad"),id<CalibrationRevisionId>("bad-v1"),
+        {1000,2000},{76000,27000},SlideRectangleLengthAxis::StageX,
+        74000,25000,300,1000,0.01);
+    check(!mismatch&&mismatch.error()==SlideRectangleDefinitionError::DimensionConstraintMismatch,
+        "rejects dimension constraints inconsistent with the two drawn endpoints");
+    auto lengthOnY=take(SlideRectangleDefinition2D::create(
+        id<SlideId>("vertical-cad"),id<CalibrationRevisionId>("vertical-v1"),
+        {10000,10000},{20000,85000},SlideRectangleLengthAxis::StageY,
+        75000,10000,0,1000,0.01));
+    auto opposite=take(lengthOnY.placement().toStage({75000,10000,100}));
+    check(std::abs(opposite.xMicrometers-20000)<1e-9&&
+        std::abs(opposite.yMicrometers-85000)<1e-9,
+        "supports slide length aligned with stage Y");
+}
+
 void rigidThreeDimensionalMapping(){
     auto g=take(SlideGeometry3D::create(75'000,25'000,1'000));
     auto rotated=take(SlidePlacement3D::create(id<SlideId>("rotated"),id<CalibrationRevisionId>("r1"),g,
@@ -166,7 +196,7 @@ void measuredStagePositionProjectsIntoSlideCoordinates(){
 }
 }
 int main(){
-    fixedTenSlideMap();rigidThreeDimensionalMapping();physicalEndstopReference();
+    userDefinedSlideMap();cadRectangleConstraints();rigidThreeDimensionalMapping();physicalEndstopReference();
     zFullStrokeReference();measuredStagePositionProjectsIntoSlideCoordinates();
     if(failures)return 1;
     std::cout<<"3D working-surface and axis-reference tests passed\n";

@@ -5,9 +5,9 @@
 
 ## Physical working-surface model
 
-The stage is one physical 3D working volume. It is not a dynamically resized collection of slide slots. The installed hardware definition contains exactly ten fixed slide placements in a fixed-size array.
+The stage is one physical 3D working volume. It is not an automatically discovered collection of hardware slots; the user authors and edits the saved CAD layout. The slide map is a user-authored CAD drawing containing a variable number of slide rectangles. It is not limited to ten slides and is not an automatically discovered set of hardware slots.
 
-Each placement contains a slide identity, registration revision, physical length/width/thickness, a mechanical stop-point datum that defines its local origin, stop-point uncertainty, and a right-handed orthonormal local X/Y/Z basis expressed in stage coordinates. The working volume is explicitly bound to three distinct installed linear StageAxisIds; its micrometer bounds are checked against the corresponding configured axis travel (including unit conversion).
+Each placement retains its original stop-point and opposite XY endpoints, explicit length/width dimensional constraints, drawing tolerance, Z datum and thickness. The resulting 3D placement derives a right-handed orthonormal local X/Y/Z frame from the CAD rectangle. The working volume is explicitly bound to three distinct installed linear StageAxisIds; its micrometer bounds are checked against the corresponding configured axis travel (including unit conversion).
 
 A stage coordinate is projected through the selected slide's inverse rigid transform. Projection remains defined when the stage is between slides or outside a slide footprint. The returned inside-slide and inside-working-volume flags are separate facts.
 
@@ -36,7 +36,7 @@ An unknown starting position cannot become known by commanding one nominal strok
 
 ## Integration boundary
 
-This commit adds deterministic Core geometry and axis-reference state contracts. It does not yet connect the 3D position model to the live three-axis feedback aggregator, motion driver, reference-command executor, calibration persistence or SwiftUI projection. The old DualSlideCarrierState remains a legacy two-slide path during migration; the new model is the intended fixed ten-slide working-surface representation.
+This implementation adds deterministic Core geometry and axis-reference state contracts. It does not yet connect the 3D position model to the live three-axis feedback aggregator, motion driver, reference-command executor, calibration persistence or SwiftUI projection. The old DualSlideCarrierState remains a legacy two-slide path during migration; the new model is the intended user-authored multi-slide working-surface representation.
 
 
 ## Live three-axis position projection
@@ -53,3 +53,23 @@ This remains a Core model. The Application worker must still own incoming device
 The Application layer now has a three-axis feedback reducer for the StagePosition3D aggregate. It accepts only current Core feedback dispositions, applies only X/Y/Z AxisPositionObservation payloads, and invalidates all three machine references when the feedback-loss latch is set. A complete XYZ HomeReferenceEstablished fact is accepted only when its exact device/operation/step/command correlation matches and the Core operation step is Verified.
 
 Physical limit-switch reference is now a distinct StagePositionEvidence value. It can establish the known starting boundary of a later full-stroke traversal and remains distinguishable from encoder, external measurement and calibrated command estimates.
+
+
+## CAD rectangle authoring
+
+`StageWorkingSurface3D::SlidePlacements` is a variable-size collection of
+`SlideRectangleDefinition2D` values. A working surface may have no rectangles
+initially; the user adds as many as required in the saved CAD drawing.
+
+Each rectangle retains:
+- The first XY endpoint, which is the mechanical stop-point datum and local origin.
+- The opposite XY endpoint.
+- Whether slide length follows stage X or stage Y.
+- Explicit length and width constraints.
+- Z datum, slide thickness, dimensional tolerance and stop-point uncertainty.
+
+The endpoint spans must satisfy the dimensional constraints within the drawing
+tolerance. The 3D pose is derived from the rectangle but the original CAD
+parameters remain stored and inspectable. This milestone does not yet implement
+interactive dragging, constraint solving during edits, undo/redo, persistence,
+or overlap/clearance checks.

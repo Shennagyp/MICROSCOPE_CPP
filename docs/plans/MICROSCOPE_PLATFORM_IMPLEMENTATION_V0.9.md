@@ -2,7 +2,7 @@
 
 **Architecture reference:** ../architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
-**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration and Phase 4 operation runtime/stage navigation are in progress. Core now has the stage/navigation model, bounded feedback inbox and serialized operation-state owner. Application now has the runtime wake primitive, owner-loop entry point and legacy dual-slide X/Y feedback reducer. A new fixed ten-slide 3D working-surface and axis-reference Core contract has been added as the target model for hardware-coordinate migration.
+**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration and Phase 4 operation runtime/stage navigation are in progress. Core now has the stage/navigation model, bounded feedback inbox and serialized operation-state owner. Application now has the runtime wake primitive, owner-loop entry point and legacy dual-slide X/Y feedback reducer. A 3D working-surface CAD model, axis-reference contract and XYZ position projection have been added as the target model for hardware-coordinate migration.
 
 ## Objective
 
@@ -377,7 +377,7 @@ Controller-specific STEP/DIR generation and vendor protocols remain in external 
 The Core now contains an initial fixed physical model in
 `microscope/core/stage/StageWorkingSurface3D.h`:
 
-- One 3D stage working volume maps to exactly ten fixed slide placements.
+- One 3D stage working volume maps to a variable number of user-authored CAD slide rectangles.
 - Each slide has its own mechanical stop-point origin, dimensions and rigid
   right-handed XYZ coordinate frame.
 - Forward mapping converts a slide-local target into stage coordinates.
@@ -409,11 +409,11 @@ physical working-surface model.
 
 ### Stage 6 update — fixed 3D working surface and actual position projection
 
-Core now defines a fixed ten-slide 3D working-surface map. The volume is bound to explicit installed X/Y/Z linear axes and validated against their operating ranges. Each physical slide has a stop-point origin, independent rigid pose, dimensions, registration revision and datum uncertainty.
+Core now defines a 3D working-surface model with a user-authored, variable-size collection of slide rectangles. The volume is bound to explicit installed X/Y/Z linear axes and validated against their operating ranges. Each physical slide retains its two XY endpoints, stop-point origin, explicit dimensional constraints, Z datum, thickness, drawing tolerance and derived rigid pose.
 
 StagePosition3D now aggregates the three immutable axis position states. It accepts axis observations, accepts reference observations only after external operation verification, and projects the current machine XYZ coordinate into the selected slide frame. The projection retains position evidence, source, uncertainty and independent inside-slide/inside-working-volume flags. It does not discard coordinates merely because the stage is between physical slides.
 
-Tests were added for fixed ten-slide mapping, rotated 3D coordinate transforms, stop-point uncertainty propagation, physical endstop reference, full-stroke software-endstop reference and projection from three measured axis positions. These tests have been registered but were not executed in this environment.
+Tests were added for variable-size CAD slide layouts, constrained rectangle geometry, rotated 3D coordinate transforms, stop-point uncertainty propagation, physical endstop reference, full-stroke software-endstop reference and projection from three measured axis positions. These tests have been registered but were not executed in this environment.
 
 Still outstanding: Application worker integration of three-axis feedback, stage reference-motion execution and correlation, hardware adapter, calibration persistence, stop/fault/timeouts and frontend-neutral live position snapshots.
 
@@ -423,3 +423,10 @@ Still outstanding: Application worker integration of three-axis feedback, stage 
 The Application layer now has StagePosition3DFeedbackReducer for serialized worker use. It applies current-session XYZ position observations to the immutable Core aggregate, ignores non-position payloads and unrelated axes, and invalidates all three absolute references on feedback loss. Its verified-home path requires the complete X/Y/Z requested axis set and exact command correlation, and accepts the home fact only after Core marks the associated operation step Verified.
 
 Physical endstop datum evidence is represented separately from encoder and external measurement and from command-derived estimates. The Core and Application tests were registered; they were not executed here. The existing application worker still requires a concrete host composition to invoke the reducer and publish its resulting snapshots.
+
+
+### Stage layout correction — parametric CAD slide rectangles
+
+The earlier fixed-ten slide array is superseded. A stage working surface now owns a variable-size collection of user-authored `SlideRectangleDefinition2D` values. Each definition retains the two original XY endpoints, the first endpoint's stop-point datum, explicit length/width constraints, length-axis assignment, Z datum, thickness and constraint tolerance. The 3D slide placement is derived from those retained parameters.
+
+This is an editable layout definition, not automatic hardware discovery or a fixed slot count. Interactive CAD input, constraint solving during dragging, undo/redo, persistence and overlap/clearance rules remain outstanding.

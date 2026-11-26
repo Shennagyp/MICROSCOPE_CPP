@@ -25,31 +25,40 @@ struct BayerFormat final {
     std::uint64_t pixelFormat;
     camera::PixelColorFilterArray pattern;
     std::uint8_t significantBits;
+    bool packed = false;
 };
 
-// PFNC 32-bit format identifiers. The 10/12/14/16-bit variants here are
-// unpacked into 16-bit samples; packed variants intentionally remain opaque.
+// PFNC 32-bit format identifiers. Unpacked 10/12/14/16-bit variants use
+// 16-bit containers; 10p/12p variants retain their packed byte layout.
 constexpr BayerFormat bayerFormats[] = {
     {UINT64_C(0x01080008), camera::PixelColorFilterArray::GRBG, 8},
     {UINT64_C(0x0110000C), camera::PixelColorFilterArray::GRBG, 10},
     {UINT64_C(0x01100010), camera::PixelColorFilterArray::GRBG, 12},
     {UINT64_C(0x01100109), camera::PixelColorFilterArray::GRBG, 14},
     {UINT64_C(0x0110002E), camera::PixelColorFilterArray::GRBG, 16},
+    {UINT64_C(0x010A0056), camera::PixelColorFilterArray::GRBG, 10, true},
+    {UINT64_C(0x010C0057), camera::PixelColorFilterArray::GRBG, 12, true},
     {UINT64_C(0x01080009), camera::PixelColorFilterArray::RGGB, 8},
     {UINT64_C(0x0110000D), camera::PixelColorFilterArray::RGGB, 10},
     {UINT64_C(0x01100011), camera::PixelColorFilterArray::RGGB, 12},
     {UINT64_C(0x0110010A), camera::PixelColorFilterArray::RGGB, 14},
     {UINT64_C(0x0110002F), camera::PixelColorFilterArray::RGGB, 16},
+    {UINT64_C(0x010A0058), camera::PixelColorFilterArray::RGGB, 10, true},
+    {UINT64_C(0x010C0059), camera::PixelColorFilterArray::RGGB, 12, true},
     {UINT64_C(0x0108000A), camera::PixelColorFilterArray::GBRG, 8},
     {UINT64_C(0x0110000E), camera::PixelColorFilterArray::GBRG, 10},
     {UINT64_C(0x01100012), camera::PixelColorFilterArray::GBRG, 12},
     {UINT64_C(0x0110010B), camera::PixelColorFilterArray::GBRG, 14},
     {UINT64_C(0x01100030), camera::PixelColorFilterArray::GBRG, 16},
+    {UINT64_C(0x010A0054), camera::PixelColorFilterArray::GBRG, 10, true},
+    {UINT64_C(0x010C0055), camera::PixelColorFilterArray::GBRG, 12, true},
     {UINT64_C(0x0108000B), camera::PixelColorFilterArray::BGGR, 8},
     {UINT64_C(0x0110000F), camera::PixelColorFilterArray::BGGR, 10},
     {UINT64_C(0x01100013), camera::PixelColorFilterArray::BGGR, 12},
     {UINT64_C(0x0110010C), camera::PixelColorFilterArray::BGGR, 14},
-    {UINT64_C(0x01100031), camera::PixelColorFilterArray::BGGR, 16}
+    {UINT64_C(0x01100031), camera::PixelColorFilterArray::BGGR, 16},
+    {UINT64_C(0x010A0052), camera::PixelColorFilterArray::BGGR, 10, true},
+    {UINT64_C(0x010C0053), camera::PixelColorFilterArray::BGGR, 12, true}
 };
 
 std::optional<BayerFormat> bayerFormat(
@@ -193,26 +202,44 @@ makeCommonFrame(DataStreamFrame source) {
     // never demosaics or changes sample values.
     if (const auto bayer = bayerFormat(source)) {
         frame->pixelColorFilterArray = bayer->pattern;
-        const std::size_t bytesPerPixel = bayer->significantBits == 8 ? 1 : 2;
-        const auto reportedByteOrder = pixelByteOrder(source.pixelEndianness);
-        const bool byteOrderIsSafe = bytesPerPixel == 1 ||
-            reportedByteOrder != camera::PixelByteOrder::Unknown;
-        if (byteOrderIsSafe &&
-            payloadSizeMatches(frame->width, frame->height, bytesPerPixel,
-                               frame->pixels.size()) &&
-            strideFits(frame->width, bytesPerPixel)) {
-            frame->pixelFormat = bytesPerPixel == 1
-                ? camera::PixelFormat::Raw8
-                : camera::PixelFormat::Raw16;
-            frame->pixelPacking = camera::PixelPacking::NotPacked;
-            frame->pixelByteOrder = bytesPerPixel == 1
-                ? camera::PixelByteOrder::NotApplicable
-                : reportedByteOrder;
-            frame->strideBytes = static_cast<std::uint32_t>(
-                static_cast<std::size_t>(frame->width) * bytesPerPixel);
-            frame->significantBitsPerPixel = bayer->significantBits;
-            frame->storageBitsPerPixel = static_cast<std::uint8_t>(
-                bytesPerPixel * 8);
+        if (bayer->packed) {
+            std::uint32_t packedStride = 0;
+            std::size_t expectedPayload = 0;
+            if (packedRowLayout(frame->width, bayer->significantBits,
+                                packedStride, expectedPayload, frame->height) &&
+                frame->pixels.size() == expectedPayload) {
+                frame->pixelFormat = camera::PixelFormat::Raw8;
+                frame->pixelPacking = bayer->significantBits == 10
+                    ? camera::PixelPacking::PFNC10p
+                    : camera::PixelPacking::PFNC12p;
+                frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
+                frame->strideBytes = packedStride;
+                frame->significantBitsPerPixel = bayer->significantBits;
+                frame->storageBitsPerPixel = bayer->significantBits;
+            }
+        } else {
+            const std::size_t bytesPerPixel =
+                bayer->significantBits == 8 ? 1 : 2;
+            const auto reportedByteOrder = pixelByteOrder(source.pixelEndianness);
+            const bool byteOrderIsSafe = bytesPerPixel == 1 ||
+                reportedByteOrder != camera::PixelByteOrder::Unknown;
+            if (byteOrderIsSafe &&
+                payloadSizeMatches(frame->width, frame->height, bytesPerPixel,
+                                   frame->pixels.size()) &&
+                strideFits(frame->width, bytesPerPixel)) {
+                frame->pixelFormat = bytesPerPixel == 1
+                    ? camera::PixelFormat::Raw8
+                    : camera::PixelFormat::Raw16;
+                frame->pixelPacking = camera::PixelPacking::NotPacked;
+                frame->pixelByteOrder = bytesPerPixel == 1
+                    ? camera::PixelByteOrder::NotApplicable
+                    : reportedByteOrder;
+                frame->strideBytes = static_cast<std::uint32_t>(
+                    static_cast<std::size_t>(frame->width) * bytesPerPixel);
+                frame->significantBitsPerPixel = bayer->significantBits;
+                frame->storageBitsPerPixel = static_cast<std::uint8_t>(
+                    bytesPerPixel * 8);
+            }
         }
     }
 

@@ -108,6 +108,9 @@ struct NativeSmartGalleryDock: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
         }
+        .onAppear {
+            gallery.activate()
+        }
     }
 
     private func captureRow(_ item: NativeCaptureItem) -> some View {
@@ -186,9 +189,6 @@ struct NativeSmartGalleryDock: View {
                 }
             }
         }
-    }
-    .onAppear {
-        gallery.activate()
     }
 }
 

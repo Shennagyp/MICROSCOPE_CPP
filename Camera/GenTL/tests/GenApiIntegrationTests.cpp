@@ -7,7 +7,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -38,16 +37,9 @@ const camera::CameraCommandDescriptor* findCommand(
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2) return EXIT_FAILURE;
+    if (argc != 3) return EXIT_FAILURE;
 
-    const auto directory =
-        std::filesystem::temp_directory_path() / "camera-gentl-genapi-tests";
-    std::filesystem::create_directories(directory);
-    const auto ctiPath = directory / "mock.cti";
-    {
-        std::ofstream file(ctiPath);
-        file << "test fixture";
-    }
+    const std::filesystem::path ctiPath(argv[2]);
 
     try {
         auto bridge = camera::gentl::ConsumerBridge::load(argv[1]);

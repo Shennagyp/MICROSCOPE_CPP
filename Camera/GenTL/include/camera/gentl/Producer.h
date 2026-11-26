@@ -123,6 +123,12 @@ private:
 
 class Producer final {
 public:
+    // Opens a CTI through the in-process C++ GenTL Consumer. No separately
+    // deployed Consumer bridge or Swift runtime is required.
+    static Producer open(const std::filesystem::path& ctiPath);
+
+    // Explicit bridge injection remains available for alternative consumers
+    // and boundary tests.
     static Producer open(
         const std::shared_ptr<ConsumerBridge>& bridge,
         const std::filesystem::path& ctiPath);
@@ -145,6 +151,8 @@ public:
 
 private:
     explicit Producer(std::shared_ptr<ProducerContext> context) noexcept;
+    static Producer openWithConsumer(
+        Consumer consumer, std::string canonicalPath);
     std::shared_ptr<ProducerContext> context_;
 };
 

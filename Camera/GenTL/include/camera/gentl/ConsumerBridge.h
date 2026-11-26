@@ -10,8 +10,8 @@
 
 namespace camera::gentl {
 
-// Operation IDs are the stable C ABI bridge contract. Their order mirrors the
-// 64 raw GenTLAPI operations in AMSCOPE_DRIVER's GenTLConsumerCAPI package.
+// Stable internal operation IDs for the GenTL C function surface. The numeric
+// values preserve the ordering used by the existing test fixture.
 enum class Operation : std::uint32_t {
     gcGetInfo = 0,
     gcGetLastError = 1,

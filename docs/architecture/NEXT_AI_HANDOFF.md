@@ -85,11 +85,13 @@ save/restore. Only human visual inspection and current-revision physical
 MU503 UI smoke remain; CI is not a substitute.
 
 Owner direction on 26 November 2026: postpone the physical MU503 test and
-continue Phase 6 now. Phase 4 remains pending acceptance, not accepted, and is
-not a blocker for software work. Continue from
-[CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
-The GenApi negative/failure slice is CI-green at `ea356d5`. Do not repeat the
-inventory or reopen Phase 5. AmScope source/tests/contracts/behavior are frozen.
+proceed with Phase 7 packaging. Phase 4 remains pending acceptance, not
+accepted. Phase 6 remains open at the frozen AmScope provider-test boundary;
+its provider-neutral GenTL/GenApi work is complete for the current public
+contract. See [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md)
+for the recorded audit. Do not repeat the inventory or reopen Phase 5.
+AmScope provider source, tests, public contracts and runtime behavior remain
+frozen.
 
 
 Phase 4 includes CameraFeatureEditor in the preview feature tabs,

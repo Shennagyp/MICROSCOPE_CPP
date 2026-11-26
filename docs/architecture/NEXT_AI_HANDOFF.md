@@ -5,20 +5,22 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b`  
-**Latest CI:** [workflow #45742968336](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742968336) — Intel x86_64 and Apple Silicon arm64 jobs passed for the Phase 6 AmScope corrections.  
-**Phase status:** **Phase 6 in progress** — initial source-to-test audit recorded; two narrow gaps corrected. Recheck the live branch tip before each session.
+**Latest reviewed implementation checkpoint:** `a445bfa7a9d01ade09782dd7ad91e1c6c8775f50`  
+**Latest CI:** [workflow #45744057767](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45744057767) — non-Qt and Qt builds passed on Intel x86_64 and Apple Silicon arm64; Qt preview built and 21/21 CTest passed per architecture.  
+**Phase status:** Phase 3 accepted; Phase 4 in progress; Phase 5 complete by owner direction; Phase 6 follows Phase 4. Recheck the live branch tip before each session.
 
 ---
 
 ## 1. Continuation authority
 
 The project owner explicitly corrected the previous continuation attempt:
-- Phase 5 GenTL/GenApi integration is considered complete.
-- Phase 6 is the next implementation milestone.
-- Continue the existing roadmap; do not invent a replacement roadmap.
-- AmScope preview/UI work is not the current task.
-- The retired `AMSCOPE_DRIVER` project/repository is not a current dependency or source of truth. Do not inspect, revive, clone, build against, or modify it.
+- Original Camera Module Phases 0–8 remain governing.
+- Qt is optional as a dependency, not a removed deliverable. Original Phase 3 (Qt streaming) and Phase 4 (reusable Qt UI) remain in scope.
+- Phase 3 is accepted; Phase 4 is the current critical-path phase and remains open for visual/workspace and physical MU503 UI verification.
+- Phase 5 GenTL/GenApi implementation is complete by owner direction; do not restart it.
+- Phase 6 capability/feature/command/model coverage follows Phase 4. Two preliminary AmScope corrections and an initial audit are already recorded.
+- The AmScope preview application exists in Camera/Amscope/app/main.cpp; do not treat it as obsolete or exclude it from the project.
+- The retired AMSCOPE_DRIVER project/repository is not a current dependency or source of truth. Do not inspect, revive, clone, build against, or modify it.
 
 If older documents conflict with this owner direction or the current status ledger, do not silently follow the older instruction. Record the conflict.
 
@@ -29,20 +31,23 @@ If older documents conflict with this owner direction or the current status ledg
 | 0 — Baseline | Historically accepted | Do not reopen without a concrete regression. |
 | 1 — Native AmScope driver | Historically accepted; hardening evidence remains | Do not rewrite. Reopen only for a reproduced defect or a specific Phase 6 gap. |
 | 2 — Common camera contracts | Implemented substantially; residual hardware evidence remains | Reuse existing contracts. Change only for a demonstrated semantic defect. |
-| 3 — Qt streaming separation | Excluded from active scope by owner decision | No Qt work. |
-| 4 — Reusable Qt UI | Excluded from active scope by owner decision | No UI or preview work. |
+| 3 — Qt streaming separation | **Accepted by owner** | Preserve the one-session adapter and backend-neutral frame-stream boundary. |
+| 4 — Reusable Qt UI | **IN PROGRESS** | Reusable widgets and preview app exist. CameraFeatureEditor is now integrated into feature tabs. Complete visual/workspace and physical MU503 UI smoke before accepting Phase 4. |
 | 5 — GenTL/GenApi integration | **Complete by owner direction** | Do not restart, duplicate, or replace the integration. External device qualification is separate Phase 8 evidence. |
-| 6 — Capability, feature, command and model coverage | **IN PROGRESS** | Initial audit and two AmScope corrections complete; continue from the prioritized gaps in `CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md`. |
+| 6 — Capability, feature, command and model coverage | **OPEN; preliminary work exists** | Two AmScope corrections and the initial audit are recorded. Continue after Phase 4 acceptance from CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md. |
 | 7 — Packaging and external consumers | Open | Do not jump ahead of Phase 6. |
 | 8 — Hardware qualification and release | Open | Preserve as a separate evidence/release milestone. |
 
-The task is not “add more GenTL.” Determine whether the public API accurately describes what each provider and supported camera model can actually do.
+The immediate task is not “add more GenTL” and not “remove Qt.” Preserve the existing preview and reusable UI. Finish Phase 4 acceptance, then determine whether the public API accurately describes what each provider and supported camera model can actually do.
 
 ## 3. Repository boundaries
 
 - `Camera/Common`: backend-neutral identity, capabilities, frame/layout types, feature/command contracts, validation and common frame-delivery primitives.
 - `Camera/Amscope`: native AmScope C++ provider. `AmcamCamera` owns the AmScope SDK session and acquisition lifecycle.
 - `Camera/GenTL`: GenTL 1.6 Consumer-side implementation, Producer/device/data-stream lifecycle, frame projection, remote-port/XML access and optional GenApi 3.5.1 adapters.
+- Camera/Qt: optional Qt Core frame-stream library.
+- Camera/QtWidgets: optional backend-neutral reusable widgets, including CameraFeatureEditor.
+- Camera/Amscope/src/QtAmcamCamera.cpp and Camera/Amscope/app/main.cpp: AmScope Qt adapter and preview composition. The adapter composes one native session owner; the application does not open a second camera handle.
 - Root CMake and CI: configure/build/test/install boundaries and cross-architecture validation.
 - `docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md`: current phase ledger and evidence history.
 - `docs/architecture/AMSCOPE_IMPLEMENTATION_INVENTORY.md`: historical v0.7 inventory, not current phase authority. Do not trust its old UI/test counts without re-verification.
@@ -63,14 +68,20 @@ The separate Optika application owns presentation, UI, workspace, microscope sta
 9. Unknown is not true or false. Preserve unknown, unsupported and not-available distinctions; do not fabricate metadata.
 10. Preserve provider ownership and lifecycle. Do not create duplicate camera sessions, GenApi node maps or serialization boundaries.
 11. Preserve immutable frame ownership, payload lifetime, layout validation, overflow checks and opaque handling of unsupported pixel formats.
-12. Do not add Qt/UI dependencies to the active native library.
+12. Keep Qt optional to Camera/Common and Amscope::Driver, but preserve Phase 3/4 Qt targets and the AmScope preview application. Do not move Qt dependencies into the native core.
 
-## 5. Phase 6 work package
+## 5. Phase 4 current work and Phase 6 follow-on
 
-The initial source-to-test audit and two corrected gaps are recorded in
+Phase 4 source now includes the reusable CameraFeatureEditor, integrated
+into the AmScope preview feature tabs. The current Qt CI checkpoint builds
+amscope_preview and passes 21/21 CTest tests on both architectures. The
+remaining Phase 4 gate is application visual/workspace inspection and the
+current-revision physical MU503 UI smoke; CI is not a substitute.
+
+After Phase 4 acceptance, continue Phase 6 from
 [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
-Continue from its prioritized remaining-gap matrix; do not repeat the initial
-audit or reopen Phase 5.
+The initial audit and two AmScope provider corrections are already recorded;
+do not repeat the inventory or reopen Phase 5.
 
 
 ### 5.1 Create a source-grounded coverage matrix
@@ -141,8 +152,8 @@ Phase 8 remains responsible for exact-commit hardware records, supported provide
 
 1. Confirm current branch and HEAD before every session; the branch may have advanced.
 2. Read this handoff, the status ledger, relevant source and tests before proposing a change.
-3. Continue from the recorded Phase 6 audit. Recheck source and tests for each remaining gap; do not repeat the completed inventory without a reason.
-4. Do not modify unrelated projects, branches, UI, hardware-control code or historical snapshots.
+3. Continue from the governing phase sequence. Phase 4 is current; use the existing preview application and reusable widgets rather than replacing or omitting them. Phase 6 audit work follows Phase 4 acceptance.
+4. Do not modify unrelated projects, branches, hardware-control code or historical snapshots. Qt Phase 3/4 source is in scope; keep it in its existing targets and preserve the native core's Qt-free boundary.
 5. Do not run local builds/tests/debugging in this environment. Use existing CI evidence; do not claim tests ran if they did not. Use/trigger CI only when authorized and appropriate.
 6. Never force-push, rewrite history, delete branches or replace whole files without inspecting current contents and preserving unrelated work.
 7. Make small isolated commits with descriptive messages. Update this handoff/status only when verified state changes.
@@ -152,9 +163,10 @@ Phase 8 remains responsible for exact-commit hardware records, supported provide
 
 ## 9. Immediate next action
 
-Continue with **P1: deterministic AmScope feature behavior tests** from
-[CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
-First design the smallest private testability boundary for descriptor
-construction and feature operations. Keep it separate from the lifecycle seam
-unless a specific operation requires reuse. Do not add a public SDK interface,
-change session ownership, or modify the completed GenTL integration.
+Complete the Phase 4 acceptance gate for the existing amscope_preview:
+inspect the document-centric workspace, dock move/tabify/float/close/restore,
+layout persistence, Output pane and status-bar information strip; then run the
+physical MU503 discover/open/preview/live-feature-readback/stop/close smoke.
+Do not mark Phase 4 complete from CI alone. After that, continue Phase 6 from
+the recorded audit. Do not add a public SDK interface, change session ownership,
+or modify the completed GenTL integration.

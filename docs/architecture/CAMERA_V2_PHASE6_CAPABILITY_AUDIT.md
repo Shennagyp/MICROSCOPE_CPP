@@ -2,9 +2,10 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Reviewed implementation checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b`  
+**Reviewed provider checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b`  
+**Current Qt/UI checkpoint:** `a445bfa7a9d01ade09782dd7ad91e1c6c8775f50`  
 **Review date:** 26 November 2026  
-**Status:** Initial source-to-test audit complete; Phase 6 remains in progress.
+**Status:** Preliminary Phase 6 source-to-test audit complete; Phase 6 remains open and follows Phase 4 in the governing sequence.
 
 ## 1. Authority and scope
 
@@ -12,7 +13,9 @@ The current owner-directed phase ledger is
 [CAMERA_V2_DEVELOPMENT_STATUS.md](CAMERA_V2_DEVELOPMENT_STATUS.md), and the
 operational rules are in [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
 Phase 5 GenTL/GenApi integration is complete by owner direction. This audit
-does not reopen it.
+does not reopen it. Original Phases 3 and 4 remain in scope: Phase 3 is accepted,
+and Phase 4 reusable Qt UI is still in progress. The preliminary Phase 6 work
+below does not authorize skipping Phase 4 acceptance.
 
 Older AmScope-only plans use different phase numbering. Their phase labels do
 not override the current owner-directed Phase 0–8 ledger. In particular,
@@ -22,6 +25,7 @@ This audit inspects:
 - Common contracts and validation;
 - AmScope discovery, model facts, settings, commands, telemetry and accessories;
 - GenTL discovery, frame/device access, GenApi features and commands;
+- adjacent Qt UI integration as a Phase 4 cross-check, not as proof of backend capability;
 - automated tests and the evidence limits of CI.
 
 Source presence, automated test coverage, CI success, physical hardware
@@ -39,7 +43,9 @@ Both corrections have cross-architecture CI evidence. No physical hardware
 verification was added. Phase 6 remains open because provider-level AmScope
 feature/command behavior is not adequately tested, GenApi negative/failure
 coverage is incomplete, and the common discovery/capability relationship
-between GenTL and AmScope still needs an explicit API decision.
+between GenTL and AmScope still needs an explicit API decision. Phase 4 remains
+the current critical-path phase until the preview application's visual and
+physical UI acceptance checks are completed.
 
 ## 3. Coverage matrix
 
@@ -58,6 +64,7 @@ between GenTL and AmScope still needs an explicit API decision.
 | GenTL GenApi features | Boolean, Integer, Float, String and Enumeration nodes; Root-category traversal; dynamic availability/access modes; units/ranges/enumeration symbols; validated writes with GenApi verification | XML-backed tests cover all five scalar kinds, nested categories, internal-register exclusion, dynamic availability, read-only access and readback | Positive-path coverage is meaningful |
 | GenTL GenApi commands | `ICommand` discovery, issue and `IsDone` polling through common command contract | XML-backed tests cover root/nested commands, internal command-register rejection, issue and incomplete→complete transition; read-only command rejection | Positive-path coverage is meaningful; malformed/failure cases remain |
 | Cross-backend discovery semantics | AmScope discovery exposes common `CameraDeviceInfo`; GenTL discovery exposes `DeviceDescriptor`; GenApi features/commands use common access contracts | No shared provider/discovery abstraction or explicit GenTL→Common projection appears in the current public headers | **API alignment decision required**, not permission to restart Phase 5 |
+| Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor is used by the preview feature tabs; Amcam pixel-format labels are host-supplied while enum symbols remain canonical | Workflow [#45744057767](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45744057767) built the preview and passed 21/21 Qt CTest tests on both architectures | Phase 4 remains open for visual/workspace and physical MU503 UI smoke. Widget presence is not evidence of provider hardware capability |
 
 ### 3.1 AmScope feature inventory accounting
 
@@ -158,13 +165,16 @@ documented, synchronized multi-camera acquisition, RAW demosaicing for visible
 preview and a concrete GPU renderer.
 
 These are not automatically Phase 6 implementation tasks. First classify
-each against the current product scope and SDK evidence. Do not implement
-undocumented behavior or pull preview/UI work back into Camera v2.0.
+each against the current product scope and SDK evidence. Preview/UI remains an
+original Phase 3/4 deliverable, tracked separately from this provider audit;
+widget existence must never be used as evidence that a camera feature is
+supported or hardware-qualified.
 
 ## 7. Next work package
 
-1. Preserve the current Phase 5 completion boundary.
-2. Design a narrow Phase 6 testability layer for AmScope feature descriptor
+1. Preserve the current Phase 5 completion boundary and complete Phase 4
+   acceptance before treating Phase 6 as the active critical-path milestone.
+2. After Phase 4, design a narrow Phase 6 testability layer for AmScope feature descriptor
    construction and provider operations. The existing Phase 1 seam document
    covers lifecycle calls and explicitly excludes feature/accessory calls from
    its initial increment; do not turn it into a universal SDK interface.

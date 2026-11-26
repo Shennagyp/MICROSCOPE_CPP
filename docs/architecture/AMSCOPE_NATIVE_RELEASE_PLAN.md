@@ -178,7 +178,7 @@ Work:
 
 ### Phase 4 — Extract reusable Qt camera UI
 
-**Status: IN PROGRESS; FrameView accepted; document-centric workspace source built at owner-reported branch head 040e381; `amscope_preview` linked and 15/15 CTest passed; application visual and physical MU503 workspace/live-edit smoke remains pending**
+**Status: IN PROGRESS; reusable FrameView, CameraControlPanel, ImageInfoBar and CameraFeatureEditor exist; document-centric preview workspace and amscope_preview build are CI-verified on Intel/Apple Silicon with 21/21 CTest passing per architecture; application visual and current-revision physical MU503 workspace/live-edit smoke remains pending**
 
 Implemented in this Phase 4 slice:
 
@@ -186,6 +186,7 @@ Implemented in this Phase 4 slice:
 - Extracted `camera::qtwidgets::FrameView`. Its public contract uses only `camera::FramePtr` and Qt Widgets. It wraps retained external frame memory for RGB24, RAW8 and RAW16; it does not make an owned per-frame pixel copy, demosaic RAW data, or add a GPU renderer.
 - Extracted `camera::qtwidgets::CameraControlPanel`. It accepts common `CameraDeviceInfo` values, preserves opaque device IDs, and reports Refresh/Open/Start/Stop/Close intent through host callbacks. It owns no enumeration, camera session, request scheduler, or backend lifecycle behavior.
 - Added `camera::qtwidgets::ImageInfoBar`. It displays host-supplied imaging facts and values, reports double-click/keyboard edit intent, and has no camera access or feature-write behavior of its own.
+- Added the backend-neutral `camera::qtwidgets::CameraFeatureEditor`. It supports Boolean, exact `int64_t`, integer-vector, floating-point, string and enumeration values; it requires a valid current readback for readable features, preserves write-only/unset state, validates against the common descriptor, and reports typed write intent to the host. The AmScope preview now uses it in feature tabs; a host-supplied enumeration display-name provider preserves friendly Amcam pixel-format labels without changing the canonical submitted symbols.
 - The preview shell now uses a document-centric workspace: Live Preview is a document tab in the central area; Camera Explorer and Camera Properties are separate, vertically split right-side tool windows; Output is a docked bottom tool window. The panes support moving, tabification, floating, resizing, closing, View-menu restoration, and persisted layout state.
 - Camera Explorer owns the existing common discovery/lifecycle panel and still-capture controls. Camera Properties owns the existing feature tabs, trigger configuration and accessory controls. File → Camera Workspace raises both panes; the Workspace toolbar exposes the workspace action and Reset Window Layout. The View menu exposes each tool-window toggle and layout reset.
 - Output is a read-only application/camera message history with timestamps and a 2,000-block maximum. The editable `ImageInfoBar` remains a horizontal information strip but is now a permanent widget in the actual `QStatusBar`; it shows acquired-frame metadata and confirmed existing feature readbacks. A separate status indicator reports camera lifecycle state.
@@ -215,7 +216,7 @@ Extract only the components needed to turn the preview into a reusable library:
 
 1. Camera discovery and lifecycle controls — `CameraControlPanel`, hosted in Camera Explorer and raised through File → Camera Workspace.
 2. Imaging-information strip — `ImageInfoBar`, displaying host-supplied frame metadata and confirmed feature values in the real status bar; application/camera event history is separate in the Output tool window.
-3. Descriptor-driven feature editors, including current-value loading and disabled/unavailable states — existing application editor remains in place; generic extraction is a later slice.
+3. Descriptor-driven feature editors, including current-value loading and disabled/unavailable states — CameraFeatureEditor is extracted and integrated into the AmScope preview feature tabs. The host still owns request scheduling, generations, readback, Amcam-specific command semantics and the status-bar edit dialog.
 4. Command controls kept separate from setting writes.
 5. Telemetry presentation with explicit units.
 6. Live frame view and still-capture interaction.

@@ -47,6 +47,36 @@ The `camera_qt_widgets_camera_control_panel_tests` offscreen test covers
 device-label/opaque-ID preservation, callback dispatch, empty discovery,
 pending-state gating, and Closed/Open/Streaming/Faulted action availability.
 
+## CameraFeatureEditor
+
+camera::qtwidgets::CameraFeatureEditor presents one
+CameraFeatureDescriptor using the matching typed editor. It supports
+Boolean, exact signed 64-bit integer, integer vector, floating-point, string
+and enumeration values. It does not own a camera, schedule reads/writes, or
+assume that an editor's initial control value is the device's current value.
+
+The host supplies current readback, pending state, error messages and a write
+request callback. Readable features remain non-editable until a valid current
+readback is supplied. Write-only controls begin unset; the widget does not
+fabricate a false, zero or first-enum value. Descriptor availability,
+writability, ranges, increments, vector cardinality and enum symbols are
+validated before a typed write request is emitted. The host remains responsible
+for executing the request and presenting confirmed readback.
+
+A host may provide an enumeration display-name callback for user-friendly
+labels. The canonical enumeration symbol remains the submitted value; display
+labels do not alter backend identity or semantics.
+
+The AmScope preview uses this widget in its descriptor-driven feature tabs.
+Amcam-specific labels are supplied by the application host; the widget itself
+has no Amcam SDK dependency.
+
+The camera_qt_widgets_feature_editor_tests offscreen test covers readback
+gating, typed writes, integer increments, discrete integer choices, Boolean
+state, enum symbols and display labels, vector cardinality, floating-point
+steps, UTF-8 strings, read-only/unavailable behavior, write-only inputs and
+pending-state gating.
+
 ## ImageInfoBar
 
 `camera::qtwidgets::ImageInfoBar` renders a horizontally scrollable list of

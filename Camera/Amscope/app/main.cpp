@@ -98,12 +98,6 @@ std::string featureSectionKey(const camera::CameraFeatureDescriptor& descriptor)
         return name.find(token) != std::string::npos;
     };
 
-    if (has("Exposure") || has("Gain") || has("AutoExposure"))
-        return "exposure";
-    if (has("Resolution") || has("PixelFormat") || has("Raw") ||
-        has("HardwareROI") || has("Binning") || has("FrameRate") ||
-        has("FrameSpeed") || has("Trigger") || has("Bandwidth"))
-        return "capture";
     if (has("WhiteBalance") || has("Color") || has("Brightness") ||
         has("Contrast") || has("Gamma") || has("Saturation") ||
         has("Hue") || has("Tone") || has("Curve") || has("Demosaic") ||
@@ -111,10 +105,16 @@ std::string featureSectionKey(const camera::CameraFeatureDescriptor& descriptor)
         has("DarkField") || has("DefectPixel") || has("TestPattern") ||
         has("Orientation"))
         return "image";
-    if (has("Sensor") || has("BlackLevel") || has("ConversionGain") ||
+    if (has("ConversionGain") || has("Sensor") || has("BlackLevel") ||
         has("LowNoise") || has("FullWell") || has("Temperature") ||
         has("Tec") || has("Fan") || has("Heater"))
         return "sensor";
+    if (has("Exposure") || has("AnalogGain") || has("AutoExposure"))
+        return "exposure";
+    if (has("Resolution") || has("PixelFormat") || has("Raw") ||
+        has("HardwareROI") || has("Binning") || has("FrameRate") ||
+        has("FrameSpeed") || has("Trigger") || has("Bandwidth"))
+        return "capture";
     return "advanced";
 }
 

@@ -702,11 +702,13 @@ int32_t gentl_consumer_invoke(
             size_t value = 0;
             if (command == STREAM_INFO_NUM_ANNOUNCED) {
                 for (size_t i = 0; i < stream_buffer_count; ++i)
-                    if (stream_owners[i] == (DS_HANDLE)pointer(arguments[0])) ++value;
+                    if (stream_memory[i] &&
+                        stream_owners[i] == (DS_HANDLE)pointer(arguments[0])) ++value;
             } else if (command == STREAM_INFO_NUM_QUEUED) {
                 for (size_t i = 0; i < queued_buffer_count; ++i) {
                     for (size_t j = 0; j < stream_buffer_count; ++j) {
-                        if (queued_buffers[i] == stream_handles[j] &&
+                        if (stream_memory[j] &&
+                            queued_buffers[i] == stream_handles[j] &&
                             stream_owners[j] == (DS_HANDLE)pointer(arguments[0])) {
                             ++value;
                             break;

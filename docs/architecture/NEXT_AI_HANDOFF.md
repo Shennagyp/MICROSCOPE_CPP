@@ -6,7 +6,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
 **Latest reviewed implementation checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284`  
-**Latest CI:** [workflow #45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
+**Latest CI:** [workflow #45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction. Recheck the live branch tip before each session.
 
 ---
@@ -35,7 +35,7 @@ If older documents conflict with this owner direction or the current status ledg
 | 3 — Qt streaming separation | **Accepted by owner** | Preserve the one-session adapter and backend-neutral frame-stream boundary. |
 | 4 — Reusable Qt UI | **SOURCE/OFFSCREEN COMPLETE; OWNER ACCEPTANCE PENDING** | FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel exist; the AmScope preview uses the feature editor, telemetry strip and model capability panel. CI passes 24/24 tests per architecture, including the application-level offscreen composition/dock-state smoke. Visual/workspace acceptance remains pending; physical MU503 UI test is postponed. Do not mark Phase 4 accepted, but do not block Phase 6 software work on it. |
 | 5 — GenTL/GenApi integration | **Complete by owner direction** | Do not restart, duplicate, or replace the integration. External device qualification is separate Phase 8 evidence. |
-| 6 — Capability, feature, command and model coverage | **ACTIVE; OPEN** | GenApi malformed XML, unsupported generic-node, feature read/write failure recovery and command execution failure recovery are CI-verified at `a07c8a2`. AmScope provider-level tests remain blocked by the explicit AmScope freeze. Continue provider-neutral discovery/vector contract decisions and the next safe Phase 6 gap. |
+| 6 — Capability, feature, command and model coverage | **ACTIVE; OPEN** | GenApi malformed XML, unsupported generic-node, feature read/write failure recovery and command execution failure recovery are CI-verified at `ea356d5`. AmScope provider-level tests remain blocked by the explicit AmScope freeze. Continue provider-neutral discovery/vector contract decisions and the next safe Phase 6 gap. |
 | 7 — Packaging and external consumers | Open | Do not jump ahead of Phase 6. |
 | 8 — Hardware qualification and release | Open | Preserve as a separate evidence/release milestone. |
 
@@ -87,7 +87,7 @@ Owner direction on 26 November 2026: postpone the physical MU503 test and
 continue Phase 6 now. Phase 4 remains pending acceptance, not accepted, and is
 not a blocker for software work. Continue from
 [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
-The GenApi negative/failure slice is CI-green at `a07c8a2`. Do not repeat the
+The GenApi negative/failure slice is CI-green at `ea356d5`. Do not repeat the
 inventory or reopen Phase 5. AmScope source/tests/contracts/behavior are frozen.
 
 

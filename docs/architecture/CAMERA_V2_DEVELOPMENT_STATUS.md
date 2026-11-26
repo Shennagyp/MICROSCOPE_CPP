@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
 **Latest reviewed implementation checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284` — GenApi negative-path coverage now includes malformed XML rejection/recovery, unsupported public generic-node classification, and injected feature/command execution/completion failure recovery.  
-**Latest CI-validated checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284` — workflow [#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
+**Latest CI-validated checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284` — workflow [#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction while Phase 4 acceptance remains pending.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
@@ -224,7 +224,7 @@ CI evidence:
 No local build/test/debug run or new physical-camera test was performed.
 AmScope source and tests were not modified. The latest GenTL/GenApi-only
 increment is commit `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284`; workflow
-[#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996)
+[#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186)
 passed the GenTL suite and official GenApi 3.5.1 build/integration tests on
 Intel x86_64 and Apple Silicon arm64.
 
@@ -267,7 +267,7 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 ## 8. Next development sequence
 
 1. Continue Phase 6 now on `camera-v.2.0`: finalize the provider-specific GenTL discovery decision and vector-descriptor requirement assessment, then select the next provider-neutral coverage gap.
-2. Keep the GenApi negative/failure test slice at commit `a07c8a2` as CI-verified. Do not restart Phase 5.
+2. Keep the GenApi negative/failure test slice at commit `ea356d5` as CI-verified. Do not restart Phase 5.
 3. Keep AmScope provider-level feature/command coverage explicitly blocked by the AmScope freeze; do not change AmScope source/tests/contracts to address it.
 4. Keep Phase 4 visual/workspace acceptance pending and the physical MU503 test postponed; neither blocks the current Phase 6 software work. Do not claim Phase 4 accepted.
 5. After Phase 6, export native, GenTL and optional Qt CMake packages and verify clean external consumers under Phase 7.

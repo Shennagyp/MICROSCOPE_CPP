@@ -228,10 +228,18 @@ Still outstanding:
 
 ## 7. Execution policy and result reporting
 
-The test sources and CTest registrations have been authored. They have **not been compiled or executed as part of this change**. Therefore:
-- No test is reported as passing.
-- No C++ compile status is claimed.
-- No hardware behavior is claimed.
-- Newly added integration tests are evidence of designed test paths only until compiled and run in the project build environment.
+### CI verification snapshot
 
-When executed, report test results by target name, compiler/build configuration and commit SHA. HIL evidence must separately record controller/firmware identity, axis mapping/calibration, mechanical setup, test conditions, measurements and acceptance tolerances.
+GitHub Actions platform matrix run [45885221446](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45885221446) checked the code at commit `a9329ad52f5fdb681308bb053727ae479e79eb20` before this documentation-only update.
+
+| Runner | Core standalone | Application standalone | Root platform-only composition |
+|---|---:|---:|---:|
+| Ubuntu GCC | 22/22 passed | 45/45 passed | 45/45 passed |
+| macOS Clang | 22/22 passed | 45/45 passed | 45/45 passed |
+| Windows MSVC | In progress at last observation | Not yet reached | Not yet reached |
+
+The Ubuntu and macOS job conclusions were successful. Windows SQLite3 installation through vcpkg completed successfully; the Windows Core build was still running when this snapshot was written. The full three-platform matrix is therefore **not yet verified**.
+
+The Application test results include the new SampleType/Slide SQLite persistence test target. The stage worker integration, stage verification policy, optics workflow integration, camera model discovery/enrichment, and existing camera persistence tests all ran as part of the above CTest suites.
+
+These are software build/contract/persistence results. They do not prove any hardware behavior. HIL evidence must separately record controller/firmware identity, axis mapping/calibration, mechanical setup, test conditions, measurements and acceptance tolerances.

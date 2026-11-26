@@ -31,6 +31,7 @@ enum class CameraComponentModelBindingStoreErrorCode {
     SchemaMigrationFailed,
     UnsupportedSchemaVersion,
     InvalidRevision,
+    InvalidModelKey,
     RevisionConflict,
     DuplicateCameraComponent,
     CameraComponentNotInstalled,

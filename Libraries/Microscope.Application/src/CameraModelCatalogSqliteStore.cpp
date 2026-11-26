@@ -715,7 +715,6 @@ core::Status<CameraModelCatalogStoreError> CameraModelCatalogSqliteStore::save(
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (expectedCurrentRevision >= kMaximumSqliteInteger ||
-        catalog.revision() != expectedCurrentRevision + 1 ||
         catalog.revision() > kMaximumSqliteInteger) {
         return failureStatus(makeError(
             StoreErrorCode::InvalidCatalogRevision,
@@ -739,6 +738,12 @@ core::Status<CameraModelCatalogStoreError> CameraModelCatalogSqliteStore::save(
             StoreErrorCode::RevisionConflict,
             database_,
             "The camera model catalog changed since it was loaded."));
+    }
+    if (catalog.revision() != expectedCurrentRevision + 1) {
+        return failureStatus(makeError(
+            StoreErrorCode::InvalidCatalogRevision,
+            database_,
+            "The catalog revision must advance exactly one from the current revision."));
     }
 
     if (sqlite3_exec(

@@ -52,11 +52,16 @@ command-completion polling failure recovery.
 The exact green checkpoint is `85dd6af1fc71434d16452e4c62ceae6933b2a713`,
 workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248).
 
-Phase 6 remains open. AmScope provider-level feature/command behavior remains
-a known gap but is blocked by the explicit AmScope freeze. The GenTL discovery
-model decision and vector descriptor consumer requirement are the next
-provider-neutral audit decisions. Phase 4 visual/physical acceptance remains
-pending; its physical MU503 test is postponed and does not block Phase 6.
+Phase 6 remains open, but its provider-neutral GenTL/GenApi workstream is
+complete for the current public contract. The GenTL discovery projection and
+vector-descriptor decisions are recorded; route identity, unsupported
+IRegister behavior, malformed XML, feature failures, command execution and
+completion-query failures have deterministic CI coverage. The remaining
+high-priority gaps are AmScope provider-level feature/command/model-mapping
+tests, blocked by the explicit AmScope freeze. No further provider-neutral
+Phase 6 source gap is currently identified. Phase 4 visual/physical acceptance
+remains pending; its physical MU503 test is postponed and does not block
+Phase 6.
 Reusable command and capability presentation are implemented.
 
 ## 3. Coverage matrix
@@ -228,9 +233,11 @@ supported or hardware-qualified.
    cardinality guidance and Common validation rejects wrong vector lengths;
    providers retain per-field semantics. Defer per-element labels/ranges until
    a concrete generic consumer requires them.
-6. Continue the next provider-neutral Phase 6 coverage gap. Keep vendor CTI,
-   vendor GenApi XML and physical camera qualification as Phase 8 evidence;
-   mock/XML CI is not hardware verification.
+6. No additional provider-neutral Phase 6 source gap is currently identified.
+   Do not invent work or modify AmScope to close the remaining blocked tests.
+   Hold this boundary until the owner changes the AmScope freeze or directs
+   Phase 7. Keep vendor CTI, vendor GenApi XML and physical camera qualification
+   as Phase 8 evidence; mock/XML CI is not hardware verification.
 
 **No local build/test/debug run or physical-camera test was performed for this
 audit.** The CI results above are the exact remote workflow evidence.

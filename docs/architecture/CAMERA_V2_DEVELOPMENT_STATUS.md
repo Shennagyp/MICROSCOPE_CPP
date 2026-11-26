@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
 **Latest reviewed implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery now tests rejection of foreign Producer, stale interface and unknown device identifiers with distinct failure codes; GenApi negative-path coverage includes malformed XML rejection/recovery, unsupported public IRegister classification, and injected feature/command execution/completion failure recovery.  
-**Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
+**Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64 (10/10 bridge tests and 11/11 official GenApi tests per architecture).  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction while Phase 4 acceptance remains pending.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
@@ -239,20 +239,25 @@ That increment covers:
   execution and command-completion polling to `BackendFailure`, with subsequent
   recovery / no-side-effect assertions.
 
-Next Phase 6 actions:
-1. Record the GenTL discovery-to-Common decision: retain provider-specific
-   `DeviceDescriptor` for now because it carries producer/interface/device
-   routing identity; `ProducerTests` verifies rejection of foreign Producer
-   paths and stale interface IDs. Do not synthesize a lossy common discovery
-   record without a real multi-provider consumer requirement.
-2. Preserve the vector-descriptor decision: the reusable editor consumes
-   `elementCount` for cardinality guidance, and Common validation rejects a
-   mismatched vector length. Per-element labels/ranges are not currently
+Phase 6 disposition:
+1. GenTL discovery-to-Common is resolved: retain provider-specific
+   `DeviceDescriptor`; the Producer tests now reject foreign Producer paths,
+   stale interface IDs and unknown device IDs. Do not add a lossy projection
+   without a real multi-provider consumer requirement.
+2. Vector semantics are resolved for current consumers: `CameraFeatureEditor`
+   uses `elementCount` for cardinality guidance and Common validation rejects
+   mismatched vector lengths. Per-element labels/ranges are not currently
    required; do not expand `CameraFeatureDescriptor` without a new consumer.
-3. Keep AmScope provider-level feature/command coverage as a known gap blocked
-   by the explicit AmScope freeze. Do not alter AmScope to close it.
-4. Continue with the next provider-neutral Phase 6 gap; keep physical MU503,
-   vendor CTI and real-device GenApi evidence pending for Phase 8.
+3. GenTL/GenApi positive and negative adapter-boundary coverage is complete
+   for the current public contract, including malformed XML, unsupported
+   IRegister, feature read/write failures, command execution/status failures,
+   and recovery.
+4. The remaining high-priority Phase 6 gaps are AmScope provider-level feature,
+   command and model-mapping tests. They are blocked by the explicit AmScope
+   freeze. Do not modify AmScope source, tests, contracts or behavior.
+5. No additional provider-neutral Phase 6 source gap is currently identified.
+   Do not invent work or reopen completed GenTL integration. Keep physical
+   MU503, vendor CTI and real-device GenApi evidence pending for Phase 8.
 
 ## 7. Highest-priority unresolved risks
 

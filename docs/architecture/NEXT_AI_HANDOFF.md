@@ -181,11 +181,15 @@ Continue Phase 6 on `camera-v.2.0`:
    for cardinality guidance and Common validation rejects wrong vector
    lengths; provider code retains per-field semantics. Do not add per-element
    labels/ranges unless a concrete generic consumer needs them.
-3. Select the next provider-neutral Phase 6 coverage gap. AmScope provider
-   tests remain blocked by the explicit AmScope freeze; do not change its
-   source, tests, public contracts or behavior.
+3. No additional provider-neutral Phase 6 source gap is currently identified.
+   The remaining high-priority AmScope provider tests are blocked by the
+   explicit freeze; do not change AmScope source, tests, public contracts or
+   behavior. Hold at this boundary until the owner changes the freeze or
+   explicitly directs Phase 7.
 
 Phase 4 visual/workspace acceptance remains pending and the physical MU503
 test is postponed. Do not mark Phase 4 accepted; do not let this pending
 hardware/visual acceptance block Phase 6. Do not add a public SDK interface,
-change session ownership, or modify the completed GenTL integration.
+change session ownership, or modify the completed GenTL integration. CI at
+`85dd6af` passed 10/10 GenTL bridge tests and 11/11 official GenApi tests on
+each architecture.

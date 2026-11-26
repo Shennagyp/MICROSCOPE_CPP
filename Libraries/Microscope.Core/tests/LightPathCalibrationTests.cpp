@@ -64,6 +64,8 @@ void testModeSettingUsesExactCalibrationAndInterpolatesIrradiance() {
 
     const auto calibration = makeCalibration(modeId, lightPathId, opticalComponents);
     const auto setting = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("calibration-microscope"),
+        12,
         modeId,
         7,
         lightPathId,
@@ -80,6 +82,8 @@ void testModeSettingUsesExactCalibrationAndInterpolatesIrradiance() {
           "uses piecewise-linear calibration interpolation in specimen irradiance units");
 
     const auto outsideRange = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("calibration-microscope"),
+        12,
         modeId,
         7,
         lightPathId,
@@ -103,6 +107,8 @@ void testCalibrationBindingRejectsChangedOpticalConfiguration() {
         modeId, lightPathId, calibratedComponents);
 
     const auto changedFilter = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("calibration-microscope"),
+        12,
         modeId,
         7,
         lightPathId,
@@ -117,6 +123,8 @@ void testCalibrationBindingRejectsChangedOpticalConfiguration() {
           "rejects reusing calibration after an optical filter has changed");
 
     const auto changedModeRevision = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("calibration-microscope"),
+        12,
         modeId,
         8,
         lightPathId,
@@ -129,6 +137,8 @@ void testCalibrationBindingRejectsChangedOpticalConfiguration() {
           "rejects calibration from an older operation-mode revision");
 
     const auto changedPath = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("calibration-microscope"),
+        12,
         modeId,
         7,
         makeId<LightPathId>("light-path-episcopic"),

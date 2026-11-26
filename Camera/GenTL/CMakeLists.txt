@@ -114,6 +114,30 @@ if(BUILD_TESTING)
     target_link_libraries(camera_gentl_simulator_smoke
         PRIVATE Camera::GenTLConsumerBridge)
 
+    # The existing mock GenTL Producer is also built as a real loadable CTI.
+    # Simulator mode relaxes only test-specific timeout assumptions; the
+    # ordinary mock bridge retains its deterministic cancellation behavior.
+    add_library(gentl_test_simulator_cti SHARED
+        tests/MockConsumerBridge.c)
+    target_include_directories(gentl_test_simulator_cti PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/include")
+    target_compile_definitions(gentl_test_simulator_cti PRIVATE
+        CAMERA_GENTL_SIMULATOR_MODE=1)
+    set_target_properties(gentl_test_simulator_cti PROPERTIES
+        C_STANDARD 11
+        C_STANDARD_REQUIRED YES
+        C_EXTENSIONS OFF
+        PREFIX ""
+        OUTPUT_NAME "gentl_test_simulator"
+        SUFFIX ".cti")
+
+    add_test(NAME camera_gentl_inrepo_simulator_smoke
+        COMMAND camera_gentl_simulator_smoke
+            "$<TARGET_FILE:gentl_native_consumer_bridge_fixture>"
+            "$<TARGET_FILE:gentl_test_simulator_cti>")
+    set_tests_properties(camera_gentl_inrepo_simulator_smoke PROPERTIES
+        TIMEOUT 120)
+
     set(CAMERA_GENTL_SIMULATOR_CTI "" CACHE FILEPATH
         "Optional vendor/simulator GenTL CTI path for the opt-in integration smoke")
     if(CAMERA_GENTL_SIMULATOR_CTI)

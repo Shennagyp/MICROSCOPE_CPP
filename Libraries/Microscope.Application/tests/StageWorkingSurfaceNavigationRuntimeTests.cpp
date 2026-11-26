@@ -664,6 +664,54 @@ void testQueuedTargetIsRejectedAfterSlideRegistrationChanges() {
         "a stale queued target creates no operation identity and dispatches no physical command");
 }
 
+void testCorrelatedControllerFaultFailsNavigationAndPreservesIndependentFocusZ() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    auto initial = referencedPosition(surface, stage);
+    initial = take(initial.afterCalibratedReference(
+        id<core::StageAxisId>("focus-z"), 5000.0, 1.0));
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, initial, homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    const auto started = take(navigation.beginRequest(
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    check(started.disposition ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched &&
+          navigation.navigationActive(),
+          "the stage owner has an active coordinated movement before controller fault feedback");
+
+    const auto fault = take(core::StageMotionFaultObservation::create(
+        core::StageMotionFaultKind::FollowingError,
+        id<core::StageAxisId>("x")));
+    const auto metadata = take(core::FeedbackMetadata::create(
+        core::FeedbackCorrelation{fixture.device, lastOperation(port)},
+        core::FeedbackKind::AdapterFailure,
+        core::ObservationSource::AdapterReport));
+    const auto envelope = core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
+        metadata, core::StageMotionFeedbackPayload{fault});
+    const auto feedback = fixture.process(envelope);
+    const auto failed = take(navigation.processFeedback(feedback));
+
+    check(failed.disposition ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::
+                  NavigationFailed &&
+          failed.operation &&
+          failed.operation->status() == core::OperationStatus::Failed &&
+          !navigation.navigationActive(),
+          "a command-correlated controller following-error terminates the navigation operation");
+    const auto position = take(navigation.positionSnapshot());
+    check(!position.x().positionIsUsable() && !position.y().positionIsUsable(),
+          "a coordinated XY controller fault invalidates both in-plane position references");
+    check(position.z().positionIsUsable() && position.z().position() &&
+          position.z().position()->value() == 5000.0,
+          "an XY controller fault does not erase the independent focus-Z reference");
+}
+
 void testOwnerRejectsConcurrentNavigationAndLayoutReplacement() {
     RuntimeFixture fixture;
     const auto stage = stageSpecification();
@@ -808,6 +856,7 @@ int main() {
     testPreDispatchRejectionClosesOperationAndCanRetry();
     testRestoredMoveAdapterRejectionClosesHomedOperation();
     testQueuedTargetIsRejectedAfterSlideRegistrationChanges();
+    testCorrelatedControllerFaultFailsNavigationAndPreservesIndependentFocusZ();
     testOwnerRejectsConcurrentNavigationAndLayoutReplacement();
     testStaleCommandFeedbackCannotCompleteCurrentMove();
     testBoundedControlQueueDispatchesOnTheOwnerThread();

@@ -1520,8 +1520,8 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
         fixture.microscopeId,
         operationModeId,
         1,
-        "Brightfield",
-        ContrastMethod::Brightfield,
+        "Fluorescence",
+        ContrastMethod::Fluorescence,
         {modeSetting}));
 
     FluorescenceCameraRequirements fluorescenceRequirements{
@@ -1546,12 +1546,26 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
     check(cameraResolution.isResolved(),
           "resolves the single camera endpoint on the selected LightPath");
 
+    const auto fluorescenceProfileId =
+        makeId<ConfigurationProfileId>("profile-lightpath-fluorescence");
+    const auto fluorescenceProfile = take(ConfigurationProfile::create(
+        fluorescenceProfileId,
+        ContrastMethod::Fluorescence,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.illuminationPathId, fixture.imagingPathId, fixture.fullPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {fixture.objectiveId}));
+    const auto fluorescenceProfiles = take(
+        ConfigurationProfileCatalog::create({fluorescenceProfile}));
+
     const auto request = LightPathConfigurationRequestFactory::create(
         equipment,
         operationMode,
         lightPathId,
         cameraResolution,
-        fixture.brightfieldProfileId,
+        fluorescenceProfileId,
         fixture.objectiveId,
         fixture.condenserId,
         fixture.illuminationId,
@@ -1569,7 +1583,7 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
           "generated request retains the camera assessor's warning diagnostics");
 
     const auto resolution =
-        ConfigurationResolver::resolve(equipment, fixture.profiles, request.value());
+        ConfigurationResolver::resolve(equipment, fluorescenceProfiles, request.value());
     check(resolution.isResolved(),
           "the existing profile resolver accepts a coherent LightPath-derived request");
     check(hasDiagnosticCode(

@@ -151,7 +151,12 @@ int runProducerTests(int argc, char** argv) {
         if (camera::gentl::makeCommonFrame(incompleteFrame)) return 16;
         auto paddedFrame = *frame;
         paddedFrame.xPadding = 1;
-        if (camera::gentl::makeCommonFrame(paddedFrame)) return 17;
+        const auto opaquePaddedFrame =
+            camera::gentl::makeCommonFrame(paddedFrame);
+        if (!opaquePaddedFrame ||
+            (*opaquePaddedFrame)->pixelFormat != camera::PixelFormat::Unknown ||
+            (*opaquePaddedFrame)->strideBytes != 0 ||
+            (*opaquePaddedFrame)->rowPaddingBytes != 1) return 17;
         auto chunkedFrame = *frame;
         chunkedFrame.containsChunkData = true;
         if (camera::gentl::makeCommonFrame(chunkedFrame)) return 18;

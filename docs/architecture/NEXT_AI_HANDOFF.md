@@ -213,18 +213,18 @@ This does not modify AmScope, the production public API, or installed package
 exports. It does not resolve or replace the separate Swift bridge in production.
 
 **No local build/test/debug run has been performed and no simulator has been
-executed.** The initial harness baseline passed GenTL bridge CI and package /
-external-consumer CI at commit `7d3a83b4ff87d5a9ee24f04a26f86d00ab6d6976`.
-The follow-up device-index selection change is a later source commit and must
-pass its own CI. The best additional CTI candidate identified is Hikrobot
-MVS's documented `MvProducerVIR.cti`, subject to vendor confirmation of
-third-party GenTL consumer compatibility and license permission; Linux or
-Windows may be required. Critical Link's simulated GenTL Producer is a
-secondary candidate. The Imaging Source Virtual Camera Producer remains a
-candidate but its third-party consumer compatibility and license scope are
-unconfirmed. Do not use Vimba X until its published restrictions are confirmed
-compatible. Aravis fake GV is not a CTI Producer and cannot be passed directly
-to this harness.
+executed.** The device-index selection source passed both replacement CI
+workflows at commit `337bc58fc25de903b1c8e103261d9e89bc7d9c60`:
+GenTL bridge #45781919824 and package/external-consumer #45781919810, each on
+Intel x86_64 and Apple Silicon arm64.
+
+Do not use a vendor simulator without explicit license clearance. TIS Virtual
+Camera is the clearest dedicated CTI simulator product, but its published EULA
+limits use to operating TIS products; obtain written permission for this
+project's generic GenTL test use. Hikrobot's virtual-camera CTI is documented
+in an older MVS manual, but current package/architecture support and third-party
+consumer permission are unconfirmed. Vimba X is also license-blocked. Aravis
+fake GV is not a CTI Producer and cannot be passed directly to this harness.
 
 The smoke selects device index 0 by default, accepts an optional device index
 for manual runs, and uses the first stream on the selected device. It remains
@@ -232,3 +232,12 @@ an initial integration probe, not a complete multi-device, feature/command,
 fault-injection or performance qualification. Simulator
 results remain separate from the outstanding physical AmScope and GenTL
 hardware gates.
+
+
+## Simulator continuation decision
+
+The next technical investigation should compare two lawful routes before adding more production-facing code:
+1. Obtain written vendor permission and a current CTI package for a genuine simulator (TIS first for Linux x86_64 or a compatible macOS 26 runner; Hikrobot only after confirming exact package and architecture).
+2. Build a first-party, test-only GenTL 1.6 simulated CTI fixture that exports the required Producer symbols and deterministic GenApi XML/frame buffers. It must exercise the existing GenTLProducerLibrary -> native test shim -> ConsumerBridge -> Producer path, stay under Camera/GenTL/tests, never install/export, and be labelled an in-repo simulator rather than vendor interoperability evidence.
+
+Before implementing route 2, enumerate every GenTL operation and data contract invoked by Producer, DeviceSession and DataStreamSession. Keep the fixture minimal but standards-correct: module/handle lifetimes, two-call info queries, port URL/XML, event registration/wait/kill, buffer announce/queue/requeue, complete frame metadata and deterministic payload. Do not modify AmScope, the Optika app, Phase 4/5, or run local builds/tests/debuggers. Require GitHub CI for source validation.

@@ -221,6 +221,55 @@ void testBayerMosaicFormatsPreservePatternAndRawSamples() {
     }
 }
 
+void testPackedBayer10pAnd12pPreservePatternAndByteLayout() {
+    struct FormatCase {
+        std::uint64_t format;
+        camera::PixelColorFilterArray pattern;
+        std::uint8_t bits;
+        std::uint32_t stride;
+        std::size_t payloadSize;
+    };
+    const FormatCase cases[] = {
+        {UINT64_C(0x010A0056), camera::PixelColorFilterArray::GRBG, 10, 4, 8},
+        {UINT64_C(0x010C0057), camera::PixelColorFilterArray::GRBG, 12, 5, 10},
+        {UINT64_C(0x010A0058), camera::PixelColorFilterArray::RGGB, 10, 4, 8},
+        {UINT64_C(0x010C0059), camera::PixelColorFilterArray::RGGB, 12, 5, 10},
+        {UINT64_C(0x010A0054), camera::PixelColorFilterArray::GBRG, 10, 4, 8},
+        {UINT64_C(0x010C0055), camera::PixelColorFilterArray::GBRG, 12, 5, 10},
+        {UINT64_C(0x010A0052), camera::PixelColorFilterArray::BGGR, 10, 4, 8},
+        {UINT64_C(0x010C0053), camera::PixelColorFilterArray::BGGR, 12, 5, 10}
+    };
+    for (const auto& test : cases) {
+        auto source = validMono8Frame();
+        source.pixelFormat = test.format;
+        source.pixelEndianness = GenTL::PIXELENDIANNESS_UNKNOWN;
+        source.payload.resize(test.payloadSize);
+        for (std::size_t i = 0; i < source.payload.size(); ++i)
+            source.payload[i] = static_cast<std::uint8_t>(i * 13 + 7);
+        const auto original = source.payload;
+        const auto result = camera::gentl::makeCommonFrame(std::move(source));
+        require(result.has_value(), "Packed Bayer frame was rejected.");
+        const auto& frame = **result;
+        require(frame.pixelColorFilterArray == test.pattern,
+                "Packed Bayer mosaic pattern was not preserved.");
+        require(frame.pixelFormat == camera::PixelFormat::Raw8,
+                "Packed Bayer bytes were not represented as raw byte storage.");
+        require(frame.pixelPacking == (test.bits == 10
+                    ? camera::PixelPacking::PFNC10p
+                    : camera::PixelPacking::PFNC12p),
+                "Packed Bayer PFNC packing identity was not preserved.");
+        require(frame.pixelByteOrder == camera::PixelByteOrder::NotApplicable,
+                "Packed Bayer samples must not claim byte endianness.");
+        require(frame.significantBitsPerPixel == test.bits &&
+                    frame.storageBitsPerPixel == test.bits,
+                "Packed Bayer sample bit depth was not preserved.");
+        require(frame.strideBytes == test.stride,
+                "Packed Bayer row stride was incorrect.");
+        require(frame.pixels == original,
+                "Packed Bayer payload bytes were modified or unpacked.");
+    }
+}
+
 void testBayer16WithoutKnownByteOrderPreservesOnlyMosaicMetadata() {
     auto source = validMono8Frame();
     source.pixelFormat = UINT64_C(0x0110002F); // PFNC BayerRG16
@@ -441,6 +490,7 @@ int main() {
         testMono16ProjectionUsesReportedByteOrder();
         testUnpackedMono10Mono12Mono14Projection();
         testBayerMosaicFormatsPreservePatternAndRawSamples();
+        testPackedBayer10pAnd12pPreservePatternAndByteLayout();
         testBayer16WithoutKnownByteOrderPreservesOnlyMosaicMetadata();
         testMono16WithoutKnownByteOrderRemainsOpaque();
         testRgb8Projection();

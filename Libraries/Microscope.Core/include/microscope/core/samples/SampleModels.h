@@ -321,8 +321,8 @@ enum class SlidePreparationRequirementsError {
     DuplicateLabelKind
 };
 
-// Constraints on the actual preparation record. SampleType stores the allowed
-// preparation envelope; SpecimenPreparation stores the observed preparation.
+// Constraints on actual slide preparation. SlideType stores the reusable
+// preparation envelope; Slide stores the observed preparation snapshot.
 class SlidePreparationRequirements final {
 public:
     [[nodiscard]] static Result<
@@ -675,7 +675,7 @@ enum class SlidePreparationError {
 // remain absent; they are not filled from the SampleType template.
 class SlidePreparation final {
 public:
-    [[nodiscard]] static Result<SpecimenPreparation, SlidePreparationError> create(
+    [[nodiscard]] static Result<SlidePreparation, SlidePreparationError> create(
         SpecimenPreparationMethod method,
         SpecimenFixationState fixationState,
         std::optional<double> sectionThicknessMicrometers = std::nullopt,

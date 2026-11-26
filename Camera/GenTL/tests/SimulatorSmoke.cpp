@@ -97,18 +97,18 @@ void verifyTwoDeviceIsolation(
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 3 || argc > 5) {
+    if (argc < 2 || argc > 4) {
         std::cerr
             << "Usage: camera_gentl_simulator_smoke "
-            << "<native-test-bridge-library> <vendor-producer.cti> "
-            << "[device-index] [--verify-two-device-isolation]\n";
+            << "<vendor-producer.cti> [device-index] "
+            << "[--verify-two-device-isolation]\n";
         return 64;
     }
 
     std::size_t selectedDeviceIndex = 0;
     bool verifyMultiDeviceIsolation = false;
-    if (argc >= 4) {
-        const std::string option = argv[3];
+    if (argc >= 3) {
+        const std::string option = argv[2];
         if (option == "--verify-two-device-isolation") {
             verifyMultiDeviceIsolation = true;
         } else {
@@ -121,8 +121,8 @@ int main(int argc, char** argv) {
             }
         }
     }
-    if (argc == 5) {
-        if (std::string(argv[4]) != "--verify-two-device-isolation") {
+    if (argc == 4) {
+        if (std::string(argv[3]) != "--verify-two-device-isolation") {
             std::cerr << "Unknown simulator smoke option.\n";
             return 67;
         }
@@ -130,9 +130,7 @@ int main(int argc, char** argv) {
     }
 
     try {
-        const auto bridge =
-            camera::gentl::ConsumerBridge::load(argv[1]);
-        auto producer = camera::gentl::Producer::open(bridge, argv[2]);
+        auto producer = camera::gentl::Producer::open(argv[1]);
 
         std::cout << "CTI: " << producer.ctiPath() << '\n';
         const auto devices = producer.discover(5000);

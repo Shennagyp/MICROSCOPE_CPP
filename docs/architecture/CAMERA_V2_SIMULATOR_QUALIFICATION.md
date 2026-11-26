@@ -2,7 +2,7 @@
 
 **Branch:** `camera-v.2.0`  
 **Purpose:** Add vendor-independent software integration evidence for the GenTL consumer without claiming physical-camera qualification.  
-**Status:** Assessment complete; simulator execution is not yet verified.
+**Status:** Candidate assessment and test-only harness implementation complete; no simulator execution or CI compile result is claimed yet.
 
 ## 1. Qualification boundary
 
@@ -74,12 +74,14 @@ This boundary must be resolved before claiming simulator-backed integration of t
 
 ## 4. Bounded implementation proposal
 
-1. Add a **test-only** native C ABI shim around the already-existing `GenTLProducerLibrary`. It should export the exact five symbols expected by `ConsumerBridge` and forward calls to the direct CTI loader. Keep it out of installed package exports and production runtime selection.
-2. Add a simulator integration executable that accepts explicit bridge and CTI paths; it must not scan arbitrary host CTI directories or silently choose a Producer.
+1. **Implemented in source:** a test-only native C ABI shim around the existing `GenTLProducerLibrary`, exporting the five symbols expected by `ConsumerBridge`. It is not installed or exported and does not change production runtime selection.
+2. **Implemented in source:** `camera_gentl_simulator_smoke`, which accepts explicit bridge and CTI paths, uses the existing `Producer` API, selects the first discovered device/stream, and checks GenApi XML plus five complete frames and orderly stop/close. CMake registers it with CTest only when `CAMERA_GENTL_SIMULATOR_CTI` is supplied.
 3. Exercise the actual `Producer`, `DeviceSession`, `DataStreamSession`, `GenTLFrameAdapter`, and, where the simulator's XML permits, the official GenApi adapter.
 4. Record discovered device descriptors, Producer version, simulator version, CTI path/hash, feature descriptors, frame dimensions/format/payload length, frame count, and teardown result. Treat unsupported simulator features as capability observations, not test failures.
 5. Prefer an opt-in/manual CI job or a separately provisioned runner if vendor download/license conditions prevent safe automatic installation. Do not make normal package CI depend on a vendor installer.
 6. Keep AmScope provider source, tests, public contracts and runtime behavior frozen. Do not modify the Optika v0.9 application or restart Phase 5.
+
+The source changes above have not yet been compiled or executed in this environment. The next evidence must come from the existing GitHub CI and an approved simulator CTI run. Do not report the harness as passing until those records exist.
 
 ## 5. Acceptance criteria
 

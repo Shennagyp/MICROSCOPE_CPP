@@ -92,7 +92,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 4 | Extract reusable Qt camera UI library | **SOURCE AND OFFSCREEN CHECKS COMPLETE; OWNER ACCEPTANCE PENDING/POSTPONED.** Camera::QtWidgets contains FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel. The AmScope preview uses the feature editor, telemetry strip and selected-model capability panel. The command panel is for no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned. Workflow #45749181949 built amscope_preview and passed 24/24 Qt CTest tests on both architectures, including an application-level offscreen composition and dock-state restore test. Human visual/workspace inspection and physical MU503 UI smoke remain pending; the owner has postponed the physical test. This pending acceptance does not block the owner-directed Phase 6 software work. |
 | 5 | Integrate existing GenTL/GenApi implementation | **COMPLETE — owner-confirmed implementation milestone.** The GenTL Producer/device/stream lifecycle, buffer acquisition, frame metadata projection, remote-port access, XML retrieval and GenApi 3.5.1 feature/command integration are implemented and covered by cross-architecture CI. Do not reopen or reimplement Phase 5. Vendor CTI/device and physical-camera qualification are external integration/release evidence and must be tracked separately; they do not authorize restarting the completed implementation milestone. |
 | 6 | Complete capability, feature, command and model coverage | **OPEN; BLOCKED AT THE AMSCOPE PROVIDER-TEST BOUNDARY.** Provider-neutral GenTL/GenApi coverage and discovery/vector decisions are complete for the current public contract. AmScope provider-level feature/command/model tests remain unaddressed because AmScope is frozen by owner instruction. The owner has explicitly authorized Phase 7 to proceed without changing that freeze. Do not mark Phase 6 complete. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
-| 7 | Release packaging and external-consumer integration | **AUTOMATED PACKAGE ACCEPTANCE PASSED; PHASE 7 REMAINS OPEN FOR PHYSICAL AND REDISTRIBUTION GATES.** Workflow [#45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) passed on Intel x86_64 and Apple Silicon arm64: 28/28 CTest tests per architecture, install/relocation, clean Common/GenTL/GenApi/AmScope/Qt external consumers, runtime-link inspection and installed-artifact architecture checks. The AmScope vendor-runtime default-off contract passed on Apple Silicon. Installed non-Qt/Qt AmScope physical smoke and installed GenTL physical CTI-camera smoke remain pending; SDK redistribution rights remain unresolved. A separate simulator-backed GenTL software qualification track is authorized but not yet executed; see [simulator qualification plan](CAMERA_V2_SIMULATOR_QUALIFICATION.md). |
+| 7 | Release packaging and external-consumer integration | **AUTOMATED PACKAGE ACCEPTANCE PASSED; PHASE 7 REMAINS OPEN FOR PHYSICAL AND REDISTRIBUTION GATES.** Workflow [#45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) passed on Intel x86_64 and Apple Silicon arm64: 28/28 CTest tests per architecture, install/relocation, clean Common/GenTL/GenApi/AmScope/Qt external consumers, runtime-link inspection and installed-artifact architecture checks. The AmScope vendor-runtime default-off contract passed on Apple Silicon. Installed non-Qt/Qt AmScope physical smoke and installed GenTL physical CTI-camera smoke remain pending; SDK redistribution rights remain unresolved. A separate simulator-backed GenTL software qualification track is authorized. The test-only native CTI shim and opt-in five-frame smoke harness are now present, but no simulator run or CI compile result is yet claimed; see [simulator qualification plan](CAMERA_V2_SIMULATOR_QUALIFICATION.md). |
 | 8 | Final hardware qualification and release | **Open.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer deployment, vendor SDK redistribution review, release CI and owner acceptance. |
 
 Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Current execution is owner-directed: Phase 3 is accepted; Phase 4 source/offscreen work is complete while visual/workspace and physical MU503 acceptance remain pending (physical test postponed); Phase 5 is complete by owner direction; Phase 6 remains open but is blocked by the explicit AmScope freeze; Phase 7 is now active by explicit owner authorization despite that blocked Phase 6 provider-specific test gap. This does not waive or complete Phase 6. Vendor CTI/device qualification remains separate Phase 8 evidence; do not restart Phase 5.
@@ -366,3 +366,29 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 - [Simulator qualification plan](CAMERA_V2_SIMULATOR_QUALIFICATION.md)
 - [Native Optika application camera integration](AMSCOPE_NATIVE_MACOS_APP.md)
 - [Driver README](../../Camera/Amscope/README.md)
+
+
+## 11. Simulator qualification progress — 26 November 2026
+
+The owner requested simulator-backed camera testing as a separate software
+qualification track. The test-only native CTI bridge shim and
+`camera_gentl_simulator_smoke` executable have been added under
+`Camera/GenTL/tests`; CMake builds them with testing enabled and registers the
+smoke only when `CAMERA_GENTL_SIMULATOR_CTI` is configured. The harness uses
+the existing `ConsumerBridge` and `Producer` APIs and checks CTI loading,
+discovery, device open, GenApi XML retrieval, five complete image buffers,
+stream stop and device close. It is not installed or exported.
+
+No local build/test/debug run has been performed. No simulator has been
+executed and no CI result for this increment is yet established. The next
+evidence is the exact-commit CI compile result followed by a run against a
+vendor CTI whose third-party consumer compatibility and license permit this
+use. The Imaging Source Virtual Camera Producer is the first candidate for
+clarification. Vimba X is excluded pending confirmation of its published
+license restrictions. Aravis fake GV is a GigE Vision protocol simulator, not
+a CTI Producer.
+
+This simulator track supplements GenTL software integration only. It does not
+close installed physical-camera smoke, AmScope physical tests, Phase 4 visual
+acceptance, Phase 6 frozen AmScope provider tests, or redistribution gates.
+See [CAMERA_V2_SIMULATOR_QUALIFICATION.md](CAMERA_V2_SIMULATOR_QUALIFICATION.md).

@@ -409,11 +409,11 @@ physical working-surface model.
 
 ### Stage 6 update — fixed 3D working surface and actual position projection
 
-Core now defines a 3D working-surface model with a user-authored, variable-size collection of slide rectangles. The volume is bound to explicit installed X/Y/Z linear axes and validated against their operating ranges. Each physical slide retains its two XY endpoints, stop-point origin, explicit dimensional constraints, Z datum, thickness, drawing tolerance and derived rigid pose.
+Core now defines a 3D working-surface model with a user-authored, variable-size collection of slide rectangles. The XY working surface is bound only to installed X/Y linear axes and validated against their operating ranges. Each physical slide retains two XY endpoints, a stop-point origin, explicit length/width constraints and a derived 2D placement. The focus Z axis and its travel range are separate microscope-axis data.
 
 StagePosition3D now aggregates the three immutable axis position states. It accepts axis observations, accepts reference observations only after external operation verification, and projects the current machine XYZ coordinate into the selected slide frame. The projection retains position evidence, source, uncertainty and independent inside-slide/inside-working-volume flags. It does not discard coordinates merely because the stage is between physical slides.
 
-Tests were added for variable-size CAD slide layouts, constrained rectangle geometry, rotated 3D coordinate transforms, stop-point uncertainty propagation, physical endstop reference, full-stroke software-endstop reference and projection from three measured axis positions. These tests have been registered but were not executed in this environment.
+Tests were added for variable-size XY CAD slide layouts, constrained rectangle geometry, physical endstop reference, no-start-position full-range Z sweep, safe continuous-knob-overtravel capability and independent focus-Z position. These tests have been registered but were not executed in this environment.
 
 Still outstanding: Application worker integration of three-axis feedback, stage reference-motion execution and correlation, hardware adapter, calibration persistence, stop/fault/timeouts and frontend-neutral live position snapshots.
 
@@ -430,3 +430,16 @@ Physical endstop datum evidence is represented separately from encoder and exter
 The earlier fixed-ten slide array is superseded. A stage working surface now owns a variable-size collection of user-authored `SlideRectangleDefinition2D` values. Each definition retains the fixed stop-point endpoint, initial opposite-corner handle, solved opposite endpoint, explicit length/width constraints, length-axis assignment, Z datum, thickness and constraint tolerance. The constraints solve the final opposite endpoint while the first endpoint stays anchored; the 3D slide placement is derived from that solved rectangle.
 
 This is an editable layout definition, not automatic hardware discovery or a fixed slot count. Interactive pointer-driven drawing/editing, incremental constraint re-solving while dragging, undo/redo, persistence and overlap/clearance rules remain outstanding. The Core definition already solves the initial two-point rectangle from its dimensional constraints.
+
+
+### Physical model correction — XY slide layout and independent focus Z
+
+The previous working-surface model incorrectly included slide Z datum, slide thickness, drawing tolerance and stop-point uncertainty. Those fields have been removed from the replacement model.
+
+StageWorkingSurface2D owns only the physical XY working boundaries, X/Y axis identities and user-authored slide rectangles. Each slide rectangle retains its stop-point endpoint, initial opposite-corner handle, solved opposite endpoint and constrained length/width. Its transform is strictly two-dimensional.
+
+StagePosition3D still tracks machine X/Y and microscope focus Z. Slide position projection requires only referenced X and Y; focus Z remains a separate axis coordinate and cannot change the slide-local XY mapping.
+
+The no-switch focus reference is FullRangeSweep: command one complete configured Z travel range in the selected top/bottom direction from an unknown in-range start. This is allowed only when the focus mechanism declares ContinuousKnobRotationWithoutClash. After exact correlated motion completion, the selected Z boundary is recorded as an estimated calibrated reference unless encoder/external measurement verifies it. The reference state no longer requires the start coordinate to be known.
+
+Interactive CAD editing, persisted layout revisions and Application execution/composition of the Z full-range sweep remain outstanding.

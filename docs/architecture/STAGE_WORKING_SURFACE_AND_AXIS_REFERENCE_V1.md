@@ -1,77 +1,94 @@
-# Stage Working Surface and Axis Reference Model v1
+# Stage Working Surface and Microscope Axis Reference Model v2
 
-**Status:** Initial Core contract implementation  
+**Status:** Core XY CAD layout and per-axis reference contracts implemented; live host integration remains in progress.  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9
 
-## Physical working-surface model
+## 1. Physical ownership
 
-The stage is one physical 3D working volume. It is not an automatically discovered collection of hardware slots; the user authors and edits the saved CAD layout. The slide map is a user-authored CAD drawing containing a variable number of slide rectangles. It is not limited to ten slides and is not an automatically discovered set of hardware slots.
+The microscope has one physical motorized stage with an XY working surface and a separate focus Z axis.
 
-Each placement retains the stop-point endpoint, original opposite-corner handle, solved opposite endpoint, explicit length/width dimensional constraints, drawing tolerance, Z datum and thickness. The resulting 3D placement derives a right-handed orthonormal local X/Y/Z frame from the solved CAD rectangle. The working volume is explicitly bound to three distinct installed linear StageAxisIds; its micrometer bounds are checked against the corresponding configured axis travel (including unit conversion).
+The stage working surface is strictly 2D. It owns:
+- X/Y stage axis identities and units.
+- The usable XY working boundaries, validated against the stage axes' configured operating ranges.
+- A variable-size, user-authored collection of slide rectangles.
 
-A stage coordinate is projected through the selected slide's inverse rigid transform. Projection remains defined when the stage is between slides or outside a slide footprint. The returned inside-slide and inside-working-volume flags are separate facts.
+It does not own or store:
+- Z datum or slide height.
+- Slide thickness.
+- Drawing tolerance.
+- Stop-point uncertainty.
 
-## Coordinate relationship
+The focus Z axis belongs to the microscope's axis specification and runtime position model. Its operating range is declared by AxisOperatingRange, independently of the slide layout. Its top/bottom reference policy is represented by StageAxisReferenceSpecification.
 
-For a slide-local point p and placement i:
+## 2. CAD slide rectangle
 
-    p_stage = origin_i + x_i * p.x + y_i * p.y + z_i * p.z
-    p_slide = R_i^T * (p_stage - origin_i)
+Each saved slide rectangle contains:
+- A first XY endpoint that is fixed as the physical mechanical stop-point datum and slide-local origin.
+- An initial opposite-corner handle that chooses the rectangle quadrant.
+- A solved opposite endpoint.
+- An explicit assignment of slide length to stage X or stage Y.
+- Constrained length and width.
 
-The transform is rigid; its basis must be orthonormal and right-handed. Slide Z describes physical thickness/normal. It does not imply a motorized Z axis. A motorized Z axis has its own stage axis specification, actual position and reference lifecycle.
+The dimensions solve the final opposite corner while the stop point remains fixed. The original handle and solved corner are both retained. The slide's coordinate transform is two-dimensional.
 
-## Axis reference procedures
+For slide-local point p_s=(u,v), stage point p_m is:
 
-Every motorized linear axis declares one reference method and one boundary to establish.
+    p_m = stopPoint + xAxis * u + yAxis * v
 
-- PhysicalEndstop: an active, axis-matched limit observation establishes the configured travel boundary.
-- FullStrokeTraversal: the configured boundary is a software endstop. The procedure begins at the opposite, already-known boundary and traverses the entire configured range.
+The inverse applies the transpose of the 2D orthonormal basis. Mapping remains valid outside the selected slide footprint; insideSlide and insideWorkingSurface are reported separately.
 
-Full-stroke completion has two evidence outcomes:
+There is no slide-local Z coordinate in this rectangle model. A selected slide determines the XY reference frame only.
 
-- Encoder or external position measurement at the target boundary establishes a measured reference.
-- Calibrated open-loop command completion establishes an estimated software-endstop reference only. It is never upgraded to measured evidence.
+## 3. Actual position and focus Z
 
-An unknown starting position cannot become known by commanding one nominal stroke length. Full-stroke traversal therefore requires a previously established starting datum. If the traversal is interrupted, its in-progress reference is discarded.
+StagePosition3D is an aggregate of the physical machine X, Y and focus Z axis states:
+- X/Y are projected into the selected slide's 2D CAD coordinate frame.
+- Z remains the microscope focus coordinate and is exposed independently through StagePosition3D::z().
 
-## Integration boundary
+positionOnSlide() requires valid X and Y references only. It must not fail merely because focus Z has not yet been referenced. Z focus movements and observations cannot alter slide-local XY coordinates.
 
-This implementation adds deterministic Core geometry and axis-reference state contracts. It does not yet connect the 3D position model to the live three-axis feedback aggregator, motion driver, reference-command executor, calibration persistence or SwiftUI projection. The old DualSlideCarrierState remains a legacy two-slide path during migration; the new model is the intended user-authored multi-slide working-surface representation.
+## 4. Axis endstop and focus reference policy
+
+Every axis declares its physical operating range in its axis specification. Its reference procedure is configured separately.
+
+### Physical endstop
+
+When an axis has a physical limit-switch endstop, a matching active AxisLimitObservation at the configured end establishes the reference datum. This is physical switch evidence.
+
+### Focus axis without an endstop sensor
+
+When Z has no limit-switch sensor, the reference workflow performs a full-range sweep in one direction toward the configured upper/top or lower/bottom boundary.
+
+The full-range sweep:
+1. Reads the configured Z operating range.
+2. Chooses the requested boundary (AxisLimitEnd::Positive or Negative).
+3. Commands a displacement equal to the entire configured travel range in that direction.
+4. Waits for the exact correlated motion command to complete.
+5. Assigns the selected boundary as a calibrated estimated reference.
+
+This procedure deliberately does not require a known starting Z coordinate. It relies on the carriage starting somewhere within its physical travel envelope: traversing one complete travel-range distance in the selected direction is sufficient to reach that end. The microscope focus mechanism must explicitly declare ContinuousKnobRotationWithoutClash, meaning the knob/drive can continue rotating safely after the carriage reaches its travel boundary. The reference specification rejects this procedure if that mechanical capability is not declared.
+
+This mechanical capability is a safety precondition; it is not position feedback and does not prove the exact carriage coordinate. Without an independent encoder/measurement, the resulting reference remains ReferencedEstimatedFullRangeSweep with CalibratedCommandFullRangeSweep evidence and a configured uncertainty bound. It is never promoted to measured evidence.
+
+If encoder or external measurement is available, a target-boundary observation can instead complete the sweep as measured evidence.
+
+An interrupted or rejected sweep does not establish a reference. The exact command completion must be correlated and verified before the Application promotes the Core axis reference state.
+
+## 5. Position semantics
+
+A controller-reported or encoder-measured position is an observation. A calibrated full-range sweep establishes a command-derived estimated reference. The app preserves this evidence distinction.
+
+The actual focus Z coordinate is independent of the slide rectangle and is not folded into the slide-local XY coordinates.
+
+## 6. Integration boundary
+
+Core now defines the XY CAD working surface, slide rectangle transform, three-axis machine-position aggregate, physical-endstop reference, and safe full-range sweep state. The remaining Application work is to execute the full-range motion command through the correlated operation runtime, update the Z axis state from the resulting reference snapshot, publish immutable X/Y/Z snapshots, and expose the CAD editing/persistence workflow to the UI.
 
 
-## Live three-axis position projection
+## 7. Microscope focus Z and no-switch homing
 
-StagePosition3D is an immutable Core aggregate of the installed X, Y and Z StageAxisPositionState values. It accepts observations one axis at a time and only promotes a homing observation when the caller has already verified the corresponding reference procedure. A slide-relative estimate is unavailable until all three axes are referenced and have finite uncertainty bounds.
+The focus Z travel range is defined by the focus axis AxisOperatingRange, not by any slide rectangle. If the focus axis has a physical limit switch, that switch establishes its configured top/bottom reference.
 
-The inverse mapping returns coordinates even outside the selected slide footprint. It reports inside-slide and inside-working-volume independently. Local uncertainty is bounded conservatively by projecting each machine-axis error bound onto the slide basis and adding the stop-point datum uncertainty. Evidence and source are retained per axis.
+If no limit-switch sensor exists, the focus axis uses a FullRangeSweep toward the configured upper or lower boundary. The procedure commands one full configured travel distance in that direction without requiring a known start coordinate. This depends on the focus mechanism's ContinuousKnobRotationWithoutClash capability so continued knob/drive rotation after the carriage reaches its physical travel boundary cannot cause collision. Without that declared mechanical capability, the Core reference specification rejects the no-switch sweep.
 
-This remains a Core model. The Application worker must still own incoming device feedback, update this state serially, publish immutable snapshots and coordinate all three axis-reference operations.
-
-
-## Feedback integration contract
-
-The Application layer now has a three-axis feedback reducer for the StagePosition3D aggregate. It accepts only current Core feedback dispositions, applies only X/Y/Z AxisPositionObservation payloads, and invalidates all three machine references when the feedback-loss latch is set. A complete XYZ HomeReferenceEstablished fact is accepted only when its exact device/operation/step/command correlation matches and the Core operation step is Verified.
-
-Physical limit-switch reference is now a distinct StagePositionEvidence value. It can establish the known starting boundary of a later full-stroke traversal and remains distinguishable from encoder, external measurement and calibrated command estimates.
-
-
-## CAD rectangle authoring
-
-`StageWorkingSurface3D::SlideRectangles` is a variable-size collection of
-`SlideRectangleDefinition2D` values. A working surface may have no rectangles
-initially; the user adds as many as required in the saved CAD drawing.
-
-Each rectangle retains:
-- The first XY endpoint, which is fixed as the mechanical stop-point datum and local origin.
-- The initial opposite-corner handle, which selects the rectangle quadrant.
-- The solved opposite endpoint, derived from the dimensional constraints.
-- Whether slide length follows stage X or stage Y.
-- Explicit length and width constraints.
-- Z datum, slide thickness, dimensional tolerance and stop-point uncertainty.
-
-The initial handle supplies direction signs; the length and width constraints
-solve the final opposite corner while keeping the first endpoint fixed. Both the
-initial handle and solved corner are retained. The 3D pose is derived from the
-solved rectangle while the complete CAD definition remains stored and inspectable. This milestone does not yet implement
-interactive dragging with incremental constraint re-solving, undo/redo, persistence,
-or overlap/clearance checks.
+The resulting coordinate is a calibrated estimate unless an independent encoder/external position observation verifies the boundary.

@@ -27,8 +27,8 @@ struct StagePosition3DFeedbackReduction final{
     StagePosition3DFeedbackDisposition disposition;
 };
 
-// Reducer for the fixed X/Y/Z working-volume position state. The serialized
-// worker remains the sole writer; the returned aggregate is an immutable value.
+// Reducer for the microscope's independent X/Y/focus-Z machine coordinates.
+// The serialized worker remains the sole writer; the returned aggregate is immutable.
 class StagePosition3DFeedbackReducer final{
 public:
     using FeedbackResult=core::FeedbackProcessingResult<core::StageMotionFeedbackPayload>;

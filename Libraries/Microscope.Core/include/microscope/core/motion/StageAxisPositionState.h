@@ -29,6 +29,12 @@ public:
         EquipmentComponentId stageComponentId,const AxisPositionObservation& observation,
         ObservationSource source);
 
+    // A calibrated no-switch full-range sweep establishes an estimated datum.
+    // The calling workflow must have verified the exact full-range motion action.
+    static Result<StageAxisPositionState,StageAxisPositionStateError> referencedEstimate(
+        EquipmentComponentId stageComponentId,StageAxisId axisId,AxisCoordinateUnit unit,
+        double referencePosition,double uncertainty);
+
     Result<StageAxisPositionState,StageAxisPositionStateError> afterCommandedDisplacement(
         const AxisDisplacement&,std::optional<double> additionalErrorBound) const;
     Result<StageAxisPositionState,StageAxisPositionStateError> afterCommandedPosition(

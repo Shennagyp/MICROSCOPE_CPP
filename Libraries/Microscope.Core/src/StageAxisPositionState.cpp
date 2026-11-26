@@ -78,6 +78,28 @@ StageAxisPositionState::homed(
 }
 
 Result<StageAxisPositionState,StageAxisPositionStateError>
+StageAxisPositionState::referencedEstimate(
+    EquipmentComponentId stageComponentId,StageAxisId axisId,
+    AxisCoordinateUnit unit,double referencePosition,double uncertainty) {
+    if(!physicalUnit(unit))
+        return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
+            StageAxisPositionStateError::UnsupportedCoordinateUnit);
+    if(!std::isfinite(uncertainty)||uncertainty<0.0)
+        return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
+            StageAxisPositionStateError::InvalidUncertainty);
+    auto position=AxisPosition::create(axisId,referencePosition,unit);
+    if(!position)
+        return Result<StageAxisPositionState,StageAxisPositionStateError>::failure(
+            StageAxisPositionStateError::PositionOverflow);
+    return Result<StageAxisPositionState,StageAxisPositionStateError>::success(
+        StageAxisPositionState(std::move(stageComponentId),std::move(axisId),unit,
+            std::move(position).value(),uncertainty,
+            StagePositionEvidence::CommandDerivedEstimate,
+            ObservationSource::CalibratedEstimate,
+            StageMachineReferenceStatus::Referenced));
+}
+
+Result<StageAxisPositionState,StageAxisPositionStateError>
 StageAxisPositionState::afterCommandedDisplacement(
     const AxisDisplacement& displacement,std::optional<double> additionalError) const {
     if(displacement.axisId()!=axisId_)

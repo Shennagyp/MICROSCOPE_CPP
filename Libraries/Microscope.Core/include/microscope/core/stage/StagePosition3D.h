@@ -1,53 +1,65 @@
 #pragma once
 #include "microscope/core/motion/StageAxisPositionState.h"
-#include "microscope/core/stage/StageWorkingSurface3D.h"
+#include "microscope/core/stage/StageWorkingSurface2D.h"
 
 namespace microscope::core {
-enum class StagePosition3DError{
-    StageMismatch,AxisMismatch,AxisUnitMismatch,PositionUnknown,
-    PositionUncertaintyUnknown,PositionRejected,SlideProjectionRejected,SlideNotFound
+
+enum class StagePosition3DError {
+    StageMismatch, AxisMismatch, AxisUnitMismatch, FocusAxisNotFound,
+    FocusAxisMustBeDistinct, UnsupportedFocusAxis, PositionUnknown,
+    PositionUncertaintyUnknown, PositionRejected, SlideProjectionRejected, SlideNotFound
 };
 
-struct SlidePositionEstimate3D final{
+struct SlidePositionEstimate2D final {
     SlideId slideId;
     CalibrationRevisionId registrationRevision;
-    SlidePoint3D position;
+    SlidePoint2D position;
     double xErrorBoundMicrometers;
     double yErrorBoundMicrometers;
-    double zErrorBoundMicrometers;
-    StagePositionEvidence xEvidence,yEvidence,zEvidence;
-    ObservationSource xSource,ySource,zSource;
+    StagePositionEvidence xEvidence;
+    StagePositionEvidence yEvidence;
+    ObservationSource xSource;
+    ObservationSource ySource;
     bool insideSlide;
-    bool insideWorkingVolume;
+    bool insideWorkingSurface;
 };
 
-// Immutable three-axis position state. It is updated from controller/encoder
-// observations on the serialized runtime owner and projected through one of
-// the ten fixed slide transforms when a consumer selects a physical slide.
-class StagePosition3D final{
+// One installed machine coordinate aggregate:
+// - X/Y are the stage working-surface coordinates and are projected into a
+//   selected slide's 2D CAD rectangle.
+// - Z is the microscope focus axis, independently referenced over its own
+//   travel range. It is never part of slide geometry or slide-local XY.
+class StagePosition3D final {
 public:
-    static Result<StagePosition3D,StagePosition3DError> unknown(const StageWorkingSurface3D&);
-    Result<StagePosition3D,StagePosition3DError> afterPositionObservation(
-        const AxisPositionObservation&,ObservationSource)const;
-    // Call only after the operation runtime has verified the complete reference
-    // procedure for this axis.
-    Result<StagePosition3D,StagePosition3DError> afterVerifiedHomingObservation(
-        const AxisPositionObservation&,ObservationSource)const;
-    Result<StagePosition3D,StagePosition3DError> afterCommandedPosition(
-        const AxisPosition&,std::optional<double> additionalErrorBound)const;
-    Result<StagePosition3D,StagePosition3DError> afterCommandedDisplacement(
-        const AxisDisplacement&,std::optional<double> additionalErrorBound)const;
-    StagePosition3D invalidateMachineReference()const;
+    static Result<StagePosition3D, StagePosition3DError> unknown(
+        const StageWorkingSurface2D&, const StageSpecification&, StageAxisId focusAxisId);
 
-    const StageAxisPositionState& x()const noexcept;
-    const StageAxisPositionState& y()const noexcept;
-    const StageAxisPositionState& z()const noexcept;
+    Result<StagePosition3D, StagePosition3DError> afterPositionObservation(
+        const AxisPositionObservation&, ObservationSource) const;
+    Result<StagePosition3D, StagePosition3DError> afterVerifiedHomingObservation(
+        const AxisPositionObservation&, ObservationSource) const;
+    Result<StagePosition3D, StagePosition3DError> afterCalibratedReference(
+        const StageAxisId&, double referencePosition, double uncertainty) const;
+    Result<StagePosition3D, StagePosition3DError> afterCommandedPosition(
+        const AxisPosition&, std::optional<double> additionalErrorBound) const;
+    Result<StagePosition3D, StagePosition3DError> afterCommandedDisplacement(
+        const AxisDisplacement&, std::optional<double> additionalErrorBound) const;
+    StagePosition3D invalidateMachineReference() const;
 
-    Result<SlidePositionEstimate3D,StagePosition3DError> positionOnSlide(
-        const StageWorkingSurface3D&,const SlideId&)const;
+    const StageAxisPositionState& x() const noexcept;
+    const StageAxisPositionState& y() const noexcept;
+    const StageAxisPositionState& z() const noexcept;
+
+    // Requires referenced X/Y only. Z focus position is exposed independently
+    // through z(); an unreferenced focus axis does not invalidate XY mapping.
+    Result<SlidePositionEstimate2D, StagePosition3DError> positionOnSlide(
+        const StageWorkingSurface2D&, const SlideId&) const;
 
 private:
-    StagePosition3D(StageAxisPositionState,StageAxisPositionState,StageAxisPositionState);
-    StageAxisPositionState x_,y_,z_;
+    StagePosition3D(StageAxisPositionState, StageAxisPositionState, StageAxisPositionState);
+    StageAxisPositionState x_;
+    StageAxisPositionState y_;
+    StageAxisPositionState z_;
 };
+
 } // namespace microscope::core

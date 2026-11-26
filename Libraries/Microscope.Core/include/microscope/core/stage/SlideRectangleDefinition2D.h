@@ -1,2 +1,2 @@
 #pragma once
-#include "microscope/core/stage/StageWorkingSurface3D.h"
+#include "microscope/core/stage/StageWorkingSurface2D.h"

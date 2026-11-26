@@ -194,6 +194,15 @@ void emptyCanvasSupportsImmutableSlideRectangleEdits() {
         StageWorkingSurface2DError::DuplicateSlideIdentity,
         "rejects adding a slide identity already present on the canvas");
 
+    const auto reusedRevision = take(SlideRectangleDefinition2D::create(
+        id<SlideId>("slide-1"), id<CalibrationRevisionId>("slide-1-v1"),
+        {40'000,10'000}, {40'001,10'001}, SlideRectangleLengthAxis::StageX,
+        80'000, 20'000));
+    auto sameRevisionReplacement = oneSlide.replacingSlideRectangle(reusedRevision);
+    check(!sameRevisionReplacement && sameRevisionReplacement.error() ==
+        StageWorkingSurface2DError::RegistrationRevisionMustChange,
+        "rejects changed placement or dimensions under the same registration revision");
+
     const auto revised = take(SlideRectangleDefinition2D::create(
         id<SlideId>("slide-1"), id<CalibrationRevisionId>("slide-1-v2"),
         {40'000,10'000}, {40'001,10'001}, SlideRectangleLengthAxis::StageX,

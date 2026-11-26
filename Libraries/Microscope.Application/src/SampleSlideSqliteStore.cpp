@@ -782,8 +782,8 @@ void writeOptionalBand(
             const auto& samples = label.emissionSpectrum()->samples();
             writer.count(samples.size());
             for (const auto& sample : samples) {
-                writer.real(sample.wavelengthNanometers);
-                writer.real(sample.relativePower);
+                writer.real(sample.wavelength.value());
+                writer.real(sample.relativeIntensity);
             }
         }
 
@@ -871,19 +871,25 @@ void writeOptionalBand(
                 sampleCount > kMaximumCollectionCount) {
                 return std::nullopt;
             }
-            std::vector<SpectralPowerSample> samples;
+            std::vector<FluorescenceEmissionSample> samples;
             samples.reserve(sampleCount);
             for (std::uint32_t sampleIndex = 0;
                  sampleIndex < sampleCount;
                  ++sampleIndex) {
-                SpectralPowerSample sample;
-                if (!reader.real(sample.wavelengthNanometers) ||
-                    !reader.real(sample.relativePower)) {
+                double wavelength = 0.0;
+                double relativeIntensity = 0.0;
+                if (!reader.real(wavelength) ||
+                    !reader.real(relativeIntensity)) {
                     return std::nullopt;
                 }
-                samples.push_back(sample);
+                auto typedWavelength = PositiveNanometers::create(wavelength);
+                if (!typedWavelength) {
+                    return std::nullopt;
+                }
+                samples.push_back(FluorescenceEmissionSample{
+                    std::move(typedWavelength).value(), relativeIntensity});
             }
-            auto created = SpectralPowerDistribution::create(std::move(samples));
+            auto created = FluorescenceEmissionSpectrum::create(std::move(samples));
             if (!created) {
                 return std::nullopt;
             }

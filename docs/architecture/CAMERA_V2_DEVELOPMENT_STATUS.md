@@ -180,6 +180,9 @@ Usage and component options are documented in [Camera/README.md](../../Camera/RE
 | `a455979` | Reject stale GenTL interface descriptors | Verifies `Producer::openDevice` rejects a descriptor whose interface ID is no longer retained, complementing the existing foreign-Producer-path rejection. Workflow #45768851121 passed both architectures. |
 | `5080256` | Keep Producer test failures distinct | Assigns a unique return code to the stale-interface descriptor assertion so it cannot be confused with the later closed-stream assertion; no production behavior changes. Workflow #45769387254 passed both architectures. |
 | `85dd6af` | Validate GenTL device identifier routing | The mock `IFOpenDevice` rejects unknown device IDs; `ProducerTests` verifies `openDevice` propagates the failure for a descriptor with a missing device ID. Workflow #45770024248 passed both architectures. |
+| `643319a` | Add relocatable CameraModule CMake package | Adds the separate `Camera/` package entry point, component-aware namespaced target exports, config/version files, and Common/GenTL/AmScope/Qt external-consumer fixtures. |
+| `58f3790` | Exercise installed package consumers | External consumers instantiate the AmScope, GenTL and Qt APIs; package CI runs them after installation and prefix relocation, and inspects installed runtime link paths. |
+| `49cc11e` | Enforce optional dependency isolation | Preview configuration implies its Qt adapter; GenApi package exports require imported official SDK targets; Common/GenTL/native consumers configure with Qt package discovery disabled. |
 
 ### Current Qt and non-Qt CI — checkpoint a4fc39b
 
@@ -311,24 +314,29 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 8. Next development sequence
 
-1. The provider-neutral GenTL/GenApi portion of Phase 6 is complete for the
-   current public contract. Discovery routing, GenApi unsupported/failure
-   paths and recovery are covered by cross-architecture CI. The GenTL
-   discovery-projection and vector-descriptor decisions are recorded.
-2. The remaining Phase 6 gaps are AmScope provider-level feature, command and
-   model-mapping tests. They are blocked by the explicit AmScope freeze. Do not
-   change AmScope source, tests, contracts or behavior.
-3. Hold at this Phase 6 boundary until the owner changes the AmScope freeze or
-   explicitly directs Phase 7. Do not invent more provider-neutral work or
-   reopen the completed GenTL integration.
-4. Keep Phase 4 visual/workspace acceptance pending and the physical MU503
-   test postponed; neither blocks the current Phase 6 software work. Do not
-   claim Phase 4 accepted.
-5. After Phase 6 is unblocked/closed by owner direction, export native, GenTL
-   and optional Qt CMake packages and verify clean external consumers under
-   Phase 7.
-6. Complete Phase 8 physical qualification for every declared provider/model
-   combination and verify vendor SDK redistribution terms.
+1. Phase 6 remains open at the AmScope provider-test boundary. Its
+   provider-neutral GenTL/GenApi coverage and discovery/vector decisions are
+   complete for the current public contract. The remaining AmScope
+   feature/command/model tests are blocked by the explicit freeze; do not
+   modify AmScope source, tests, contracts or runtime behavior.
+2. The owner explicitly authorized Phase 7 on 26 November 2026. Continue
+   package/export work on `camera-v.2.0`; do not wait for the frozen Phase 6
+   tests and do not mark Phase 6 complete.
+3. Phase 7 software acceptance requires the dedicated package workflow to
+   pass on Intel x86_64 and Apple Silicon arm64: package build/tests, install,
+   relocation, component-aware `find_package`, clean external consumers,
+   non-Qt dependency isolation and installed runtime-loading checks.
+4. Phase 7 hardware acceptance remains separate and pending: use installed
+   artifacts for non-Qt AmScope enumerate/open/read-setting/start/frame/
+   stop/close; verify Qt preview and descriptor-driven controls against the
+   physical AmScope camera; and test the installed GenTL consumer with a
+   physical CTI camera. Document vendor SDK redistribution requirements
+   before publication.
+5. Keep Phase 4 visual/workspace acceptance pending and the physical MU503 UI
+   test postponed. Do not mark Phase 4 accepted.
+6. Phase 8 covers exact-commit qualification across the declared provider/
+   model matrix, long-duration and recovery evidence, deployment validation,
+   vendor SDK redistribution review and release acceptance.
 
 ## 9. Continuation rules
 

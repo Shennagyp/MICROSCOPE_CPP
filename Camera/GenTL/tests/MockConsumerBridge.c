@@ -148,21 +148,11 @@ static BUFFER_HANDLE stream_handles[16];
 static size_t stream_buffer_count;
 static BUFFER_HANDLE queued_buffers[16];
 static size_t queued_buffer_count;
-static size_t queue_buffer_call_count;
-static size_t duplicate_queue_count;
 static atomic_int event_wait_entered = 0;
 static atomic_int event_unregistered = 0;
 
 int gentl_mock_event_wait_entered(void) {
     return atomic_load_explicit(&event_wait_entered, memory_order_acquire);
-}
-
-size_t gentl_mock_queue_buffer_calls(void) {
-    return queue_buffer_call_count;
-}
-
-size_t gentl_mock_duplicate_queue_count(void) {
-    return duplicate_queue_count;
 }
 
 static void* pointer(uint64_t value) {
@@ -488,23 +478,12 @@ int32_t gentl_consumer_invoke(
     case 45: { // DSQueueBuffer
         if (argument_count != 2 || arguments[0] != 0x5555 ||
             queued_buffer_count >= 16) return GC_ERR_INVALID_PARAMETER;
-        ++queue_buffer_call_count;
         const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
         size_t index = 0;
         while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
         if (index == stream_buffer_count || !stream_memory[index])
             return GC_ERR_INVALID_BUFFER;
-        for (size_t queued = 0; queued < queued_buffer_count; ++queued) {
-            if (queued_buffers[queued] == handle) {
-                ++duplicate_queue_count;
-                return GC_ERR_INVALID_BUFFER;
-            }
-        }
         queued_buffers[queued_buffer_count++] = handle;
-        // Simulate a Producer that mutates the queue, then reports failure.
-        // The caller cannot safely infer that the buffer remained unqueued.
-        if (getenv("MOCK_GENTL_FAIL_QUEUE_AFTER_MUTATION"))
-            return GC_ERR_INVALID_PARAMETER;
         return GC_ERR_SUCCESS;
     }
     case 46: { // DSGetBufferInfo

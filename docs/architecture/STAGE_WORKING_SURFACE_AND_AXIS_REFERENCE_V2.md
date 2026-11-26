@@ -1,5 +1,6 @@
 # Stage Working Surface and Microscope Axis Reference Model v2
 
+**Version:** 2  
 **Status:** Core XY CAD layout and per-axis reference contracts implemented; live host integration remains in progress.  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9
 

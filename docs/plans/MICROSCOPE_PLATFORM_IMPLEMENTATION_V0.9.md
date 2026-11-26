@@ -372,51 +372,18 @@ The Core inbox/runtime and Application StageNavigationRuntime now provide the st
 Controller-specific STEP/DIR generation and vendor protocols remain in external driver libraries.
 
 
-## Stage working-surface and axis-reference update
+## Current stage coordinate model
 
-The Core now contains an initial fixed physical model in
-`microscope/core/stage/StageWorkingSurface3D.h`:
+The active Core model is split by physical responsibility:
 
-- One 3D stage working volume maps to a variable number of user-authored CAD slide rectangles.
-- Each slide has its own mechanical stop-point origin, dimensions and rigid
-  right-handed XYZ coordinate frame.
-- Forward mapping converts a slide-local target into stage coordinates.
-- Inverse mapping converts a stage coordinate into the selected slide frame,
-  even when the stage is between slides or outside the selected slide footprint.
-- The inverse result separately reports whether the position is inside the
-  slide geometry and inside the overall working volume.
+- StageWorkingSurface2D defines only the XY working-surface bounds and the user-authored variable collection of slide rectangles.
+- Each CAD rectangle retains its fixed mechanical stop-point endpoint, initial opposite-corner handle, solved opposite endpoint and constrained length/width.
+- SlidePlacement2D maps between stage XY and the selected slide's local XY. It stores no Z, slide thickness, drawing tolerance or stop-point uncertainty.
+- StagePosition3D tracks machine X/Y plus microscope focus Z. positionOnSlide() requires referenced X/Y only; the current focus Z coordinate is exposed independently and cannot affect slide-local XY.
 
-Core also contains an axis-specific reference state in
-`microscope/core/stage/StageAxisReference.h`:
+The microscope focus Z operating range is an AxisOperatingRange on the microscope's axis specification. A physical endstop uses an active matching limit-switch observation. A no-switch axis can use FullRangeSweep toward the configured upper or lower boundary: the workflow commands one complete configured travel range in that direction from an unknown starting coordinate that is assumed to be within the physical travel envelope. The sweep is permitted only when the focus mechanism declares ContinuousKnobRotationWithoutClash, so continued knob rotation after the carriage reaches the travel boundary cannot collide. Without independent encoder/external measurement, the datum is a calibrated estimate, never a measured position.
 
-- A physical-endstop procedure requires an active observation for the
-  configured axis and end.
-- A full-stroke procedure requires a measured starting datum at the opposite
-  calibrated boundary and a completed traversal to the configured boundary.
-- Encoder/external measurement establishes a measured full-stroke reference.
-  Calibrated open-loop completion establishes only an estimated software
-  endstop and preserves that evidence distinction.
-- An interrupted full-stroke traversal is invalidated rather than retained as
-  a valid reference.
-
-This is an initial Core contract milestone, not end-to-end hardware support.
-The live three-axis position aggregator, axis reference motion executor,
-driver feedback correlation, calibration/placement persistence and frontend
-projection remain outstanding. Existing two-slide X/Y code remains available
-as a legacy path during migration; it must not be treated as the target
-physical working-surface model.
-
-
-### Stage 6 update — fixed 3D working surface and actual position projection
-
-Core now defines a 3D working-surface model with a user-authored, variable-size collection of slide rectangles. The XY working surface is bound only to installed X/Y linear axes and validated against their operating ranges. Each physical slide retains two XY endpoints, a stop-point origin, explicit length/width constraints and a derived 2D placement. The focus Z axis and its travel range are separate microscope-axis data.
-
-StagePosition3D now aggregates the three immutable axis position states. It accepts axis observations, accepts reference observations only after external operation verification, and projects the current machine XYZ coordinate into the selected slide frame. The projection retains position evidence, source, uncertainty and independent inside-slide/inside-working-volume flags. It does not discard coordinates merely because the stage is between physical slides.
-
-Tests were added for variable-size XY CAD slide layouts, constrained rectangle geometry, physical endstop reference, no-start-position full-range Z sweep, safe continuous-knob-overtravel capability and independent focus-Z position. These tests have been registered but were not executed in this environment.
-
-Still outstanding: Application worker integration of three-axis feedback, stage reference-motion execution and correlation, hardware adapter, calibration persistence, stop/fault/timeouts and frontend-neutral live position snapshots.
-
+Core geometry, the full-range reference state transition, position projection and tests are implemented. Application execution of the correlated sweep command, promotion of its resulting snapshot into the Z position state, host composition, persisted CAD layout revisions and frontend projection remain outstanding.
 
 ### Stage feedback update — XYZ position reducer
 

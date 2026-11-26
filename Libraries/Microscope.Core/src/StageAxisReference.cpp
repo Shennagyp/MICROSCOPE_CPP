@@ -14,6 +14,10 @@ bool validMethod(StageAxisReferenceMethod method) noexcept {
 bool linearUnit(AxisCoordinateUnit unit) noexcept {
     return unit == AxisCoordinateUnit::Micrometers || unit == AxisCoordinateUnit::Millimeters;
 }
+bool validOvertravel(StageAxisOvertravelCapability capability) noexcept {
+    return capability == StageAxisOvertravelCapability::NotSupported ||
+        capability == StageAxisOvertravelCapability::ContinuousKnobRotationWithoutClash;
+}
 }
 
 StageAxisReferenceSpecification::StageAxisReferenceSpecification(
@@ -34,15 +38,13 @@ StageAxisReferenceSpecification::create(
     if (!validEnd(end))
         return Result<StageAxisReferenceSpecification, StageAxisReferenceError>::failure(
             StageAxisReferenceError::InvalidEnd);
+    if (!validOvertravel(overtravel))
+        return Result<StageAxisReferenceSpecification, StageAxisReferenceError>::failure(
+            StageAxisReferenceError::InvalidOvertravelCapability);
     if (method == StageAxisReferenceMethod::FullRangeSweep &&
         overtravel != StageAxisOvertravelCapability::ContinuousKnobRotationWithoutClash)
         return Result<StageAxisReferenceSpecification, StageAxisReferenceError>::failure(
             StageAxisReferenceError::UnsafeOvertravelUnavailable);
-    if (method == StageAxisReferenceMethod::PhysicalEndstop &&
-        overtravel != StageAxisOvertravelCapability::NotSupported &&
-        overtravel != StageAxisOvertravelCapability::ContinuousKnobRotationWithoutClash)
-        return Result<StageAxisReferenceSpecification, StageAxisReferenceError>::failure(
-            StageAxisReferenceError::InvalidOvertravelCapability);
     if (!std::isfinite(uncertainty) || uncertainty < 0.0)
         return Result<StageAxisReferenceSpecification, StageAxisReferenceError>::failure(
             StageAxisReferenceError::InvalidUncertainty);

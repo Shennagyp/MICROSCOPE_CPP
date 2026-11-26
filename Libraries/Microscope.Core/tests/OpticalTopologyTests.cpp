@@ -1157,8 +1157,6 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
         fixture, "camera-request-factory-path", true);
-    const auto cameraModeA =
-        makeId<CameraModeId>("camera-request-factory-mode-a");
     const auto cameraModeB =
         makeId<CameraModeId>("camera-request-factory-mode-b");
     const auto equipment = take(MicroscopeEquipmentDefinition::create(
@@ -1206,6 +1204,27 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         check(request.value().contrastMethod() == mode.contrastMethod(),
               "uses the operation mode contrast semantics");
     }
+
+    const auto otherMode = makeCameraResolverMode(
+        fixture,
+        imaging.lightPath.id(),
+        ContrastMethod::Brightfield,
+        "camera-request-factory-other-mode");
+    const auto staleModeResolution = LightPathConfigurationRequestFactory::create(
+        equipment,
+        otherMode,
+        imaging.lightPath.id(),
+        cameraResolution,
+        makeId<ConfigurationProfileId>("camera-request-factory-profile-stale-mode"),
+        fixture.objectiveAId,
+        fixture.condenserId,
+        fixture.sourceId,
+        makeId<IlluminationChannelId>("camera-request-factory-channel"),
+        ExposurePolicy::Automatic);
+    check(!staleModeResolution &&
+          staleModeResolution.error() ==
+              LightPathConfigurationRequestFactoryError::ResolvedCameraOperationModeMismatch,
+          "does not reuse a camera choice resolved against another operation mode");
 
     const auto otherPathId = makeId<LightPathId>("different-light-path");
     const auto wrongPathMode = makeCameraResolverMode(

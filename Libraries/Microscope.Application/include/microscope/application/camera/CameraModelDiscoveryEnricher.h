@@ -38,6 +38,16 @@ struct CameraSpecificationProjectionResult {
     std::vector<CameraModelEnrichmentWarning> warnings;
 };
 
+enum class CameraSpecificationProjectionErrorCode {
+    ModelProfileNotResolved,
+    CoreSpecificationRejected
+};
+
+struct CameraSpecificationProjectionError {
+    CameraSpecificationProjectionErrorCode code;
+    std::optional<core::CameraSpecificationError> coreError;
+};
+
 class CameraModelDiscoveryEnricher final {
 public:
     [[nodiscard]] static CameraModelEnrichmentResult enrich(

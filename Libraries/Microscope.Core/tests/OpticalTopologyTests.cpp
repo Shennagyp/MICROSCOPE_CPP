@@ -1176,7 +1176,8 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         mode,
         imaging.lightPath.id(),
         fixture.cameraBId,
-        cameraModeB);
+        cameraModeB,
+        cameraResolverFluorescenceRequirements());
     check(cameraResolution.isResolved(),
           "resolves a manual camera endpoint before creating a configuration request");
 
@@ -1203,6 +1204,20 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
               "uses only the resolved camera output mode");
         check(request.value().contrastMethod() == mode.contrastMethod(),
               "uses the operation mode contrast semantics");
+        check(request.value().lightPathBinding().has_value(),
+              "retains the resolved LightPath camera binding on the generated request");
+        if (request.value().lightPathBinding()) {
+            const auto& binding = *request.value().lightPathBinding();
+            check(binding.operationModeId == mode.id() &&
+                  binding.operationModeRevision == mode.revision(),
+                  "retains the exact OperationMode identity and revision");
+            check(binding.lightPathId == imaging.lightPath.id() &&
+                  binding.cameraComponentId == fixture.cameraBId &&
+                  binding.cameraModeId == cameraModeB,
+                  "retains the LightPath, derived camera endpoint and selected output mode together");
+        }
+        check(!request.value().cameraSelectionDiagnostics().empty(),
+              "retains fluorescence suitability warnings from camera resolution");
     }
 
     const auto otherMode = makeCameraResolverMode(

@@ -260,6 +260,8 @@ int main(int argc, char** argv) {
             }
 
             const auto statistics = stream.statistics();
+            const std::string expectedTransportType =
+                sequenceMode == "out-of-order" ? "GEV" : "MockGenTL";
             std::cout << "Statistics diagnostic: tltype="
                       << statistics.transportType.value_or("<absent>")
                       << " delivered=" << statistics.producerDeliveredBuffers.value_or(UINT64_MAX)
@@ -276,7 +278,8 @@ int main(int argc, char** argv) {
                       << " timeouts=" << statistics.integrity.frameWaitTimeouts
                       << " starvation=" << statistics.integrity.bufferStarvationEvents
                       << '\n';
-            if (statistics.transportType != std::optional<std::string>("MockGenTL") ||
+            if (statistics.transportType !=
+                    std::optional<std::string>(expectedTransportType) ||
                 statistics.producerDeliveredBuffers != requiredFrames ||
                 statistics.producerBufferUnderruns != 2 ||
                 statistics.producerFramesStarted != requiredFrames ||

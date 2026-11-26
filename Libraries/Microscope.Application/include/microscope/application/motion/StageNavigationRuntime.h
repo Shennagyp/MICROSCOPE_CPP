@@ -175,9 +175,9 @@ enum class StageNavigationRuntimeErrorCode {
 struct StageNavigationRuntimeError final {
     StageNavigationRuntimeErrorCode code;
     std::optional<core::StageNavigationPlanningError> planningError;
-    std::optional<core::StageNavigationExecutionErrorCode> executionError;
-    std::optional<core::StagePositionCommandReductionErrorCode> commandReductionError;
-    std::optional<core::StagePositionFeedbackReducerErrorCode> feedbackReductionError;
+    std::optional<StageNavigationExecutionErrorCode> executionError;
+    std::optional<StagePositionCommandReductionErrorCode> commandReductionError;
+    std::optional<StagePositionFeedbackReducerErrorCode> feedbackReductionError;
     std::optional<core::StageAxisPositionStateError> positionError;
     std::optional<core::SerializedOperationRuntimeError> runtimeError;
 };
@@ -358,6 +358,7 @@ public:
             return failure(
                 StageNavigationRuntimeErrorCode::OperationNotRunning,
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt,
                 operation ? std::nullopt :
                     std::optional<core::SerializedOperationRuntimeError>(operation.error()));
         }
@@ -367,6 +368,7 @@ public:
             return failure(
                 StageNavigationRuntimeErrorCode::InitialStepNotPending,
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt,
                 step ? std::nullopt :
                     std::optional<core::SerializedOperationRuntimeError>(step.error()));
         }

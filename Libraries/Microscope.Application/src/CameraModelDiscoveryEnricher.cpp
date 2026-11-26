@@ -134,6 +134,7 @@ void mergeSensorCharacteristics(
     const ::camera::CameraSensorCharacteristics& modelSensor,
     const ::camera::CameraCapabilities& runtimeCapabilities,
     const ::camera::CameraCapabilities& modelCapabilities,
+    const std::string& modelSourceReference,
     std::vector<Warning>& warnings) {
     const bool sensorExists = runtimeSensor.has_value();
     ::camera::CameraSensorCharacteristics merged =

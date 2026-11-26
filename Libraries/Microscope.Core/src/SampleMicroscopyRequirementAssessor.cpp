@@ -67,9 +67,9 @@ void appendDiagnostic(
 
 void assessPreparation(
     Diagnostics& diagnostics,
-    const SpecimenPreparationRequirements& requirements,
-    const SpecimenPreparation& preparation,
-    const SpecimenId& specimenId) {
+    const SlidePreparationRequirements& requirements,
+    const SlidePreparation& preparation,
+    const SlideId& slideId) {
     if (!requirements.allowedMethods().empty() &&
         std::find(
             requirements.allowedMethods().begin(),
@@ -79,9 +79,9 @@ void assessPreparation(
             diagnostics,
             DiagnosticSeverity::Error,
             "sample.preparation.method_not_allowed",
-            "The actual specimen preparation method is not allowed by this SampleType.",
-            "Specimen",
-            specimenId.value());
+            "The actual slide preparation method is not allowed by this SampleType.",
+            "Slide",
+            slideId.value());
     }
 
     if (!requirements.allowedFixationStates().empty() &&
@@ -94,9 +94,9 @@ void assessPreparation(
             diagnostics,
             DiagnosticSeverity::Error,
             "sample.preparation.fixation_state_not_allowed",
-            "The actual specimen fixation state is not allowed by this SampleType.",
-            "Specimen",
-            specimenId.value());
+            "The actual slide fixation state is not allowed by this SampleType.",
+            "Slide",
+            slideId.value());
     }
 
     const auto assessThickness = [&](
@@ -115,10 +115,10 @@ void assessPreparation(
                 diagnostics,
                 DiagnosticSeverity::Warning,
                 unknownCode,
-                std::string("The specimen ") + measurementName +
+                std::string("The slide ") + measurementName +
                     " is not recorded; the SampleType's preparation tolerance cannot be evaluated.",
-                "Specimen",
-                specimenId.value());
+                "Slide",
+                slideId.value());
             return;
         }
         if (minimum && *actual < *minimum) {
@@ -126,20 +126,20 @@ void assessPreparation(
                 diagnostics,
                 DiagnosticSeverity::Error,
                 belowCode,
-                std::string("The specimen ") + measurementName +
+                std::string("The slide ") + measurementName +
                     " is below the SampleType minimum.",
-                "Specimen",
-                specimenId.value());
+                "Slide",
+                slideId.value());
         }
         if (maximum && *actual > *maximum) {
             appendDiagnostic(
                 diagnostics,
                 DiagnosticSeverity::Error,
                 aboveCode,
-                std::string("The specimen ") + measurementName +
+                std::string("The slide ") + measurementName +
                     " exceeds the SampleType maximum.",
-                "Specimen",
-                specimenId.value());
+                "Slide",
+                slideId.value());
         }
     };
 
@@ -167,9 +167,9 @@ void assessPreparation(
             diagnostics,
             DiagnosticSeverity::Error,
             "sample.preparation.mounting_medium_required",
-            "This SampleType requires a recorded mounting medium, but none is present on the Specimen preparation record.",
-            "Specimen",
-            specimenId.value());
+            "This SampleType requires a recorded mounting medium, but none is present on the Slide preparation record.",
+            "Slide",
+            slideId.value());
     }
 
     for (const auto requiredKind : requirements.requiredLabelKinds()) {
@@ -184,9 +184,9 @@ void assessPreparation(
                 diagnostics,
                 DiagnosticSeverity::Error,
                 "sample.preparation.required_label_missing",
-                "The Specimen is missing a label class required by its SampleType.",
-                "Specimen",
-                specimenId.value());
+                "The Slide is missing a label class required by its SampleType.",
+                "Slide",
+                slideId.value());
         }
     }
 }
@@ -255,7 +255,7 @@ void assessObjective(
     Diagnostics& diagnostics,
     const ObjectiveMicroscopyRequirements& requirements,
     const ObjectiveSpecification& objective,
-    const SpecimenPreparation& preparation) {
+    const SlidePreparation& preparation) {
     const double magnification = objective.nominalMagnification();
     const double numericalAperture = objective.numericalAperture();
 
@@ -313,8 +313,8 @@ void assessObjective(
                 diagnostics,
                 DiagnosticSeverity::Warning,
                 "sample.microscopy.coverglass_thickness_unknown",
-                "The specimen coverglass thickness is not recorded, so objective coverglass correction compatibility cannot be assessed.",
-                "Specimen");
+                "The slide coverglass thickness is not recorded, so objective coverglass correction compatibility cannot be assessed.",
+                "Slide");
         } else if (!designCoverglass) {
             appendDiagnostic(
                 diagnostics,
@@ -332,7 +332,7 @@ void assessObjective(
                     diagnostics,
                     DiagnosticSeverity::Error,
                     "sample.microscopy.coverglass_design_mismatch",
-                    "The specimen coverglass thickness differs from the selected objective's design thickness by more than the SampleType tolerance.",
+                    "The slide coverglass thickness differs from the selected objective's design thickness by more than the SampleType tolerance.",
                     "EquipmentComponent",
                     objective.componentId().value());
             }
@@ -1156,7 +1156,7 @@ void assessFluorescenceCameraSuitability(
     Diagnostics& diagnostics,
     const MicroscopeEquipmentDefinition& equipment,
     const ConfigurationRequest& request,
-    const SpecimenPreparation& preparation,
+    const SlidePreparation& preparation,
     const std::optional<CameraPerformanceRequirements>& requirements) {
     const auto* camera = findCamera(equipment, request.cameraComponentId());
     if (camera == nullptr) {
@@ -1207,7 +1207,7 @@ void assessFluorescenceCameraSuitability(
 void assessFluorescenceLabels(
     Diagnostics& diagnostics,
     const MicroscopyRequirements& requirements,
-    const SpecimenPreparation& preparation,
+    const SlidePreparation& preparation,
     ContrastMethod selectedMethod) {
     if (selectedMethod != ContrastMethod::Fluorescence) {
         return;
@@ -1228,9 +1228,9 @@ void assessFluorescenceLabels(
                 : DiagnosticSeverity::Warning,
             "sample.microscopy.fluorescent_label_missing",
             requirements.requireFluorescentLabelMetadata()
-                ? "This SampleType requires fluorescent-label metadata, but the prepared specimen has no fluorescent label."
-                : "The prepared specimen has no fluorescent-label metadata. Autofluorescence may still be present, but a task-specific detector-side spectral estimate cannot be derived from a label profile.",
-            "Specimen");
+                ? "This SampleType requires fluorescent-label metadata, but the prepared slide has no fluorescent label."
+                : "The prepared slide has no fluorescent-label metadata. Autofluorescence may still be present, but a task-specific detector-side spectral estimate cannot be derived from a label profile.",
+            "Slide");
         return;
     }
 
@@ -1295,8 +1295,7 @@ bool SampleMicroscopyAssessment::hasWarnings() const noexcept {
 SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
     const MicroscopeEquipmentDefinition& equipment,
     const SampleType& sampleType,
-    const Sample& sample,
-    const Specimen& specimen,
+    const Slide& slide,
     const ResolvedConfiguration& configuration,
     const OperationMode* operationMode) {
     Diagnostics diagnostics;
@@ -1312,27 +1311,16 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
         return SampleMicroscopyAssessment(std::move(diagnostics));
     }
 
-    if (sample.sampleTypeId() != sampleType.id() ||
-        sample.sampleTypeRevision() != sampleType.revision()) {
-        appendDiagnostic(
-            diagnostics,
-            DiagnosticSeverity::Error,
-            "sample.microscopy.sample_type_revision_mismatch",
-            "The Sample is bound to a different SampleType identity or revision than the supplied SampleType definition.",
-            "Sample",
-            sample.id().value());
-        return SampleMicroscopyAssessment(std::move(diagnostics));
-    }
 
-    if (specimen.sampleId() != sample.id() ||
-        specimen.sampleRevision() != sample.revision()) {
+    if (slide.sampleTypeId() != sampleType.id() ||
+        slide.sampleTypeRevision() != sampleType.revision()) {
         appendDiagnostic(
             diagnostics,
             DiagnosticSeverity::Error,
-            "sample.microscopy.specimen_sample_revision_mismatch",
-            "The Specimen was prepared from a different Sample identity or revision than the supplied Sample.",
-            "Specimen",
-            specimen.id().value());
+            "sample.microscopy.slide_sample_type_revision_mismatch",
+            "The Slide pins a different SampleType identity or revision than the supplied SampleType definition.",
+            "Slide",
+            slide.id().value());
         return SampleMicroscopyAssessment(std::move(diagnostics));
     }
 
@@ -1340,8 +1328,8 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
         assessPreparation(
             diagnostics,
             *sampleType.preparationRequirements(),
-            specimen.preparation(),
-            specimen.id());
+            slide.preparation(),
+            slide.id());
     }
 
     const auto& request = configuration.request();
@@ -1366,7 +1354,7 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
                 diagnostics,
                 *requirements.objective(),
                 *objective,
-                specimen.preparation());
+                slide.preparation());
         }
     }
 
@@ -1416,11 +1404,11 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
     assessFluorescenceLabels(
         diagnostics,
         requirements,
-        specimen.preparation(),
+        slide.preparation(),
         request.contrastMethod());
 
     if (request.contrastMethod() == ContrastMethod::Fluorescence) {
-        for (const auto& label : specimen.preparation().labels()) {
+        for (const auto& label : slide.preparation().labels()) {
             if (label.kind() != SpecimenLabelKind::Fluorescent) {
                 continue;
             }
@@ -1438,7 +1426,7 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
             diagnostics,
             equipment,
             request,
-            specimen.preparation(),
+            slide.preparation(),
             requirements.camera());
     }
 

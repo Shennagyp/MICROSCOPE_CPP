@@ -1,4 +1,5 @@
 #include "camera/gentl/Producer.h"
+#include "camera/gentl/GenTLProducerLibrary.h"
 
 #include <algorithm>
 #include <cstring>
@@ -322,6 +323,12 @@ public:
 Producer::Producer(std::shared_ptr<ProducerContext> context) noexcept
     : context_(std::move(context)) {}
 
+Producer Producer::open(const std::filesystem::path& ctiPath) {
+    auto nativeProducer = GenTLProducerLibrary::load(ctiPath);
+    const auto canonicalPath = nativeProducer->path().string();
+    return openWithConsumer(nativeProducer->createConsumer(), canonicalPath);
+}
+
 Producer Producer::open(
     const std::shared_ptr<ConsumerBridge>& bridge,
     const std::filesystem::path& ctiPath) {
@@ -329,9 +336,14 @@ Producer Producer::open(
         throw std::invalid_argument("A loaded GenTL Consumer bridge is required.");
     }
     const auto canonicalPath = std::filesystem::canonical(ctiPath).string();
-    auto consumer = bridge->createProducer(canonicalPath);
+    return openWithConsumer(
+        bridge->createProducer(canonicalPath), canonicalPath);
+}
+
+Producer Producer::openWithConsumer(
+    Consumer consumer, std::string canonicalPath) {
     auto context = std::make_shared<ProducerContext>(
-        std::move(consumer), canonicalPath);
+        std::move(consumer), std::move(canonicalPath));
 
     check(context->consumer.invoke(Operation::gcInitLib), "GCInitLib");
     context->initialized = true;

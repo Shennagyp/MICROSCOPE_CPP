@@ -2,6 +2,7 @@
 #include "microscope/core/configuration/LightPathCameraResolver.h"
 #include "microscope/core/configuration/LightPathConfigurationRequestFactory.h"
 #include "microscope/core/configuration/OperationMode.h"
+#include "microscope/core/configuration/SampleMicroscopyRequirementAssessor.h"
 
 #include <algorithm>
 #include <iostream>
@@ -240,6 +241,130 @@ bool hasCode(const Diagnostics& diagnostics, const char* expected) {
         });
 }
 
+void testSlideAssessmentUsesPinnedSampleTypeAndObservedSlideFacts() {
+    const auto fixture = makeFixture();
+    const auto cameraResolution = LightPathCameraResolver::resolve(
+        fixture.equipment, fixture.operationMode, fixture.lightPathId);
+    if (!cameraResolution.isResolved()) {
+        check(false, "precondition: integration fixture resolves the physical LightPath camera");
+        return;
+    }
+    const auto request = LightPathConfigurationRequestFactory::create(
+        fixture.equipment,
+        fixture.operationMode,
+        fixture.lightPathId,
+        cameraResolution,
+        fixture.profileId,
+        fixture.objectiveId,
+        fixture.condenserId,
+        fixture.sourceId,
+        fixture.channelId,
+        ExposurePolicy::Manual);
+    if (!request) {
+        check(false, "precondition: LightPath request is created");
+        return;
+    }
+    const auto resolution = ConfigurationResolver::resolve(
+        fixture.equipment, fixture.profileCatalog, request.value());
+    if (!resolution.resolvedConfiguration()) {
+        check(false, "precondition: microscope configuration resolves before SampleType assessment");
+        return;
+    }
+
+    const auto preparationRequirements = take(SlidePreparationRequirements::create(
+        {SpecimenPreparationMethod::TissueSection},
+        {SpecimenFixationState::Fixed},
+        3.0,
+        8.0,
+        150.0,
+        190.0,
+        true,
+        {SpecimenLabelKind::Fluorescent}));
+    const auto microscopyRequirements = take(MicroscopyRequirements::create(
+        {{ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Required}}));
+    const auto sampleType = take(SampleType::create(
+        id<SampleTypeId>("assessment-sample-type"),
+        4,
+        "Fixed immunofluorescence tissue section",
+        SampleMaterialClass::Biological,
+        microscopyRequirements,
+        std::nullopt,
+        preparationRequirements));
+    const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
+    const auto fluorescentLabel = take(SpecimenLabel::create(
+        "FITC", SpecimenLabelKind::Fluorescent));
+    const auto compatiblePreparation = take(SlidePreparation::create(
+        SpecimenPreparationMethod::TissueSection,
+        SpecimenFixationState::Fixed,
+        5.0,
+        170.0,
+        "Antifade mounting medium",
+        1.46,
+        {fluorescentLabel}));
+    const auto compatibleSlide = take(Slide::create(
+        id<SlideId>("assessment-slide-compatible"),
+        1,
+        sampleType.id(),
+        sampleType.revision(),
+        "Compatible slide",
+        geometry,
+        compatiblePreparation));
+
+    const auto compatibleAssessment = SampleMicroscopyRequirementAssessor::assess(
+        fixture.equipment,
+        sampleType,
+        compatibleSlide,
+        *resolution.resolvedConfiguration());
+    check(compatibleAssessment.isCompatible() &&
+          !compatibleAssessment.hasWarnings(),
+          "assesses the Slide's observed preparation against the pinned SampleType and resolved microscope");
+
+    const auto incompatiblePreparation = take(SlidePreparation::create(
+        SpecimenPreparationMethod::TissueSection,
+        SpecimenFixationState::Fixed,
+        10.0,
+        170.0,
+        "Antifade mounting medium",
+        1.46));
+    const auto incompatibleSlide = take(Slide::create(
+        id<SlideId>("assessment-slide-incompatible"),
+        1,
+        sampleType.id(),
+        sampleType.revision(),
+        "Out-of-spec slide",
+        geometry,
+        incompatiblePreparation));
+    const auto incompatibleAssessment = SampleMicroscopyRequirementAssessor::assess(
+        fixture.equipment,
+        sampleType,
+        incompatibleSlide,
+        *resolution.resolvedConfiguration());
+    check(!incompatibleAssessment.isCompatible() &&
+          hasCode(incompatibleAssessment.diagnostics(),
+                  "sample.preparation.section_thickness_above_maximum") &&
+          hasCode(incompatibleAssessment.diagnostics(),
+                  "sample.preparation.required_label_missing"),
+          "fails the Slide when observed thickness and label facts violate SampleType preparation constraints");
+
+    const auto staleTypeSlide = take(Slide::create(
+        id<SlideId>("assessment-slide-stale-type"),
+        1,
+        sampleType.id(),
+        sampleType.revision() - 1,
+        "Slide pinned to a stale SampleType revision",
+        geometry,
+        compatiblePreparation));
+    const auto staleAssessment = SampleMicroscopyRequirementAssessor::assess(
+        fixture.equipment,
+        sampleType,
+        staleTypeSlide,
+        *resolution.resolvedConfiguration());
+    check(!staleAssessment.isCompatible() &&
+          hasCode(staleAssessment.diagnostics(),
+                  "sample.microscopy.slide_sample_type_revision_mismatch"),
+          "rejects an assessor call that supplies a SampleType revision different from the revision pinned by the Slide");
+}
+
 void testCompleteLightPathToDesiredConfigurationWorkflow() {
     const auto fixture = makeFixture();
 
@@ -390,6 +515,7 @@ void testEquipmentRevisionChangeInvalidatesModeBoundLightPath() {
 
 int main() {
     testCompleteLightPathToDesiredConfigurationWorkflow();
+    testSlideAssessmentUsesPinnedSampleTypeAndObservedSlideFacts();
     testEquipmentRevisionChangeInvalidatesModeBoundLightPath();
 
     if (failures != 0) {

@@ -39,6 +39,34 @@ bool rectangleInside(const SlideRectangleDefinition2D& rectangle,
         inside(corners.widthEdgeEnd, minimum, maximum) &&
         inside(corners.oppositeCorner, minimum, maximum);
 }
+struct RectangleBounds2D final {
+    double minimumX;
+    double maximumX;
+    double minimumY;
+    double maximumY;
+};
+RectangleBounds2D boundsOf(const SlideRectangleDefinition2D& rectangle) noexcept {
+    const auto c = rectangle.stageCorners();
+    return {
+        std::min({c.stopPoint.xMicrometers, c.lengthEdgeEnd.xMicrometers,
+            c.widthEdgeEnd.xMicrometers, c.oppositeCorner.xMicrometers}),
+        std::max({c.stopPoint.xMicrometers, c.lengthEdgeEnd.xMicrometers,
+            c.widthEdgeEnd.xMicrometers, c.oppositeCorner.xMicrometers}),
+        std::min({c.stopPoint.yMicrometers, c.lengthEdgeEnd.yMicrometers,
+            c.widthEdgeEnd.yMicrometers, c.oppositeCorner.yMicrometers}),
+        std::max({c.stopPoint.yMicrometers, c.lengthEdgeEnd.yMicrometers,
+            c.widthEdgeEnd.yMicrometers, c.oppositeCorner.yMicrometers})
+    };
+}
+// Rectangles are stage-axis aligned by the current CAD contract. Strict
+// inequalities reject positive-area overlap but permit exact edge/corner contact.
+bool rectanglesOverlap(const SlideRectangleDefinition2D& left,
+    const SlideRectangleDefinition2D& right) noexcept {
+    const auto a = boundsOf(left);
+    const auto b = boundsOf(right);
+    return a.minimumX < b.maximumX && a.maximumX > b.minimumX &&
+        a.minimumY < b.maximumY && a.maximumY > b.minimumY;
+}
 }
 
 StageTravelRange2D::StageTravelRange2D(double x, double y) noexcept : x_(x), y_(y) {}
@@ -301,6 +329,9 @@ Result<StageWorkingSurface2D, StageWorkingSurface2DError> StageWorkingSurface2D:
             if (rectangles[i].slideId() == rectangles[j].slideId())
                 return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
                     StageWorkingSurface2DError::DuplicateSlideIdentity);
+            if (rectanglesOverlap(rectangles[i], rectangles[j]))
+                return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+                    StageWorkingSurface2DError::SlideRectanglesOverlap);
         }
         if (!rectangleInside(rectangles[i], minimum, maximum))
             return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
@@ -349,6 +380,11 @@ StageWorkingSurface2D::withSlideRectangle(const SlideRectangleDefinition2D& rect
     if (!rectangleInside(rectangle, minimumBoundary_, maximumBoundary_))
         return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
             StageWorkingSurface2DError::SlideOutsideWorkingSurface);
+    for (const auto& existing : rectangles_) {
+        if (rectanglesOverlap(existing, rectangle))
+            return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+                StageWorkingSurface2DError::SlideRectanglesOverlap);
+    }
     auto rectangles = rectangles_;
     rectangles.push_back(rectangle);
     return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::success(
@@ -367,8 +403,13 @@ StageWorkingSurface2D::replacingSlideRectangle(
     if (!rectangleInside(rectangle, minimumBoundary_, maximumBoundary_))
         return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
             StageWorkingSurface2DError::SlideOutsideWorkingSurface);
-    auto rectangles = rectangles_;
     const auto index = static_cast<std::size_t>(std::distance(rectangles_.begin(), it));
+    for (std::size_t i = 0; i < rectangles_.size(); ++i) {
+        if (i != index && rectanglesOverlap(rectangles_[i], rectangle))
+            return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+                StageWorkingSurface2DError::SlideRectanglesOverlap);
+    }
+    auto rectangles = rectangles_;
     rectangles[index] = rectangle;
     return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::success(
         StageWorkingSurface2D(stageComponentId_, xAxisId_, yAxisId_, xUnit_, yUnit_,

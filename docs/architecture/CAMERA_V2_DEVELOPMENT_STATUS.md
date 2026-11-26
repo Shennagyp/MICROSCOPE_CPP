@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
 **Latest reviewed implementation checkpoint:** `ee2681d5fa1b1af9b7b981477f93db44c4f99499` — GenApi negative-path coverage now includes malformed XML rejection/recovery, unsupported public IRegister classification, and injected feature/command execution/completion failure recovery.  
-**Latest CI-validated checkpoint:** `ee2681d5fa1b1af9b7b981477f93db44c4f99499` — workflow [#45768295355](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
+**Latest CI-validated checkpoint:** `ee2681d5fa1b1af9b7b981477f93db44c4f99499` — workflow [#45768295355](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45768295355) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction while Phase 4 acceptance remains pending.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
@@ -142,7 +142,7 @@ Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | `8b9be09`, `977d53b` | Test GenApi port failure recovery | Adds mock read/write fault injection and verifies feature read failure recovery, failed-write no-side-effect behavior, and command execution failure/recovery. The read fault is injected before first feature access to avoid GenApi cache bypass. |
 | `9bb1c4c` | Test malformed GenApi XML handling | Injects malformed XML through the mock remote port; verifies node-map construction rejects it and a later valid node map recovers. |
 | `a07c8a2` | Initial unsupported-node fixture | Added a generic `Node` case; superseded by the explicit `IRegister` test below. |
-| `ea356d5` | Test GenApi command completion-query failure recovery | Injects a remote-port read failure while `ICommand::IsDone()` polls completion; verifies `BackendFailure` mapping, then verifies polling resumes. Workflow #45768295355 passed official GenApi 3.5.1 integration on both architectures. |
+| `ea356d5` | Test GenApi command completion-query failure recovery | Injects a remote-port read failure while `ICommand::IsDone()` polls completion; verifies `BackendFailure` mapping, then verifies polling resumes. Workflow #45767832186 passed official GenApi 3.5.1 integration on both architectures. |
 
 ### Current Qt and non-Qt CI — checkpoint a4fc39b
 
@@ -224,7 +224,7 @@ CI evidence:
 No local build/test/debug run or new physical-camera test was performed.
 AmScope source and tests were not modified. The latest GenTL/GenApi-only
 increment is commit `ee2681d5fa1b1af9b7b981477f93db44c4f99499`; workflow
-[#45768295355](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186)
+[#45768295355](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45768295355)
 passed the GenTL suite and official GenApi 3.5.1 build/integration tests on
 Intel x86_64 and Apple Silicon arm64.
 

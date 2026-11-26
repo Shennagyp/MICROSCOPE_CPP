@@ -242,6 +242,12 @@ void testSampleTypeRevisionHistoryAndFullRequirementRoundTrip() {
         const auto current = store->loadCurrentSampleType(typeId);
         check(current && current.value() && current.value()->revision() == 2,
               "resolves the current SampleType revision independently of history");
+
+        const auto currentSampleTypes = store->loadCurrentSampleTypes();
+        check(currentSampleTypes && currentSampleTypes.value().size() == 1 &&
+              currentSampleTypes.value().front().id() == typeId &&
+              currentSampleTypes.value().front().revision() == 2,
+              "enumerates only current SampleType definitions in stable-ID order");
         const auto staleWrite = store->saveSampleTypeRevision(revision2, 1);
         check(!staleWrite.isSuccess() &&
               staleWrite.error().code == SampleSlideStoreErrorCode::RevisionConflict,
@@ -350,6 +356,14 @@ void testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation() {
               historicalSlideContext.value()->slide.sampleTypeRevision() ==
                   historicalSlideContext.value()->sampleType.revision(),
               "historical context lookup preserves exact Slide-to-SampleType revision equality");
+
+        const auto currentSlides =
+            store->loadCurrentSlidesWithPinnedSampleTypes();
+        check(currentSlides && currentSlides.value().size() == 1 &&
+              currentSlides.value().front().slide.id() == slideId &&
+              currentSlides.value().front().slide.sampleTypeRevision() == 1 &&
+              currentSlides.value().front().sampleType.revision() == 1,
+              "enumerates current workspace Slides with their exact pinned historical SampleTypes");
 
         const auto currentSlide = store->loadCurrentSlide(slideId);
         check(currentSlide && currentSlide.value() &&

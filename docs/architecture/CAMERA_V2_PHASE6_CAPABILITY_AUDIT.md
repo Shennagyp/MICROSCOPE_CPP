@@ -239,7 +239,14 @@ supported or hardware-qualified.
    for cardinality guidance and Common validation rejects wrong vector
    lengths; providers retain per-field semantics. Defer per-element
    labels/ranges until a concrete generic consumer requires them.
-8. Phase 7 requires baseline physical smoke using installed AmScope
+8. The reusable package defaults `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF`.
+   The checked-in vendor SDK tree contains no license/notice/EULA; the public
+   [AmScope software downloads page](https://amscope.com/pages/software-downloads)
+   points to licensing terms, but the applicable SDK redistribution grant is
+   not included here. CI enables bundling only for ephemeral internal
+   validation. Do not publish AmScope-linked binaries or bundle the vendor
+   runtime until the actual SDK terms or written permission are reviewed.
+9. Phase 7 requires baseline physical smoke using installed AmScope
    non-Qt/Qt consumers and an installed GenTL consumer with a physical CTI
    camera. Phase 8 expands to the declared provider/model qualification
    matrix and release evidence. Mock/XML CI is not hardware verification.

@@ -265,9 +265,9 @@ Use `AMSCOPE_IMPLEMENTATION_INVENTORY.md` and `Camera/Amscope/README.md` as the 
 ### Phase 6 — CMake package and external consumers
 
 **Status: ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026).** The package entry
-point, namespaced exports, component-aware config/version files, and clean
-Common/GenTL/GenApi/AmScope/Qt consumer fixtures are committed in
-`camera-v.2.0`. Cross-architecture package CI is pending. See
+point, namespaced exports, component-aware config/version files, clean
+Common/GenTL/GenApi/AmScope/Qt consumer fixtures and vendor-runtime opt-in
+are committed in `camera-v.2.0`. Cross-architecture package CI is pending. See
 [Camera/README.md](../../Camera/README.md) and the canonical
 [Camera v2.0 status ledger](CAMERA_V2_DEVELOPMENT_STATUS.md).
 
@@ -287,9 +287,11 @@ Common/GenTL/GenApi/AmScope/Qt consumer fixtures are committed in
    and runs clean consumers, and inspects dylib dependencies.
 6. Document required Qt components, bundled Amcam runtime selection,
    supported macOS architectures and build options.
-7. Establish the AmScope SDK redistribution decision and preserve vendor
-   notices. Do not redistribute a large SDK/sample bundle without checking
-   its terms.
+7. The checked-in vendor SDK tree contains no license/notice/EULA. The
+   reusable package defaults `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF`;
+   CI opts in only for ephemeral internal validation. Obtain and review the
+   actual SDK terms or written vendor permission before redistributing the
+   linked driver binary or vendor runtime. Preserve vendor notices.
 8. Build clean Common, GenTL, GenApi, AmScope and Qt consumers using
    `find_package`, with no repository-relative include/library paths.
 9. Verify that GenTL base consumers do not require GenApi and non-Qt
@@ -304,7 +306,10 @@ Common/GenTL/GenApi/AmScope/Qt consumer fixtures are committed in
   inherit GenApi.
 - Installed artifacts pass architecture and runtime-link checks on Intel
   x86_64 and Apple Silicon arm64.
-- Vendor redistribution and platform scope are documented.
+- Vendor redistribution remains unresolved: the checked-in SDK tree has no
+  license/notice/EULA, so public distribution stays gated pending the actual
+  SDK terms or written permission. The package option defaults OFF.
+- Platform scope is documented.
 - Original Camera Module Phase 7 hardware acceptance also passes: installed
   AmScope non-Qt/Qt physical smoke and installed GenTL CTI-camera smoke.
 

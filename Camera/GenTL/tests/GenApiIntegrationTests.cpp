@@ -115,31 +115,31 @@ int main(int argc, char** argv) {
                            item.name == "TriggerModeReg" ||
                            item.name == "CommandReg";
                 }), "Internal register nodes leaked into the public feature list.");
-            require(findFeature(*features, "Device") == nullptr,
-                    "Unsupported public Port node was exposed as a scalar feature.");
+            require(findFeature(*features, "UnsupportedNode") == nullptr,
+                    "Unsupported public generic node was exposed as a scalar feature.");
 
-            auto unsupportedRegisterRead =
-                access.features().readFeature("Device");
-            auto* unsupportedRegisterReadError =
+            auto unsupportedNodeRead =
+                access.features().readFeature("UnsupportedNode");
+            auto* unsupportedNodeReadError =
                 std::get_if<camera::CameraFeatureAccessError>(
-                    &unsupportedRegisterRead);
-            require(unsupportedRegisterReadError &&
-                        unsupportedRegisterReadError->code ==
+                    &unsupportedNodeRead);
+            require(unsupportedNodeReadError &&
+                        unsupportedNodeReadError->code ==
                             camera::CameraFeatureAccessError::Code::Unsupported,
-                    "Unsupported public Port read was not classified as Unsupported.");
+                    "Unsupported public generic node read was not classified as Unsupported.");
 
-            const camera::CameraFeatureValue unsupportedRegisterValue{
+            const camera::CameraFeatureValue unsupportedNodeValue{
                 std::int64_t{1}};
-            auto unsupportedRegisterWrite =
+            auto unsupportedNodeWrite =
                 access.features().writeFeature(
-                    "Device", unsupportedRegisterValue);
-            auto* unsupportedRegisterWriteError =
+                    "UnsupportedNode", unsupportedNodeValue);
+            auto* unsupportedNodeWriteError =
                 std::get_if<camera::CameraFeatureAccessError>(
-                    &unsupportedRegisterWrite);
-            require(unsupportedRegisterWriteError &&
-                        unsupportedRegisterWriteError->code ==
+                    &unsupportedNodeWrite);
+            require(unsupportedNodeWriteError &&
+                        unsupportedNodeWriteError->code ==
                             camera::CameraFeatureAccessError::Code::Unsupported,
-                    "Unsupported public Port write was not classified as Unsupported.");
+                    "Unsupported public generic node write was not classified as Unsupported.");
 
             auto hiddenRegisterRead = access.features().readFeature("GainReg");
             auto* hiddenReadError =

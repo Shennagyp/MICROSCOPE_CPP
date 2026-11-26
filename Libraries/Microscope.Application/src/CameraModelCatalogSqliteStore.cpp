@@ -630,9 +630,15 @@ core::Result<
             sensor.colorMode = readOptionalEnum<camera::CameraColorMode>(
                 statement.get(), 9);
 
+            const bool widthPresent =
+                sqlite3_column_type(statement.get(), 10) != SQLITE_NULL;
+            const bool heightPresent =
+                sqlite3_column_type(statement.get(), 11) != SQLITE_NULL;
             const auto width = readOptionalUInt32(statement.get(), 10);
             const auto height = readOptionalUInt32(statement.get(), 11);
-            if (width.has_value() != height.has_value()) {
+            if (widthPresent != heightPresent ||
+                (widthPresent && !width) ||
+                (heightPresent && !height)) {
                 return core::Result<
                     std::optional<camera::CameraModelCatalog>,
                     CameraModelCatalogStoreError>::failure(
@@ -771,6 +777,17 @@ core::Status<CameraModelCatalogStoreError> CameraModelCatalogSqliteStore::save(
     for (const auto& profile : catalog.profiles()) {
         const auto& key = profile.key();
         const auto& sensor = profile.sensorCharacteristics();
+        if (profile.profileRevision() == 0 ||
+            profile.profileRevision() > kMaximumSqliteInteger ||
+            key.manufacturer.find('\\0') != std::string::npos ||
+            key.model.find('\\0') != std::string::npos ||
+            (key.variant && key.variant->find('\\0') != std::string::npos) ||
+            profile.sourceReference().find('\\0') != std::string::npos) {
+            return failureStatus(makeError(
+                StoreErrorCode::InvalidPersistedProfile,
+                database_,
+                "Camera model profile identity or revision is not persistable."));
+        }
         if (!hasValidSensorEnumValues(sensor)) {
             return failureStatus(makeError(
                 StoreErrorCode::InvalidPersistedProfile,

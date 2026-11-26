@@ -1,5 +1,6 @@
 #include "microscope/core/equipment/OpticalTopology.h"
 
+#include <algorithm>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
@@ -249,6 +250,7 @@ void testLightPathDerivesOnlyConnectedCameraEndpoints() {
         {},
         {},
         {},
+        {},
         {lightPath});
 
     check(static_cast<bool>(definition),
@@ -311,6 +313,7 @@ void testLightPathMustContainAnImagingRoute() {
         {},
         {},
         {},
+        {},
         {illuminationOnlyLightPath});
 
     check(!definition &&
@@ -360,6 +363,7 @@ void testMultipleCameraLightPathRequiresPhysicalSplitter() {
         {},
         {cameraSpecification(fixture.cameraAId, "camera-a-mode"),
          cameraSpecification(fixture.cameraBId, "camera-b-mode")},
+        {},
         {},
         {},
         {},

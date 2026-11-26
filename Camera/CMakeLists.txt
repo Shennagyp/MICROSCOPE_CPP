@@ -13,6 +13,8 @@ option(CAMERA_MODULE_BUILD_GENAPI "Build optional GenApi 3.5.1 adapter" OFF)
 option(CAMERA_MODULE_BUILD_QT "Build optional Qt Core frame-stream library" OFF)
 option(CAMERA_MODULE_BUILD_QT_WIDGETS "Build optional reusable Qt Widgets library" OFF)
 option(CAMERA_MODULE_BUILD_AMSCOPE_QT "Build optional AmScope Qt adapter" OFF)
+option(CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME
+    "Install the bundled AmScope vendor runtime; requires redistribution rights" OFF)
 option(CAMERA_MODULE_BUILD_PREVIEW_APP "Build AmScope preview app (not a package component)" OFF)
 
 if(CAMERA_MODULE_BUILD_QT_WIDGETS OR CAMERA_MODULE_BUILD_AMSCOPE_QT OR CAMERA_MODULE_BUILD_PREVIEW_APP)
@@ -47,6 +49,8 @@ if(CAMERA_MODULE_BUILD_AMSCOPE)
         "Build optional AmScope Qt adapter" FORCE)
     set(AMSCOPE_BUILD_PREVIEW_APP "${CAMERA_MODULE_BUILD_PREVIEW_APP}" CACHE BOOL
         "Build optional AmScope preview app" FORCE)
+    set(AMSCOPE_INSTALL_VENDOR_RUNTIME "${CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME}" CACHE BOOL
+        "Install bundled AmScope vendor runtime; requires redistribution rights" FORCE)
     add_subdirectory(Amscope)
 endif()
 
@@ -83,6 +87,10 @@ set(CAMERA_MODULE_HAS_QT "${CAMERA_MODULE_BUILD_QT}")
 set(CAMERA_MODULE_HAS_QT_WIDGETS "${CAMERA_MODULE_BUILD_QT_WIDGETS}")
 set(CAMERA_MODULE_HAS_AMSCOPE "${CAMERA_MODULE_BUILD_AMSCOPE}")
 set(CAMERA_MODULE_HAS_AMSCOPE_QT "${CAMERA_MODULE_BUILD_AMSCOPE_QT}")
+set(CAMERA_MODULE_HAS_AMSCOPE_VENDOR_RUNTIME FALSE)
+if(CAMERA_MODULE_BUILD_AMSCOPE AND CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME)
+    set(CAMERA_MODULE_HAS_AMSCOPE_VENDOR_RUNTIME TRUE)
+endif()
 configure_package_config_file(cmake/CameraModuleConfig.cmake.in
     "${CMAKE_CURRENT_BINARY_DIR}/CameraModuleConfig.cmake"
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/CameraModule")

@@ -33,10 +33,25 @@ resolved only for requested components. A package configured with GenApi
 requires the official GenApi 3.5.1 CMake package; exported targets must not
 contain machine-specific SDK include or library paths.
 
-The AmScope package installs the vendor runtime library beside its driver;
-SDK redistribution approval remains a Phase 8 gate. GenTL packaging exports
-the C++ library and headers only. It does not bundle a vendor CTI Producer or
-the separately supplied GenTL C ABI bridge runtime.
+The AmScope package installs the driver but does **not** bundle the vendor
+`libamcam.dylib` runtime by default. Set
+`CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=ON` only after confirming that
+the applicable AmScope SDK terms permit redistribution. When disabled, the
+consumer must supply a compatible vendor runtime and make it available beside
+the driver (the driver uses its loader-relative runtime path). The installed
+package config exposes `CameraModule_Amscope_VENDOR_RUNTIME_INCLUDED`.
+
+The checked-in vendor SDK tree contains no license/notice/EULA file. AmScope's
+[software downloads page](https://amscope.com/pages/software-downloads) points
+to software licensing terms, but the applicable SDK redistribution grant is
+not captured in this repository. Treat redistribution of both the linked
+driver binary and vendor runtime as unresolved until the actual SDK terms or
+written vendor permission are obtained. Package CI enables the runtime option
+only for ephemeral internal validation; that CI package is not a release
+artifact.
+
+GenTL packaging exports the C++ library and headers only. It does not bundle
+a vendor CTI Producer or the separately supplied GenTL C ABI bridge runtime.
 
 CAMERA_MODULE_BUILD_PREVIEW_APP is an optional local application build, not
 a library package component. Qt remains optional: Common, GenTL and native

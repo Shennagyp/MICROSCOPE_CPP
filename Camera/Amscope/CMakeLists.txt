@@ -105,6 +105,14 @@ add_custom_command(TARGET amscope_driver POST_BUILD
 # Camera Module deliverables for consumers that choose the Qt stack.
 option(AMSCOPE_BUILD_QT_ADAPTER "Build the optional AmScope Qt control/streaming adapter" OFF)
 option(AMSCOPE_BUILD_PREVIEW_APP "Build the optional Qt Widgets preview composition app" OFF)
+if(CAMERA_MODULE_PACKAGE_BUILD)
+    set(_amscope_install_vendor_runtime_default OFF)
+else()
+    set(_amscope_install_vendor_runtime_default ON)
+endif()
+option(AMSCOPE_INSTALL_VENDOR_RUNTIME
+    "Install the bundled AmScope vendor runtime; requires redistribution rights"
+    ${_amscope_install_vendor_runtime_default})
 # Standalone diagnostics. These tools intentionally use different acquisition
 # paths and are never part of the production camera session or Qt preview.
 option(AMSCOPE_BUILD_NATIVE_PROBE
@@ -279,8 +287,10 @@ install(TARGETS amscope_driver
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-install(FILES "${AMSCOPE_VENDOR_LIBRARY}"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}" RENAME "libamcam.dylib")
+if(AMSCOPE_INSTALL_VENDOR_RUNTIME)
+    install(FILES "${AMSCOPE_VENDOR_LIBRARY}"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}" RENAME "libamcam.dylib")
+endif()
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 if(AMSCOPE_BUILD_QT_ADAPTER)

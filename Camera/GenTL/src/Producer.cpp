@@ -193,13 +193,13 @@ public:
     }
 
     // Called with mutex held. A quarantined context is retained for process
-    // lifetime so its Consumer and dynamically loaded C ABI bridge cannot be
-    // unloaded while a CTI still owns native handles or callbacks.
+    // lifetime so its Consumer backend and CTI library cannot be unloaded
+    // while a CTI still owns native handles or callbacks.
     void quarantineLocked() noexcept;
 
     // Destructor-time cleanup failures cannot retain this object through
-    // shared_from_this(); retain the Consumer itself, which owns the C ABI
-    // bridge and its GenTL implementation context.
+    // shared_from_this(); retain the Consumer itself, which owns the backend
+    // context and the loaded CTI library.
     void retainConsumerOnFailedShutdown() noexcept;
 
     void shutdown() noexcept {

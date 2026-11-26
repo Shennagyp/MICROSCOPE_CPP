@@ -1274,8 +1274,7 @@ SampleSlideSqliteStore::saveSampleTypeRevision(
     std::lock_guard<std::mutex> lock(mutex_);
     if (!revisionFitsSqlite(sampleType.revision()) ||
         expectedCurrentRevision > kMaximumSqliteInteger ||
-        expectedCurrentRevision == kMaximumSqliteInteger ||
-        sampleType.revision() != expectedCurrentRevision + 1) {
+        expectedCurrentRevision == kMaximumSqliteInteger) {
         return failureStatus(makeError(
             StoreErrorCode::InvalidRevision,
             database_,
@@ -1304,6 +1303,12 @@ SampleSlideSqliteStore::saveSampleTypeRevision(
             StoreErrorCode::RevisionConflict,
             database_,
             "The current SampleType revision changed before this write."));
+    }
+    if (sampleType.revision() != expectedCurrentRevision + 1) {
+        return failureStatus(makeError(
+            StoreErrorCode::InvalidRevision,
+            database_,
+            "SampleType revision must advance exactly one from the current revision."));
     }
 
     std::vector<std::uint8_t> payload;
@@ -1336,17 +1341,32 @@ SampleSlideSqliteStore::saveSampleTypeRevision(
             "Could not append the immutable SampleType revision."));
     }
 
-    Statement currentWrite(
-        database_,
-        "INSERT INTO sample_type_current (sample_type_id, revision) "
-        "VALUES (?, ?) ON CONFLICT(sample_type_id) DO UPDATE SET "
-        "revision = excluded.revision");
-    if (!currentWrite.prepared() ||
-        !currentWrite.bindText(1, sampleType.id().value()) ||
-        !currentWrite.bindInt64(2, sampleType.revision()) ||
-        currentWrite.step() != SQLITE_DONE) {
-        return failureStatus(makeError(
-            StoreErrorCode::SqliteOperationFailed, database_));
+    if (current) {
+        Statement updateCurrent(
+            database_,
+            "UPDATE sample_type_current SET revision = ? "
+            "WHERE sample_type_id = ? AND revision = ?");
+        if (!updateCurrent.prepared() ||
+            !updateCurrent.bindInt64(1, sampleType.revision()) ||
+            !updateCurrent.bindText(2, sampleType.id().value()) ||
+            !updateCurrent.bindInt64(3, expectedCurrentRevision) ||
+            updateCurrent.step() != SQLITE_DONE ||
+            sqlite3_changes(database_) != 1) {
+            return failureStatus(makeError(
+                StoreErrorCode::RevisionConflict, database_));
+        }
+    } else {
+        Statement insertCurrent(
+            database_,
+            "INSERT INTO sample_type_current (sample_type_id, revision) "
+            "VALUES (?, ?)");
+        if (!insertCurrent.prepared() ||
+            !insertCurrent.bindText(1, sampleType.id().value()) ||
+            !insertCurrent.bindInt64(2, sampleType.revision()) ||
+            insertCurrent.step() != SQLITE_DONE) {
+            return failureStatus(makeError(
+                StoreErrorCode::SqliteOperationFailed, database_));
+        }
     }
 
     if (!transaction.commit()) {
@@ -1469,8 +1489,7 @@ SampleSlideSqliteStore::saveSlideRevision(
     if (!revisionFitsSqlite(slide.revision()) ||
         !revisionFitsSqlite(slide.sampleTypeRevision()) ||
         expectedCurrentRevision > kMaximumSqliteInteger ||
-        expectedCurrentRevision == kMaximumSqliteInteger ||
-        slide.revision() != expectedCurrentRevision + 1) {
+        expectedCurrentRevision == kMaximumSqliteInteger) {
         return failureStatus(makeError(
             StoreErrorCode::InvalidRevision,
             database_,
@@ -1517,6 +1536,12 @@ SampleSlideSqliteStore::saveSlideRevision(
             database_,
             "The current Slide revision changed before this write."));
     }
+    if (slide.revision() != expectedCurrentRevision + 1) {
+        return failureStatus(makeError(
+            StoreErrorCode::InvalidRevision,
+            database_,
+            "Slide revision must advance exactly one from the current revision."));
+    }
 
     std::vector<std::uint8_t> payload;
     if (!encodeSlidePayload(slide, payload)) {
@@ -1550,16 +1575,31 @@ SampleSlideSqliteStore::saveSlideRevision(
             "Could not append the immutable Slide revision."));
     }
 
-    Statement currentWrite(
-        database_,
-        "INSERT INTO slide_current (slide_id, revision) VALUES (?, ?) "
-        "ON CONFLICT(slide_id) DO UPDATE SET revision = excluded.revision");
-    if (!currentWrite.prepared() ||
-        !currentWrite.bindText(1, slide.id().value()) ||
-        !currentWrite.bindInt64(2, slide.revision()) ||
-        currentWrite.step() != SQLITE_DONE) {
-        return failureStatus(makeError(
-            StoreErrorCode::SqliteOperationFailed, database_));
+    if (current) {
+        Statement updateCurrent(
+            database_,
+            "UPDATE slide_current SET revision = ? "
+            "WHERE slide_id = ? AND revision = ?");
+        if (!updateCurrent.prepared() ||
+            !updateCurrent.bindInt64(1, slide.revision()) ||
+            !updateCurrent.bindText(2, slide.id().value()) ||
+            !updateCurrent.bindInt64(3, expectedCurrentRevision) ||
+            updateCurrent.step() != SQLITE_DONE ||
+            sqlite3_changes(database_) != 1) {
+            return failureStatus(makeError(
+                StoreErrorCode::RevisionConflict, database_));
+        }
+    } else {
+        Statement insertCurrent(
+            database_,
+            "INSERT INTO slide_current (slide_id, revision) VALUES (?, ?)");
+        if (!insertCurrent.prepared() ||
+            !insertCurrent.bindText(1, slide.id().value()) ||
+            !insertCurrent.bindInt64(2, slide.revision()) ||
+            insertCurrent.step() != SQLITE_DONE) {
+            return failureStatus(makeError(
+                StoreErrorCode::SqliteOperationFailed, database_));
+        }
     }
 
     if (!transaction.commit()) {

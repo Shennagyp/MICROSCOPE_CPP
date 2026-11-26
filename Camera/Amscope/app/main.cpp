@@ -1,6 +1,7 @@
 #include "amscope/QtAmcamCamera.h"
 #include "camera/FrameRateEstimator.h"
 #include "camera/CameraFeatureValidation.h"
+#include "camera/qtwidgets/CameraCapabilityPanel.h"
 #include "camera/qtwidgets/CameraControlPanel.h"
 #include "camera/qtwidgets/CameraFeatureEditor.h"
 #include "camera/qtwidgets/FrameView.h"
@@ -337,6 +338,13 @@ public:
         featureStatus_->setWordWrap(true);
 
         refreshFeaturesButton_ = new QPushButton("Refresh features", controlsContent);
+        capabilityGroup_ = new QGroupBox("Model capabilities", controlsContent);
+        auto* capabilityLayout = new QVBoxLayout(capabilityGroup_);
+        capabilityLayout->setContentsMargins(6, 6, 6, 6);
+        capabilityPanel_ =
+            new camera::qtwidgets::CameraCapabilityPanel(capabilityGroup_);
+        capabilityLayout->addWidget(capabilityPanel_);
+
         featureTabs_ = new QTabWidget(controlsContent);
         featureTabs_->setMinimumWidth(0);
         featureTabs_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -481,6 +489,7 @@ public:
         settingsColumn->setContentsMargins(0, 0, 0, 0);
         settingsColumn->addWidget(featureStatus_);
         settingsColumn->addWidget(refreshFeaturesButton_);
+        settingsColumn->addWidget(capabilityGroup_);
         settingsColumn->addWidget(triggerGroup_);
         settingsColumn->addWidget(accessoryGroup_);
         settingsColumn->addWidget(astroAutoFocuserGroup_);
@@ -526,6 +535,10 @@ public:
 
         cameraControls_->setRefreshRequestedHandler(
             [this]() { refreshCameras(); });
+        cameraControls_->setSelectionChangedHandler(
+            [this](std::optional<std::string> deviceId) {
+                updateSelectedCameraCapabilities(deviceId);
+            });
         cameraControls_->setOpenRequestedHandler(
             [this](const std::string& deviceId) { openCamera(deviceId); });
         cameraControls_->setStartRequestedHandler(
@@ -714,6 +727,26 @@ private:
         std::optional<camera::CameraFeatureValue> currentValue;
     };
 
+    void updateSelectedCameraCapabilities(
+        const std::optional<std::string>& deviceId) {
+        if (!capabilityPanel_)
+            return;
+        if (!deviceId) {
+            capabilityPanel_->setCapabilities({});
+            return;
+        }
+
+        const auto found = std::find_if(
+            discoveredCameras_.begin(), discoveredCameras_.end(),
+            [&](const amscope::CameraInfo& device) {
+                return device.id == *deviceId;
+            });
+        capabilityPanel_->setCapabilities(
+            found == discoveredCameras_.end()
+                ? camera::CameraCapabilities{}
+                : found->capabilities);
+    }
+
     void refreshCameras() {
         if (camera_.state() != amscope::CameraState::Closed ||
             lifecycleRequestPending_ || cameraEnumerationPending_) {
@@ -739,11 +772,11 @@ private:
                     return;
                 }
 
-                const auto discoveredCameras =
+                discoveredCameras_ =
                     std::get<std::vector<amscope::CameraInfo>>(std::move(result));
                 std::vector<camera::CameraDeviceInfo> commonDevices;
-                commonDevices.reserve(discoveredCameras.size());
-                for (const auto& discovered : discoveredCameras) {
+                commonDevices.reserve(discoveredCameras_.size());
+                for (const auto& discovered : discoveredCameras_) {
                     auto commonInfo =
                         static_cast<const camera::CameraDeviceInfo&>(discovered);
                     if (commonInfo.displayName.empty())
@@ -3152,6 +3185,7 @@ private:
     std::optional<amscope::AmcamTriggerConfiguration> currentTriggerConfiguration_;
     bool accessoryOperationPending_ = false;
     std::unordered_map<std::string, FeatureControl> featureControls_;
+    std::vector<amscope::CameraInfo> discoveredCameras_;
     std::vector<std::string> featureOrder_;
 
     QTabWidget* documentTabs_ = nullptr;
@@ -3161,6 +3195,8 @@ private:
     QPlainTextEdit* outputLog_ = nullptr;
     QLabel* cameraStateIndicator_ = nullptr;
     camera::qtwidgets::CameraControlPanel* cameraControls_ = nullptr;
+    QGroupBox* capabilityGroup_ = nullptr;
+    camera::qtwidgets::CameraCapabilityPanel* capabilityPanel_ = nullptr;
     QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
     QLabel* stillPrecisionLabel_ = nullptr;

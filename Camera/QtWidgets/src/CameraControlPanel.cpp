@@ -5,6 +5,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QSizePolicy>
+#include <QSignalBlocker>
 #include <QString>
 
 #include <utility>
@@ -67,6 +68,12 @@ CameraControlPanel::CameraControlPanel(QWidget* parent)
     layout->addLayout(deviceRow);
     layout->addLayout(actionRow);
 
+    connect(deviceSelector_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        updateControls();
+        if (selectionChangedHandler_)
+            selectionChangedHandler_(selectedDeviceId());
+    });
     connect(refreshButton_, &QPushButton::clicked, this, [this]() {
         if (refreshRequestedHandler_)
             refreshRequestedHandler_();
@@ -94,13 +101,29 @@ CameraControlPanel::CameraControlPanel(QWidget* parent)
 
 void CameraControlPanel::setDevices(
     std::vector<CameraDeviceInfo> devices) {
-    deviceSelector_->clear();
-    for (const auto& device : devices) {
-        deviceSelector_->addItem(
-            deviceLabel(device),
-            QString::fromStdString(device.id));
+    const auto previousSelection = selectedDeviceId();
+    {
+        const QSignalBlocker blocker(deviceSelector_);
+        deviceSelector_->clear();
+        for (const auto& device : devices) {
+            deviceSelector_->addItem(
+                deviceLabel(device),
+                QString::fromStdString(device.id));
+        }
+        if (previousSelection) {
+            const int previousIndex = deviceSelector_->findData(
+                QString::fromStdString(*previousSelection));
+            if (previousIndex >= 0)
+                deviceSelector_->setCurrentIndex(previousIndex);
+        }
+        if (deviceSelector_->currentIndex() < 0 &&
+            deviceSelector_->count() > 0) {
+            deviceSelector_->setCurrentIndex(0);
+        }
     }
     updateControls();
+    if (selectionChangedHandler_)
+        selectionChangedHandler_(selectedDeviceId());
 }
 
 std::optional<std::string> CameraControlPanel::selectedDeviceId() const {
@@ -128,6 +151,13 @@ void CameraControlPanel::setOpenRequestedHandler(
     std::function<void(const std::string&)> handler) {
     openRequestedHandler_ = std::move(handler);
     updateControls();
+}
+
+void CameraControlPanel::setSelectionChangedHandler(
+    SelectionChangedHandler handler) {
+    selectionChangedHandler_ = std::move(handler);
+    if (selectionChangedHandler_)
+        selectionChangedHandler_(selectedDeviceId());
 }
 
 void CameraControlPanel::setStartRequestedHandler(

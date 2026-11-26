@@ -52,6 +52,12 @@ int main(int argc, char** argv) {
     int stopRequests = 0;
     int closeRequests = 0;
     std::string openedDeviceId;
+    std::optional<std::string> selectedId;
+    int selectionChanges = 0;
+    panel.setSelectionChangedHandler([&](std::optional<std::string> id) {
+        selectedId = std::move(id);
+        ++selectionChanges;
+    });
 
     panel.setRefreshRequestedHandler([&]() { ++refreshRequests; });
     panel.setOpenRequestedHandler([&](const std::string& deviceId) {
@@ -81,7 +87,8 @@ int main(int argc, char** argv) {
     second.identity.model = "Model B";
 
     panel.setDevices({first, second});
-    if (selector->count() != 2 ||
+    if (!selectedId || *selectedId != "opaque-device-id-A" ||
+        selector->count() != 2 ||
         selector->itemText(0) != QStringLiteral("Microscope A") ||
         selector->itemText(1) != QStringLiteral("Model B") ||
         selector->itemData(0).toString() != QStringLiteral("opaque-device-id-A")) {
@@ -94,6 +101,17 @@ int main(int argc, char** argv) {
     }
 
     selector->setCurrentIndex(1);
+    if (!selectedId || *selectedId != "opaque-device-id-B" ||
+        selectionChanges < 2) {
+        fail("Selection change did not report the selected opaque device ID.");
+        return EXIT_FAILURE;
+    }
+    panel.setDevices({second, first});
+    if (!selectedId || *selectedId != "opaque-device-id-B" ||
+        selector->currentData().toString() != QStringLiteral("opaque-device-id-B")) {
+        fail("Device refresh did not preserve the existing selection.");
+        return EXIT_FAILURE;
+    }
     open->click();
     if (openRequests != 1 || openedDeviceId != "opaque-device-id-B") {
         fail("Open did not report the selected opaque device ID unchanged.");

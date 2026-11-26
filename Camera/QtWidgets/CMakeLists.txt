@@ -14,12 +14,14 @@ endif()
 find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
 
 add_library(camera_qt_widgets STATIC
+    src/CameraCapabilityPanel.cpp
     src/CameraCommandPanel.cpp
     src/CameraControlPanel.cpp
     src/CameraFeatureEditor.cpp
     src/FrameView.cpp
     src/ImageInfoBar.cpp
     include/camera/qtwidgets/CameraCommandPanel.h
+    include/camera/qtwidgets/CameraCapabilityPanel.h
     include/camera/qtwidgets/CameraControlPanel.h
     include/camera/qtwidgets/CameraFeatureEditor.h
     include/camera/qtwidgets/FrameView.h
@@ -35,6 +37,16 @@ target_include_directories(camera_qt_widgets
 target_link_libraries(camera_qt_widgets PUBLIC Camera::Common Qt6::Widgets)
 
 if(BUILD_TESTING)
+    add_executable(camera_qt_widgets_capability_panel_tests
+        tests/CameraCapabilityPanelTests.cpp)
+    target_compile_features(camera_qt_widgets_capability_panel_tests PRIVATE cxx_std_17)
+    target_link_libraries(camera_qt_widgets_capability_panel_tests
+        PRIVATE Camera::QtWidgets Qt6::Widgets)
+    add_test(NAME camera_qt_widgets_capability_panel_tests
+        COMMAND camera_qt_widgets_capability_panel_tests)
+    set_tests_properties(camera_qt_widgets_capability_panel_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     add_executable(camera_qt_widgets_command_panel_tests
         tests/CameraCommandPanelTests.cpp)
     target_compile_features(camera_qt_widgets_command_panel_tests PRIVATE cxx_std_17)

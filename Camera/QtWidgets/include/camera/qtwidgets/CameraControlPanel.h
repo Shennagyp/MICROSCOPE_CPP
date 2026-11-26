@@ -41,6 +41,9 @@ struct CameraControlPanelState final {
 // session, schedule requests, or own a camera/backend object.
 class CameraControlPanel final : public QWidget {
 public:
+    using SelectionChangedHandler =
+        std::function<void(std::optional<std::string>)>;
+
     explicit CameraControlPanel(QWidget* parent = nullptr);
 
     void setDevices(std::vector<CameraDeviceInfo> devices);
@@ -51,6 +54,7 @@ public:
     void setRefreshRequestedHandler(std::function<void()> handler);
     void setOpenRequestedHandler(
         std::function<void(const std::string&)> handler);
+    void setSelectionChangedHandler(SelectionChangedHandler handler);
     void setStartRequestedHandler(std::function<void()> handler);
     void setStopRequestedHandler(std::function<void()> handler);
     void setCloseRequestedHandler(std::function<void()> handler);
@@ -68,6 +72,7 @@ private:
     CameraControlPanelState state_;
     std::function<void()> refreshRequestedHandler_;
     std::function<void(const std::string&)> openRequestedHandler_;
+    SelectionChangedHandler selectionChangedHandler_;
     std::function<void()> startRequestedHandler_;
     std::function<void()> stopRequestedHandler_;
     std::function<void()> closeRequestedHandler_;

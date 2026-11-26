@@ -321,8 +321,8 @@ enum class SlidePreparationRequirementsError {
     DuplicateLabelKind
 };
 
-// Constraints on actual slide preparation. SlideType stores the reusable
-// preparation envelope; Slide stores the observed preparation snapshot.
+// Constraints on actual slide preparation. SampleType stores the reusable preparation envelope; Slide stores the observed
+// preparation snapshot.
 class SlidePreparationRequirements final {
 public:
     [[nodiscard]] static Result<
@@ -384,7 +384,9 @@ public:
         std::string name,
         SampleMaterialClass materialClass,
         MicroscopyRequirements microscopyRequirements,
-        std::optional<std::string> description = std::nullopt);
+        std::optional<std::string> description = std::nullopt,
+        std::optional<SlidePreparationRequirements> preparationRequirements =
+            std::nullopt);
 
     [[nodiscard]] const SampleTypeId& id() const noexcept;
     [[nodiscard]] std::uint64_t revision() const noexcept;
@@ -392,6 +394,8 @@ public:
     [[nodiscard]] SampleMaterialClass materialClass() const noexcept;
     [[nodiscard]] const MicroscopyRequirements& microscopyRequirements() const noexcept;
     [[nodiscard]] const std::optional<std::string>& description() const noexcept;
+    [[nodiscard]] const std::optional<SlidePreparationRequirements>&
+    preparationRequirements() const noexcept;
 private:
     SampleType(
         SampleTypeId id,
@@ -399,7 +403,8 @@ private:
         std::string name,
         SampleMaterialClass materialClass,
         MicroscopyRequirements microscopyRequirements,
-        std::optional<std::string> description);
+        std::optional<std::string> description,
+        std::optional<SlidePreparationRequirements> preparationRequirements);
 
     SampleTypeId id_;
     std::uint64_t revision_;
@@ -407,6 +412,7 @@ private:
     SampleMaterialClass materialClass_;
     MicroscopyRequirements microscopyRequirements_;
     std::optional<std::string> description_;
+    std::optional<SlidePreparationRequirements> preparationRequirements_;
 };
 
 enum class SampleTypeCatalogError {
@@ -434,186 +440,11 @@ private:
     std::vector<SampleType> sampleTypes_;
 };
 
-enum class SampleError {
-    EmptyName,
-    InvalidName,
-    EmptyMaterialDescription,
-    InvalidMaterialDescription,
-    InvalidOrganismScientificName,
-    InvalidExternalAccession,
-    InvalidDescription,
-    ZeroRevision,
-    ZeroSampleTypeRevision
-};
-
-// A Sample is the source material / biological entity (REMBI Biosample
-// concept), not a glass slide and not a prepared specimen.
-class Sample final {
-public:
-    [[nodiscard]] static Result<Sample, SampleError> create(
-        SampleId id,
-        std::uint64_t revision,
-        SampleTypeId sampleTypeId,
-        std::uint64_t sampleTypeRevision,
-        std::string name,
-        std::string materialDescription,
-        std::optional<std::string> organismScientificName = std::nullopt,
-        std::optional<std::string> externalAccession = std::nullopt,
-        std::optional<std::string> description = std::nullopt);
-
-    [[nodiscard]] const SampleId& id() const noexcept;
-    [[nodiscard]] std::uint64_t revision() const noexcept;
-    [[nodiscard]] const SampleTypeId& sampleTypeId() const noexcept;
-    [[nodiscard]] std::uint64_t sampleTypeRevision() const noexcept;
-    [[nodiscard]] const std::string& name() const noexcept;
-    [[nodiscard]] const std::string& materialDescription() const noexcept;
-    [[nodiscard]] const std::optional<std::string>& organismScientificName() const noexcept;
-    [[nodiscard]] const std::optional<std::string>& externalAccession() const noexcept;
-    [[nodiscard]] const std::optional<std::string>& description() const noexcept;
-
-private:
-    Sample(
-        SampleId id,
-        std::uint64_t revision,
-        SampleTypeId sampleTypeId,
-        std::uint64_t sampleTypeRevision,
-        std::string name,
-        std::string materialDescription,
-        std::optional<std::string> organismScientificName,
-        std::optional<std::string> externalAccession,
-        std::optional<std::string> description);
-
-    SampleId id_;
-    std::uint64_t revision_;
-    SampleTypeId sampleTypeId_;
-    std::uint64_t sampleTypeRevision_;
-    std::string name_;
-    std::string materialDescription_;
-    std::optional<std::string> organismScientificName_;
-    std::optional<std::string> externalAccession_;
-    std::optional<std::string> description_;
-};
-
-enum class SlideTypeError {
-    EmptyName,
-    InvalidName,
-    InvalidDescription,
-    ZeroRevision
-};
-
-// Reusable physical-slide preparation template. It is separate from SampleType:
-// SampleType describes the source material; SlideType describes slide preparation.
-class SlideType final {
-public:
-    [[nodiscard]] static Result<SlideType, SlideTypeError> create(
-        SlideTypeId id,
-        std::uint64_t revision,
-        std::string name,
-        SlidePreparationRequirements preparationRequirements,
-        std::optional<std::string> description = std::nullopt,
-        std::optional<SlideGeometry> nominalGeometry = std::nullopt);
-
-    [[nodiscard]] const SlideTypeId& id() const noexcept;
-    [[nodiscard]] std::uint64_t revision() const noexcept;
-    [[nodiscard]] const std::string& name() const noexcept;
-    [[nodiscard]] const SlidePreparationRequirements& preparationRequirements() const noexcept;
-    [[nodiscard]] const std::optional<std::string>& description() const noexcept;
-    [[nodiscard]] const std::optional<SlideGeometry>& nominalGeometry() const noexcept;
-
-private:
-    SlideType(
-        SlideTypeId id,
-        std::uint64_t revision,
-        std::string name,
-        SlidePreparationRequirements preparationRequirements,
-        std::optional<std::string> description,
-        std::optional<SlideGeometry> nominalGeometry);
-
-    SlideTypeId id_;
-    std::uint64_t revision_;
-    std::string name_;
-    SlidePreparationRequirements preparationRequirements_;
-    std::optional<std::string> description_;
-    std::optional<SlideGeometry> nominalGeometry_;
-};
-
-enum class SlideTypeCatalogError {
-    EmptyCatalog,
-    ZeroRevision,
-    DuplicateSlideTypeId
-};
-
-class SlideTypeCatalog final {
-public:
-    [[nodiscard]] static Result<SlideTypeCatalog, SlideTypeCatalogError> create(
-        std::uint64_t revision,
-        std::vector<SlideType> slideTypes);
-
-    [[nodiscard]] std::uint64_t revision() const noexcept;
-    [[nodiscard]] const std::vector<SlideType>& slideTypes() const noexcept;
-    [[nodiscard]] const SlideType* find(const SlideTypeId& id) const noexcept;
-
-private:
-    SlideTypeCatalog(std::uint64_t revision, std::vector<SlideType> slideTypes);
-
-    std::uint64_t revision_;
-    std::vector<SlideType> slideTypes_;
-};
-
 enum class SlideError {
     EmptyName,
     InvalidName,
     ZeroRevision,
-    ZeroSampleRevision,
-    ZeroSlideTypeRevision
-};
-
-// A Slide is the physical prepared imaging unit. It pins both the source
-// Sample revision and the exact SlideType revision used to prepare it.
-class Slide final {
-public:
-    [[nodiscard]] static Result<Slide, SlideError> create(
-        SlideId id,
-        std::uint64_t revision,
-        SampleId sampleId,
-        std::uint64_t sampleRevision,
-        SlideTypeId slideTypeId,
-        std::uint64_t slideTypeRevision,
-        std::string name,
-        SlideGeometry geometry,
-        SlidePreparation preparation);
-
-    [[nodiscard]] const SlideId& id() const noexcept;
-    [[nodiscard]] std::uint64_t revision() const noexcept;
-    [[nodiscard]] const SampleId& sampleId() const noexcept;
-    [[nodiscard]] std::uint64_t sampleRevision() const noexcept;
-    [[nodiscard]] const SlideTypeId& slideTypeId() const noexcept;
-    [[nodiscard]] std::uint64_t slideTypeRevision() const noexcept;
-    [[nodiscard]] const std::string& name() const noexcept;
-    [[nodiscard]] const SlideGeometry& geometry() const noexcept;
-    [[nodiscard]] const SlidePreparation& preparation() const noexcept;
-
-private:
-    Slide(
-        SlideId id,
-        std::uint64_t revision,
-        SampleId sampleId,
-        std::uint64_t sampleRevision,
-        SlideTypeId slideTypeId,
-        std::uint64_t slideTypeRevision,
-        std::string name,
-        SlideGeometry geometry,
-        SlidePreparation preparation);
-
-    SlideId id_;
-    std::uint64_t revision_;
-    SampleId sampleId_;
-    std::uint64_t sampleRevision_;
-    SlideTypeId slideTypeId_;
-    std::uint64_t slideTypeRevision_;
-    std::string name_;
-    SlideGeometry geometry_;
-    SlidePreparation preparation_;
+    ZeroSampleTypeRevision
 };
 
 enum class SpecimenLabelError {
@@ -671,8 +502,8 @@ enum class SlidePreparationError {
     DuplicateLabel
 };
 
-// Actual preparation facts for one specimen instance. Unknown physical facts
-// remain absent; they are not filled from the SampleType template.
+// Actual preparation facts recorded for one physical slide. Unknown physical
+// facts remain absent; they are not filled from the SampleType requirements.
 class SlidePreparation final {
 public:
     [[nodiscard]] static Result<SlidePreparation, SlidePreparationError> create(
@@ -711,5 +542,47 @@ private:
     std::vector<SpecimenLabel> labels_;
 };
 
+
+class Slide final {
+public:
+    [[nodiscard]] static Result<Slide, SlideError> create(
+        SlideId id,
+        std::uint64_t revision,
+        SampleTypeId sampleTypeId,
+        std::uint64_t sampleTypeRevision,
+        std::string name,
+        SlideGeometry geometry,
+        SlidePreparation preparation,
+        std::optional<OriginLabId> originLabId = std::nullopt);
+
+    [[nodiscard]] const SlideId& id() const noexcept;
+    [[nodiscard]] std::uint64_t revision() const noexcept;
+    [[nodiscard]] const SampleTypeId& sampleTypeId() const noexcept;
+    [[nodiscard]] std::uint64_t sampleTypeRevision() const noexcept;
+    [[nodiscard]] const std::string& name() const noexcept;
+    [[nodiscard]] const SlideGeometry& geometry() const noexcept;
+    [[nodiscard]] const SlidePreparation& preparation() const noexcept;
+    [[nodiscard]] const std::optional<OriginLabId>& originLabId() const noexcept;
+
+private:
+    Slide(
+        SlideId id,
+        std::uint64_t revision,
+        SampleTypeId sampleTypeId,
+        std::uint64_t sampleTypeRevision,
+        std::string name,
+        SlideGeometry geometry,
+        SlidePreparation preparation,
+        std::optional<OriginLabId> originLabId);
+
+    SlideId id_;
+    std::uint64_t revision_;
+    SampleTypeId sampleTypeId_;
+    std::uint64_t sampleTypeRevision_;
+    std::string name_;
+    SlideGeometry geometry_;
+    SlidePreparation preparation_;
+    std::optional<OriginLabId> originLabId_;
+};
 
 } // namespace microscope::core

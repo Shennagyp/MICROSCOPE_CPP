@@ -39,6 +39,16 @@ enum class PixelColorFilterArray : std::uint8_t {
     BGGR
 };
 
+// Describes bit-level packing within each image row. Packed PFNC payloads
+// remain byte-for-byte intact; consumers must decode using the identified
+// PFNC format and its specified packing convention.
+enum class PixelPacking : std::uint8_t {
+    Unknown,
+    NotPacked,
+    PFNC10p,
+    PFNC12p
+};
+
 // A format identifier is meaningful only inside its declared scheme.
 // Examples: "amcam.fourcc" and "pfnc". The common layer never translates
 // values between schemes unless an explicit, verified mapping exists.
@@ -76,6 +86,7 @@ struct Frame {
     PixelByteOrder pixelByteOrder = PixelByteOrder::Unknown;
     PixelColorFilterArray pixelColorFilterArray =
         PixelColorFilterArray::Unknown;
+    PixelPacking pixelPacking = PixelPacking::Unknown;
     std::optional<PixelFormatIdentifier> pixelFormatIdentifier;
     std::uint8_t significantBitsPerPixel = 0;
     std::uint8_t storageBitsPerPixel = 0;

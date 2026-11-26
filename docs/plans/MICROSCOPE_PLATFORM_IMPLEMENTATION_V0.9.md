@@ -126,7 +126,7 @@ The equipment definition now describes installed topology and static capabilitie
 
 ### Phase 3 — Declarative configuration
 
-**Phase 3 complete — 3A–3E implemented and cross-platform validated**
+**Phase 3A–3E baseline implemented; Phase 3 is being extended for editable composable modes, candidate selection, route-derived cameras and optical sampling. Phase 3 is not exit-ready against the revised requirements until 3F–3H are implemented and validated.**
 
 **Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
 
@@ -196,6 +196,44 @@ The equipment definition now describes installed topology and static capabilitie
 - The corrected transition model and expanded representative-profile tests passed the complete current-head matrix on Ubuntu GCC, macOS Clang and Windows MSVC, including Core standalone, Application standalone and root platform-only builds/tests: [run 122](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45636792527).
 
 **Phase 3A–3C exit:** satisfied and cross-platform validated. **Phase 3D source exit:** the deterministic adapter-neutral dependency DAG, safety root, verification sink, cycle checks and execution layers are implemented; final current-head cross-platform validation is pending. **Phase 3E source exit:** representative brightfield, phase, DIC and polarized-light profile cases are present; current-head CI is pending. Verified-state reconciliation and execution remain Phase 4.
+
+**Revised Phase 3 work — required before Phase 3 exit**
+
+The earlier 3A–3E implementation established useful typed equipment, optical-function, resolver and transition-plan foundations. Its current request shape requires explicit component identities and treats camera compatibility as a profile list. Those semantics are too restrictive for the revised operating model. The following work replaces those assumptions; it is not a reason to restart the already completed Phase 4 runtime work.
+
+**3F — Composable, editable operation-mode model**
+- Add stable technique identities and declarative technique definitions. A technique declares required optical functions/compatibility, route-position constraints, exclusions and optional target contributions.
+- Define an operation mode as editable data that composes a set of techniques plus objective constraints and operating targets; do not create one class per magnification/technique combination.
+- Preserve manual operation: exact component identities can be supplied as optional hard constraints. Omitted identities activate equipment-based discovery.
+- Support required versus preferred per-microscope component bindings. Preferred values rank valid candidates; required values constrain them.
+- Merge contributions explicitly and report conflicts when multiple selected techniques demand incompatible components or settings.
+- Keep persistence out of Core. Application will load/save equipment and mode revisions in Phase 5; Core consumes already materialized typed definitions.
+
+**3G — Complete candidate resolution and path-derived camera**
+- Enumerate complete compatible configurations rather than accepting the first locally valid component.
+- Discover required phase/DIC/polarization components from the selected route set and validate their physical placement and compatibility IDs.
+- Derive camera identity from the selected imaging route's camera endpoint. Remove camera identity as an unrelated selection dimension; retain an optional explicit camera override only as a validation constraint, which must match a camera on that route.
+- Enumerate supported output modes only for the path-derived camera. If a route set has multiple camera endpoints or several equally valid complete configurations, return the valid alternatives and a selection-required outcome.
+- Return a complete resolved desired configuration. The transition planner must consume that resolved value, not reach back into an incomplete original request for independently supplied component IDs.
+- Return no candidate with diagnostics when no installed route satisfies the combined mode and technique requirements.
+
+**3H — Objective constraints and camera sampling**
+- Add an objective requirement with minimum NA and optional requested magnification. If magnification is omitted, choose the lowest magnification that satisfies the NA and image-sampling constraints.
+- Evaluate the selected camera's physical pixel pitch and actual CameraOutputMode sensor-to-delivered-pixel mapping, including binning/ROI/resampling.
+- Use the declared reference wavelength and total image-forming magnification (objective plus magnification-affecting relay optics) to test the configured sampling factor. The default policy for this use case is 2.3 delivered pixels per Rayleigh separation in both axes.
+- Treat missing wavelength, relay magnification or pixel mapping as unknown/insufficient evidence, not as a passing constraint. Add the required relay-optic magnification data to the installed equipment model before claiming total magnification is known.
+- Rank candidates using declared preferences from a specimen/task imaging profile and/or microscope-specific mode binding. For example, an H&E task may prefer 0.75 NA over 0.4 NA when both meet the hard constraints. No sample-specific hard-coded branch is permitted.
+
+**3F–3H acceptance**
+- A 20× phase request discovers a valid matched phase plate/annulus without requiring the user to name those components.
+- Phase contrast and polarization may be composed when their combined route/component constraints are satisfiable; incompatible combinations are rejected with diagnostics.
+- A missing or mismatched component invalidates only the relevant candidate; another valid route may still be offered.
+- The camera is always one connected to the selected imaging route. A camera installed elsewhere is never accepted.
+- Two connected camera/route candidates are returned as alternatives; equal-ranked candidates require explicit selection.
+- A per-microscope preferred objective resolves a valid tie; a required objective binding rejects fallback.
+- For two 20× objectives with NA 0.4 and 0.75, an H&E imaging preference ranks 0.75 higher when both otherwise satisfy the request.
+- When magnification is unspecified, the lowest objectively adequate magnification is selected only after both NA and the 2.3-Rayleigh sampling condition have been evaluated.
+- Tests cover non-square pixel pitch, binned and unbinned output modes, insufficient sampling, missing wavelength, absent relay-magnification metadata and the candidate alternatives/selection-required states.
 
 ### Phase 4 — Core operation runtime
 

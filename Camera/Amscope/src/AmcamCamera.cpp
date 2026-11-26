@@ -1014,9 +1014,13 @@ buildAmcamFeatureDescriptors(
         std::string(camera::RawOutputBitDepthFeature),
         "Sensor Output Bit Depth", CameraFeatureKind::Integer,
         std::string("significant bits"),
-        rawBitDepthHardwareSupported,
+        // This feature selects an SDK pixel format, so the same model
+        // policy that gates AmcamPixelFormat must also gate this narrower
+        // RAW significant-bit-depth selector.
+        rawBitDepthHardwareSupported && pixelFormatAllowed,
         rawBitDepthReadable,
-        rawBitDepthHardwareSupported && rawBitDepthWritable && stopped,
+        rawBitDepthHardwareSupported && rawBitDepthWritable &&
+            pixelFormatAllowed && stopped,
         std::nullopt, std::nullopt, {},
         camera::CameraFeatureGroup::Sensor,
         std::move(rawBitDepthValues),

@@ -102,6 +102,8 @@ int main() {
             "allow-list can explicitly permit hardware I/O line access");
     require(!registry.allows("Model-A", AmcamCameraFeature::WhiteBalance),
             "deny-list takes precedence over allow-list");
+    require(!registry.allows("Model-A", AmcamCameraFeature::PixelFormatSelection),
+            "profile denies pixel-format selection when it is omitted from the allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::PreciseFrameRate),
             "profile denies features omitted from its allow-list");
     require(!registry.allows("Model-A", AmcamCameraFeature::DiscreteFrameSpeed),

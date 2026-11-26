@@ -313,7 +313,10 @@ A configured profile is an allow-list, and explicit deny entries take
 precedence. The exact model code is whitespace-trimmed for lookup. Duplicate
 profiles use the last entry. Profiles can only restrict capabilities already
 confirmed by SDK probes; they cannot make unsupported hardware features appear.
-A model without a configured profile uses its runtime-probed capabilities.
+The backend-neutral `RawOutputBitDepth` selector changes the SDK pixel format,
+so it follows the same `PixelFormatSelection` profile policy as
+`AmcamPixelFormat`. A model without a configured profile uses its
+runtime-probed capabilities.
 
 ## CTI / GenTL integration status
 

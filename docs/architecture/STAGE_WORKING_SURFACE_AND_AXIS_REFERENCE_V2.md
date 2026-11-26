@@ -115,7 +115,7 @@ Implemented in Core:
 - Zero initial slide rectangles. Each slide is separately added from its own user-selected mechanical stop-point coordinate, CAD handle, length-axis assignment, constrained length and width.
 - Four explicitly exposed stage-coordinate corners for every slide rectangle.
 - Immutable add, replace and remove operations. Add/replace validate identity, workspace containment and positive-area overlap. Exact edge/corner contact is permitted; no unconfigured clearance is invented.
-- Revision-bound slide-local navigation targets, invalidated when the referenced slide registration revision changes.
+- Revision-bound slide-local navigation targets, invalidated when the referenced slide registration revision changes. Replacing a slide registration with the same revision identifier is rejected; the host must issue a new, never-reused revision identity for every changed registration.
 - Slot-independent navigation planning to an absolute XY command. Unknown/uncertain X/Y causes X/Y homing only; microscope focus Z is not a prerequisite.
 - Axis-unit conversion at the motion-command boundary, with the working-surface geometry kept in micrometers.
 

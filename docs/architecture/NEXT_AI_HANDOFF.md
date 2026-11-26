@@ -9,11 +9,25 @@
 **Latest package CI definition:** `bdd39bd218e1f10a80266c7ea677d4f416f15aba`  
 **Package CI:** [workflow #45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) — both architectures passed 28/28 tests, relocation, all external consumer runtime checks, installed-link and architecture checks; the default-off vendor-runtime install contract passed on Apple Silicon.  
 **Latest prior implementation CI:** [workflow #45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
-**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 open but blocked by the AmScope freeze; Phase 7 active by explicit owner authorization on 26 November 2026. Package software CI passes on both architectures; physical-camera acceptance remains pending.
+**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 open but blocked by the AmScope freeze; Phase 7 active by explicit owner authorization on 26 November 2026. Package software CI passes on both architectures; physical-camera acceptance remains pending.  
+**Latest AmScope preview UI-only corrections:** `1de091a1`, `fe897959`, `2b3c1a35`, `522d8648` (main.cpp only; no provider source, tests, public contracts, Optika app or runtime behavior changed). These commits are not yet CI-verified.
 
 ---
 
 ## 1. Continuation authority
+
+### Current UI correction checkpoint — 26 November 2026
+
+The owner reported that the AmScope Qt preview had three defects: model capabilities appeared empty, preview resolution was presented as an index (`1`) instead of dimensions, and controls were grouped according to SDK function families.
+
+The latest app-only correction:
+- Adds a selected-camera model summary with reported model name, preview modes/dimensions, frame-speed range, I/O line count and fan range where supplied by the discovery descriptor.
+- Makes the capability panel explain when the SDK did not provide a model descriptor. Unknown is not presented as Unsupported and no capability is fabricated.
+- Displays preview-resolution enumeration choices as dimensions (for example `1280 × 960`) while retaining the canonical `index:widthxheight` symbol for backend writes/readback.
+- Replaces direct `CameraFeatureGroup`-to-tab presentation with host-owned operator sections: Capture, Exposure, Image appearance, Sensor & hardware, and Advanced. The backend descriptor group remains unchanged for validation and lifecycle semantics.
+
+**Important boundary:** this is a presentation correction, not proof that the SDK supplied a model descriptor for MU503. If the UI summary reports that the descriptor is absent, resolving that requires a provider-level model-query path; the AmScope provider freeze remains in force. Do not fabricate the missing data or bypass the session owner. The changes have not been compiled or run by the assistant; obtain exact-commit CI and owner visual inspection before accepting them.
+
 
 The project owner explicitly corrected the previous continuation attempt:
 - Original Camera Module Phases 0–8 remain governing.

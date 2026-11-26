@@ -24,12 +24,12 @@ void check(bool condition, const char* message) {
 void testStrongIdentityTypes() {
     using namespace microscope::core;
 
-    static_assert(!std::is_default_constructible<SampleId>::value,
-                  "SampleId must not have an invalid default value");
-    static_assert(!std::is_convertible<std::string, SampleId>::value,
-                  "raw strings must not implicitly construct SampleId");
-    static_assert(!std::is_convertible<SampleId, SlideId>::value,
-                  "SampleId must not convert to SlideId");
+    static_assert(!std::is_default_constructible<SampleTypeId>::value,
+                  "SampleTypeId must not have an invalid default value");
+    static_assert(!std::is_convertible<std::string, SampleTypeId>::value,
+                  "raw strings must not implicitly construct SampleTypeId");
+    static_assert(!std::is_convertible<SampleTypeId, SlideId>::value,
+                  "SampleTypeId must not convert to SlideId");
     static_assert(!std::is_convertible<SlideId, TileId>::value,
                   "SlideId must not convert to TileId");
     static_assert(!std::is_convertible<RuntimeId, MicroscopeId>::value,
@@ -49,42 +49,42 @@ void testStrongIdentityTypes() {
     static_assert(!std::is_convertible<RuntimeGeneration, DeviceSessionGeneration>::value,
                   "runtime generation must not convert to device-session generation");
 
-    auto sampleResult = SampleId::create("sample-opaque-001");
+    auto sampleResult = SampleTypeId::create("sample-type-opaque-001");
     auto slideResult = SlideId::create("slide-opaque-001");
-    check(static_cast<bool>(sampleResult), "creates a non-empty SampleId");
+    check(static_cast<bool>(sampleResult), "creates a non-empty SampleTypeId");
     check(static_cast<bool>(slideResult), "creates a non-empty SlideId");
 
     if (sampleResult && slideResult) {
-        const SampleId sample = sampleResult.value();
+        const SampleTypeId sample = sampleResult.value();
         const SlideId slide = slideResult.value();
-        check(sample.value() == "sample-opaque-001",
-              "preserves the opaque SampleId representation");
-        check(sample != SampleId::create("sample-opaque-002").value(),
+        check(sample.value() == "sample-type-opaque-001",
+              "preserves the opaque SampleTypeId representation");
+        check(sample != SampleTypeId::create("sample-type-opaque-002").value(),
               "different opaque values are not equal");
         check(slide.value() == "slide-opaque-001",
-              "preserves SlideId independently from SampleId");
+              "preserves SlideId independently from SampleTypeId");
 
-        std::unordered_set<SampleId> sampleSet;
+        std::unordered_set<SampleTypeId> sampleSet;
         sampleSet.insert(sample);
         check(sampleSet.find(sample) != sampleSet.end(),
               "strong IDs support hash-based lookup");
     }
 
-    auto opaquePathLikeValue = SampleId::create("source/part:alpha");
+    auto opaquePathLikeValue = SampleTypeId::create("source/part:alpha");
     check(static_cast<bool>(opaquePathLikeValue),
           "opaque IDs are not restricted to filesystem path syntax");
 
-    auto whitespaceOnly = SampleId::create(" \t\n ");
+    auto whitespaceOnly = SampleTypeId::create(" \t\n ");
     check(!whitespaceOnly &&
           whitespaceOnly.error().code == IdentityError::Code::WhitespaceOnlyValue,
           "rejects an identifier consisting only of whitespace");
 
-    auto embeddedNull = SampleId::create(std::string("sample\0suffix", 13));
+    auto embeddedNull = SampleTypeId::create(std::string("sample-type\0suffix", 13));
     check(!embeddedNull &&
           embeddedNull.error().code == IdentityError::Code::EmbeddedNull,
           "rejects an identifier containing an embedded NUL byte");
 
-    auto emptyResult = SampleId::create("");
+    auto emptyResult = SampleTypeId::create("");
     check(!emptyResult, "rejects an empty persisted identity");
     if (!emptyResult) {
         check(emptyResult.error().code == IdentityError::Code::EmptyValue,

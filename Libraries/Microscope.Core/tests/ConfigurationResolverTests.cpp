@@ -1819,21 +1819,17 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         fixture.equipment.filterSpecifications(),
         fixture.equipment.revision()));
 
-    const auto calibration = makeLightPathCalibration(
-        fixture.microscopeId,
-        equipment.revision(),
-        lightPathId,
-        fixture.illuminationId,
-        fixture.illuminationChannelId);
     const auto operationModeId =
         makeId<OperationModeId>("sample-assessment-brightfield-mode");
+    const auto calibrationId =
+        makeId<CalibrationRevisionId>("sample-assessment-brightfield-cal-r1");
     const auto modeSetting = take(LightPathModeSetting::create(
         fixture.microscopeId,
         equipment.revision(),
         operationModeId,
         1,
         lightPathId,
-        calibration.revision(),
+        calibrationId,
         fixture.illuminationId,
         fixture.illuminationChannelId,
         {fixture.objectiveId, fixture.condenserId},

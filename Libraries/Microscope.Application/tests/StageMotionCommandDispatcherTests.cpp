@@ -116,6 +116,16 @@ core::MoveAxesTo moveTarget() {
     return take(core::MoveAxesTo::create({x, y}));
 }
 
+core::MoveAxesBy relativeMove() {
+    return take(core::MoveAxesBy::create({
+        take(core::AxisDisplacement::create(
+            id<core::StageAxisId>("x"), 250.0,
+            core::AxisCoordinateUnit::Micrometers)),
+        take(core::AxisDisplacement::create(
+            id<core::StageAxisId>("y"), -0.5,
+            core::AxisCoordinateUnit::Millimeters))}));
+}
+
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> acknowledgement(
     const core::StageMotionCommandContext& context) {
     const auto axes = take(core::StageAxisSet::create({
@@ -191,6 +201,34 @@ int main() {
               id<core::OperationId>("rejected-operation")).value().status() ==
               core::OperationStatus::Failed,
           "adapter rejection is recorded as failure and never mistaken for a homing result");
+
+    RuntimeFixture relativeFixture;
+    auto relativeContext = relativeFixture.prepare(
+        "relative-operation", "relative-step", "relative-command");
+    RecordingStagePort relativePort;
+    const auto relative = application::motion::StageMotionCommandDispatcher::moveAxesBy(
+        relativeContext, relativeMove(), relativePort, *relativeFixture.runtime);
+    check(bool(relative) &&
+          relative.value().action == core::StageMotionAction::MoveAxesBy &&
+          relative.value().submission.status() == core::StageMotionSubmissionStatus::Accepted &&
+          relative.value().stepStatus == core::StepStatus::AdapterAccepted &&
+          relativePort.moveByCalls == 1,
+          "relative physical displacement is dispatched through the typed adapter port");
+
+    RuntimeFixture stopFixture;
+    auto stopContext = stopFixture.prepare(
+        "stop-operation", "stop-step", "stop-command");
+    RecordingStagePort stopPort;
+    const auto stopAxes = core::StopAxes::create(take(core::StageAxisSet::create({
+        id<core::StageAxisId>("x"), id<core::StageAxisId>("y")})));
+    const auto stop = application::motion::StageMotionCommandDispatcher::stopAxes(
+        stopContext, stopAxes, stopPort, *stopFixture.runtime);
+    check(bool(stop) &&
+          stop.value().action == core::StageMotionAction::StopAxes &&
+          stop.value().submission.status() == core::StageMotionSubmissionStatus::Accepted &&
+          stop.value().stepStatus == core::StepStatus::AdapterAccepted &&
+          stopPort.stopCalls == 1,
+          "controlled stop is dispatched as a distinct typed adapter command");
 
     RuntimeFixture throwingFixture;
     auto throwingContext = throwingFixture.prepare(

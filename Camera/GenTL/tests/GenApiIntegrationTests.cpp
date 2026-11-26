@@ -37,13 +37,12 @@ const camera::CameraCommandDescriptor* findCommand(
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 3) return EXIT_FAILURE;
+    if (argc != 2) return EXIT_FAILURE;
 
-    const std::filesystem::path ctiPath(argv[2]);
+    const std::filesystem::path ctiPath(argv[1]);
 
     try {
-        auto bridge = camera::gentl::ConsumerBridge::load(argv[1]);
-        auto producer = camera::gentl::Producer::open(bridge, ctiPath);
+        auto producer = camera::gentl::Producer::open(ctiPath);
         const auto devices = producer.discover();
         require(!devices.empty(), "GenApi fixture device was not discovered.");
 

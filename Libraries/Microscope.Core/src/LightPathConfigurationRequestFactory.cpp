@@ -73,11 +73,18 @@ LightPathConfigurationRequestFactory::create(
                 LightPathConfigurationRequestFactoryError::LightPathNotInstalled);
     }
 
-    if (operationMode.findLightPathSetting(lightPathId) == nullptr) {
+    const auto* modeSetting = operationMode.findLightPathSetting(lightPathId);
+    if (modeSetting == nullptr) {
         return Result<
             ConfigurationRequest,
             LightPathConfigurationRequestFactoryError>::failure(
                 LightPathConfigurationRequestFactoryError::OperationModeDoesNotContainLightPath);
+    }
+    if (modeSetting->equipmentDefinitionRevision() != equipment.revision()) {
+        return Result<
+            ConfigurationRequest,
+            LightPathConfigurationRequestFactoryError>::failure(
+                LightPathConfigurationRequestFactoryError::OperationModeEquipmentRevisionMismatch);
     }
 
     if (!cameraResolution.isResolved() || !cameraResolution.selected()) {
@@ -157,6 +164,7 @@ LightPathConfigurationRequestFactory::create(
                 LightPathConfigurationBinding{
                     selected.operationModeId,
                     selected.operationModeRevision,
+                    equipment.revision(),
                     selected.lightPathId,
                     selected.cameraComponentId,
                     selected.cameraModeId},

@@ -568,3 +568,179 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_NOT_IMPLEMENTED;
     }
 }
+
+
+// The same fixture also exports the standard GenTL C symbols. These wrappers
+// route into the existing deterministic mock state machine so the native C++
+// CTI loader can be tested without an intermediary bridge.
+static GC_ERROR mock_genTL_call(
+    uint32_t operation, const uint64_t* arguments, uint32_t argument_count) {
+    return (GC_ERROR)gentl_consumer_invoke(
+        &context_token, operation, arguments, argument_count);
+}
+
+#define MOCK_ENCODE(value) ((uint64_t)(uintptr_t)(value))
+#define MOCK_CALL0(operation) \
+    return mock_genTL_call((operation), 0, 0)
+#define MOCK_CALL1(operation, a) do { \
+    const uint64_t args[] = {MOCK_ENCODE(a)}; \
+    return mock_genTL_call((operation), args, 1); \
+} while (0)
+#define MOCK_CALL2(operation, a, b) do { \
+    const uint64_t args[] = {MOCK_ENCODE(a), MOCK_ENCODE(b)}; \
+    return mock_genTL_call((operation), args, 2); \
+} while (0)
+#define MOCK_CALL3(operation, a, b, c) do { \
+    const uint64_t args[] = {MOCK_ENCODE(a), MOCK_ENCODE(b), MOCK_ENCODE(c)}; \
+    return mock_genTL_call((operation), args, 3); \
+} while (0)
+#define MOCK_CALL4(operation, a, b, c, d) do { \
+    const uint64_t args[] = {MOCK_ENCODE(a), MOCK_ENCODE(b), MOCK_ENCODE(c), MOCK_ENCODE(d)}; \
+    return mock_genTL_call((operation), args, 4); \
+} while (0)
+#define MOCK_CALL5(operation, a, b, c, d, e) do { \
+    const uint64_t args[] = {MOCK_ENCODE(a), MOCK_ENCODE(b), MOCK_ENCODE(c), MOCK_ENCODE(d), MOCK_ENCODE(e)}; \
+    return mock_genTL_call((operation), args, 5); \
+} while (0)
+#define MOCK_CALL6(operation, a, b, c, d, e, f) do { \
+    const uint64_t args[] = {MOCK_ENCODE(a), MOCK_ENCODE(b), MOCK_ENCODE(c), MOCK_ENCODE(d), MOCK_ENCODE(e), MOCK_ENCODE(f)}; \
+    return mock_genTL_call((operation), args, 6); \
+} while (0)
+
+GC_ERROR GC_CALLTYPE GCGetInfo(
+    TL_INFO_CMD command, INFO_DATATYPE* type, void* buffer, size_t* size) {
+    MOCK_CALL4(0, command, type, buffer, size);
+}
+GC_ERROR GC_CALLTYPE GCInitLib(void) { MOCK_CALL0(2); }
+GC_ERROR GC_CALLTYPE GCCloseLib(void) { MOCK_CALL0(3); }
+GC_ERROR GC_CALLTYPE GCReadPort(
+    PORT_HANDLE port, uint64_t address, void* buffer, size_t* size) {
+    MOCK_CALL4(4, port, address, buffer, size);
+}
+GC_ERROR GC_CALLTYPE GCWritePort(
+    PORT_HANDLE port, uint64_t address, const void* buffer, size_t* size) {
+    MOCK_CALL4(5, port, address, buffer, size);
+}
+GC_ERROR GC_CALLTYPE GCGetPortURL(
+    PORT_HANDLE port, char* url, size_t* size) {
+    MOCK_CALL3(6, port, url, size);
+}
+GC_ERROR GC_CALLTYPE GCRegisterEvent(
+    EVENTSRC_HANDLE source, EVENT_TYPE event, EVENT_HANDLE* handle) {
+    MOCK_CALL3(8, source, event, handle);
+}
+GC_ERROR GC_CALLTYPE GCUnregisterEvent(
+    EVENTSRC_HANDLE source, EVENT_TYPE event) {
+    MOCK_CALL2(9, source, event);
+}
+GC_ERROR GC_CALLTYPE EventGetData(
+    EVENT_HANDLE event, void* buffer, size_t* size, uint64_t timeout) {
+    MOCK_CALL4(10, event, buffer, size, timeout);
+}
+GC_ERROR GC_CALLTYPE EventKill(EVENT_HANDLE event) { MOCK_CALL1(14, event); }
+GC_ERROR GC_CALLTYPE TLOpen(TL_HANDLE* handle) { MOCK_CALL1(15, handle); }
+GC_ERROR GC_CALLTYPE TLClose(TL_HANDLE handle) { MOCK_CALL1(16, handle); }
+GC_ERROR GC_CALLTYPE TLGetNumInterfaces(
+    TL_HANDLE tl, uint32_t* count) { MOCK_CALL2(18, tl, count); }
+GC_ERROR GC_CALLTYPE TLGetInterfaceID(
+    TL_HANDLE tl, uint32_t index, char* id, size_t* size) {
+    MOCK_CALL4(19, tl, index, id, size);
+}
+GC_ERROR GC_CALLTYPE TLOpenInterface(
+    TL_HANDLE tl, const char* id, IF_HANDLE* handle) {
+    MOCK_CALL3(21, tl, id, handle);
+}
+GC_ERROR GC_CALLTYPE TLUpdateInterfaceList(
+    TL_HANDLE tl, bool8_t* changed, uint64_t timeout) {
+    MOCK_CALL3(22, tl, changed, timeout);
+}
+GC_ERROR GC_CALLTYPE IFClose(IF_HANDLE handle) { MOCK_CALL1(23, handle); }
+GC_ERROR GC_CALLTYPE IFGetInfo(
+    IF_HANDLE iface, INTERFACE_INFO_CMD command, INFO_DATATYPE* type,
+    void* buffer, size_t* size) {
+    MOCK_CALL5(24, iface, command, type, buffer, size);
+}
+GC_ERROR GC_CALLTYPE IFGetNumDevices(
+    IF_HANDLE iface, uint32_t* count) { MOCK_CALL2(25, iface, count); }
+GC_ERROR GC_CALLTYPE IFGetDeviceID(
+    IF_HANDLE iface, uint32_t index, char* id, size_t* size) {
+    MOCK_CALL4(26, iface, index, id, size);
+}
+GC_ERROR GC_CALLTYPE IFUpdateDeviceList(
+    IF_HANDLE iface, bool8_t* changed, uint64_t timeout) {
+    MOCK_CALL3(27, iface, changed, timeout);
+}
+GC_ERROR GC_CALLTYPE IFGetDeviceInfo(
+    IF_HANDLE iface, const char* id, DEVICE_INFO_CMD command,
+    INFO_DATATYPE* type, void* buffer, size_t* size) {
+    MOCK_CALL6(28, iface, id, command, type, buffer, size);
+}
+GC_ERROR GC_CALLTYPE IFOpenDevice(
+    IF_HANDLE iface, const char* id, DEVICE_ACCESS_FLAGS access,
+    DEV_HANDLE* handle) {
+    MOCK_CALL4(29, iface, id, access, handle);
+}
+GC_ERROR GC_CALLTYPE DevGetPort(
+    DEV_HANDLE device, PORT_HANDLE* port) { MOCK_CALL2(30, device, port); }
+GC_ERROR GC_CALLTYPE DevGetNumDataStreams(
+    DEV_HANDLE device, uint32_t* count) { MOCK_CALL2(31, device, count); }
+GC_ERROR GC_CALLTYPE DevGetDataStreamID(
+    DEV_HANDLE device, uint32_t index, char* id, size_t* size) {
+    MOCK_CALL4(32, device, index, id, size);
+}
+GC_ERROR GC_CALLTYPE DevOpenDataStream(
+    DEV_HANDLE device, const char* id, DS_HANDLE* stream) {
+    MOCK_CALL3(33, device, id, stream);
+}
+GC_ERROR GC_CALLTYPE DevClose(DEV_HANDLE device) { MOCK_CALL1(35, device); }
+GC_ERROR GC_CALLTYPE DSAllocAndAnnounceBuffer(
+    DS_HANDLE stream, size_t size, void* privateData, BUFFER_HANDLE* buffer) {
+    MOCK_CALL4(37, stream, size, privateData, buffer);
+}
+GC_ERROR GC_CALLTYPE DSFlushQueue(
+    DS_HANDLE stream, ACQ_QUEUE_TYPE operation) {
+    MOCK_CALL2(38, stream, operation);
+}
+GC_ERROR GC_CALLTYPE DSStartAcquisition(
+    DS_HANDLE stream, ACQ_START_FLAGS flags, uint64_t count) {
+    MOCK_CALL3(39, stream, flags, count);
+}
+GC_ERROR GC_CALLTYPE DSStopAcquisition(
+    DS_HANDLE stream, ACQ_STOP_FLAGS flags) {
+    MOCK_CALL2(40, stream, flags);
+}
+GC_ERROR GC_CALLTYPE DSGetInfo(
+    DS_HANDLE stream, STREAM_INFO_CMD command, INFO_DATATYPE* type,
+    void* buffer, size_t* size) {
+    MOCK_CALL5(41, stream, command, type, buffer, size);
+}
+GC_ERROR GC_CALLTYPE DSClose(DS_HANDLE stream) { MOCK_CALL1(43, stream); }
+GC_ERROR GC_CALLTYPE DSRevokeBuffer(
+    DS_HANDLE stream, BUFFER_HANDLE buffer, void** memory, void** privateData) {
+    MOCK_CALL4(44, stream, buffer, memory, privateData);
+}
+GC_ERROR GC_CALLTYPE DSQueueBuffer(
+    DS_HANDLE stream, BUFFER_HANDLE buffer) {
+    MOCK_CALL2(45, stream, buffer);
+}
+GC_ERROR GC_CALLTYPE DSGetBufferInfo(
+    DS_HANDLE stream, BUFFER_HANDLE buffer, BUFFER_INFO_CMD command,
+    INFO_DATATYPE* type, void* value, size_t* size) {
+    MOCK_CALL6(46, stream, buffer, command, type, value, size);
+}
+GC_ERROR GC_CALLTYPE GCGetNumPortURLs(
+    PORT_HANDLE port, uint32_t* count) { MOCK_CALL2(47, port, count); }
+GC_ERROR GC_CALLTYPE GCGetPortURLInfo(
+    PORT_HANDLE port, uint32_t index, URL_INFO_CMD command,
+    INFO_DATATYPE* type, void* value, size_t* size) {
+    MOCK_CALL6(48, port, index, command, type, value, size);
+}
+
+#undef MOCK_CALL0
+#undef MOCK_CALL1
+#undef MOCK_CALL2
+#undef MOCK_CALL3
+#undef MOCK_CALL4
+#undef MOCK_CALL5
+#undef MOCK_CALL6
+#undef MOCK_ENCODE

@@ -1418,6 +1418,46 @@ void testResolverEnforcesPathCompatibilityAndIlluminationChannel() {
           "rejects an installed or requested objective not allowed by the profile");
 }
 
+void testCameraProfileMismatchWarnsButDoesNotBlockManualSelection() {
+    const auto fixture = makeConfigurationFixture();
+    const auto otherPreferredCamera =
+        makeId<EquipmentComponentId>("camera-preferred-by-profile");
+    const auto profile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-other-camera-preferred"),
+        ContrastMethod::Brightfield,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId},
+        {otherPreferredCamera},
+        {fixture.illuminationId}));
+    const auto catalog = take(ConfigurationProfileCatalog::create({profile}));
+    const auto request = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::Brightfield,
+        profile.id());
+
+    const auto resolution =
+        ConfigurationResolver::resolve(fixture.equipment, catalog, request);
+    check(resolution.isResolved(),
+          "does not reject a physically connected manually selected camera outside the profile preference set");
+    check(hasDiagnosticCode(
+              resolution,
+              "configuration.camera.not_preferred_by_profile"),
+          "returns a warning when the selected camera is not the profile's preferred camera");
+
+    bool warningSeverity = false;
+    for (const auto& diagnostic : resolution.diagnostics()) {
+        if (diagnostic.code() == "configuration.camera.not_preferred_by_profile") {
+            warningSeverity =
+                diagnostic.severity() == DiagnosticSeverity::Warning;
+        }
+    }
+    check(warningSeverity,
+          "camera preference mismatch is explicitly warning severity, not error severity");
+}
+
 void testResolverRejectsCameraNotConnectedToSelectedImagingPath() {
     const auto fixture = makeConfigurationFixture();
     const auto request = makeRequest(
@@ -1487,6 +1527,7 @@ int main() {
     testResolverRejectsUnavailableCameraMode();
     testResolverReportsProfileConflictAndMissingPath();
     testResolverEnforcesPathCompatibilityAndIlluminationChannel();
+    testCameraProfileMismatchWarnsButDoesNotBlockManualSelection();
     testResolverRejectsCameraNotConnectedToSelectedImagingPath();
     testProfileRequiredComponentMustBeOnSelectedPaths();
 

@@ -143,6 +143,26 @@ void testExactProfileEnrichesMissingSensorFacts() {
         check(sensor.provenance ==
                   camera::CameraSpecificationProvenance::ManufacturerDatasheet,
               "records the source of profile-enriched sensor characteristics");
+        check(sensor.provenanceReference ==
+                  "datasheet:fluorocam-2k",
+              "retains the camera model datasheet reference");
+    }
+
+    const auto projected =
+        CameraModelDiscoveryEnricher::toCoreSensorCharacteristics(result.deviceInfo);
+    check(projected.has_value(),
+          "projects enriched sensor facts into the persistence-free Core value type");
+    if (projected) {
+        check(projected->shutterType == core::CameraShutterType::Global,
+              "projects the selected global shutter fact into Core");
+        check(projected->colorMode == core::CameraSensorColorMode::Monochrome,
+              "projects monochrome sensor identity into Core");
+        check(projected->quantumEfficiency.size() == 3 &&
+              projected->quantumEfficiency[1].quantumEfficiency == 0.91,
+              "projects the wavelength-dependent QE curve into Core");
+        check(projected->provenanceReference ==
+                  "datasheet:fluorocam-2k",
+              "preserves the catalog provenance reference across the Core boundary");
     }
 }
 

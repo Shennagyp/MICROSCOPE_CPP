@@ -13,6 +13,8 @@ constexpr std::uint64_t pfnc32Mono10 = UINT64_C(0x01100003);
 constexpr std::uint64_t pfnc32Mono12 = UINT64_C(0x01100005);
 constexpr std::uint64_t pfnc32Mono14 = UINT64_C(0x01100025);
 constexpr std::uint64_t pfnc32Mono16 = UINT64_C(0x01100007);
+constexpr std::uint64_t pfnc32Mono10p = UINT64_C(0x010A0046);
+constexpr std::uint64_t pfnc32Mono12p = UINT64_C(0x010C0047);
 constexpr std::uint64_t pfnc32Rgb8 = UINT64_C(0x02180014);
 constexpr std::uint64_t pfnc16Mono8 = UINT64_C(0x0101);
 constexpr std::uint64_t pfnc16Mono16 = UINT64_C(0x0105);
@@ -113,6 +115,23 @@ bool strideFits(std::uint32_t width, std::size_t bytesPerPixel) noexcept {
             std::numeric_limits<std::uint32_t>::max() / bytesPerPixel;
 }
 
+bool packedRowLayout(
+    std::uint32_t width, std::uint8_t bitsPerPixel,
+    std::uint32_t& strideBytes, std::size_t& totalBytes,
+    std::uint32_t height) noexcept {
+    if (width == 0 || height == 0 || bitsPerPixel == 0) return false;
+    const auto maximum = std::numeric_limits<std::size_t>::max();
+    const auto w = static_cast<std::size_t>(width);
+    if (w > (maximum - 7) / bitsPerPixel) return false;
+    const auto rowBytes = (w * bitsPerPixel + 7) / 8;
+    if (rowBytes > std::numeric_limits<std::uint32_t>::max()) return false;
+    const auto h = static_cast<std::size_t>(height);
+    if (rowBytes > maximum / h) return false;
+    strideBytes = static_cast<std::uint32_t>(rowBytes);
+    totalBytes = rowBytes * h;
+    return true;
+}
+
 } // namespace
 
 std::optional<camera::FramePtr>
@@ -196,9 +215,39 @@ makeCommonFrame(DataStreamFrame source) {
         }
     }
 
+    // PFNC Mono10p/Mono12p retain their packed wire representation.
+    // Do not unpack or reorder samples in the camera backend. Each row is
+    // byte-aligned; the final byte may contain unused high bits for widths
+    // that do not fill a complete byte.
+    std::uint8_t packedSignificantBits = 0;
+    camera::PixelPacking packedKind = camera::PixelPacking::Unknown;
+    if (isPfnc32(source, pfnc32Mono10p)) {
+        packedSignificantBits = 10;
+        packedKind = camera::PixelPacking::PFNC10p;
+    } else if (isPfnc32(source, pfnc32Mono12p)) {
+        packedSignificantBits = 12;
+        packedKind = camera::PixelPacking::PFNC12p;
+    }
+    if (packedSignificantBits != 0) {
+        std::uint32_t packedStride = 0;
+        std::size_t expectedPayload = 0;
+        if (packedRowLayout(frame->width, packedSignificantBits,
+                            packedStride, expectedPayload, frame->height) &&
+            frame->pixels.size() == expectedPayload) {
+            frame->pixelFormat = camera::PixelFormat::Raw8;
+            frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
+            frame->pixelColorFilterArray =
+                camera::PixelColorFilterArray::NotApplicable;
+            frame->pixelPacking = packedKind;
+            frame->strideBytes = packedStride;
+            frame->significantBitsPerPixel = packedSignificantBits;
+            frame->storageBitsPerPixel = packedSignificantBits;
+        }
+    }
+
     // Map only layouts whose component order, storage width, row stride and
-    // byte order are explicit. Packed, planar and compressed formats remain
-    // opaque until their exact layout contracts are implemented.
+    // byte order are explicit. Other packed, planar and compressed formats
+    // remain opaque until their exact layout contracts are implemented.
     const bool mono8 =
         isPfnc32(source, pfnc32Mono8) ||
         isPfnc16(source, pfnc16Mono8);
@@ -209,6 +258,7 @@ makeCommonFrame(DataStreamFrame source) {
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
         frame->pixelColorFilterArray =
             camera::PixelColorFilterArray::NotApplicable;
+        frame->pixelPacking = camera::PixelPacking::NotPacked;
         frame->strideBytes = frame->width;
         frame->significantBitsPerPixel = 8;
         frame->storageBitsPerPixel = 8;
@@ -224,6 +274,7 @@ makeCommonFrame(DataStreamFrame source) {
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
         frame->pixelColorFilterArray =
             camera::PixelColorFilterArray::NotApplicable;
+        frame->pixelPacking = camera::PixelPacking::NotPacked;
         frame->strideBytes = frame->width * 3;
         frame->significantBitsPerPixel = 24;
         frame->storageBitsPerPixel = 24;
@@ -246,6 +297,7 @@ makeCommonFrame(DataStreamFrame source) {
         frame->pixelByteOrder = byteOrder;
         frame->pixelColorFilterArray =
             camera::PixelColorFilterArray::NotApplicable;
+        frame->pixelPacking = camera::PixelPacking::NotPacked;
         frame->strideBytes = frame->width * 2;
         frame->significantBitsPerPixel = monoSignificantBits;
         frame->storageBitsPerPixel = 16;

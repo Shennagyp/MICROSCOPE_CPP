@@ -82,6 +82,90 @@ private:
     std::optional<double> maximumCoverglassDesignMismatchMicrometers_;
 };
 
+enum class CondenserRequirementsError {
+    NoConstraint,
+    NonFiniteValue,
+    InvalidAperture,
+    InvertedApertureRange,
+    InvalidDesign,
+    DuplicateDesign,
+    InvalidImmersionMedium,
+    DuplicateImmersionMedium
+};
+
+// Sample-side condenser requirements use optical performance and capability,
+// not a microscope-specific condenser component identity.
+class CondenserMicroscopyRequirements final {
+public:
+    [[nodiscard]] static Result<
+        CondenserMicroscopyRequirements,
+        CondenserRequirementsError> create(
+            std::optional<double> minimumApertureNA = std::nullopt,
+            std::optional<double> maximumApertureNA = std::nullopt,
+            std::vector<CondenserDesign> allowedDesigns = {},
+            std::vector<CondenserImmersionMedium> allowedImmersionMedia = {});
+
+    [[nodiscard]] const std::optional<double>& minimumApertureNA() const noexcept;
+    [[nodiscard]] const std::optional<double>& maximumApertureNA() const noexcept;
+    [[nodiscard]] const std::vector<CondenserDesign>& allowedDesigns() const noexcept;
+    [[nodiscard]] const std::vector<CondenserImmersionMedium>&
+    allowedImmersionMedia() const noexcept;
+
+private:
+    CondenserMicroscopyRequirements(
+        std::optional<double> minimumApertureNA,
+        std::optional<double> maximumApertureNA,
+        std::vector<CondenserDesign> allowedDesigns,
+        std::vector<CondenserImmersionMedium> allowedImmersionMedia);
+
+    std::optional<double> minimumApertureNA_;
+    std::optional<double> maximumApertureNA_;
+    std::vector<CondenserDesign> allowedDesigns_;
+    std::vector<CondenserImmersionMedium> allowedImmersionMedia_;
+};
+
+enum class IlluminationRequirementsError {
+    NoConstraint,
+    NonFiniteValue,
+    NegativeMinimumIrradiance,
+    NonPositiveMaximumIrradiance,
+    InvertedIrradianceRange
+};
+
+// Absolute specimen-plane irradiance constraints use the same physical unit as
+// LightPathCalibration. They are never inferred from a lamp drive percentage.
+class IlluminationMicroscopyRequirements final {
+public:
+    [[nodiscard]] static Result<
+        IlluminationMicroscopyRequirements,
+        IlluminationRequirementsError> create(
+            std::optional<double> minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter =
+                std::nullopt,
+            std::optional<double> maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter =
+                std::nullopt,
+            std::optional<SpectralBand> requiredSpectralBand = std::nullopt,
+            bool requireContinuouslyAdjustableSource = false);
+
+    [[nodiscard]] const std::optional<double>&
+    minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() const noexcept;
+    [[nodiscard]] const std::optional<double>&
+    maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() const noexcept;
+    [[nodiscard]] const std::optional<SpectralBand>& requiredSpectralBand() const noexcept;
+    [[nodiscard]] bool requireContinuouslyAdjustableSource() const noexcept;
+
+private:
+    IlluminationMicroscopyRequirements(
+        std::optional<double> minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+        std::optional<double> maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+        std::optional<SpectralBand> requiredSpectralBand,
+        bool requireContinuouslyAdjustableSource);
+
+    std::optional<double> minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter_;
+    std::optional<double> maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter_;
+    std::optional<SpectralBand> requiredSpectralBand_;
+    bool requireContinuouslyAdjustableSource_ = false;
+};
+
 enum class CameraPerformanceRequirementsError {
     NoConstraint,
     NonFiniteValue,
@@ -162,7 +246,11 @@ public:
                 std::nullopt,
             std::optional<CameraPerformanceRequirements> camera =
                 std::nullopt,
-            bool requireFluorescentLabelMetadata = false);
+            bool requireFluorescentLabelMetadata = false,
+            std::optional<CondenserMicroscopyRequirements> condenser =
+                std::nullopt,
+            std::optional<IlluminationMicroscopyRequirements> illumination =
+                std::nullopt);
 
     [[nodiscard]] const std::vector<MicroscopyTechniqueConstraint>&
     techniques() const noexcept;
@@ -171,18 +259,26 @@ public:
     [[nodiscard]] const std::optional<CameraPerformanceRequirements>&
     camera() const noexcept;
     [[nodiscard]] bool requireFluorescentLabelMetadata() const noexcept;
+    [[nodiscard]] const std::optional<CondenserMicroscopyRequirements>&
+    condenser() const noexcept;
+    [[nodiscard]] const std::optional<IlluminationMicroscopyRequirements>&
+    illumination() const noexcept;
 
 private:
     MicroscopyRequirements(
         std::vector<MicroscopyTechniqueConstraint> techniques,
         std::optional<ObjectiveMicroscopyRequirements> objective,
         std::optional<CameraPerformanceRequirements> camera,
-        bool requireFluorescentLabelMetadata);
+        bool requireFluorescentLabelMetadata,
+        std::optional<CondenserMicroscopyRequirements> condenser,
+        std::optional<IlluminationMicroscopyRequirements> illumination);
 
     std::vector<MicroscopyTechniqueConstraint> techniques_;
     std::optional<ObjectiveMicroscopyRequirements> objective_;
     std::optional<CameraPerformanceRequirements> camera_;
     bool requireFluorescentLabelMetadata_ = false;
+    std::optional<CondenserMicroscopyRequirements> condenser_;
+    std::optional<IlluminationMicroscopyRequirements> illumination_;
 };
 
 enum class SampleTypeError {

@@ -43,7 +43,8 @@ namespace {
 bool isMeasuredEvidence(StagePositionEvidence e) noexcept {
     return e==StagePositionEvidence::ControllerReported||
            e==StagePositionEvidence::EncoderMeasured||
-           e==StagePositionEvidence::ExternalMeasured;
+           e==StagePositionEvidence::ExternalMeasured||
+           e==StagePositionEvidence::PhysicalEndstop;
 }
 }
 AxisPosition::AxisPosition(StageAxisId a,double v,AxisCoordinateUnit u):axisId_(std::move(a)),value_(v),unit_(u){}

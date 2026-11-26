@@ -80,6 +80,7 @@ private:
     explicit StageAxisReferenceState(StageAxisReferenceSpecification);
     bool isAt(double,double)const noexcept;
     bool isMeasuredEvidence(StagePositionEvidence)const noexcept;
+    bool isTrustedStartingEvidence(StagePositionEvidence)const noexcept;
     StageAxisReferenceSnapshot makeSnapshot()const noexcept;
     StageAxisReferenceSpecification specification_;
     StageAxisReferenceStatus status_;

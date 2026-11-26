@@ -46,3 +46,10 @@ StagePosition3D is an immutable Core aggregate of the installed X, Y and Z Stage
 The inverse mapping returns coordinates even outside the selected slide footprint. It reports inside-slide and inside-working-volume independently. Local uncertainty is bounded conservatively by projecting each machine-axis error bound onto the slide basis and adding the stop-point datum uncertainty. Evidence and source are retained per axis.
 
 This remains a Core model. The Application worker must still own incoming device feedback, update this state serially, publish immutable snapshots and coordinate all three axis-reference operations.
+
+
+## Feedback integration contract
+
+The Application layer now has a three-axis feedback reducer for the StagePosition3D aggregate. It accepts only current Core feedback dispositions, applies only X/Y/Z AxisPositionObservation payloads, and invalidates all three machine references when the feedback-loss latch is set. A complete XYZ HomeReferenceEstablished fact is accepted only when its exact device/operation/step/command correlation matches and the Core operation step is Verified.
+
+Physical limit-switch reference is now a distinct StagePositionEvidence value. It can establish the known starting boundary of a later full-stroke traversal and remains distinguishable from encoder, external measurement and calibrated command estimates.

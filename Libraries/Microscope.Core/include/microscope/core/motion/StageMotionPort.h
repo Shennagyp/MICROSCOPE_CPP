@@ -24,7 +24,8 @@ enum class StagePositionEvidence {
     CommandDerivedEstimate,
     ControllerReported,
     EncoderMeasured,
-    ExternalMeasured
+    ExternalMeasured,
+    PhysicalEndstop
 };
 
 enum class AxisPositionObservationError { InvalidUncertainty, InvalidEvidence };

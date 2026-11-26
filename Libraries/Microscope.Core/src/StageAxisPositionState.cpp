@@ -15,14 +15,16 @@ bool knownEvidence(StagePositionEvidence e) noexcept {
     case StagePositionEvidence::CommandDerivedEstimate:
     case StagePositionEvidence::ControllerReported:
     case StagePositionEvidence::EncoderMeasured:
-    case StagePositionEvidence::ExternalMeasured:return true;
+    case StagePositionEvidence::ExternalMeasured:
+    case StagePositionEvidence::PhysicalEndstop:return true;
     }
     return false;
 }
 bool observationEvidence(StagePositionEvidence e) noexcept {
     return e==StagePositionEvidence::ControllerReported||
            e==StagePositionEvidence::EncoderMeasured||
-           e==StagePositionEvidence::ExternalMeasured;
+           e==StagePositionEvidence::ExternalMeasured||
+           e==StagePositionEvidence::PhysicalEndstop;
 }
 bool usableSource(ObservationSource s) noexcept {
     return s==ObservationSource::HardwareReadback||s==ObservationSource::DeviceEvent||

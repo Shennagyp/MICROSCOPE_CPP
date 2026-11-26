@@ -49,6 +49,9 @@ bool StageAxisReferenceState::isAt(double p,double target)const noexcept{return 
 bool StageAxisReferenceState::isMeasuredEvidence(StagePositionEvidence e)const noexcept {
     return e==StagePositionEvidence::EncoderMeasured||e==StagePositionEvidence::ExternalMeasured;
 }
+bool StageAxisReferenceState::isTrustedStartingEvidence(StagePositionEvidence e)const noexcept {
+    return isMeasuredEvidence(e)||e==StagePositionEvidence::PhysicalEndstop;
+}
 StageAxisReferenceSnapshot StageAxisReferenceState::makeSnapshot()const noexcept {
     return {status_,evidence_,referencePosition_,uncertainty_,traversalStartPosition_};
 }
@@ -79,7 +82,7 @@ StageAxisReferenceState::beginFullStrokeTraversal(const AxisPosition& start,Stag
         return Result<StageAxisReferenceSnapshot,StageAxisReferenceError>::failure(StageAxisReferenceError::UnitMismatch);
     if(!std::isfinite(uncertainty)||uncertainty<0||uncertainty>specification_.maximumReferenceUncertainty())
         return Result<StageAxisReferenceSnapshot,StageAxisReferenceError>::failure(StageAxisReferenceError::UncertaintyExceedsPolicy);
-    if(!isMeasuredEvidence(evidence))
+    if(!isTrustedStartingEvidence(evidence))
         return Result<StageAxisReferenceSnapshot,StageAxisReferenceError>::failure(StageAxisReferenceError::StartingEvidenceInsufficient);
     if(!isAt(start.value(),specification_.startingPosition()))
         return Result<StageAxisReferenceSnapshot,StageAxisReferenceError>::failure(StageAxisReferenceError::WrongStartingBoundary);

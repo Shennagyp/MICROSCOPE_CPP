@@ -416,3 +416,10 @@ StagePosition3D now aggregates the three immutable axis position states. It acce
 Tests were added for fixed ten-slide mapping, rotated 3D coordinate transforms, stop-point uncertainty propagation, physical endstop reference, full-stroke software-endstop reference and projection from three measured axis positions. These tests have been registered but were not executed in this environment.
 
 Still outstanding: Application worker integration of three-axis feedback, stage reference-motion execution and correlation, hardware adapter, calibration persistence, stop/fault/timeouts and frontend-neutral live position snapshots.
+
+
+### Stage feedback update — XYZ position reducer
+
+The Application layer now has StagePosition3DFeedbackReducer for serialized worker use. It applies current-session XYZ position observations to the immutable Core aggregate, ignores non-position payloads and unrelated axes, and invalidates all three absolute references on feedback loss. Its verified-home path requires the complete X/Y/Z requested axis set and exact command correlation, and accepts the home fact only after Core marks the associated operation step Verified.
+
+Physical endstop datum evidence is represented separately from encoder and external measurement and from command-derived estimates. The Core and Application tests were registered; they were not executed here. The existing application worker still requires a concrete host composition to invoke the reducer and publish its resulting snapshots.

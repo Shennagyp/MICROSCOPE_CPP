@@ -176,6 +176,24 @@ void mergeSensorCharacteristics(
             "sensor color mode");
     }
 
+    // A positive model capability is enough to establish these two facts
+    // when no richer sensor profile value exists. A known negative capability
+    // is not used to infer Rolling or Color; unknown hardware variants exist.
+    if (!merged.shutterType &&
+        !modelSensor.shutterType &&
+        modelCapabilities.supports(::camera::CameraCapability::GlobalShutter) &&
+        runtimeGlobalShutter != ::camera::CapabilityStatus::Unsupported) {
+        merged.shutterType = ::camera::CameraShutterType::Global;
+        usedModelData = true;
+    }
+    if (!merged.colorMode &&
+        !modelSensor.colorMode &&
+        modelCapabilities.supports(::camera::CameraCapability::MonochromeSensor) &&
+        runtimeMonochrome != ::camera::CapabilityStatus::Unsupported) {
+        merged.colorMode = ::camera::CameraColorMode::Monochrome;
+        usedModelData = true;
+    }
+
     if (!merged.activeSensorDimensions && modelSensor.activeSensorDimensions) {
         merged.activeSensorDimensions = modelSensor.activeSensorDimensions;
         usedModelData = true;

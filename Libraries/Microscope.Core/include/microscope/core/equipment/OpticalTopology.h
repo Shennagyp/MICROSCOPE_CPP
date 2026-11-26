@@ -254,6 +254,7 @@ private:
 };
 
 enum class EquipmentDefinitionError {
+    ZeroRevision,
     EmptyComponentSet,
     DuplicateComponentId,
     DuplicateObjectiveSpecification,
@@ -326,9 +327,11 @@ public:
             std::vector<StageSpecification> stageSpecifications = {},
             std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications = {},
             std::vector<LightPath> lightPaths = {},
-            std::vector<OpticalFilterSpecification> filterSpecifications = {});
+            std::vector<OpticalFilterSpecification> filterSpecifications = {},
+            std::uint64_t revision = 1);
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
+    [[nodiscard]] std::uint64_t revision() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponent>& components() const noexcept;
     [[nodiscard]] const std::vector<OpticalConnection>& connections() const noexcept;
     [[nodiscard]] const std::vector<OpticalPath>& opticalPaths() const noexcept;
@@ -363,9 +366,11 @@ private:
         std::vector<StageSpecification> stageSpecifications,
         std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
         std::vector<LightPath> lightPaths,
-        std::vector<OpticalFilterSpecification> filterSpecifications);
+        std::vector<OpticalFilterSpecification> filterSpecifications,
+        std::uint64_t revision);
 
     MicroscopeId microscopeId_;
+    std::uint64_t revision_;
     std::vector<EquipmentComponent> components_;
     std::vector<OpticalConnection> connections_;
     std::vector<OpticalPath> opticalPaths_;

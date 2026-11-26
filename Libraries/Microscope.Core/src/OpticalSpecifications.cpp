@@ -47,6 +47,19 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool isKnownOpticalRelayRole(OpticalRelayRole role) noexcept {
+    switch (role) {
+    case OpticalRelayRole::TubeLens:
+    case OpticalRelayRole::IntermediateRelay:
+    case OpticalRelayRole::CameraAdapter:
+    case OpticalRelayRole::ReductionAdapter:
+    case OpticalRelayRole::MagnificationChanger:
+    case OpticalRelayRole::Other:
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool isKnownCameraPixelLayout(CameraPixelLayout value) noexcept {
     switch (value) {
     case CameraPixelLayout::Monochrome:
@@ -157,6 +170,60 @@ ObjectiveImmersionMedium ObjectiveSpecification::immersionMedium() const noexcep
 const std::optional<PositiveMicrometers>&
 ObjectiveSpecification::designCoverglassThickness() const noexcept {
     return designCoverglassThickness_;
+}
+
+OpticalRelaySpecification::OpticalRelaySpecification(
+    EquipmentComponentId componentId,
+    OpticalRelayRole role,
+    std::optional<PositiveOpticalMagnificationFactor> magnificationFactor)
+    : componentId_(std::move(componentId)),
+      role_(role),
+      magnificationFactor_(std::move(magnificationFactor)) {}
+
+Result<
+    OpticalRelaySpecification,
+    OpticalRelaySpecificationError> OpticalRelaySpecification::create(
+        EquipmentComponentId componentId,
+        OpticalRelayRole role,
+        std::optional<double> magnificationFactor) {
+    if (!isKnownOpticalRelayRole(role)) {
+        return Result<
+            OpticalRelaySpecification,
+            OpticalRelaySpecificationError>::failure(
+                OpticalRelaySpecificationError::InvalidRole);
+    }
+
+    std::optional<PositiveOpticalMagnificationFactor> typedFactor;
+    if (magnificationFactor) {
+        auto factor = PositiveOpticalMagnificationFactor::create(*magnificationFactor);
+        if (!factor) {
+            return Result<
+                OpticalRelaySpecification,
+                OpticalRelaySpecificationError>::failure(
+                    OpticalRelaySpecificationError::InvalidMagnificationFactor);
+        }
+        typedFactor = std::move(factor).value();
+    }
+
+    return Result<
+        OpticalRelaySpecification,
+        OpticalRelaySpecificationError>::success(
+            OpticalRelaySpecification(
+                std::move(componentId), role, std::move(typedFactor)));
+}
+
+const EquipmentComponentId&
+OpticalRelaySpecification::componentId() const noexcept {
+    return componentId_;
+}
+
+OpticalRelayRole OpticalRelaySpecification::role() const noexcept {
+    return role_;
+}
+
+const std::optional<PositiveOpticalMagnificationFactor>&
+OpticalRelaySpecification::magnificationFactor() const noexcept {
+    return magnificationFactor_;
 }
 
 CondenserSpecification::CondenserSpecification(

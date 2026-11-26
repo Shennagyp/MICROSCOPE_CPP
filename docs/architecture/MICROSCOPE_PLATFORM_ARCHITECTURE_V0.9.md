@@ -139,6 +139,8 @@ The Core runtime performs the imperative orchestration:
 
 The runtime is not a generic workflow platform. It is the execution mechanism for microscope-domain operations.
 
+The installed imaging path may include tube lenses, intermediate relay optics and camera/reduction adapters. These are component-scoped OpticalRelaySpecification values with typed roles and optional positive factors. OpticalMagnificationResolver composes the objective's nominal magnification with factors on the selected Imaging path only; unknown factors stay unknown, and display zoom/software resizing is excluded.
+
 ## 5. Equipment model
 
 ### 5.1 Microscope composition

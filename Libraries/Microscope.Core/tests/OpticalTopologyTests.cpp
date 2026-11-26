@@ -1286,6 +1286,108 @@ void testOperationModeWithoutSelectedLightPathSettingIsUnsupported() {
           "requires the selected LightPath to be configured by the operation mode");
 }
 
+void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
+    const auto microscopeId = makeId<MicroscopeId>("magnification-microscope");
+    const auto objectiveId = makeId<EquipmentComponentId>("magnification-objective-10x");
+    const auto relayId = makeId<EquipmentComponentId>("magnification-camera-reducer");
+    const auto cameraId = makeId<EquipmentComponentId>("magnification-camera");
+
+    const auto objectiveOutput = makeId<OpticalPortId>("magnification-objective-output");
+    const auto relayInput = makeId<OpticalPortId>("magnification-relay-input");
+    const auto relayOutput = makeId<OpticalPortId>("magnification-relay-output");
+    const auto cameraInput = makeId<OpticalPortId>("magnification-camera-input");
+    const auto imagingPathId = makeId<OpticalPathId>("magnification-imaging-path");
+
+    const auto objectiveComponent = take(EquipmentComponent::create(
+        objectiveId,
+        EquipmentComponentKind::OpticalElement,
+        {makePort("magnification-objective-input", OpticalPortDirection::Input),
+         makePort("magnification-objective-output", OpticalPortDirection::Output)}));
+    const auto relayComponent = take(EquipmentComponent::create(
+        relayId,
+        EquipmentComponentKind::OpticalElement,
+        {makePort("magnification-relay-input", OpticalPortDirection::Input),
+         makePort("magnification-relay-output", OpticalPortDirection::Output)}));
+    const auto cameraComponent = take(EquipmentComponent::create(
+        cameraId,
+        EquipmentComponentKind::ImagingDevice,
+        {makePort("magnification-camera-input", OpticalPortDirection::Input)}));
+
+    const auto objective = take(ObjectiveSpecification::create(
+        objectiveId,
+        take(NominalMagnification::create(10.0)),
+        take(NumericalAperture::create(0.25)),
+        micrometers(6000.0),
+        ObjectiveChromaticCorrection::Achromatic,
+        ObjectiveFieldCorrection::Plan,
+        ObjectiveImmersionMedium::Air));
+    const auto reducer = take(OpticalRelaySpecification::create(
+        relayId, OpticalRelayRole::CameraAdapter, 0.5));
+
+    const auto path = take(OpticalPath::create(
+        imagingPathId,
+        {makeStep(objectiveId, std::nullopt, objectiveOutput),
+         makeStep(relayId, relayInput, relayOutput),
+         makeStep(cameraId, cameraInput, std::nullopt)},
+        OpticalPathRole::Imaging));
+    const auto connections = std::vector<OpticalConnection>{
+        makeConnection("magnification-objective-to-relay", objectiveOutput, relayInput),
+        makeConnection("magnification-relay-to-camera", relayOutput, cameraInput)};
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        microscopeId,
+        {objectiveComponent, relayComponent, cameraComponent},
+        connections,
+        {path},
+        {objective},
+        {cameraSpecification(cameraId, "magnification-mono8")},
+        {}, {}, {}, {}, {}, {}, 1, {reducer}));
+
+    const auto resolved = OpticalMagnificationResolver::resolve(
+        equipment, imagingPathId, objectiveId);
+    check(static_cast<bool>(resolved),
+          "resolves effective magnification for an installed objective on an imaging path");
+    if (resolved) {
+        check(resolved.value().objectiveNominalMagnification == 10.0,
+              "keeps objective-rated magnification separate from relay magnification");
+        check(resolved.value().relayContributions.size() == 1 &&
+              resolved.value().relayContributions.front().role == OpticalRelayRole::CameraAdapter &&
+              resolved.value().relayContributions.front().magnificationFactor ==
+                  std::optional<double>(0.5),
+              "records the camera-adapter factor along the selected imaging route");
+        check(resolved.value().totalMagnification == std::optional<double>(5.0),
+              "calculates 10x objective multiplied by 0.5x camera relay as 5x");
+    }
+
+    const auto unknownReducer = take(OpticalRelaySpecification::create(
+        relayId, OpticalRelayRole::CameraAdapter, std::nullopt));
+    const auto unknownEquipment = take(MicroscopeEquipmentDefinition::create(
+        microscopeId,
+        {objectiveComponent, relayComponent, cameraComponent},
+        connections,
+        {path},
+        {objective},
+        {cameraSpecification(cameraId, "magnification-mono8-unknown")},
+        {}, {}, {}, {}, {}, {}, 1, {unknownReducer}));
+    const auto unknownResult = OpticalMagnificationResolver::resolve(
+        unknownEquipment, imagingPathId, objectiveId);
+    check(unknownResult && !unknownResult.value().totalMagnification &&
+          unknownResult.value().relayContributions.size() == 1 &&
+          !unknownResult.value().relayContributions.front().magnificationFactor,
+          "represents an unknown relay factor as unknown rather than assuming 1x");
+
+    const auto invalidFactor = OpticalRelaySpecification::create(
+        relayId, OpticalRelayRole::CameraAdapter, 0.0);
+    check(!invalidFactor &&
+          invalidFactor.error() == OpticalRelaySpecificationError::InvalidMagnificationFactor,
+          "rejects zero optical magnification factors");
+
+    const auto unknownPath = OpticalMagnificationResolver::resolve(
+        equipment, makeId<OpticalPathId>("magnification-path-not-installed"), objectiveId);
+    check(!unknownPath &&
+          unknownPath.error() == OpticalMagnificationResolutionError::OpticalPathNotFound,
+          "refuses to calculate magnification for an uninstalled path");
+}
+
 int main() {
     testStrongEquipmentIdentities();
     testSharedComponentsAndBranching();
@@ -1302,6 +1404,7 @@ int main() {
     testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie();
     testLightPathRequestFactoryDerivesCameraAndAllRouteIds();
     testOperationModeWithoutSelectedLightPathSettingIsUnsupported();
+    testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath();
     testSharedPhysicalConnectionSupportsOppositePathTraversal();
     testDuplicatePhysicalIdentitiesAreRejected();
     testUnknownConnectionPortIsRejected();

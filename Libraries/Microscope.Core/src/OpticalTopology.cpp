@@ -1,6 +1,7 @@
 #include "microscope/core/equipment/OpticalTopology.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <map>
 #include <set>
@@ -494,7 +495,8 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
     std::vector<LightPath> lightPaths,
     std::vector<OpticalFilterSpecification> filterSpecifications,
-    std::uint64_t revision)
+    std::uint64_t revision,
+    std::vector<OpticalRelaySpecification> opticalRelaySpecifications)
     : microscopeId_(std::move(microscopeId)),
       revision_(revision),
       components_(std::move(components)),
@@ -502,6 +504,7 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
       opticalPaths_(std::move(opticalPaths)),
       lightPaths_(std::move(lightPaths)),
       filterSpecifications_(std::move(filterSpecifications)),
+      opticalRelaySpecifications_(std::move(opticalRelaySpecifications)),
       objectiveSpecifications_(std::move(objectiveSpecifications)),
       cameraSpecifications_(std::move(cameraSpecifications)),
       condenserSpecifications_(std::move(condenserSpecifications)),
@@ -524,7 +527,8 @@ Result<
         std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
         std::vector<LightPath> lightPaths,
         std::vector<OpticalFilterSpecification> filterSpecifications,
-        std::uint64_t revision) {
+        std::uint64_t revision,
+        std::vector<OpticalRelaySpecification> opticalRelaySpecifications) {
     if (revision == 0) {
         return Result<
             MicroscopeEquipmentDefinition,
@@ -741,6 +745,35 @@ Result<
                 MicroscopeEquipmentDefinition,
                 EquipmentDefinitionError>::failure(
                     EquipmentDefinitionError::FilterCompatibilityMismatch);
+        }
+    }
+
+    std::set<EquipmentComponentId> relayComponentIds;
+    for (const auto& relay : opticalRelaySpecifications) {
+        if (!relayComponentIds.insert(relay.componentId()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateOpticalRelaySpecification);
+        }
+        const auto component = componentIndex.find(relay.componentId());
+        if (component == componentIndex.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::OpticalRelayReferencesUnknownComponent);
+        }
+        if (component->second->kind() != EquipmentComponentKind::OpticalElement) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::OpticalRelayComponentWrongKind);
+        }
+        if (objectiveComponentIds.find(relay.componentId()) != objectiveComponentIds.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::OpticalRelayConflictsWithObjectiveSpecification);
         }
     }
 
@@ -1011,7 +1044,8 @@ Result<
                 std::move(dualSlideCarrierSpecifications),
                 std::move(lightPaths),
                 std::move(filterSpecifications),
-                revision));
+                revision,
+                std::move(opticalRelaySpecifications)));
 }
 
 const MicroscopeId& MicroscopeEquipmentDefinition::microscopeId() const noexcept {
@@ -1045,6 +1079,11 @@ MicroscopeEquipmentDefinition::lightPaths() const noexcept {
 const std::vector<OpticalFilterSpecification>&
 MicroscopeEquipmentDefinition::filterSpecifications() const noexcept {
     return filterSpecifications_;
+}
+
+const std::vector<OpticalRelaySpecification>&
+MicroscopeEquipmentDefinition::opticalRelaySpecifications() const noexcept {
+    return opticalRelaySpecifications_;
 }
 
 std::vector<EquipmentComponentId>
@@ -1119,6 +1158,113 @@ MicroscopeEquipmentDefinition::stageSpecifications() const noexcept {
 const std::vector<DualSlideCarrierSpecification>&
 MicroscopeEquipmentDefinition::dualSlideCarrierSpecifications() const noexcept {
     return dualSlideCarrierSpecifications_;
+}
+
+Result<
+    EffectiveOpticalMagnification,
+    OpticalMagnificationResolutionError> OpticalMagnificationResolver::resolve(
+        const MicroscopeEquipmentDefinition& equipment,
+        const OpticalPathId& imagingPathId,
+        const EquipmentComponentId& objectiveComponentId) {
+    const OpticalPath* selectedPath = nullptr;
+    for (const auto& path : equipment.opticalPaths()) {
+        if (path.id() == imagingPathId) {
+            selectedPath = &path;
+            break;
+        }
+    }
+    if (selectedPath == nullptr) {
+        return Result<
+            EffectiveOpticalMagnification,
+            OpticalMagnificationResolutionError>::failure(
+                OpticalMagnificationResolutionError::OpticalPathNotFound);
+    }
+    if (selectedPath->role() != OpticalPathRole::Imaging) {
+        return Result<
+            EffectiveOpticalMagnification,
+            OpticalMagnificationResolutionError>::failure(
+                OpticalMagnificationResolutionError::SelectedPathIsNotImaging);
+    }
+
+    const ObjectiveSpecification* selectedObjective = nullptr;
+    for (const auto& objective : equipment.objectiveSpecifications()) {
+        if (objective.componentId() == objectiveComponentId) {
+            selectedObjective = &objective;
+            break;
+        }
+    }
+    if (selectedObjective == nullptr) {
+        return Result<
+            EffectiveOpticalMagnification,
+            OpticalMagnificationResolutionError>::failure(
+                OpticalMagnificationResolutionError::ObjectiveSpecificationNotFound);
+    }
+
+    const auto objectiveIsOnPath = std::any_of(
+        selectedPath->steps().begin(),
+        selectedPath->steps().end(),
+        [&objectiveComponentId](const OpticalPathStep& step) {
+            return step.componentId() == objectiveComponentId;
+        });
+    if (!objectiveIsOnPath) {
+        return Result<
+            EffectiveOpticalMagnification,
+            OpticalMagnificationResolutionError>::failure(
+                OpticalMagnificationResolutionError::ObjectiveNotOnSelectedImagingPath);
+    }
+
+    std::size_t objectiveCountOnPath = 0;
+    for (const auto& objective : equipment.objectiveSpecifications()) {
+        const auto isOnPath = std::any_of(
+            selectedPath->steps().begin(),
+            selectedPath->steps().end(),
+            [&objective](const OpticalPathStep& step) {
+                return step.componentId() == objective.componentId();
+            });
+        if (isOnPath) {
+            ++objectiveCountOnPath;
+        }
+    }
+    if (objectiveCountOnPath != 1) {
+        return Result<
+            EffectiveOpticalMagnification,
+            OpticalMagnificationResolutionError>::failure(
+                OpticalMagnificationResolutionError::MultipleObjectivesOnSelectedImagingPath);
+    }
+
+    EffectiveOpticalMagnification result;
+    result.objectiveNominalMagnification = selectedObjective->nominalMagnification();
+    result.totalMagnification = result.objectiveNominalMagnification;
+
+    for (const auto& step : selectedPath->steps()) {
+        for (const auto& relay : equipment.opticalRelaySpecifications()) {
+            if (relay.componentId() != step.componentId()) {
+                continue;
+            }
+            const std::optional<double> factor = relay.magnificationFactor()
+                ? std::optional<double>(relay.magnificationFactor()->value())
+                : std::nullopt;
+            result.relayContributions.push_back(
+                OpticalRelayMagnificationContribution{
+                    relay.componentId(), relay.role(), factor});
+            if (!factor) {
+                result.totalMagnification = std::nullopt;
+            } else if (result.totalMagnification) {
+                const double updated = *result.totalMagnification * *factor;
+                if (!std::isfinite(updated) || updated <= 0.0) {
+                    return Result<
+                        EffectiveOpticalMagnification,
+                        OpticalMagnificationResolutionError>::failure(
+                            OpticalMagnificationResolutionError::TotalMagnificationOverflow);
+                }
+                result.totalMagnification = updated;
+            }
+        }
+    }
+
+    return Result<
+        EffectiveOpticalMagnification,
+        OpticalMagnificationResolutionError>::success(std::move(result));
 }
 
 } // namespace microscope::core

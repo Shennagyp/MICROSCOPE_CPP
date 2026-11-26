@@ -305,7 +305,11 @@ enum class EquipmentDefinitionError {
     FilterReferencesUnknownComponent,
     FilterComponentWrongKind,
     FilterOpticalFunctionMismatch,
-    FilterCompatibilityMismatch
+    FilterCompatibilityMismatch,
+    DuplicateOpticalRelaySpecification,
+    OpticalRelayReferencesUnknownComponent,
+    OpticalRelayComponentWrongKind,
+    OpticalRelayConflictsWithObjectiveSpecification
 };
 
 // Immutable definition of the equipment physically installed in one
@@ -329,7 +333,8 @@ public:
             std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications = {},
             std::vector<LightPath> lightPaths = {},
             std::vector<OpticalFilterSpecification> filterSpecifications = {},
-            std::uint64_t revision = 1);
+            std::uint64_t revision = 1,
+            std::vector<OpticalRelaySpecification> opticalRelaySpecifications = {});
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] std::uint64_t revision() const noexcept;
@@ -339,6 +344,8 @@ public:
     [[nodiscard]] const std::vector<LightPath>& lightPaths() const noexcept;
     [[nodiscard]] const std::vector<OpticalFilterSpecification>&
     filterSpecifications() const noexcept;
+    [[nodiscard]] const std::vector<OpticalRelaySpecification>&
+    opticalRelaySpecifications() const noexcept;
     [[nodiscard]] std::vector<EquipmentComponentId> cameraEndpointIds(
         const LightPathId& lightPathId) const;
     [[nodiscard]] const std::vector<ObjectiveSpecification>&
@@ -368,7 +375,8 @@ private:
         std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
         std::vector<LightPath> lightPaths,
         std::vector<OpticalFilterSpecification> filterSpecifications,
-        std::uint64_t revision);
+        std::uint64_t revision,
+        std::vector<OpticalRelaySpecification> opticalRelaySpecifications);
 
     MicroscopeId microscopeId_;
     std::uint64_t revision_;
@@ -377,6 +385,7 @@ private:
     std::vector<OpticalPath> opticalPaths_;
     std::vector<LightPath> lightPaths_;
     std::vector<OpticalFilterSpecification> filterSpecifications_;
+    std::vector<OpticalRelaySpecification> opticalRelaySpecifications_;
     std::vector<ObjectiveSpecification> objectiveSpecifications_;
     std::vector<CameraSpecification> cameraSpecifications_;
     std::vector<CondenserSpecification> condenserSpecifications_;
@@ -385,4 +394,38 @@ private:
     std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications_;
 };
 
+
+struct OpticalRelayMagnificationContribution final {
+    EquipmentComponentId componentId;
+    OpticalRelayRole role;
+    std::optional<double> magnificationFactor;
+};
+
+struct EffectiveOpticalMagnification final {
+    double objectiveNominalMagnification = 0.0;
+    std::vector<OpticalRelayMagnificationContribution> relayContributions;
+    // Empty whenever any relay on the selected path has an unknown factor.
+    std::optional<double> totalMagnification;
+};
+
+enum class OpticalMagnificationResolutionError {
+    OpticalPathNotFound,
+    SelectedPathIsNotImaging,
+    ObjectiveSpecificationNotFound,
+    ObjectiveNotOnSelectedImagingPath,
+    MultipleObjectivesOnSelectedImagingPath,
+    TotalMagnificationOverflow
+};
+
+class OpticalMagnificationResolver final {
+public:
+    [[nodiscard]] static Result<
+        EffectiveOpticalMagnification,
+        OpticalMagnificationResolutionError> resolve(
+            const MicroscopeEquipmentDefinition& equipment,
+            const OpticalPathId& imagingPathId,
+            const EquipmentComponentId& objectiveComponentId);
+};
+
 } // namespace microscope::core
+

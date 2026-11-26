@@ -19,6 +19,7 @@ enum class PositiveFiniteValueError {
 namespace detail {
 struct PositiveMicrometersTag final {};
 struct NominalMagnificationTag final {};
+struct OpticalMagnificationFactorTag final {};
 struct NumericalApertureTag final {};
 struct PositiveNanometersTag final {};
 struct PositiveMicrosecondsTag final {};
@@ -66,6 +67,10 @@ private:
 
 using PositiveMicrometers = PositiveFiniteValue<detail::PositiveMicrometersTag>;
 using NominalMagnification = PositiveFiniteValue<detail::NominalMagnificationTag>;
+// A factor relative to the objective's rated magnification. Values below 1.0
+// represent reduction optics; values above 1.0 represent magnifying relays.
+using PositiveOpticalMagnificationFactor =
+    PositiveFiniteValue<detail::OpticalMagnificationFactorTag>;
 using NumericalAperture = PositiveFiniteValue<detail::NumericalApertureTag>;
 using PositiveNanometers = PositiveFiniteValue<detail::PositiveNanometersTag>;
 using PositiveMicroseconds = PositiveFiniteValue<detail::PositiveMicrosecondsTag>;
@@ -190,6 +195,47 @@ private:
     ObjectiveFieldCorrection fieldCorrection_;
     ObjectiveImmersionMedium immersionMedium_;
     std::optional<PositiveMicrometers> designCoverglassThickness_;
+};
+
+enum class OpticalRelayRole {
+    TubeLens,
+    IntermediateRelay,
+    CameraAdapter,
+    ReductionAdapter,
+    MagnificationChanger,
+    Other
+};
+
+enum class OpticalRelaySpecificationError {
+    InvalidRole,
+    InvalidMagnificationFactor
+};
+
+// A physical relay optic contributes a factor along imaging paths that traverse
+// its component. Unknown manufacturer/calibration data stays explicitly unknown.
+class OpticalRelaySpecification final {
+public:
+    [[nodiscard]] static Result<
+        OpticalRelaySpecification,
+        OpticalRelaySpecificationError> create(
+            EquipmentComponentId componentId,
+            OpticalRelayRole role,
+            std::optional<double> magnificationFactor = std::nullopt);
+
+    [[nodiscard]] const EquipmentComponentId& componentId() const noexcept;
+    [[nodiscard]] OpticalRelayRole role() const noexcept;
+    [[nodiscard]] const std::optional<PositiveOpticalMagnificationFactor>&
+    magnificationFactor() const noexcept;
+
+private:
+    OpticalRelaySpecification(
+        EquipmentComponentId componentId,
+        OpticalRelayRole role,
+        std::optional<PositiveOpticalMagnificationFactor> magnificationFactor);
+
+    EquipmentComponentId componentId_;
+    OpticalRelayRole role_;
+    std::optional<PositiveOpticalMagnificationFactor> magnificationFactor_;
 };
 
 // Numeric values are stable persistence identities. Add new values without renumbering.

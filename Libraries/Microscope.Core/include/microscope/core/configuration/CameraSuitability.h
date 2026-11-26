@@ -1,6 +1,7 @@
 #pragma once
 
 #include "microscope/core/diagnostics/Diagnostic.h"
+#include "microscope/core/equipment/IlluminationSpecifications.h"
 #include "microscope/core/equipment/OpticalSpecifications.h"
 
 #include <cstdint>

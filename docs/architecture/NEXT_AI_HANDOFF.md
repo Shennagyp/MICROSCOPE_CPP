@@ -5,8 +5,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
-**Latest CI:** [workflow #45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949) — non-Qt and Qt builds passed on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 24/24 CTest passed per architecture, including the offscreen application composition/dock-state smoke.  
+**Latest reviewed implementation checkpoint:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b`  
+**Latest CI:** [workflow #45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032) — all four non-Qt/Qt jobs passed on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 24/24 Qt CTest passed per architecture.  
 **Phase status:** Phase 3 accepted; Phase 4 source and offscreen composition checks complete, pending visual/physical UI acceptance; Phase 5 complete by owner direction; Phase 6 follows Phase 4. Recheck the live branch tip before each session.
 
 ---
@@ -18,7 +18,7 @@ The project owner explicitly corrected the previous continuation attempt:
 - Qt is optional as a dependency, not a removed deliverable. Original Phase 3 (Qt streaming) and Phase 4 (reusable Qt UI) remain in scope.
 - Phase 3 is accepted; Phase 4 is the current critical-path phase and remains open for visual/workspace and physical MU503 UI verification.
 - Phase 5 GenTL/GenApi implementation is complete by owner direction; do not restart it.
-- Phase 6 capability/feature/command/model coverage follows Phase 4. Two preliminary AmScope corrections and an initial audit are already recorded.
+- Phase 6 capability/feature/command/model coverage follows Phase 4. Three preliminary AmScope corrections and an initial audit are already recorded.
 - The AmScope preview application exists in Camera/Amscope/app/main.cpp; do not treat it as obsolete or exclude it from the project.
 - The retired AMSCOPE_DRIVER project/repository is not a current dependency or source of truth. Do not inspect, revive, clone, build against, or modify it.
 
@@ -34,7 +34,7 @@ If older documents conflict with this owner direction or the current status ledg
 | 3 — Qt streaming separation | **Accepted by owner** | Preserve the one-session adapter and backend-neutral frame-stream boundary. |
 | 4 — Reusable Qt UI | **IN PROGRESS** | FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel exist; the AmScope preview uses the feature editor, telemetry strip and model capability panel. CI passes 24/24 tests per architecture, including the application-level offscreen composition/dock-state smoke. Only visual/workspace and physical MU503 UI acceptance remain. |
 | 5 — GenTL/GenApi integration | **Complete by owner direction** | Do not restart, duplicate, or replace the integration. External device qualification is separate Phase 8 evidence. |
-| 6 — Capability, feature, command and model coverage | **OPEN; preliminary work exists** | Two AmScope corrections and the initial audit are recorded. Continue after Phase 4 acceptance from CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md. |
+| 6 — Capability, feature, command and model coverage | **OPEN; preliminary work exists** | Three AmScope corrections and the initial audit are recorded. Continue after Phase 4 acceptance from CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md. |
 | 7 — Packaging and external consumers | Open | Do not jump ahead of Phase 6. |
 | 8 — Hardware qualification and release | Open | Preserve as a separate evidence/release milestone. |
 

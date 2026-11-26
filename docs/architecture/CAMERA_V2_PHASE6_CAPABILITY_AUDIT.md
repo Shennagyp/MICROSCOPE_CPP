@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Reviewed provider checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b`  
+**Reviewed provider checkpoint:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b`  
 **Current Qt/UI checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
 **Review date:** 26 November 2026  
 **Status:** Preliminary Phase 6 source-to-test audit complete; Phase 6 remains open and follows Phase 4 in the governing sequence.
@@ -33,7 +33,7 @@ verification and owner acceptance are separate evidence categories.
 
 ## 2. Executive result
 
-Two concrete AmScope gaps were corrected:
+Three concrete AmScope gaps were corrected:
 1. A failed RAW pixel-format enumeration call could be misreported as an
    unsupported feature rather than an SDK/backend failure.
 2. The RAW significant-bit-depth selector could bypass the model's
@@ -65,7 +65,7 @@ presentation are now implemented.
 | GenTL GenApi features | Boolean, Integer, Float, String and Enumeration nodes; Root-category traversal; dynamic availability/access modes; units/ranges/enumeration symbols; validated writes with GenApi verification | XML-backed tests cover all five scalar kinds, nested categories, internal-register exclusion, dynamic availability, read-only access and readback | Positive-path coverage is meaningful |
 | GenTL GenApi commands | `ICommand` discovery, issue and `IsDone` polling through common command contract | XML-backed tests cover root/nested commands, internal command-register rejection, issue and incomplete→complete transition; read-only command rejection | Positive-path coverage is meaningful; malformed/failure cases remain |
 | Cross-backend discovery semantics | AmScope discovery exposes common `CameraDeviceInfo`; GenTL discovery exposes `DeviceDescriptor`; GenApi features/commands use common access contracts | No shared provider/discovery abstraction or explicit GenTL→Common projection appears in the current public headers | **API alignment decision required**, not permission to restart Phase 5 |
-| Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor, ImageInfoBar and CameraCapabilityPanel are integrated into the preview; CameraCommandPanel represents no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned | Workflow [#45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949) built the preview and passed 24/24 Qt CTest tests on both architectures, including the offscreen composition/dock-state smoke | Phase 4 remains open for human visual inspection and physical MU503 UI smoke. The offscreen composition test is not hardware qualification. Widget presence is not evidence of provider hardware capability |
+| Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor, ImageInfoBar and CameraCapabilityPanel are integrated into the preview; CameraCommandPanel represents no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned | Workflow [#45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032) built the preview and passed 24/24 Qt CTest tests on both architectures, including the offscreen composition/dock-state smoke | Phase 4 remains open for human visual inspection and physical MU503 UI smoke. The offscreen composition test is not hardware qualification. Widget presence is not evidence of provider hardware capability |
 
 ### 3.1 AmScope feature inventory accounting
 
@@ -144,6 +144,31 @@ Files:
 
 CI: [#45742968336](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742968336)
 passed Intel x86_64 and Apple Silicon arm64.
+
+### 4.3 RAW bit-depth profile-denial explanation
+
+**Commit:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b`
+
+The RAW bit-depth descriptor already applied the `PixelFormatSelection`
+profile allow-list to availability and writability. However, when the model
+profile denied selection, the descriptor could have no `disabledReason`,
+leaving the UI unable to explain why the control was unavailable.
+
+The descriptor factory now supplies the explicit reason:
+"Pixel-format selection is blocked by the active camera feature profile."
+A regression assertion constructs the profile-denied descriptor without
+supplying a reason and verifies the exact resulting text. Hardware read
+capability remains separately represented; profile policy does not rewrite
+the underlying SDK probe result.
+
+Files:
+- `Camera/Amscope/src/AmcamFeatureAccessValidation.h`
+- `Camera/Amscope/tests/AmcamFeatureAccessValidationTests.cpp`
+
+CI: [#45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032)
+passed all four non-Qt/Qt jobs on Intel x86_64 and Apple Silicon arm64. The
+AmScope feature-validation test passed on both architectures; the Qt suite
+passed 24/24 tests on each architecture.
 
 ## 5. Prioritized remaining gaps
 

@@ -2,8 +2,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2` — offscreen application-composition smoke added for the existing AmScope preview.  
-**Latest CI-validated checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2` — workflow [#45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949) passed non-Qt and Qt builds/tests on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 24/24 Qt CTest tests passed on each architecture, including the application composition/dock-state smoke.  
+**Latest reviewed implementation checkpoint:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b` — AmScope RAW bit-depth descriptor now supplies an explicit disabled reason when the active model profile blocks pixel-format selection.  
+**Latest CI-validated checkpoint:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b` — workflow [#45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032) passed non-Qt and Qt builds/tests on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 24/24 Qt CTest tests passed on each architecture.  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source implementation and offscreen composition checks are complete, pending visual and physical UI acceptance; Phase 5 GenTL/GenApi implementation is owner-confirmed complete; Phase 6 follows Phase 4.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
@@ -95,7 +95,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 7 | Release packaging and external-consumer integration | **Open.** Initial install rules exist and native public headers install/compile. An exported CMake package/config/version flow and clean native/GenTL external consumers remain. Qt consumers must be included as an optional exported target, not excluded. |
 | 8 | Final hardware qualification and release | **Not started/accepted.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer tests, release CI and owner acceptance. |
 
-Active continuation order: 0 → 1 → 2 → 3 → **4 (current phase)** → 5 → 6 → 7 → 8. Phase 3 is accepted; Phase 4's reusable UI components are implemented and cross-architecture CI-verified, but application visual/workspace and current-revision physical MU503 UI smoke checks remain. Phase 5 is complete by owner direction. Phase 6 has two preliminary AmScope corrections but follows Phase 4 acceptance in the governing sequence. Vendor CTI/device qualification remains separate hardware/release evidence; do not restart Phase 5.
+Active continuation order: 0 → 1 → 2 → 3 → **4 (current phase)** → 5 → 6 → 7 → 8. Phase 3 is accepted; Phase 4's reusable UI components are implemented and cross-architecture CI-verified, but application visual/workspace and current-revision physical MU503 UI smoke checks remain. Phase 5 is complete by owner direction. Phase 6 has three preliminary AmScope corrections but follows Phase 4 acceptance in the governing sequence. Vendor CTI/device qualification remains separate hardware/release evidence; do not restart Phase 5.
 
 ## 5. Changes made on camera-v.2.0
 
@@ -138,15 +138,16 @@ Active continuation order: 0 → 1 → 2 → 3 → **4 (current phase)** → 5 �
 | `28a9710`, `9c3362e` | Report discovery selection safely | Adds a selection-changed callback and resets selection on a new discovery snapshot; opaque enumeration IDs are not persisted as stable camera identity. |
 | `587ee5e` | Add preview composition smoke | Adds `--self-test-ui` to the existing preview executable; verifies document/dock composition, status bar, Output pane, tri-state capability table and dock save/restore without discovery or user settings. |
 | `37a9b54` | Verify nested widget ownership | Uses QWidget ancestry checks for nested dock contents; the offscreen smoke passes in cross-architecture CI. |
+| `a4fc39b` | Explain RAW bit-depth profile denial | The descriptor factory now supplies an actionable disabled reason when model policy blocks the feature; a regression test checks the exact reason. |
 
-### Current Qt and non-Qt CI — checkpoint 37a9b54
+### Current Qt and non-Qt CI — checkpoint a4fc39b
 
-Workflow [#45749181949](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45749181949)
-passed at exact checkpoint 37a9b544dd30aac2acd6aac349c399d2617477c2:
+Workflow [#45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032)
+passed at exact checkpoint a4fc39b3d876ba301a2f1c8a916216c94186cd3b:
 
 - Non-Qt Intel x86_64 and Apple Silicon arm64 builds, CTest, install-surface checks, public-header syntax checks and architecture checks passed.
 - Qt Intel x86_64 and Apple Silicon arm64 builds compiled the Qt adapter, reusable widgets, amscope_preview and the hardware-rate test executable.
-- 24/24 CTest tests passed on each Qt architecture, including the application-level `amscope_preview_ui_composition_tests` which verifies dock/document composition, status-bar widgets, the model capability table and dock-state save/restore.
+- 24/24 CTest tests passed on each Qt architecture, including `amscope_feature_access_validation_tests` and the application-level `amscope_preview_ui_composition_tests` which verifies dock/document composition, status-bar widgets, the model capability table and dock-state save/restore.
 - Artifact and architecture checks passed for the driver, Qt adapter, vendor SDK, preview application and hardware-rate test executable.
 
 The offscreen test suppresses discovery and user QSettings; it does not perform human visual inspection, exercise dock persistence interactively, or verify a physical camera.
@@ -191,22 +192,28 @@ The preliminary source-to-test audit is recorded in
 It covers Common contracts, AmScope discovery/features/commands/model policy,
 and GenTL/GenApi discovery/features/commands. The audit is not a Phase 6
 completion claim. Phase 6 follows original Phase 4 in the governing sequence;
-the two AmScope fixes below were useful preparatory corrections, not grounds
+the three AmScope corrections below were useful preparatory fixes, not grounds
 to skip the outstanding Qt UI acceptance gate.
 
-The first two confirmed AmScope gaps were corrected:
+The first three confirmed AmScope gaps were corrected:
 - `a1be35d`: preserve `E_NOTIMPL` as model-level unavailability and map
   other failed `Amcam_get_PixelFormatSupport` calls to `BackendFailure`
   with the native HRESULT. Add deterministic classification tests.
 - `b8148ee`: gate `RawOutputBitDepth` with the existing
   `PixelFormatSelection` model-profile policy because both settings mutate
   `AMCAM_OPTION_PIXEL_FORMAT`.
+- `a4fc39b`: provide an explicit descriptor `disabledReason` when that profile
+  policy blocks RAW bit-depth selection; the regression test verifies the
+  exact user-facing reason rather than accepting an empty tooltip.
 
 CI evidence:
 - [#45742832263](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742832263)
   passed Intel x86_64 and Apple Silicon arm64 for `a1be35d`.
 - [#45742968336](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742968336)
   passed Intel x86_64 and Apple Silicon arm64 for `b8148ee`.
+- [#45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032)
+  passed all four non-Qt/Qt jobs on Intel x86_64 and Apple Silicon arm64 for
+  `a4fc39b`; the feature-validation test passed on both architectures.
 
 No local build/test/debug run or new physical-camera test was performed.
 Phase 6 remains open. The next bounded task is to establish deterministic

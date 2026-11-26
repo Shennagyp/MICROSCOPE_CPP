@@ -699,12 +699,12 @@ public:
             outputDock_->objectName() != QStringLiteral("outputDock")) {
             return fail(QStringLiteral("Expected dock widgets or stable dock identities are missing."));
         }
-        if (cameraControlsDock_->findChild<camera::qtwidgets::CameraControlPanel*>() !=
-                cameraControls_ ||
-            cameraPropertiesDock_->findChild<camera::qtwidgets::CameraCapabilityPanel*>() !=
-                capabilityPanel_ ||
-            !capabilityGroup_ || capabilityGroup_->title() !=
-                QStringLiteral("Model capabilities")) {
+        if (!cameraControls_ || !cameraControlsDock_->widget() ||
+            cameraControls_->parentWidget() != cameraControlsDock_->widget() ||
+            !capabilityPanel_ || !capabilityGroup_ ||
+            capabilityGroup_->parentWidget() != cameraPropertiesDock_->widget() ||
+            capabilityPanel_->parentWidget() != capabilityGroup_ ||
+            capabilityGroup_->title() != QStringLiteral("Model capabilities")) {
             return fail(QStringLiteral("Reusable discovery or capability presentation is not composed into the expected dock."));
         }
         if (!outputLog_ || outputDock_->widget() != outputLog_ ||

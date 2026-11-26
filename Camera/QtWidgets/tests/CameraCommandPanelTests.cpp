@@ -128,10 +128,10 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    panel.setExecutionState(
+    const bool failureStateUpdated = panel.setExecutionState(
         "RunCalibration", CameraCommandExecutionState::Failed,
         "Device rejected command");
-    if (!runButton->isEnabled() ||
+    if (!failureStateUpdated || !runButton->isEnabled() ||
         commandStateText(panel, "Run calibration") !=
             QStringLiteral("Device rejected command")) {
         fail("Command failure state/message was not represented.");

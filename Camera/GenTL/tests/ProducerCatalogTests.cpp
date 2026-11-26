@@ -61,11 +61,15 @@ int main(int argc, char** argv) {
             argv[1], nestedDirectory / "nested.cti");
 
         EnvironmentRestore restore("GENICAM_GENTL64_PATH");
+        if (setenv("GENICAM_GENTL64_PATH", "", 1) != 0) return 2;
+        if (!camera::gentl::ProducerCatalog::discoverProducerPaths().empty())
+            return 3;
+
         const auto searchPath =
-            firstDirectory.string() + ":" + secondDirectory.string() + ":" +
-            firstDirectory.string() + ":" + (root / "missing").string();
+            (root / "missing").string() + ":" + firstDirectory.string() + ":" +
+            secondDirectory.string() + ":" + firstDirectory.string();
         if (setenv("GENICAM_GENTL64_PATH", searchPath.c_str(), 1) != 0)
-            return 2;
+            return 4;
 
         const auto paths =
             camera::gentl::ProducerCatalog::discoverProducerPaths();
@@ -74,28 +78,28 @@ int main(int argc, char** argv) {
             std::filesystem::canonical(secondCti) != paths[2]) {
             // The first directory is lexically sorted: broken.cti precedes
             // first.cti. The second directory contributes second.CTI.
-            return 3;
+            return 5;
         }
 
         const auto report =
             camera::gentl::ProducerCatalog::discoverDevices(5000);
-        if (report.producerPaths != paths) return 4;
+        if (report.producerPaths != paths) return 6;
         if (report.failures.size() != 1 ||
             report.failures.front().producerPath !=
-                std::filesystem::canonical(brokenCti)) return 5;
-        if (report.devices.size() != 4) return 6;
+                std::filesystem::canonical(brokenCti)) return 7;
+        if (report.devices.size() != 4) return 8;
 
         std::set<std::string> discoveredProducers;
         for (const auto& device : report.devices) {
             if (device.producerPath.empty() ||
                 device.interfaceId.empty() ||
-                device.deviceId.empty()) return 7;
+                device.deviceId.empty()) return 9;
             discoveredProducers.insert(device.producerPath);
         }
         if (discoveredProducers.size() != 2 ||
             discoveredProducers.count(std::filesystem::canonical(firstCti).string()) == 0 ||
             discoveredProducers.count(std::filesystem::canonical(secondCti).string()) == 0) {
-            return 8;
+            return 10;
         }
     } catch (...) {
         std::filesystem::remove_all(root);

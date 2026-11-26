@@ -220,10 +220,15 @@ public:
 
         const auto* xBudget = errorBudget.contributionFor(surface.xAxisId());
         const auto* yBudget = errorBudget.contributionFor(surface.yAxisId());
+        const bool boundedMode =
+            verificationPolicy.mode() ==
+            StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate;
         if (errorBudget.contributions().size() != 2 ||
             xBudget == nullptr || yBudget == nullptr ||
             xBudget->unit() != surface.xAxisUnit() ||
-            yBudget->unit() != surface.yAxisUnit()) {
+            yBudget->unit() != surface.yAxisUnit() ||
+            (boundedMode &&
+                (!xBudget->conservativeBound() || !yBudget->conservativeBound()))) {
             return creationFailure(StageWorkingSurfaceNavigationRuntimeErrorCode::ErrorBudgetMismatch);
         }
 
@@ -285,6 +290,12 @@ public:
             position_ = position_.invalidateMachineReference();
             feedbackLossObserved_ = true;
             return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::FeedbackLossUnresolved);
+        }
+        // Validate identities before creating persistent operation state. A
+        // rejected identity set must not leave a Running operation or Pending step.
+        if (identities.initialStepId == identities.restoredMoveStepId ||
+            identities.initialCommandId == identities.restoredMoveCommandId) {
+            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected);
         }
 
         auto plan = core::StageWorkingSurfaceNavigationPlanner::planToSlidePoint(

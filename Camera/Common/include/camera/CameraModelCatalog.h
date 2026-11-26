@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
+#include <cstddef>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace camera {
@@ -106,10 +108,16 @@ public:
             std::move(key), capabilities, std::move(sensorCharacteristics));
     }
 
-    [[nodiscard]] const CameraModelKey& key() const noexcept;
-    [[nodiscard]] const CameraCapabilities& capabilities() const noexcept;
+    [[nodiscard]] const CameraModelKey& key() const noexcept {
+        return key_;
+    }
+    [[nodiscard]] const CameraCapabilities& capabilities() const noexcept {
+        return capabilities_;
+    }
     [[nodiscard]] const CameraSensorCharacteristics&
-    sensorCharacteristics() const noexcept;
+    sensorCharacteristics() const noexcept {
+        return sensorCharacteristics_;
+    }
 
 private:
     CameraModelProfile(

@@ -163,14 +163,10 @@ void assessMinimum(
     }
 }
 
-[[nodiscard]] bool differentKnownValue(
+[[nodiscard]] bool hasDifferentKnownValue(
     const std::optional<double>& left,
-    const std::optional<double>& right,
-    bool higherIsBetter) noexcept {
-    if (!left || !right || *left == *right) {
-        return false;
-    }
-    return higherIsBetter ? *left > *right : *left < *right;
+    const std::optional<double>& right) noexcept {
+    return left && right && *left != *right;
 }
 
 } // namespace
@@ -286,37 +282,32 @@ bool CameraSuitabilityAssessor::shouldRecommendBefore(
         return left.unknownPreferenceData < right.unknownPreferenceData;
     }
 
-    if (differentKnownValue(
+    if (hasDifferentKnownValue(
             left.meanQuantumEfficiencyInEmissionBand,
-            right.meanQuantumEfficiencyInEmissionBand,
-            true)) {
+            right.meanQuantumEfficiencyInEmissionBand)) {
         return *left.meanQuantumEfficiencyInEmissionBand >
                *right.meanQuantumEfficiencyInEmissionBand;
     }
-    if (differentKnownValue(
+    if (hasDifferentKnownValue(
             left.readNoiseElectronsRms,
-            right.readNoiseElectronsRms,
-            false)) {
+            right.readNoiseElectronsRms)) {
         return *left.readNoiseElectronsRms < *right.readNoiseElectronsRms;
     }
-    if (differentKnownValue(
+    if (hasDifferentKnownValue(
             left.darkCurrentElectronsPerPixelPerSecond,
-            right.darkCurrentElectronsPerPixelPerSecond,
-            false)) {
+            right.darkCurrentElectronsPerPixelPerSecond)) {
         return *left.darkCurrentElectronsPerPixelPerSecond <
                *right.darkCurrentElectronsPerPixelPerSecond;
     }
-    if (differentKnownValue(
+    if (hasDifferentKnownValue(
             left.fullWellCapacityElectrons,
-            right.fullWellCapacityElectrons,
-            true)) {
+            right.fullWellCapacityElectrons)) {
         return *left.fullWellCapacityElectrons >
                *right.fullWellCapacityElectrons;
     }
-    if (differentKnownValue(
+    if (hasDifferentKnownValue(
             left.maximumFrameRateFramesPerSecond,
-            right.maximumFrameRateFramesPerSecond,
-            true)) {
+            right.maximumFrameRateFramesPerSecond)) {
         return *left.maximumFrameRateFramesPerSecond >
                *right.maximumFrameRateFramesPerSecond;
     }

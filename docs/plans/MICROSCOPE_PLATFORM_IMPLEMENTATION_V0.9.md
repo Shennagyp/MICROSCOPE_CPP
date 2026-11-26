@@ -388,7 +388,7 @@ Core geometry, the full-range reference state transition, position projection an
 
 ### Stage feedback update — XYZ position reducer
 
-The Application layer now has StagePosition3DFeedbackReducer for serialized worker use. It applies current-session XYZ position observations to the immutable Core aggregate, ignores non-position payloads and unrelated axes, and invalidates all three absolute references on feedback loss. Its verified-home path requires the complete X/Y/Z requested axis set and exact command correlation, and accepts the home fact only after Core marks the associated operation step Verified.
+The Application layer now has StagePosition3DFeedbackReducer for serialized worker use. It applies current-session XYZ position observations to the immutable Core aggregate, ignores non-position payloads and unrelated axes, and invalidates all three absolute references on true whole-device feedback loss. Its verified-home path accepts exactly the non-empty requested subset of the stage's X/Y/Z axes, validates exact axis-set equality and command correlation, and applies the home fact only after Core marks the associated operation step Verified. Slide-plane navigation therefore references X/Y only; focus Z retains an independent reference lifecycle.
 
 Physical endstop datum evidence is represented separately from encoder and external measurement and from command-derived estimates. The Core and Application tests were registered; they were not executed here. The existing application worker still requires a concrete host composition to invoke the reducer and publish its resulting snapshots.
 

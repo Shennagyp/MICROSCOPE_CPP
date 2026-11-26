@@ -1,4 +1,5 @@
 #include "camera/CameraModels.h"
+#include "camera/CameraModelCatalog.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -62,6 +63,77 @@ void testCapabilityKnowledge() {
     require(capabilities.status(CameraCapability::Count) ==
                 CapabilityStatus::Unknown,
             "sentinel is rejected without indexing beyond the bitset");
+}
+
+void testPersistableCameraModelCatalog() {
+    using namespace camera;
+
+    CameraCapabilities capabilities;
+    capabilities.set(CameraCapability::GlobalShutter, true);
+    capabilities.set(CameraCapability::MonochromeSensor, true);
+
+    CameraSensorCharacteristics sensor;
+    sensor.technology = CameraSensorTechnology::ScientificCMOS;
+    sensor.shutterType = CameraShutterType::Global;
+    sensor.colorMode = CameraColorMode::Monochrome;
+    sensor.pixelPitchXMicrometers = 6.5;
+    sensor.pixelPitchYMicrometers = 6.5;
+    sensor.readNoiseElectronsRms = 1.1;
+    sensor.darkCurrentElectronsPerPixelPerSecond = 0.02;
+    sensor.fullWellCapacityElectrons = 30000.0;
+    sensor.quantumEfficiency = {
+        {450.0, 0.82}, {550.0, 0.91}, {650.0, 0.74}};
+    sensor.provenance = CameraSpecificationProvenance::ManufacturerDatasheet;
+
+    auto profile = CameraModelProfile::create(
+        CameraModelKey{"Example Imaging", "SCMOS-2048", "rev-B"},
+        capabilities,
+        sensor);
+    require(profile.has_value(),
+            "creates a persistable camera model profile from stable manufacturer/model/variant identity");
+
+    auto catalog = CameraModelCatalog::create({*profile});
+    require(catalog.has_value(),
+            "creates a typed model catalog with unique model identities");
+
+    CameraIdentity identity;
+    identity.manufacturer = " example imaging ";
+    identity.model = "SCMOS-2048";
+    identity.modelVariant = "REV-b";
+    identity.serialNumber = "unit-serial-123";
+
+    const auto* match = catalog->findExact(identity);
+    require(match != nullptr,
+            "matches exact model identity independently of case, surrounding whitespace and camera serial number");
+    require(match && match->capabilities().supports(CameraCapability::GlobalShutter),
+            "catalog exposes model-level capabilities for resolver ranking");
+    require(match && match->sensorCharacteristics().quantumEfficiency.size() == 3,
+            "catalog retains wavelength-dependent fluorescence sensor QE data");
+
+    identity.modelVariant = "rev-C";
+    require(catalog->findExact(identity) == nullptr,
+            "does not apply a profile for a different hardware variant");
+    identity.modelVariant.reset();
+    require(catalog->findExact(identity) == nullptr,
+            "does not guess a variant when the connected model does not identify it");
+
+    CameraIdentity incompleteIdentity;
+    incompleteIdentity.model = "SCMOS-2048";
+    require(catalog->findExact(incompleteIdentity) == nullptr,
+            "does not infer manufacturer identity when discovery omitted it");
+
+    auto duplicateCatalog = CameraModelCatalog::create({*profile, *profile});
+    require(!duplicateCatalog,
+            "rejects duplicate stable model keys rather than using last-wins behavior");
+
+    CameraSensorCharacteristics invalidSensor;
+    invalidSensor.quantumEfficiency = {{550.0, 1.2}};
+    auto invalidProfile = CameraModelProfile::create(
+        CameraModelKey{"Example Imaging", "Invalid QE", std::nullopt},
+        capabilities,
+        invalidSensor);
+    require(!invalidProfile,
+            "rejects QE values outside the physical zero-to-one fraction");
 }
 
 void testBackendNeutralDiscoveryModel() {
@@ -129,6 +201,7 @@ void testBackendNeutralDiscoveryModel() {
 
 int main() {
     testCapabilityKnowledge();
+    testPersistableCameraModelCatalog();
     testBackendNeutralDiscoveryModel();
     std::cout << "All common camera model tests passed.\n";
     return EXIT_SUCCESS;

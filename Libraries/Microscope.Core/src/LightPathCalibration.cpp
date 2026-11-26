@@ -202,6 +202,8 @@ std::optional<double> LightPathCalibration::driveSettingForTargetIrradiance(
 }
 
 LightPathModeSetting::LightPathModeSetting(
+    MicroscopeId microscopeId,
+    std::uint64_t equipmentDefinitionRevision,
     OperationModeId operationModeId,
     std::uint64_t operationModeRevision,
     LightPathId lightPathId,
@@ -210,7 +212,9 @@ LightPathModeSetting::LightPathModeSetting(
     IlluminationChannelId illuminationChannelId,
     std::vector<EquipmentComponentId> configuredOpticalComponentIds,
     double targetIrradianceMicrowattsPerSquareMillimeter)
-    : operationModeId_(std::move(operationModeId)),
+    : microscopeId_(std::move(microscopeId)),
+      equipmentDefinitionRevision_(equipmentDefinitionRevision),
+      operationModeId_(std::move(operationModeId)),
       operationModeRevision_(operationModeRevision),
       lightPathId_(std::move(lightPathId)),
       calibrationRevisionId_(std::move(calibrationRevisionId)),
@@ -222,6 +226,8 @@ LightPathModeSetting::LightPathModeSetting(
 
 Result<LightPathModeSetting, LightPathModeSettingError>
 LightPathModeSetting::create(
+    MicroscopeId microscopeId,
+    std::uint64_t equipmentDefinitionRevision,
     OperationModeId operationModeId,
     std::uint64_t operationModeRevision,
     LightPathId lightPathId,
@@ -230,6 +236,10 @@ LightPathModeSetting::create(
     IlluminationChannelId illuminationChannelId,
     std::vector<EquipmentComponentId> configuredOpticalComponentIds,
     double targetIrradianceMicrowattsPerSquareMillimeter) {
+    if (equipmentDefinitionRevision == 0) {
+        return Result<LightPathModeSetting, LightPathModeSettingError>::failure(
+            LightPathModeSettingError::ZeroEquipmentRevision);
+    }
     if (operationModeRevision == 0) {
         return Result<LightPathModeSetting, LightPathModeSettingError>::failure(
             LightPathModeSettingError::ZeroOperationModeRevision);
@@ -246,6 +256,8 @@ LightPathModeSetting::create(
 
     return Result<LightPathModeSetting, LightPathModeSettingError>::success(
         LightPathModeSetting(
+            std::move(microscopeId),
+            equipmentDefinitionRevision,
             std::move(operationModeId),
             operationModeRevision,
             std::move(lightPathId),
@@ -254,6 +266,14 @@ LightPathModeSetting::create(
             std::move(illuminationChannelId),
             std::move(configuredOpticalComponentIds),
             targetIrradianceMicrowattsPerSquareMillimeter));
+}
+
+const MicroscopeId& LightPathModeSetting::microscopeId() const noexcept {
+    return microscopeId_;
+}
+
+std::uint64_t LightPathModeSetting::equipmentDefinitionRevision() const noexcept {
+    return equipmentDefinitionRevision_;
 }
 
 const OperationModeId& LightPathModeSetting::operationModeId() const noexcept {
@@ -296,6 +316,8 @@ double LightPathModeSetting::targetIrradianceMicrowattsPerSquareMillimeter()
 std::optional<double> LightPathModeSetting::resolveDriveSetting(
     const LightPathCalibration& calibration) const noexcept {
     if (calibration.revisionId() != calibrationRevisionId_ ||
+        calibration.microscopeId() != microscopeId_ ||
+        calibration.equipmentDefinitionRevision() != equipmentDefinitionRevision_ ||
         calibration.operationModeId() != operationModeId_ ||
         calibration.operationModeRevision() != operationModeRevision_ ||
         calibration.lightPathId() != lightPathId_ ||

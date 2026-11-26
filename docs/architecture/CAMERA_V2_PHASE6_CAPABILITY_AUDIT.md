@@ -223,8 +223,10 @@ supported or hardware-qualified.
    AmScope provider source, tests, public contracts or runtime behavior.
 3. On 26 November 2026 the owner explicitly authorized Phase 7 package and
    external-consumer work. This is a sequencing decision only; it does not
-   waive or complete Phase 6. Continue on the package workstream documented
-   in [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
+   waive or complete Phase 6. Package software CI passed both architectures
+   in workflow #45778844769 (28/28 tests per architecture, relocated
+   consumers and runtime/architecture checks). Continue on the remaining
+   installed-hardware acceptance documented in [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
 4. Keep Phase 4 visual/workspace acceptance pending and physical MU503 UI
    testing postponed. Neither blocks the authorized Phase 7 software work.
 5. The official GenApi 3.5.1 negative/failure coverage is CI-verified at

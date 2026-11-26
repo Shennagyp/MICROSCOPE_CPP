@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `75768c18ab77edad49373823b83e7d74797ab0db` — AmScope vendor runtime bundling is an explicit opt-in, default OFF for the reusable package; the installed config exposes whether it was included. **Latest package CI definition:** `bdd39bd218e1f10a80266c7ea677d4f416f15aba` — tests explicit runtime inclusion for ephemeral CI and the default-off install contract. **Baseline package CI:** [workflow #45777949772](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45777949772) passed on Intel x86_64 and Apple Silicon arm64: 28/28 CTest tests per architecture, install/relocation, Common/GenTL/GenApi/AmScope/Qt consumer configure/build/run, runtime-link inspection and installed-artifact architecture checks. The vendor-runtime gate revision is pending.  
+**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `75768c18ab77edad49373823b83e7d74797ab0db` — AmScope vendor runtime bundling is an explicit opt-in, default OFF for the reusable package; the installed config exposes whether it was included. **Latest package CI definition:** `bdd39bd218e1f10a80266c7ea677d4f416f15aba` — tests explicit runtime inclusion for ephemeral CI and the default-off install contract. **Package CI:** [workflow #45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) passed on Intel x86_64 and Apple Silicon arm64: 28/28 CTest tests per architecture, install/relocation, Common/GenTL/GenApi/AmScope/Qt consumer configure/build/run, runtime-link inspection and installed-artifact architecture checks. The default-off vendor-runtime install contract also passed on Apple Silicon.  
 **Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64 (10/10 bridge tests and 11/11 official GenApi tests per architecture).  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 remains open but blocked at the frozen AmScope provider-test boundary; Phase 7 is active by explicit owner authorization on 26 November 2026.  
@@ -330,10 +330,11 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 2. The owner explicitly authorized Phase 7 on 26 November 2026. Continue
    package/export work on `camera-v.2.0`; do not wait for the frozen Phase 6
    tests and do not mark Phase 6 complete.
-3. Phase 7 software acceptance requires the dedicated package workflow to
-   pass on Intel x86_64 and Apple Silicon arm64: package build/tests, install,
-   relocation, component-aware `find_package`, clean external consumers,
-   non-Qt dependency isolation and installed runtime-loading checks.
+3. Phase 7 software/package acceptance is CI-verified by workflow
+   #45778844769 on Intel x86_64 and Apple Silicon arm64: package build/tests,
+   install, relocation, component-aware `find_package`, clean external
+   consumers, non-Qt dependency isolation, runtime-loading and architecture
+   checks. The vendor-runtime default-off contract passed on Apple Silicon.
 4. Phase 7 hardware acceptance remains separate and pending: use installed
    artifacts for non-Qt AmScope enumerate/open/read-setting/start/frame/
    stop/close; verify Qt preview and descriptor-driven controls against the

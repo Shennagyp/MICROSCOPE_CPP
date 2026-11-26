@@ -148,6 +148,63 @@ void testSamplePinsSampleTypeRevisionAndSpecimenPinsSampleRevision() {
           "allows one source Sample to produce multiple independently tracked Specimens");
 }
 
+void testSampleTypePreparationRequirementsAreSeparateFromObservedPreparation() {
+    const auto requirements = take(SpecimenPreparationRequirements::create(
+        {SpecimenPreparationMethod::TissueSection},
+        {SpecimenFixationState::Fixed},
+        3.0,
+        8.0,
+        150.0,
+        190.0,
+        true,
+        {SpecimenLabelKind::Fluorescent}));
+
+    check(requirements.allowedMethods().front() ==
+              SpecimenPreparationMethod::TissueSection,
+          "constrains the preparation method without storing it as actual specimen data");
+    check(requirements.requireMountingMedium() &&
+          requirements.requiredLabelKinds().front() ==
+              SpecimenLabelKind::Fluorescent,
+          "can require mounting medium and one or more label classes");
+
+    const auto sampleType = take(SampleType::create(
+        makeId<SampleTypeId>("sample-type-fixed-fluorescence-section"),
+        1,
+        "Fixed immunofluorescence tissue section",
+        SampleMaterialClass::Biological,
+        take(MicroscopyRequirements::create(
+            {{ContrastMethod::Fluorescence,
+              MicroscopyTechniqueConstraintKind::Required}},
+            std::nullopt,
+            std::nullopt,
+            true)),
+        std::nullopt,
+        requirements));
+
+    check(sampleType.preparationRequirements().has_value() &&
+          sampleType.preparationRequirements()->maximumSectionThicknessMicrometers() ==
+              std::optional<double>{8.0},
+          "binds a reusable preparation envelope to the versioned SampleType");
+
+    const auto inverted = SpecimenPreparationRequirements::create(
+        {SpecimenPreparationMethod::TissueSection},
+        {},
+        8.0,
+        3.0);
+    check(!inverted &&
+          inverted.error() ==
+              SpecimenPreparationRequirementsError::InvalidSectionThicknessRange,
+          "rejects an inverted specimen section thickness range");
+
+    const auto duplicate = SpecimenPreparationRequirements::create(
+        {SpecimenPreparationMethod::TissueSection,
+         SpecimenPreparationMethod::TissueSection});
+    check(!duplicate &&
+          duplicate.error() ==
+              SpecimenPreparationRequirementsError::DuplicateMethod,
+          "rejects duplicate preparation method constraints");
+}
+
 void testCondenserAndSpecimenPlaneIlluminationRequirements() {
     const auto condenser = take(CondenserMicroscopyRequirements::create(
         0.25,
@@ -329,6 +386,7 @@ void testSpecimenSlidePlacementIsBoundedAndRegistrationRevisioned() {
 int main() {
     testSampleTypeAndCatalogRevisionContracts();
     testSamplePinsSampleTypeRevisionAndSpecimenPinsSampleRevision();
+    testSampleTypePreparationRequirementsAreSeparateFromObservedPreparation();
     testCondenserAndSpecimenPlaneIlluminationRequirements();
     testFluorescentLabelStoresSpectralProfileAndFilterCompatibility();
     testFluorescenceMetadataRequirementNeedsFluorescenceTechnique();

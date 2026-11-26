@@ -113,6 +113,10 @@ private:
     sqlite3_stmt* statement,
     int index,
     const std::string& value) noexcept {
+    if (value.size() > static_cast<std::size_t>(
+                           std::numeric_limits<int>::max())) {
+        return false;
+    }
     return sqlite3_bind_text(
         statement, index, value.c_str(),
         static_cast<int>(value.size()), SQLITE_TRANSIENT) == SQLITE_OK;
@@ -137,10 +141,11 @@ private:
         : sqlite3_bind_null(statement, index) == SQLITE_OK;
 }
 
+template <typename TEnum>
 [[nodiscard]] bool bindOptionalEnum(
     sqlite3_stmt* statement,
     int index,
-    const auto& value) noexcept {
+    const std::optional<TEnum>& value) noexcept {
     return value
         ? sqlite3_bind_int(statement, index, static_cast<int>(*value)) == SQLITE_OK
         : sqlite3_bind_null(statement, index) == SQLITE_OK;

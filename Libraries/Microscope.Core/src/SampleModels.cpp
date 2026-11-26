@@ -691,19 +691,207 @@ MicroscopyRequirements::illumination() const noexcept {
     return illumination_;
 }
 
+SpecimenPreparationRequirements::SpecimenPreparationRequirements(
+    std::vector<SpecimenPreparationMethod> allowedMethods,
+    std::vector<SpecimenFixationState> allowedFixationStates,
+    std::optional<double> minimumSectionThicknessMicrometers,
+    std::optional<double> maximumSectionThicknessMicrometers,
+    std::optional<double> minimumCoverglassThicknessMicrometers,
+    std::optional<double> maximumCoverglassThicknessMicrometers,
+    bool requireMountingMedium,
+    std::vector<SpecimenLabelKind> requiredLabelKinds)
+    : allowedMethods_(std::move(allowedMethods)),
+      allowedFixationStates_(std::move(allowedFixationStates)),
+      minimumSectionThicknessMicrometers_(minimumSectionThicknessMicrometers),
+      maximumSectionThicknessMicrometers_(maximumSectionThicknessMicrometers),
+      minimumCoverglassThicknessMicrometers_(minimumCoverglassThicknessMicrometers),
+      maximumCoverglassThicknessMicrometers_(maximumCoverglassThicknessMicrometers),
+      requireMountingMedium_(requireMountingMedium),
+      requiredLabelKinds_(std::move(requiredLabelKinds)) {}
+
+Result<
+    SpecimenPreparationRequirements,
+    SpecimenPreparationRequirementsError>
+SpecimenPreparationRequirements::create(
+    std::vector<SpecimenPreparationMethod> allowedMethods,
+    std::vector<SpecimenFixationState> allowedFixationStates,
+    std::optional<double> minimumSectionThicknessMicrometers,
+    std::optional<double> maximumSectionThicknessMicrometers,
+    std::optional<double> minimumCoverglassThicknessMicrometers,
+    std::optional<double> maximumCoverglassThicknessMicrometers,
+    bool requireMountingMedium,
+    std::vector<SpecimenLabelKind> requiredLabelKinds) {
+    if (allowedMethods.empty() &&
+        allowedFixationStates.empty() &&
+        !minimumSectionThicknessMicrometers &&
+        !maximumSectionThicknessMicrometers &&
+        !minimumCoverglassThicknessMicrometers &&
+        !maximumCoverglassThicknessMicrometers &&
+        !requireMountingMedium &&
+        requiredLabelKinds.empty()) {
+        return Result<
+            SpecimenPreparationRequirements,
+            SpecimenPreparationRequirementsError>::failure(
+                SpecimenPreparationRequirementsError::NoConstraint);
+    }
+
+    const auto finite = [](const std::optional<double>& value) {
+        return !value || std::isfinite(*value);
+    };
+    if (!finite(minimumSectionThicknessMicrometers) ||
+        !finite(maximumSectionThicknessMicrometers) ||
+        !finite(minimumCoverglassThicknessMicrometers) ||
+        !finite(maximumCoverglassThicknessMicrometers)) {
+        return Result<
+            SpecimenPreparationRequirements,
+            SpecimenPreparationRequirementsError>::failure(
+                SpecimenPreparationRequirementsError::NonFiniteThickness);
+    }
+
+    if ((minimumSectionThicknessMicrometers &&
+         *minimumSectionThicknessMicrometers <= 0.0) ||
+        (maximumSectionThicknessMicrometers &&
+         *maximumSectionThicknessMicrometers <= 0.0) ||
+        (minimumSectionThicknessMicrometers &&
+         maximumSectionThicknessMicrometers &&
+         *minimumSectionThicknessMicrometers >
+             *maximumSectionThicknessMicrometers)) {
+        return Result<
+            SpecimenPreparationRequirements,
+            SpecimenPreparationRequirementsError>::failure(
+                SpecimenPreparationRequirementsError::InvalidSectionThicknessRange);
+    }
+
+    if ((minimumCoverglassThicknessMicrometers &&
+         *minimumCoverglassThicknessMicrometers <= 0.0) ||
+        (maximumCoverglassThicknessMicrometers &&
+         *maximumCoverglassThicknessMicrometers <= 0.0) ||
+        (minimumCoverglassThicknessMicrometers &&
+         maximumCoverglassThicknessMicrometers &&
+         *minimumCoverglassThicknessMicrometers >
+             *maximumCoverglassThicknessMicrometers)) {
+        return Result<
+            SpecimenPreparationRequirements,
+            SpecimenPreparationRequirementsError>::failure(
+                SpecimenPreparationRequirementsError::InvalidCoverglassThicknessRange);
+    }
+
+    std::set<SpecimenPreparationMethod> methods;
+    for (const auto method : allowedMethods) {
+        if (!isKnownPreparationMethod(method)) {
+            return Result<
+                SpecimenPreparationRequirements,
+                SpecimenPreparationRequirementsError>::failure(
+                    SpecimenPreparationRequirementsError::InvalidMethod);
+        }
+        if (!methods.insert(method).second) {
+            return Result<
+                SpecimenPreparationRequirements,
+                SpecimenPreparationRequirementsError>::failure(
+                    SpecimenPreparationRequirementsError::DuplicateMethod);
+        }
+    }
+
+    std::set<SpecimenFixationState> fixationStates;
+    for (const auto state : allowedFixationStates) {
+        if (state == SpecimenFixationState::Unknown) {
+            return Result<
+                SpecimenPreparationRequirements,
+                SpecimenPreparationRequirementsError>::failure(
+                    SpecimenPreparationRequirementsError::InvalidFixationState);
+        }
+        if (!fixationStates.insert(state).second) {
+            return Result<
+                SpecimenPreparationRequirements,
+                SpecimenPreparationRequirementsError>::failure(
+                    SpecimenPreparationRequirementsError::DuplicateFixationState);
+        }
+    }
+
+    std::set<SpecimenLabelKind> labelKinds;
+    for (const auto kind : requiredLabelKinds) {
+        if (!isKnownLabelKind(kind)) {
+            return Result<
+                SpecimenPreparationRequirements,
+                SpecimenPreparationRequirementsError>::failure(
+                    SpecimenPreparationRequirementsError::InvalidLabelKind);
+        }
+        if (!labelKinds.insert(kind).second) {
+            return Result<
+                SpecimenPreparationRequirements,
+                SpecimenPreparationRequirementsError>::failure(
+                    SpecimenPreparationRequirementsError::DuplicateLabelKind);
+        }
+    }
+
+    return Result<
+        SpecimenPreparationRequirements,
+        SpecimenPreparationRequirementsError>::success(
+            SpecimenPreparationRequirements(
+                std::move(allowedMethods),
+                std::move(allowedFixationStates),
+                minimumSectionThicknessMicrometers,
+                maximumSectionThicknessMicrometers,
+                minimumCoverglassThicknessMicrometers,
+                maximumCoverglassThicknessMicrometers,
+                requireMountingMedium,
+                std::move(requiredLabelKinds)));
+}
+
+const std::vector<SpecimenPreparationMethod>&
+SpecimenPreparationRequirements::allowedMethods() const noexcept {
+    return allowedMethods_;
+}
+
+const std::vector<SpecimenFixationState>&
+SpecimenPreparationRequirements::allowedFixationStates() const noexcept {
+    return allowedFixationStates_;
+}
+
+const std::optional<double>&
+SpecimenPreparationRequirements::minimumSectionThicknessMicrometers() const noexcept {
+    return minimumSectionThicknessMicrometers_;
+}
+
+const std::optional<double>&
+SpecimenPreparationRequirements::maximumSectionThicknessMicrometers() const noexcept {
+    return maximumSectionThicknessMicrometers_;
+}
+
+const std::optional<double>&
+SpecimenPreparationRequirements::minimumCoverglassThicknessMicrometers() const noexcept {
+    return minimumCoverglassThicknessMicrometers_;
+}
+
+const std::optional<double>&
+SpecimenPreparationRequirements::maximumCoverglassThicknessMicrometers() const noexcept {
+    return maximumCoverglassThicknessMicrometers_;
+}
+
+bool SpecimenPreparationRequirements::requireMountingMedium() const noexcept {
+    return requireMountingMedium_;
+}
+
+const std::vector<SpecimenLabelKind>&
+SpecimenPreparationRequirements::requiredLabelKinds() const noexcept {
+    return requiredLabelKinds_;
+}
+
 SampleType::SampleType(
     SampleTypeId id,
     std::uint64_t revision,
     std::string name,
     SampleMaterialClass materialClass,
     MicroscopyRequirements microscopyRequirements,
-    std::optional<std::string> description)
+    std::optional<std::string> description,
+    std::optional<SpecimenPreparationRequirements> preparationRequirements)
     : id_(std::move(id)),
       revision_(revision),
       name_(std::move(name)),
       materialClass_(materialClass),
       microscopyRequirements_(std::move(microscopyRequirements)),
-      description_(std::move(description)) {}
+      description_(std::move(description)),
+      preparationRequirements_(std::move(preparationRequirements)) {}
 
 Result<SampleType, SampleTypeError> SampleType::create(
     SampleTypeId id,
@@ -711,7 +899,8 @@ Result<SampleType, SampleTypeError> SampleType::create(
     std::string name,
     SampleMaterialClass materialClass,
     MicroscopyRequirements microscopyRequirements,
-    std::optional<std::string> description) {
+    std::optional<std::string> description,
+    std::optional<SpecimenPreparationRequirements> preparationRequirements) {
     if (revision == 0) {
         return Result<SampleType, SampleTypeError>::failure(
             SampleTypeError::ZeroRevision);
@@ -744,7 +933,8 @@ Result<SampleType, SampleTypeError> SampleType::create(
             std::move(name),
             materialClass,
             std::move(microscopyRequirements),
-            std::move(description)));
+            std::move(description),
+            std::move(preparationRequirements)));
 }
 
 const SampleTypeId& SampleType::id() const noexcept {
@@ -769,6 +959,11 @@ const MicroscopyRequirements& SampleType::microscopyRequirements() const noexcep
 
 const std::optional<std::string>& SampleType::description() const noexcept {
     return description_;
+}
+
+const std::optional<SpecimenPreparationRequirements>&
+SampleType::preparationRequirements() const noexcept {
+    return preparationRequirements_;
 }
 
 SampleTypeCatalog::SampleTypeCatalog(

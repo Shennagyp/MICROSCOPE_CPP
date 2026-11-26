@@ -802,11 +802,53 @@ DualSlideCarrierSqliteStore::open(const std::string& databasePath) {
             DualSlideCarrierStoreError>::failure(std::move(error));
     }
 
-    if (!schemaTableExists(database, "slide_revision")) {
+    if (!schemaTableExists(database, "sample_slide_store_schema")) {
         auto error = makeError(
             ErrorCode::SampleSlideStoreSchemaRequired,
             database,
             "Open SampleSlideSqliteStore on this database before opening the dual-slide carrier store.");
+        sqlite3_close_v2(database);
+        return core::Result<
+            std::unique_ptr<DualSlideCarrierSqliteStore>,
+            DualSlideCarrierStoreError>::failure(std::move(error));
+    }
+
+    Statement sampleSlideSchema(
+        database,
+        "SELECT schema_version FROM sample_slide_store_schema WHERE id = 1");
+    if (!sampleSlideSchema.prepared() ||
+        sampleSlideSchema.step() != SQLITE_ROW) {
+        auto error = makeError(
+            ErrorCode::SampleSlideStoreSchemaRequired,
+            database,
+            "The database does not contain an initialized SampleSlideSqliteStore schema.");
+        sqlite3_close_v2(database);
+        return core::Result<
+            std::unique_ptr<DualSlideCarrierSqliteStore>,
+            DualSlideCarrierStoreError>::failure(std::move(error));
+    }
+    const sqlite3_int64 sampleSlideSchemaVersion =
+        sqlite3_column_int64(sampleSlideSchema.get(), 0);
+    if (sampleSlideSchemaVersion != 1 ||
+        sampleSlideSchema.step() != SQLITE_DONE) {
+        auto error = makeError(
+            ErrorCode::UnsupportedSchemaVersion,
+            database,
+            "The dual-slide carrier store requires SampleSlideSqliteStore schema version 1.");
+        sqlite3_close_v2(database);
+        return core::Result<
+            std::unique_ptr<DualSlideCarrierSqliteStore>,
+            DualSlideCarrierStoreError>::failure(std::move(error));
+    }
+
+    if (!schemaTableExists(database, "sample_type_revision") ||
+        !schemaTableExists(database, "sample_type_current") ||
+        !schemaTableExists(database, "slide_revision") ||
+        !schemaTableExists(database, "slide_current")) {
+        auto error = makeError(
+            ErrorCode::SampleSlideStoreSchemaRequired,
+            database,
+            "The SampleSlideSqliteStore schema is incomplete.");
         sqlite3_close_v2(database);
         return core::Result<
             std::unique_ptr<DualSlideCarrierSqliteStore>,

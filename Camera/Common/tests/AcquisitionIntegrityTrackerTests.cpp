@@ -47,7 +47,8 @@ int main() {
         tracker.recordBuffer(6, camera::FrameDeliveryStatus::CompleteImage);
         tracker.recordBuffer(7, camera::FrameDeliveryStatus::CompleteImage);
         const auto stats = tracker.snapshot();
-        require(stats.duplicateFrameIds == 1, "duplicate sequence IDs are detected");
+        require(stats.duplicateFrameIds == 2,
+                "duplicate IDs include a repeated high-water ID after ambiguity");
         require(stats.ambiguousSequenceTransitions == 1,
                 "an unknown backwards transition is not misreported as a gap");
         require(stats.missingFrames == 0, "ambiguous transitions do not invent losses");

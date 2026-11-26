@@ -104,6 +104,7 @@ bool mergeOptionalDouble(
 void mergeCapabilities(
     ::camera::CameraCapabilities& runtimeCapabilities,
     const ::camera::CameraCapabilities& modelCapabilities,
+    const std::string& modelSourceReference,
     std::vector<Warning>& warnings) {
     for (std::size_t index = 0;
          index < ::camera::CameraCapabilities::count;
@@ -298,6 +299,9 @@ void mergeSensorCharacteristics(
 
     if (usedModelData) {
         merged.provenance = modelSensor.provenance;
+        if (!modelSourceReference.empty()) {
+            merged.provenanceReference = modelSourceReference;
+        }
     }
 
     if (sensorExists || usedModelData) {
@@ -347,6 +351,7 @@ CameraModelEnrichmentResult CameraModelDiscoveryEnricher::enrich(
         profile->sensorCharacteristics(),
         discoveredDevice.capabilities,
         profile->capabilities(),
+        profile->sourceReference(),
         result.warnings);
 
     result.status = result.warnings.empty()

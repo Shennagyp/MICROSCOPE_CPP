@@ -864,7 +864,7 @@ void writeOptionalBand(
             return std::nullopt;
         }
 
-        std::optional<SpectralPowerDistribution> spectrum;
+        std::optional<FluorescenceEmissionSpectrum> spectrum;
         if (hasSpectrum) {
             std::uint32_t sampleCount = 0;
             if (!reader.u32(sampleCount) ||

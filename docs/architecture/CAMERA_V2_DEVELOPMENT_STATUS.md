@@ -2,8 +2,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284` — GenApi negative-path coverage now includes malformed XML rejection/recovery, unsupported public generic-node classification, and injected feature/command execution/completion failure recovery.  
-**Latest CI-validated checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284` — workflow [#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
+**Latest reviewed implementation checkpoint:** `ee2681d5fa1b1af9b7b981477f93db44c4f99499` — GenApi negative-path coverage now includes malformed XML rejection/recovery, unsupported public IRegister classification, and injected feature/command execution/completion failure recovery.  
+**Latest CI-validated checkpoint:** `ee2681d5fa1b1af9b7b981477f93db44c4f99499` — workflow [#45768295355](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction while Phase 4 acceptance remains pending.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
@@ -91,7 +91,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 3 | Separate driver, programmatic control and Qt streaming libraries | **ACCEPTED BY OWNER.** AmcamCamera remains the single native session owner; Amscope::Qt composes it for QObject request scheduling and frame delivery. Camera::Qt provides the extracted frame-stream boundary. Owner-confirmed physical Qt-to-MU503 streaming smoke evidence is recorded in the subordinate release plan. Qt remains optional to non-Qt consumers. |
 | 4 | Extract reusable Qt camera UI library | **SOURCE AND OFFSCREEN CHECKS COMPLETE; OWNER ACCEPTANCE PENDING/POSTPONED.** Camera::QtWidgets contains FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel. The AmScope preview uses the feature editor, telemetry strip and selected-model capability panel. The command panel is for no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned. Workflow #45749181949 built amscope_preview and passed 24/24 Qt CTest tests on both architectures, including an application-level offscreen composition and dock-state restore test. Human visual/workspace inspection and physical MU503 UI smoke remain pending; the owner has postponed the physical test. This pending acceptance does not block the owner-directed Phase 6 software work. |
 | 5 | Integrate existing GenTL/GenApi implementation | **COMPLETE — owner-confirmed implementation milestone.** The GenTL Producer/device/stream lifecycle, buffer acquisition, frame metadata projection, remote-port access, XML retrieval and GenApi 3.5.1 feature/command integration are implemented and covered by cross-architecture CI. Do not reopen or reimplement Phase 5. Vendor CTI/device and physical-camera qualification are external integration/release evidence and must be tracked separately; they do not authorize restarting the completed implementation milestone. |
-| 6 | Complete capability, feature, command and model coverage | **ACTIVE BY OWNER DIRECTION — OPEN.** The initial audit and three AmScope corrections are recorded. GenApi malformed-XML rejection/recovery, unsupported public generic-node handling, and injected feature-read, feature-write and command-execution failure/recovery are now covered by official GenApi CI on both architectures. AmScope provider-level feature/command tests remain unaddressed because AmScope is frozen by owner instruction. Continue with provider-neutral discovery/API and vector-descriptor decisions; do not modify AmScope. Phase 4 acceptance remains pending but does not block this work. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
+| 6 | Complete capability, feature, command and model coverage | **ACTIVE BY OWNER DIRECTION — OPEN.** The initial audit and three AmScope corrections are recorded. GenApi malformed-XML rejection/recovery, unsupported public IRegister handling, and injected feature-read, feature-write and command-execution failure/recovery are now covered by official GenApi CI on both architectures. AmScope provider-level feature/command tests remain unaddressed because AmScope is frozen by owner instruction. Continue with provider-neutral discovery/API and vector-descriptor decisions; do not modify AmScope. Phase 4 acceptance remains pending but does not block this work. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
 | 7 | Release packaging and external-consumer integration | **Open.** Initial install rules exist and native public headers install/compile. An exported CMake package/config/version flow and clean native/GenTL external consumers remain. Qt consumers must be included as an optional exported target, not excluded. |
 | 8 | Final hardware qualification and release | **Not started/accepted.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer tests, release CI and owner acceptance. |
 
@@ -141,8 +141,8 @@ Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | `a4fc39b` | Explain RAW bit-depth profile denial | The descriptor factory now supplies an actionable disabled reason when model policy blocks the feature; a regression test checks the exact reason. |
 | `8b9be09`, `977d53b` | Test GenApi port failure recovery | Adds mock read/write fault injection and verifies feature read failure recovery, failed-write no-side-effect behavior, and command execution failure/recovery. The read fault is injected before first feature access to avoid GenApi cache bypass. |
 | `9bb1c4c` | Test malformed GenApi XML handling | Injects malformed XML through the mock remote port; verifies node-map construction rejects it and a later valid node map recovers. |
-| `a07c8a2` | Test unsupported public GenApi node handling | Adds a generic public `Node` reachable from `Root`; verifies scalar descriptor enumeration omits it and direct feature read/write return `Unsupported`. |
-| `ea356d5` | Test GenApi command completion-query failure recovery | Injects a remote-port read failure while `ICommand::IsDone()` polls completion; verifies `BackendFailure` mapping, then verifies polling resumes. Workflow #45767832186 passed official GenApi 3.5.1 integration on both architectures. |
+| `a07c8a2` | Initial unsupported-node fixture | Added a generic `Node` case; superseded by the explicit `IRegister` test below. |
+| `ea356d5` | Test GenApi command completion-query failure recovery | Injects a remote-port read failure while `ICommand::IsDone()` polls completion; verifies `BackendFailure` mapping, then verifies polling resumes. Workflow #45768295355 passed official GenApi 3.5.1 integration on both architectures. |
 
 ### Current Qt and non-Qt CI — checkpoint a4fc39b
 
@@ -223,15 +223,15 @@ CI evidence:
 
 No local build/test/debug run or new physical-camera test was performed.
 AmScope source and tests were not modified. The latest GenTL/GenApi-only
-increment is commit `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284`; workflow
-[#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186)
+increment is commit `ee2681d5fa1b1af9b7b981477f93db44c4f99499`; workflow
+[#45768295355](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767832186)
 passed the GenTL suite and official GenApi 3.5.1 build/integration tests on
 Intel x86_64 and Apple Silicon arm64.
 
 That increment covers:
 - malformed GenApi XML is rejected and a subsequent valid node map recovers;
-- a public generic GenApi `Node` reachable from `Root` is omitted from
-  scalar feature descriptors and direct read/write return `Unsupported`;
+- a public GenApi `Register`/`IRegister` node reachable from `Root` is omitted
+  from scalar feature descriptors and direct read/write return `Unsupported`;
 - injected remote-port failures map feature read, feature write, command
   execution and command-completion polling to `BackendFailure`, with subsequent
   recovery / no-side-effect assertions.

@@ -491,11 +491,23 @@ CameraModelDiscoveryEnricher::toCoreSensorCharacteristics(
 
 core::Result<
     CameraSpecificationProjectionResult,
-    core::CameraSpecificationError>
+    CameraSpecificationProjectionError>
 CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
     const core::CameraSpecification& installedSpecification,
-    const ::camera::CameraDeviceInfo& enrichedDevice) {
-    std::vector<CameraModelEnrichmentWarning> warnings;
+    const CameraModelEnrichmentResult& enrichment) {
+    if (enrichment.status != CameraModelEnrichmentStatus::ExactProfileApplied &&
+        enrichment.status != CameraModelEnrichmentStatus::ExactProfileAppliedWithConflicts) {
+        return core::Result<
+            CameraSpecificationProjectionResult,
+            CameraSpecificationProjectionError>::failure(
+                CameraSpecificationProjectionError{
+                    CameraSpecificationProjectionErrorCode::ModelProfileNotResolved,
+                    std::nullopt});
+    }
+
+    const auto& enrichedDevice = enrichment.deviceInfo;
+    std::vector<CameraModelEnrichmentWarning> warnings =
+        enrichment.warnings;
 
     const auto addProjectionWarning = [&](std::string code, std::string message) {
         warnings.push_back({std::move(code), std::move(message)});
@@ -657,8 +669,10 @@ CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
     if (!pixelPitchX || !pixelPitchY) {
         return core::Result<
             CameraSpecificationProjectionResult,
-            core::CameraSpecificationError>::failure(
-                core::CameraSpecificationError::InvalidSensorCharacteristics);
+            CameraSpecificationProjectionError>::failure(
+                CameraSpecificationProjectionError{
+                    CameraSpecificationProjectionErrorCode::CoreSpecificationRejected,
+                    core::CameraSpecificationError::InvalidSensorCharacteristics});
     }
 
     auto specification = core::CameraSpecification::create(
@@ -673,12 +687,15 @@ CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
     if (!specification) {
         return core::Result<
             CameraSpecificationProjectionResult,
-            core::CameraSpecificationError>::failure(specification.error());
+            CameraSpecificationProjectionError>::failure(
+                CameraSpecificationProjectionError{
+                    CameraSpecificationProjectionErrorCode::CoreSpecificationRejected,
+                    specification.error()});
     }
 
     return core::Result<
         CameraSpecificationProjectionResult,
-        core::CameraSpecificationError>::success(
+        CameraSpecificationProjectionError>::success(
             CameraSpecificationProjectionResult{
                 std::move(specification).value(),
                 std::move(warnings)});

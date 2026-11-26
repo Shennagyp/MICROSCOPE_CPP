@@ -1012,7 +1012,7 @@ SpecimenLabel::SpecimenLabel(
     SpecimenLabelKind kind,
     std::optional<SpectralBand> excitationBand,
     std::optional<SpectralBand> emissionBand,
-    std::optional<FluorescenceEmissionSpectrum> emissionSpectrum,
+    std::optional<SpectralPowerDistribution> emissionSpectrum,
     std::optional<OpticalCompatibilityId> filterSetCompatibilityId)
     : name_(std::move(name)),
       kind_(kind),
@@ -1026,7 +1026,7 @@ Result<SpecimenLabel, SpecimenLabelError> SpecimenLabel::create(
     SpecimenLabelKind kind,
     std::optional<SpectralBand> excitationBand,
     std::optional<SpectralBand> emissionBand,
-    std::optional<FluorescenceEmissionSpectrum> emissionSpectrum,
+    std::optional<SpectralPowerDistribution> emissionSpectrum,
     std::optional<OpticalCompatibilityId> filterSetCompatibilityId) {
     if (name.find('\0') != std::string::npos) {
         return Result<SpecimenLabel, SpecimenLabelError>::failure(
@@ -1073,7 +1073,7 @@ const std::optional<SpectralBand>& SpecimenLabel::emissionBand() const noexcept 
     return emissionBand_;
 }
 
-const std::optional<FluorescenceEmissionSpectrum>&
+const std::optional<SpectralPowerDistribution>&
 SpecimenLabel::emissionSpectrum() const noexcept {
     return emissionSpectrum_;
 }

@@ -12,9 +12,11 @@ endif()
 
 add_library(camera_gentl_consumer_bridge STATIC
     src/ConsumerBridge.cpp
+    src/GenTLProducerLibrary.cpp
     src/Producer.cpp
     src/GenTLFrameAdapter.cpp
     include/camera/gentl/ConsumerBridge.h
+    include/camera/gentl/GenTLProducerLibrary.h
     include/camera/gentl/Producer.h
     include/camera/gentl/GenTLFrameAdapter.h
     include/camera/gentl/GenTL_v1_6.h)
@@ -62,6 +64,15 @@ if(BUILD_TESTING)
         PRIVATE Camera::GenTLConsumerBridge)
     add_test(NAME camera_gentl_producer_tests
         COMMAND camera_gentl_producer_tests
+            "$<TARGET_FILE:gentl_consumer_bridge_fixture>")
+
+    add_executable(camera_gentl_cti_loader_tests
+        tests/GenTLProducerLibraryTests.cpp)
+    target_compile_features(camera_gentl_cti_loader_tests PRIVATE cxx_std_17)
+    target_link_libraries(camera_gentl_cti_loader_tests
+        PRIVATE Camera::GenTLConsumerBridge)
+    add_test(NAME camera_gentl_cti_loader_tests
+        COMMAND camera_gentl_cti_loader_tests
             "$<TARGET_FILE:gentl_consumer_bridge_fixture>")
 
     add_executable(camera_gentl_frame_adapter_tests

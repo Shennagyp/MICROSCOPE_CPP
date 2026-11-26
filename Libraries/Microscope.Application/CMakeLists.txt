@@ -13,6 +13,12 @@ if(NOT TARGET Microscope::Core)
         "${CMAKE_CURRENT_BINARY_DIR}/microscope_core")
 endif()
 
+if(NOT TARGET Camera::Common)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../../Camera/Common"
+        "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
+endif()
+
 add_library(microscope_application STATIC
     src/RuntimeHandle.cpp
     src/RuntimeWakeSignal.cpp)
@@ -25,7 +31,7 @@ target_include_directories(microscope_application
         "$<INSTALL_INTERFACE:include>")
 
 target_link_libraries(microscope_application
-    PUBLIC Microscope::Core)
+    PUBLIC Microscope::Core Camera::Common)
 
 set_target_properties(microscope_application PROPERTIES
     POSITION_INDEPENDENT_CODE ON

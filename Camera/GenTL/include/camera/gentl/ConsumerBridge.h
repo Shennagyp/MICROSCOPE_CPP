@@ -80,6 +80,7 @@ enum class Operation : std::uint32_t {
 };
 
 class ConsumerBridge;
+class GenTLProducerLibrary;
 
 class Consumer final {
 public:
@@ -107,7 +108,14 @@ public:
 
 private:
     friend class ConsumerBridge;
-    Consumer(std::shared_ptr<const ConsumerBridge> owner, void* context) noexcept;
+    friend class GenTLProducerLibrary;
+
+    using InvokeFunction = std::int32_t (*)(
+        const void*, void*, Operation, const std::uint64_t*, std::uint32_t) noexcept;
+    using DestroyFunction = void (*)(const void*, void*) noexcept;
+
+    Consumer(std::shared_ptr<const void> owner, void* context,
+             InvokeFunction invoke, DestroyFunction destroy) noexcept;
     void reset() noexcept;
 
     template <typename T>
@@ -125,8 +133,10 @@ private:
         }
     }
 
-    std::shared_ptr<const ConsumerBridge> owner_;
+    std::shared_ptr<const void> owner_;
     void* context_ = nullptr;
+    InvokeFunction invoke_ = nullptr;
+    DestroyFunction destroy_ = nullptr;
 };
 
 class ConsumerBridge final

@@ -4,6 +4,7 @@
 #include "microscope/application/runtime/SerializedRuntimeWorker.h"
 
 #include <atomic>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -63,7 +64,7 @@ public:
             std::size_t feedbackCapacity,
             std::size_t controlCapacity) {
         auto session = Pointer(new StageWorkingSurfaceNavigationSession(
-            std::move(device), persistentDriver));
+            std::move(device)));
 
         auto operationRuntime = OperationRuntime::create(
             session->device_.microscopeId,
@@ -214,14 +215,17 @@ public:
                 if (result.healthUpdate) {
                     publish(*callbackState, std::move(*result.healthUpdate));
                 }
-                for (auto& outcome : result.outcomes) {
-                    if (outcome.update) {
-                        publish(*callbackState, std::move(*outcome.update));
+                for (const auto& outcome : result.outcomes) {
+                    // The front-end receives its own value copy; state publication
+                    // is a separate callback and cannot invalidate that outcome.
+                    if (callbackState->onRequestOutcome) {
+                        callbackState->onRequestOutcome(outcome);
                     }
-                    if (outcome.error && callbackState->onRequestOutcome) {
-                        callbackState->onRequestOutcome(std::move(outcome));
-                    } else if (outcome.update && callbackState->onRequestOutcome) {
-                        callbackState->onRequestOutcome(std::move(outcome));
+                    if (outcome.update) {
+                        publish(*callbackState, *outcome.update);
+                    }
+                    if (outcome.error) {
+                        notifyNavigationError(*callbackState, *outcome.error);
                     }
                 }
                 finishShutdownIfIdle(*callbackState);
@@ -240,15 +244,10 @@ public:
 
     // Immutable snapshots are returned by value. The active mutable objects
     // themselves remain private to the owner thread.
-    [[nodiscard]] core::StageWorkingSurface2D workingSurfaceSnapshot() const {
-        return navigation_->surface();
-    }
-
 private:
-    StageWorkingSurfaceNavigationSession(
-        core::RuntimeDeviceCorrelation device,
-        core::IStageMotionPort& persistentDriver)
-        : device_(std::move(device)), driver_(&persistentDriver) {}
+    explicit StageWorkingSurfaceNavigationSession(
+        core::RuntimeDeviceCorrelation device)
+        : device_(std::move(device)) {}
 
     [[nodiscard]] static StageWorkingSurfaceNavigationSessionError makeError(
         StageWorkingSurfaceNavigationSessionErrorCode code) {
@@ -313,7 +312,6 @@ private:
     }
 
     core::RuntimeDeviceCorrelation device_;
-    core::IStageMotionPort* driver_; // non-owning; application composition owns it
     runtime::RuntimeWakeSignal wakeSignal_;
     std::unique_ptr<OperationRuntime> operationRuntime_;
     std::unique_ptr<StageWorkingSurfaceNavigationRuntime> navigation_;

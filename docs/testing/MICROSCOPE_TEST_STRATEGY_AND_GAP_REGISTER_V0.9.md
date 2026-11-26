@@ -24,14 +24,14 @@ The branch contains these registered test groups in the subproject CMake files:
 | Test group | Registered targets | Build condition |
 |---|---:|---|
 | Microscope.Core | 22 | Root build |
-| Microscope.Application | 17 | Root build |
+| Microscope.Application | 18 | Root build |
 | Camera.Common | 5 | Root build |
 | Camera.Amscope | 7 | `OPTIKA_BUILD_AMSCOPE=ON` |
 | Camera.Qt | 1 | Qt-enabled AmScope build |
 | Camera.QtWidgets | 3 | Qt-enabled AmScope build |
 | Native OPTIKA B293 app | 6 | `OPTIKA_BUILD_NATIVE_APP=ON`, macOS, Swift and Objective-C++ |
 
-The root default enables Camera.Amscope and leaves the native app disabled. The always-added root baseline is 44 registered targets (22 Core + 17 Application + 5 Camera.Common). Optional subprojects add their registered targets when their build conditions are met.
+The root default enables Camera.Amscope and leaves the native app disabled. The always-added root baseline is 45 registered targets (22 Core + 18 Application + 5 Camera.Common). Optional subprojects add their registered targets when their build conditions are met.
 
 The six native-app tests cover automatic resolution policy, workspace/dock behavior, microscope calibration data, image geometry and preview frame-rate measurement. They do **not** currently exercise `NativeCameraController`, `OptikaB293Composition` or actual device command orchestration.
 
@@ -116,6 +116,29 @@ The expanded runtime suite explicitly challenges:
 Covers the port dispatch boundary for `MoveAxesTo`, `MoveAxesBy`, `HomeAxes` and controlled `StopAxes`, including accepted/rejected/throwing submission semantics and stale device sessions.
 
 **Important:** dispatching a controlled stop is not the same as cancelling and verifying an active navigation. The current stage-navigation owner does not expose a complete cancel/stop lifecycle, does not allocate a correlated stop operation for an active move, and has no timeout/deadline mechanism to reconcile a command that never completes.
+
+### 3.6 SampleType and Slide SQLite persistence integration
+
+`Libraries/Microscope.Application/tests/SampleSlideSqliteStoreTests.cpp`
+
+Exercises the public Application persistence boundary against temporary SQLite databases, including two independent connections:
+
+~~~text
+SampleType definition/revision
+  -> complete bounded payload codec
+  -> immutable sample_type_revision row
+  -> atomic sample_type_current pointer update
+  -> exact revision retrieval
+  -> Slide with SampleTypeId + pinned revision
+  -> composite foreign-key validation
+  -> immutable slide_revision row
+  -> atomic slide_current pointer update
+  -> restart/reopen + historical aggregate retrieval
+~~~
+
+The suite covers full microscopy/preparation requirement round-trip, Slide geometry, observed preparation, fluorescent excitation/emission and emission spectrum, filter-set compatibility identity, optional OriginLabId, historical revision lookup after SampleType advancement, stale writers on independent connections, absent exact-revision rejection, database-level UPDATE/DELETE rejection, skipped revision insertion, current-pointer rewind/deletion and rollback/no-partial-record behavior.
+
+**Boundary:** this verifies the SQLite store and domain payload codec. It does not yet verify native workspace lifecycle, UI dirty-state ownership, user save/rename flows, import of legacy data, or whole-workspace transactions involving Tile/image/acquisition records.
 
 ## 4. Implementation coverage versus missing evidence
 

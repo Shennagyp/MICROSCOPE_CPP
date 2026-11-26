@@ -364,6 +364,17 @@ int main(int argc, char** argv) {
             require(std::holds_alternative<std::monostate>(nestedExecute),
                     "Nested GenApi command lookup/execution failed.");
 
+            setenv("MOCK_GENTL_FAIL_PORT_READ_ADDRESS", "0x1002", 1);
+            auto failedDoneResult =
+                access.commands().isCommandDone("AcquisitionStart");
+            unsetenv("MOCK_GENTL_FAIL_PORT_READ_ADDRESS");
+            auto* failedDoneError =
+                std::get_if<camera::CameraCommandAccessError>(&failedDoneResult);
+            require(failedDoneError &&
+                        failedDoneError->code ==
+                            camera::CameraCommandAccessError::Code::BackendFailure,
+                    "GenApi command completion-query failure was not reported as BackendFailure.");
+
             auto doneResult =
                 access.commands().isCommandDone("AcquisitionStart");
             auto* isDone = std::get_if<bool>(&doneResult);

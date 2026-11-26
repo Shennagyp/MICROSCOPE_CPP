@@ -2,6 +2,7 @@
 #include "camera/FrameRateEstimator.h"
 #include "camera/CameraFeatureValidation.h"
 #include "camera/qtwidgets/CameraControlPanel.h"
+#include "camera/qtwidgets/CameraFeatureEditor.h"
 #include "camera/qtwidgets/FrameView.h"
 #include "camera/qtwidgets/ImageInfoBar.h"
 
@@ -708,7 +709,7 @@ private:
     }
     struct FeatureControl {
         camera::CameraFeatureDescriptor descriptor;
-        QWidget* editor = nullptr;
+        camera::qtwidgets::CameraFeatureEditor* editor = nullptr;
         bool hasCurrentValue = false;
         std::optional<camera::CameraFeatureValue> currentValue;
     };
@@ -1341,8 +1342,7 @@ private:
         for (const auto& descriptor : descriptors) {
             // RAW controls are a diagnostic group: show the camera's reported
             // capability even when the active feature profile blocks writes or
-            // the RAW mode is currently disabled. Hiding these rows made it
-            // appear that the application had no RAW sensor configuration.
+            // the RAW mode is currently disabled.
             const bool showRawDiagnostic =
                 descriptor.name == "AmcamRawOutputEnabled" ||
                 descriptor.name == "AmcamRawSensorFormat" ||
@@ -1350,7 +1350,14 @@ private:
                 descriptor.name == std::string(camera::RawOutputBitDepthFeature);
             if (!descriptor.isAvailable && !showRawDiagnostic) continue;
 
-            QWidget* editor = createFeatureEditor(descriptor);
+            auto* editor = new camera::qtwidgets::CameraFeatureEditor(
+                descriptor, featureTabs_);
+            editor->setWriteRequestedHandler(
+                [this](const std::string& featureName,
+                       const camera::CameraFeatureValue& value) {
+                    submitFeatureValue(featureName, value);
+                });
+
             auto foundForm = featureForms_.find(descriptor.group);
             if (foundForm == featureForms_.end()) {
                 auto* scroll = new QScrollArea(featureTabs_);
@@ -1370,135 +1377,10 @@ private:
                 FeatureControl{descriptor, editor});
         }
 
-        // Readable features are populated asynchronously before editing is
-        // enabled. This prevents an empty editor from being mistaken for a
-        // current camera value.
+        // The reusable editor itself withholds readable settings until a valid
+        // current value is supplied. The host additionally gates the entire
+        // group during descriptor/readback refresh and lifecycle transitions.
         setFeatureControlsEnabled(false);
-    }
-
-    QWidget* createFeatureEditor(
-        const camera::CameraFeatureDescriptor& descriptor) {
-        const QString featureName = QString::fromStdString(descriptor.name);
-        QWidget* editor = nullptr;
-
-        switch (descriptor.kind) {
-        case camera::CameraFeatureKind::Boolean: {
-            auto* control = new QCheckBox(featureTabs_);
-            connect(control, &QCheckBox::toggled, this,
-                    [this, name = descriptor.name](bool) {
-                submitFeatureWrite(name);
-            });
-            editor = control;
-            break;
-        }
-        case camera::CameraFeatureKind::Integer: {
-            if (!descriptor.discreteIntegerValues.empty()) {
-                auto* control = new QComboBox(featureTabs_);
-                for (const auto item : descriptor.discreteIntegerValues) {
-                    control->addItem(
-                        QString::number(static_cast<qlonglong>(item)),
-                        QVariant::fromValue<qlonglong>(
-                            static_cast<qlonglong>(item)));
-                }
-                if (!descriptor.isReadable)
-                    control->setCurrentIndex(-1);
-                connect(control, qOverload<int>(&QComboBox::currentIndexChanged),
-                        this, [this, name = descriptor.name](int index) {
-                    if (index >= 0) submitFeatureWrite(name);
-                });
-                editor = control;
-            } else {
-                auto* control = new QLineEdit(featureTabs_);
-                control->setPlaceholderText(numericRangeText(descriptor));
-                connect(control, &QLineEdit::editingFinished, this,
-                        [this, name = descriptor.name]() {
-                    submitFeatureWrite(name);
-                });
-                editor = control;
-            }
-            break;
-        }
-        case camera::CameraFeatureKind::IntegerVector:
-        case camera::CameraFeatureKind::String: {
-            auto* control = new QLineEdit(featureTabs_);
-            if (descriptor.kind == camera::CameraFeatureKind::IntegerVector) {
-                control->setPlaceholderText(
-                    descriptor.elementCount
-                        ? QString("%1 comma-separated values")
-                              .arg(static_cast<qulonglong>(*descriptor.elementCount))
-                        : "Comma-separated values");
-            }
-            connect(control, &QLineEdit::editingFinished, this,
-                    [this, name = descriptor.name]() {
-                submitFeatureWrite(name);
-            });
-            editor = control;
-            break;
-        }
-        case camera::CameraFeatureKind::FloatingPoint: {
-            const auto* range = descriptor.numericRange
-                ? std::get_if<camera::CameraFloatingPointRange>(
-                      &*descriptor.numericRange)
-                : nullptr;
-            if (range) {
-                auto* control = new QDoubleSpinBox(featureTabs_);
-                control->setDecimals(12);
-                control->setRange(range->minimum, range->maximum);
-                control->setSingleStep(range->increment.value_or(1.0));
-                control->setKeyboardTracking(false);
-                connect(control, &QDoubleSpinBox::editingFinished, this,
-                        [this, name = descriptor.name]() {
-                    submitFeatureWrite(name);
-                });
-                editor = control;
-            } else {
-                auto* control = new QLineEdit(featureTabs_);
-                control->setReadOnly(descriptor.numericRange.has_value());
-                control->setPlaceholderText(
-                    descriptor.numericRange
-                        ? "Invalid floating-point range descriptor"
-                        : "Numeric value");
-                connect(control, &QLineEdit::editingFinished, this,
-                        [this, name = descriptor.name]() {
-                    submitFeatureWrite(name);
-                });
-                editor = control;
-            }
-            break;
-        }
-        case camera::CameraFeatureKind::Enumeration: {
-            if (descriptor.enumerationValues.empty()) {
-                auto* control = new QLineEdit(featureTabs_);
-                control->setReadOnly(true);
-                editor = control;
-            } else {
-                auto* control = new QComboBox(featureTabs_);
-                for (const auto& symbol : descriptor.enumerationValues) {
-                    const QString value = QString::fromStdString(symbol);
-                    const QString label = descriptor.name == "AmcamPixelFormat"
-                        ? amcamPixelFormatLabel(symbol)
-                        : value;
-                    control->addItem(label, value);
-                }
-                connect(control, qOverload<int>(&QComboBox::currentIndexChanged),
-                        this, [this, name = descriptor.name](int index) {
-                    if (index >= 0) submitFeatureWrite(name);
-                });
-                editor = control;
-            }
-            break;
-        }
-        }
-
-        if (!editor) {
-            editor = new QLabel("Unsupported feature type", featureTabs_);
-        }
-        editor->setObjectName(featureName);
-        editor->setEnabled(descriptor.isAvailable && descriptor.isWritable);
-        if (descriptor.disabledReason) {
-            editor->setToolTip(QString::fromStdString(*descriptor.disabledReason));
-        }
-        return editor;
     }
 
     bool canEditFeatureFromInfoBar(const FeatureControl& control) const {
@@ -1777,6 +1659,8 @@ private:
                                 std::get_if<camera::CameraFeatureAccessError>(&result)) {
                             found->second.hasCurrentValue = false;
                             found->second.currentValue.reset();
+                            found->second.editor->setCurrentValue(std::nullopt);
+                            found->second.editor->setErrorMessage(error->message);
                             QString tooltip = QString::fromStdString(error->message);
                             if (found->second.descriptor.disabledReason) {
                                 tooltip += "\n" + QString::fromStdString(
@@ -1787,16 +1671,15 @@ private:
                             const auto& value =
                                 std::get<camera::CameraFeatureValue>(result);
                             found->second.hasCurrentValue =
-                                setFeatureEditorValue(found->second, value);
+                                found->second.editor->setCurrentValue(value);
                             if (found->second.hasCurrentValue) {
                                 found->second.currentValue = value;
                             } else {
                                 found->second.currentValue.reset();
-                            }
-                            if (!found->second.hasCurrentValue) {
                                 found->second.editor->setToolTip(
                                     "The backend returned a value that does not match its descriptor.");
-                            } else {
+                            }
+                            if (found->second.hasCurrentValue) {
                                 found->second.editor->setToolTip(
                                     found->second.descriptor.disabledReason
                                         ? QString::fromStdString(
@@ -1828,201 +1711,6 @@ private:
                 break;
             }
         }
-    }
-
-    bool setFeatureEditorValue(
-        const FeatureControl& control,
-        const camera::CameraFeatureValue& value) {
-        switch (control.descriptor.kind) {
-        case camera::CameraFeatureKind::Boolean: {
-            const auto* typed = std::get_if<bool>(&value);
-            auto* editor = qobject_cast<QCheckBox*>(control.editor);
-            if (!typed || !editor) return false;
-            const QSignalBlocker blocker(editor);
-            editor->setChecked(*typed);
-            return true;
-        }
-        case camera::CameraFeatureKind::Integer: {
-            const auto* typed = std::get_if<std::int64_t>(&value);
-            if (!typed) return false;
-            if (auto* combo = qobject_cast<QComboBox*>(control.editor)) {
-                const QSignalBlocker blocker(combo);
-                const int index = combo->findData(
-                    QVariant::fromValue<qlonglong>(
-                        static_cast<qlonglong>(*typed)));
-                combo->setCurrentIndex(index);
-                return index >= 0;
-            }
-            if (auto* editor = qobject_cast<QLineEdit*>(control.editor)) {
-                const QSignalBlocker blocker(editor);
-                editor->setText(QString::number(static_cast<qlonglong>(*typed)));
-                return true;
-            }
-            return false;
-        }
-        case camera::CameraFeatureKind::IntegerVector: {
-            const auto* typed = std::get_if<std::vector<std::int64_t>>(&value);
-            auto* editor = qobject_cast<QLineEdit*>(control.editor);
-            if (!typed || !editor) return false;
-            QStringList parts;
-            for (const auto item : *typed) parts.push_back(QString::number(static_cast<qlonglong>(item)));
-            const QSignalBlocker blocker(editor);
-            editor->setText(parts.join(", "));
-            return true;
-        }
-        case camera::CameraFeatureKind::FloatingPoint: {
-            const auto* typed = std::get_if<double>(&value);
-            if (!typed) return false;
-            if (auto* spin = qobject_cast<QDoubleSpinBox*>(control.editor)) {
-                const QSignalBlocker blocker(spin);
-                spin->setValue(*typed);
-                return true;
-            }
-            if (auto* line = qobject_cast<QLineEdit*>(control.editor)) {
-                const QSignalBlocker blocker(line);
-                line->setText(QString::number(*typed, 'g', 12));
-                return true;
-            }
-            return false;
-        }
-        case camera::CameraFeatureKind::String: {
-            const auto* typed = std::get_if<std::string>(&value);
-            auto* editor = qobject_cast<QLineEdit*>(control.editor);
-            if (!typed || !editor) return false;
-            const QSignalBlocker blocker(editor);
-            editor->setText(QString::fromUtf8(
-                typed->data(), static_cast<qsizetype>(typed->size())));
-            return true;
-        }
-        case camera::CameraFeatureKind::Enumeration: {
-            const auto* typed = std::get_if<camera::FeatureEnumeration>(&value);
-            if (!typed) return false;
-            if (auto* combo = qobject_cast<QComboBox*>(control.editor)) {
-                const QSignalBlocker blocker(combo);
-                const int index = combo->findData(QString::fromStdString(typed->symbol));
-                combo->setCurrentIndex(index);
-                return index >= 0;
-            }
-            if (auto* line = qobject_cast<QLineEdit*>(control.editor)) {
-                const QSignalBlocker blocker(line);
-                line->setText(QString::fromStdString(typed->symbol));
-                return true;
-            }
-            return false;
-        }
-        }
-        return false;
-    }
-
-    void submitFeatureWrite(const std::string& featureName) {
-        if (pendingFeatureWrite_) return;
-
-        const auto found = featureControls_.find(featureName);
-        if (found == featureControls_.end() ||
-            !found->second.descriptor.isWritable) {
-            return;
-        }
-
-        const FeatureControl& control = found->second;
-        camera::CameraFeatureValue value;
-        QString validationMessage;
-
-        switch (control.descriptor.kind) {
-        case camera::CameraFeatureKind::Boolean: {
-            const auto* editor = qobject_cast<QCheckBox*>(control.editor);
-            if (!editor) return;
-            value = editor->isChecked();
-            break;
-        }
-        case camera::CameraFeatureKind::Integer: {
-            bool ok = false;
-            qlonglong number = 0;
-            if (const auto* combo = qobject_cast<QComboBox*>(control.editor)) {
-                if (combo->currentIndex() >= 0)
-                    number = combo->currentData().toLongLong(&ok);
-            } else if (const auto* editor =
-                           qobject_cast<QLineEdit*>(control.editor)) {
-                number = editor->text().trimmed().toLongLong(&ok);
-            }
-            if (!ok) {
-                validationMessage = control.descriptor.discreteIntegerValues.empty()
-                    ? "Enter a valid signed integer."
-                    : "Select one of the advertised integer values.";
-                break;
-            }
-            value = static_cast<std::int64_t>(number);
-            break;
-        }
-        case camera::CameraFeatureKind::IntegerVector: {
-            const auto* editor = qobject_cast<QLineEdit*>(control.editor);
-            if (!editor) return;
-
-            std::vector<std::int64_t> values;
-            const QStringList parts = editor->text().split(',', Qt::KeepEmptyParts);
-            bool valid = !parts.isEmpty();
-            for (const auto& part : parts) {
-                bool ok = false;
-                const qlonglong number = part.trimmed().toLongLong(&ok);
-                if (!ok) {
-                    valid = false;
-                    break;
-                }
-                values.push_back(static_cast<std::int64_t>(number));
-            }
-            if (control.descriptor.elementCount &&
-                values.size() != *control.descriptor.elementCount) {
-                valid = false;
-            }
-            if (!valid) {
-                validationMessage = "Enter the required number of comma-separated integers.";
-                break;
-            }
-            value = std::move(values);
-            break;
-        }
-        case camera::CameraFeatureKind::FloatingPoint: {
-            bool ok = false;
-            double number = 0.0;
-            if (const auto* spin = qobject_cast<QDoubleSpinBox*>(control.editor)) {
-                number = spin->value();
-                ok = true;
-            } else if (const auto* line = qobject_cast<QLineEdit*>(control.editor)) {
-                number = line->text().trimmed().toDouble(&ok);
-            }
-            if (!ok || !std::isfinite(number)) {
-                validationMessage = "Enter a finite numeric value.";
-                break;
-            }
-            value = number;
-            break;
-        }
-        case camera::CameraFeatureKind::String: {
-            const auto* editor = qobject_cast<QLineEdit*>(control.editor);
-            if (!editor) return;
-            value = utf8String(editor->text());
-            break;
-        }
-        case camera::CameraFeatureKind::Enumeration: {
-            if (const auto* combo = qobject_cast<QComboBox*>(control.editor)) {
-                if (combo->currentIndex() < 0) {
-                    validationMessage = "Select one of the advertised enumeration values.";
-                    break;
-                }
-                value = camera::FeatureEnumeration{
-                    utf8String(combo->currentData().toString())};
-            } else {
-                validationMessage = "This enumeration has no writable values.";
-            }
-            break;
-        }
-        }
-
-        if (!validationMessage.isEmpty()) {
-            featureStatus_->setText(validationMessage);
-            return;
-        }
-
-        submitFeatureValue(featureName, std::move(value));
     }
 
     void submitFeatureValue(
@@ -2087,22 +1775,11 @@ private:
         const bool canEnable = enabled && !lifecycleRequestPending_ &&
                                 camera_.state() == amscope::CameraState::Open;
         for (auto& entry : featureControls_) {
-            const auto& descriptor = entry.second.descriptor;
-            // A readable current value is not required to configure a
-            // selector when its descriptor already supplies the exact legal
-            // choices. Leave it unselected until the user chooses if readback
-            // is unavailable; never invent a current value.
-            const bool hasExplicitChoices =
-                (descriptor.kind == camera::CameraFeatureKind::Integer &&
-                 !descriptor.discreteIntegerValues.empty()) ||
-                (descriptor.kind == camera::CameraFeatureKind::Enumeration &&
-                 !descriptor.enumerationValues.empty());
-            const bool valueIsKnown =
-                hasExplicitChoices || !descriptor.isReadable ||
-                entry.second.hasCurrentValue;
-            entry.second.editor->setEnabled(
-                canEnable && descriptor.isAvailable &&
-                descriptor.isWritable && valueIsKnown);
+            // CameraFeatureEditor owns type parsing, descriptor validation and
+            // the distinction between a current readback and an unset
+            // write-only input. The host owns lifecycle/pending gating.
+            entry.second.editor->setPending(!canEnable);
+            entry.second.editor->setEnabled(canEnable);
         }
         refreshFeaturesButton_->setEnabled(
             canEnable && camera_.state() == amscope::CameraState::Open);

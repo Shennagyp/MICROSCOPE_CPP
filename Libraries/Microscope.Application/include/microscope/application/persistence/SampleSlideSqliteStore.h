@@ -19,6 +19,7 @@ enum class SampleSlideStoreErrorCode {
     SchemaMigrationFailed,
     UnsupportedSchemaVersion,
     InvalidRevision,
+    PayloadTooLarge,
     RevisionConflict,
     DuplicateSampleTypeRevision,
     SampleTypeRevisionNotFound,

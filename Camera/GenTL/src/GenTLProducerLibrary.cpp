@@ -251,7 +251,7 @@ std::int32_t GenTLProducerLibrary::invokeRaw(
     case Operation::tlUpdateInterfaceList:
         return countIs(3) ? f.tlUpdateInterfaceList(
             static_cast<GenTL::TL_HANDLE>(pointer(0)),
-            static_cast<GenTL::bool8_t*>(pointer(1)), arguments[2]) : invalid();
+            static_cast<bool8_t*>(pointer(1)), arguments[2]) : invalid();
     case Operation::ifClose:
         return countIs(1) ? f.ifClose(
             static_cast<GenTL::IF_HANDLE>(pointer(0))) : invalid();
@@ -274,7 +274,7 @@ std::int32_t GenTLProducerLibrary::invokeRaw(
     case Operation::ifUpdateDeviceList:
         return countIs(3) ? f.ifUpdateDeviceList(
             static_cast<GenTL::IF_HANDLE>(pointer(0)),
-            static_cast<GenTL::bool8_t*>(pointer(1)), arguments[2]) : invalid();
+            static_cast<bool8_t*>(pointer(1)), arguments[2]) : invalid();
     case Operation::ifGetDeviceInfo:
         return countIs(6) ? f.ifGetDeviceInfo(
             static_cast<GenTL::IF_HANDLE>(pointer(0)),

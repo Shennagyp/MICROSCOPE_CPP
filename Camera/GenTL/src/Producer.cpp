@@ -1060,35 +1060,42 @@ DataStreamStatistics DataStreamSession::statistics() {
 
     DataStreamStatistics result;
     result.transportType = state->transportType;
-    const auto readStreamInfo = [&](auto command, auto expectedType,
+    const auto readStreamInfo = [&](auto command, auto valueType,
+                                    GenTL::INFO_DATATYPE expectedDataType,
                                     const char* name) {
-        using Value = decltype(expectedType);
+        using Value = decltype(valueType);
         return readTypedInfo<Value>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(
                     Operation::dsGetInfo, state->stream, command,
                     type, value, size);
-            }, expectedType, name);
+            }, expectedDataType, name);
     };
 
     result.producerDeliveredBuffers = readStreamInfo(
         GenTL::STREAM_INFO_NUM_DELIVERED,
-        std::uint64_t{}, "DSGetInfo(NUM_DELIVERED)");
+        std::uint64_t{}, GenTL::INFO_DATATYPE_UINT64,
+        "DSGetInfo(NUM_DELIVERED)");
     result.producerBufferUnderruns = readStreamInfo(
         GenTL::STREAM_INFO_NUM_UNDERRUN,
-        std::uint64_t{}, "DSGetInfo(NUM_UNDERRUN)");
+        std::uint64_t{}, GenTL::INFO_DATATYPE_UINT64,
+        "DSGetInfo(NUM_UNDERRUN)");
     result.producerFramesStarted = readStreamInfo(
         GenTL::STREAM_INFO_NUM_STARTED,
-        std::uint64_t{}, "DSGetInfo(NUM_STARTED)");
+        std::uint64_t{}, GenTL::INFO_DATATYPE_UINT64,
+        "DSGetInfo(NUM_STARTED)");
     result.announcedBuffers = readStreamInfo(
         GenTL::STREAM_INFO_NUM_ANNOUNCED,
-        std::size_t{}, "DSGetInfo(NUM_ANNOUNCED)");
+        std::size_t{}, GenTL::INFO_DATATYPE_SIZET,
+        "DSGetInfo(NUM_ANNOUNCED)");
     result.queuedBuffers = readStreamInfo(
         GenTL::STREAM_INFO_NUM_QUEUED,
-        std::size_t{}, "DSGetInfo(NUM_QUEUED)");
+        std::size_t{}, GenTL::INFO_DATATYPE_SIZET,
+        "DSGetInfo(NUM_QUEUED)");
     result.buffersAwaitingDelivery = readStreamInfo(
         GenTL::STREAM_INFO_NUM_AWAIT_DELIVERY,
-        std::size_t{}, "DSGetInfo(NUM_AWAIT_DELIVERY)");
+        std::size_t{}, GenTL::INFO_DATATYPE_SIZET,
+        "DSGetInfo(NUM_AWAIT_DELIVERY)");
 
     if (result.producerBufferUnderruns) {
         const auto current = *result.producerBufferUnderruns;

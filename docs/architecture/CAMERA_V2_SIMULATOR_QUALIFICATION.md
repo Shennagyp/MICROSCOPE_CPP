@@ -133,16 +133,21 @@ GenApi XML retrieval, data-stream acquisition, five frame deliveries,
 Common-frame projection and orderly teardown.
 
 The in-repository simulator is deterministic and license-independent. It
-currently models one mock camera, one interface, one data stream and repeated
-Mono8 image buffers. It is not an independent vendor implementation and does
-not qualify multiple physical transports, vendor-specific features, real
-hardware timing, or physical cameras. Its purpose is to turn the C++ CTI
-loading and consumer path into a continuously executed integration test.
+currently models one mock camera, one interface, one data stream and Mono8
+image buffers. It generates monotonically increasing frame IDs and timestamps
+and a changing deterministic payload; the smoke verifies five consecutive
+frames. It is not an independent vendor implementation and does not qualify
+multiple physical transports, vendor-specific features, real hardware timing,
+or physical cameras. Its purpose is to turn the C++ CTI loading and consumer
+path into a continuously executed integration test.
 
-The new target and test have not been built or executed locally. GitHub Actions
-must validate compilation and the simulator smoke. A CI pass will establish
-in-repository CTI integration only; a separate approved vendor CTI remains
-necessary for third-party interoperability evidence.
+The latest source commit `fc3132a62d59ca11aeb52026acaac70d3c85ddd5` passed the
+GenTL bridge workflow #45795223360 on Intel x86_64 and Apple Silicon arm64,
+including the full CTest suite and official GenApi integration tests through
+the simulated CTI. The package/external-consumer workflow #45795223288 is still
+queued at the time of this update. No local build/test/debug run was performed.
+A separate approved vendor CTI remains necessary for third-party
+interoperability evidence.
 
 ## 5. Acceptance criteria
 

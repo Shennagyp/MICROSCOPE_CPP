@@ -228,6 +228,19 @@ void testOpticalFilterSpectralResponse() {
               dichroic.value().spectralResponse().size() == 3 &&
               dichroic.value().compatibilityId() == compatibilityId,
               "retains filter role, response data and filter-set compatibility identity");
+        const auto interpolatedTransmission =
+            dichroic.value().transmissionAt(425.0);
+        const auto interpolatedReflection =
+            dichroic.value().reflectionAt(425.0);
+        check(interpolatedTransmission &&
+              std::abs(*interpolatedTransmission - 0.075) < 1e-12,
+              "linearly interpolates dichroic transmission between measured samples");
+        check(interpolatedReflection &&
+              std::abs(*interpolatedReflection - 0.90) < 1e-12,
+              "linearly interpolates dichroic reflection between measured samples");
+        check(!dichroic.value().transmissionAt(399.0) &&
+              !dichroic.value().reflectionAt(501.0),
+              "does not extrapolate dichroic response outside its measured wavelength range");
     }
 
     const auto missingDichroicReflection = OpticalFilterSpecification::create(
@@ -620,10 +633,48 @@ void testEquipmentAggregateValidatesSpecializedComponentReferences() {
 
 } // namespace
 
+void testFluorescenceEmissionSpectrumValidation() {
+    const auto spectrum = FluorescenceEmissionSpectrum::create({
+        {take(PositiveNanometers::create(500.0)), 0.1},
+        {take(PositiveNanometers::create(550.0)), 1.0},
+        {take(PositiveNanometers::create(600.0)), 0.2}});
+    check(static_cast<bool>(spectrum),
+          "accepts an ordered nonzero relative spectral photon-flux profile");
+    if (spectrum) {
+        check(spectrum.value().samples().size() == 3,
+              "retains the full fluorophore emission distribution");
+    }
+
+    const auto unsorted = FluorescenceEmissionSpectrum::create({
+        {take(PositiveNanometers::create(550.0)), 0.8},
+        {take(PositiveNanometers::create(500.0)), 0.2}});
+    check(!unsorted &&
+          unsorted.error() ==
+              FluorescenceEmissionSpectrumError::WavelengthsNotIncreasing,
+          "rejects non-increasing fluorophore emission wavelengths");
+
+    const auto allZero = FluorescenceEmissionSpectrum::create({
+        {take(PositiveNanometers::create(500.0)), 0.0},
+        {take(PositiveNanometers::create(600.0)), 0.0}});
+    check(!allZero &&
+          allZero.error() ==
+              FluorescenceEmissionSpectrumError::NoPositiveEmission,
+          "rejects a fluorophore spectrum with no emitted photons");
+
+    const auto negative = FluorescenceEmissionSpectrum::create({
+        {take(PositiveNanometers::create(500.0)), 0.2},
+        {take(PositiveNanometers::create(600.0)), -0.1}});
+    check(!negative &&
+          negative.error() ==
+              FluorescenceEmissionSpectrumError::InvalidRelativeIntensity,
+          "rejects negative relative emission density");
+}
+
 int main() {
     testPositiveOpticalValuesAreFiniteAndTyped();
     testObjectiveSpecification();
     testOpticalFilterSpectralResponse();
+    testFluorescenceEmissionSpectrumValidation();
     testCameraOutputMappingUsesSensorAndDeliveredDimensions();
     testCameraSensorCharacteristicsValidation();
     testCameraModeAndSensorValidation();

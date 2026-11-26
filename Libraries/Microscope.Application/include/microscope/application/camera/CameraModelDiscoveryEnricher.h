@@ -33,6 +33,11 @@ struct CameraModelEnrichmentResult {
     std::vector<CameraModelEnrichmentWarning> warnings;
 };
 
+struct CameraSpecificationProjectionResult {
+    core::CameraSpecification specification;
+    std::vector<CameraModelEnrichmentWarning> warnings;
+};
+
 class CameraModelDiscoveryEnricher final {
 public:
     [[nodiscard]] static CameraModelEnrichmentResult enrich(
@@ -45,6 +50,16 @@ public:
     [[nodiscard]] static std::optional<core::CameraSensorCharacteristics>
     toCoreSensorCharacteristics(
         const ::camera::CameraDeviceInfo& enrichedDevice);
+
+    // Enriches missing Core sensor-characteristic fields while preserving the
+    // active sensor dimensions, pixel pitch and output modes declared by the
+    // installed microscope equipment definition. Conflicting catalog values
+    // are returned as warnings; they do not silently replace equipment data.
+    [[nodiscard]] static core::Result<
+        CameraSpecificationProjectionResult,
+        core::CameraSpecificationError> projectToCoreCameraSpecification(
+            const core::CameraSpecification& installedSpecification,
+            const ::camera::CameraDeviceInfo& enrichedDevice);
 };
 
 } // namespace microscope::application::camera_support

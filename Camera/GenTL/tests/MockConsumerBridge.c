@@ -41,6 +41,7 @@ static const char mock_xml[] =
     "    <pFeature>TriggerMode</pFeature>\n" \
     "    <pFeature>Temperature</pFeature>\n" \
     "    <pFeature>DeviceLabel</pFeature>\n" \
+    "    <pFeature>UnsupportedNode</pFeature>\n" \
     "    <pFeature>AcquisitionControl</pFeature>\n" \
     "  </Category>\n" \
     "  <Category Name=\"AcquisitionControl\">\n" \

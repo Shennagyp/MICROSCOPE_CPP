@@ -153,9 +153,9 @@ void testExactProfileEnrichesMissingSensorFacts() {
     check(projected.has_value(),
           "projects enriched sensor facts into the persistence-free Core value type");
     if (projected) {
-        check(projected->shutterType == core::CameraShutterType::Global,
+        check(projected->shutterType == microscope::core::CameraShutterType::Global,
               "projects the selected global shutter fact into Core");
-        check(projected->colorMode == core::CameraSensorColorMode::Monochrome,
+        check(projected->colorMode == microscope::core::CameraSensorColorMode::Monochrome,
               "projects monochrome sensor identity into Core");
         check(projected->quantumEfficiency.size() == 3 &&
               projected->quantumEfficiency[1].quantumEfficiency == 0.91,

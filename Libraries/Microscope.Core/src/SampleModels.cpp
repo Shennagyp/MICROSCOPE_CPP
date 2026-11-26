@@ -247,6 +247,211 @@ ObjectiveMicroscopyRequirements::maximumCoverglassDesignMismatchMicrometers()
     return maximumCoverglassDesignMismatchMicrometers_;
 }
 
+CondenserMicroscopyRequirements::CondenserMicroscopyRequirements(
+    std::optional<double> minimumApertureNA,
+    std::optional<double> maximumApertureNA,
+    std::vector<CondenserDesign> allowedDesigns,
+    std::vector<CondenserImmersionMedium> allowedImmersionMedia)
+    : minimumApertureNA_(minimumApertureNA),
+      maximumApertureNA_(maximumApertureNA),
+      allowedDesigns_(std::move(allowedDesigns)),
+      allowedImmersionMedia_(std::move(allowedImmersionMedia)) {}
+
+Result<CondenserMicroscopyRequirements, CondenserRequirementsError>
+CondenserMicroscopyRequirements::create(
+    std::optional<double> minimumApertureNA,
+    std::optional<double> maximumApertureNA,
+    std::vector<CondenserDesign> allowedDesigns,
+    std::vector<CondenserImmersionMedium> allowedImmersionMedia) {
+    if (!minimumApertureNA && !maximumApertureNA &&
+        allowedDesigns.empty() && allowedImmersionMedia.empty()) {
+        return Result<
+            CondenserMicroscopyRequirements,
+            CondenserRequirementsError>::failure(
+                CondenserRequirementsError::NoConstraint);
+    }
+
+    const auto finite = [](const std::optional<double>& value) {
+        return !value || std::isfinite(*value);
+    };
+    if (!finite(minimumApertureNA) || !finite(maximumApertureNA)) {
+        return Result<
+            CondenserMicroscopyRequirements,
+            CondenserRequirementsError>::failure(
+                CondenserRequirementsError::NonFiniteValue);
+    }
+    if ((minimumApertureNA && *minimumApertureNA < 0.0) ||
+        (maximumApertureNA && *maximumApertureNA <= 0.0)) {
+        return Result<
+            CondenserMicroscopyRequirements,
+            CondenserRequirementsError>::failure(
+                CondenserRequirementsError::InvalidAperture);
+    }
+    if (minimumApertureNA && maximumApertureNA &&
+        *minimumApertureNA > *maximumApertureNA) {
+        return Result<
+            CondenserMicroscopyRequirements,
+            CondenserRequirementsError>::failure(
+                CondenserRequirementsError::InvertedApertureRange);
+    }
+
+    std::set<CondenserDesign> designs;
+    for (const auto design : allowedDesigns) {
+        if (design == CondenserDesign::Unknown) {
+            return Result<
+                CondenserMicroscopyRequirements,
+                CondenserRequirementsError>::failure(
+                    CondenserRequirementsError::InvalidDesign);
+        }
+        if (!designs.insert(design).second) {
+            return Result<
+                CondenserMicroscopyRequirements,
+                CondenserRequirementsError>::failure(
+                    CondenserRequirementsError::DuplicateDesign);
+        }
+    }
+
+    std::set<CondenserImmersionMedium> immersionMedia;
+    for (const auto medium : allowedImmersionMedia) {
+        if (medium == CondenserImmersionMedium::Unknown) {
+            return Result<
+                CondenserMicroscopyRequirements,
+                CondenserRequirementsError>::failure(
+                    CondenserRequirementsError::InvalidImmersionMedium);
+        }
+        if (!immersionMedia.insert(medium).second) {
+            return Result<
+                CondenserMicroscopyRequirements,
+                CondenserRequirementsError>::failure(
+                    CondenserRequirementsError::DuplicateImmersionMedium);
+        }
+    }
+
+    return Result<
+        CondenserMicroscopyRequirements,
+        CondenserRequirementsError>::success(
+            CondenserMicroscopyRequirements(
+                minimumApertureNA,
+                maximumApertureNA,
+                std::move(allowedDesigns),
+                std::move(allowedImmersionMedia)));
+}
+
+const std::optional<double>&
+CondenserMicroscopyRequirements::minimumApertureNA() const noexcept {
+    return minimumApertureNA_;
+}
+
+const std::optional<double>&
+CondenserMicroscopyRequirements::maximumApertureNA() const noexcept {
+    return maximumApertureNA_;
+}
+
+const std::vector<CondenserDesign>&
+CondenserMicroscopyRequirements::allowedDesigns() const noexcept {
+    return allowedDesigns_;
+}
+
+const std::vector<CondenserImmersionMedium>&
+CondenserMicroscopyRequirements::allowedImmersionMedia() const noexcept {
+    return allowedImmersionMedia_;
+}
+
+IlluminationMicroscopyRequirements::IlluminationMicroscopyRequirements(
+    std::optional<double> minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+    std::optional<double> maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+    std::optional<SpectralBand> requiredSpectralBand,
+    bool requireContinuouslyAdjustableSource)
+    : minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter_(
+          minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter),
+      maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter_(
+          maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter),
+      requiredSpectralBand_(std::move(requiredSpectralBand)),
+      requireContinuouslyAdjustableSource_(requireContinuouslyAdjustableSource) {}
+
+Result<
+    IlluminationMicroscopyRequirements,
+    IlluminationRequirementsError> IlluminationMicroscopyRequirements::create(
+        std::optional<double> minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+        std::optional<double> maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+        std::optional<SpectralBand> requiredSpectralBand,
+        bool requireContinuouslyAdjustableSource) {
+    if (!minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter &&
+        !maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter &&
+        !requiredSpectralBand &&
+        !requireContinuouslyAdjustableSource) {
+        return Result<
+            IlluminationMicroscopyRequirements,
+            IlluminationRequirementsError>::failure(
+                IlluminationRequirementsError::NoConstraint);
+    }
+
+    const auto finite = [](const std::optional<double>& value) {
+        return !value || std::isfinite(*value);
+    };
+    if (!finite(minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter) ||
+        !finite(maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter)) {
+        return Result<
+            IlluminationMicroscopyRequirements,
+            IlluminationRequirementsError>::failure(
+                IlluminationRequirementsError::NonFiniteValue);
+    }
+    if (minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter &&
+        *minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter < 0.0) {
+        return Result<
+            IlluminationMicroscopyRequirements,
+            IlluminationRequirementsError>::failure(
+                IlluminationRequirementsError::NegativeMinimumIrradiance);
+    }
+    if (maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter &&
+        *maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter <= 0.0) {
+        return Result<
+            IlluminationMicroscopyRequirements,
+            IlluminationRequirementsError>::failure(
+                IlluminationRequirementsError::NonPositiveMaximumIrradiance);
+    }
+    if (minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter &&
+        maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter &&
+        *minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter >
+            *maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter) {
+        return Result<
+            IlluminationMicroscopyRequirements,
+            IlluminationRequirementsError>::failure(
+                IlluminationRequirementsError::InvertedIrradianceRange);
+    }
+
+    return Result<
+        IlluminationMicroscopyRequirements,
+        IlluminationRequirementsError>::success(
+            IlluminationMicroscopyRequirements(
+                minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+                maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter,
+                std::move(requiredSpectralBand),
+                requireContinuouslyAdjustableSource));
+}
+
+const std::optional<double>&
+IlluminationMicroscopyRequirements::
+minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() const noexcept {
+    return minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter_;
+}
+
+const std::optional<double>&
+IlluminationMicroscopyRequirements::
+maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() const noexcept {
+    return maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter_;
+}
+
+const std::optional<SpectralBand>&
+IlluminationMicroscopyRequirements::requiredSpectralBand() const noexcept {
+    return requiredSpectralBand_;
+}
+
+bool IlluminationMicroscopyRequirements::
+requireContinuouslyAdjustableSource() const noexcept {
+    return requireContinuouslyAdjustableSource_;
+}
+
 CameraPerformanceRequirements::CameraPerformanceRequirements(
     std::optional<double> minimumFrameRateFramesPerSecond,
     std::optional<double> maximumReadNoiseElectronsRms,
@@ -388,18 +593,24 @@ MicroscopyRequirements::MicroscopyRequirements(
     std::vector<MicroscopyTechniqueConstraint> techniques,
     std::optional<ObjectiveMicroscopyRequirements> objective,
     std::optional<CameraPerformanceRequirements> camera,
-    bool requireFluorescentLabelMetadata)
+    bool requireFluorescentLabelMetadata,
+    std::optional<CondenserMicroscopyRequirements> condenser,
+    std::optional<IlluminationMicroscopyRequirements> illumination)
     : techniques_(std::move(techniques)),
       objective_(std::move(objective)),
       camera_(std::move(camera)),
-      requireFluorescentLabelMetadata_(requireFluorescentLabelMetadata) {}
+      requireFluorescentLabelMetadata_(requireFluorescentLabelMetadata),
+      condenser_(std::move(condenser)),
+      illumination_(std::move(illumination)) {}
 
 Result<MicroscopyRequirements, MicroscopyRequirementsError>
 MicroscopyRequirements::create(
     std::vector<MicroscopyTechniqueConstraint> techniques,
     std::optional<ObjectiveMicroscopyRequirements> objective,
     std::optional<CameraPerformanceRequirements> camera,
-    bool requireFluorescentLabelMetadata) {
+    bool requireFluorescentLabelMetadata,
+    std::optional<CondenserMicroscopyRequirements> condenser,
+    std::optional<IlluminationMicroscopyRequirements> illumination) {
     std::set<ContrastMethod> methods;
     std::size_t requiredCount = 0;
     bool fluorescenceTechniqueDeclared = false;
@@ -446,7 +657,9 @@ MicroscopyRequirements::create(
                 std::move(techniques),
                 std::move(objective),
                 std::move(camera),
-                requireFluorescentLabelMetadata));
+                requireFluorescentLabelMetadata,
+                std::move(condenser),
+                std::move(illumination)));
 }
 
 const std::vector<MicroscopyTechniqueConstraint>&
@@ -466,6 +679,16 @@ MicroscopyRequirements::camera() const noexcept {
 
 bool MicroscopyRequirements::requireFluorescentLabelMetadata() const noexcept {
     return requireFluorescentLabelMetadata_;
+}
+
+const std::optional<CondenserMicroscopyRequirements>&
+MicroscopyRequirements::condenser() const noexcept {
+    return condenser_;
+}
+
+const std::optional<IlluminationMicroscopyRequirements>&
+MicroscopyRequirements::illumination() const noexcept {
+    return illumination_;
 }
 
 SampleType::SampleType(

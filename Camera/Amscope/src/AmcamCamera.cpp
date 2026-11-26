@@ -28,6 +28,13 @@
 #include <vector>
 
 namespace {
+using amscope::detail::RawPixelFormatChoice;
+using amscope::detail::rawPixelFormatBitDepth;
+using amscope::detail::rawPixelFormatChoices;
+using amscope::detail::rawPixelFormatForBitDepth;
+using amscope::detail::rawBitDepthForPixelFormat;
+using amscope::detail::makeRawOutputBitDepthDescriptor;
+
 constexpr std::size_t kPoolSize = 4;
 constexpr int kRgb24Bits = 24;
 constexpr int kPackedRows = -1;
@@ -76,105 +83,6 @@ unsigned rawMaximumBitDepth(HAmcam handle, std::uint64_t modelFlags) {
     return std::max(sdkMaximum, rawMaximumBitDepthFromModelFlags(modelFlags));
 }
 
-// Pixel-format enumeration is the authoritative source for discrete RAW /
-// sensor-mosaic output precision on SDK v20+. The legacy BITDEPTH option exposes only
-// 8-bit versus camera-maximum and cannot represent intermediate depths.
-std::optional<unsigned> rawPixelFormatBitDepth(int pixelFormat) {
-    switch (pixelFormat) {
-    case AMCAM_PIXELFORMAT_RAW8:
-    case AMCAM_PIXELFORMAT_GMCY8: return 8U;
-    case AMCAM_PIXELFORMAT_RAW10: return 10U;
-    case AMCAM_PIXELFORMAT_RAW11: return 11U;
-    case AMCAM_PIXELFORMAT_RAW12:
-    case AMCAM_PIXELFORMAT_RAW12PACK:
-    case AMCAM_PIXELFORMAT_GMCY12: return 12U;
-    case AMCAM_PIXELFORMAT_RAW14: return 14U;
-    case AMCAM_PIXELFORMAT_RAW16: return 16U;
-    default: return std::nullopt;
-    }
-}
-
-struct RawPixelFormatChoice {
-    unsigned bitDepth = 0;
-    int pixelFormat = -1;
-};
-
-std::vector<RawPixelFormatChoice> rawPixelFormatChoices(
-    const std::vector<int>& supportedPixelFormats) {
-    // Prefer unpacked RAW12 when both representations are supported. The
-    // public bit-depth feature represents significant precision, not packing.
-    constexpr RawPixelFormatChoice candidates[] = {
-        {8U, AMCAM_PIXELFORMAT_RAW8},
-        {8U, AMCAM_PIXELFORMAT_GMCY8},
-        {10U, AMCAM_PIXELFORMAT_RAW10},
-        {11U, AMCAM_PIXELFORMAT_RAW11},
-        {12U, AMCAM_PIXELFORMAT_RAW12},
-        {12U, AMCAM_PIXELFORMAT_RAW12PACK},
-        {12U, AMCAM_PIXELFORMAT_GMCY12},
-        {14U, AMCAM_PIXELFORMAT_RAW14},
-        {16U, AMCAM_PIXELFORMAT_RAW16}
-    };
-    std::vector<RawPixelFormatChoice> choices;
-    for (const auto& candidate : candidates) {
-        if (std::find(supportedPixelFormats.begin(),
-                      supportedPixelFormats.end(), candidate.pixelFormat) ==
-            supportedPixelFormats.end()) {
-            continue;
-        }
-        const auto existing = std::find_if(
-            choices.begin(), choices.end(),
-            [&candidate](const RawPixelFormatChoice& choice) {
-                return choice.bitDepth == candidate.bitDepth;
-            });
-        if (existing == choices.end())
-            choices.push_back(candidate);
-    }
-    std::sort(choices.begin(), choices.end(),
-              [](const RawPixelFormatChoice& left,
-                 const RawPixelFormatChoice& right) {
-                  return left.bitDepth < right.bitDepth;
-              });
-    return choices;
-}
-
-std::optional<int> rawPixelFormatForBitDepth(
-    const std::vector<RawPixelFormatChoice>& choices,
-    unsigned bitDepth) {
-    const auto found = std::find_if(
-        choices.begin(), choices.end(),
-        [bitDepth](const RawPixelFormatChoice& choice) {
-            return choice.bitDepth == bitDepth;
-        });
-    return found == choices.end()
-        ? std::nullopt
-        : std::optional<int>(found->pixelFormat);
-}
-
-std::optional<unsigned> rawBitDepthForPixelFormat(
-    const std::vector<RawPixelFormatChoice>& choices,
-    const std::vector<int>& supportedPixelFormats,
-    int pixelFormat) {
-    // The selected format may be an alternate representation of a depth
-    // (notably RAW12PACK) even when the bit-depth selector prefers another
-    // canonical format for writes. Require the exact current format to be in
-    // the live SDK list before accepting its precision.
-    if (std::find(supportedPixelFormats.begin(),
-                  supportedPixelFormats.end(), pixelFormat) ==
-        supportedPixelFormats.end()) {
-        return std::nullopt;
-    }
-    const auto bitDepth = rawPixelFormatBitDepth(pixelFormat);
-    if (!bitDepth)
-        return std::nullopt;
-    const auto supportedDepth = std::find_if(
-        choices.begin(), choices.end(),
-        [bitDepth](const RawPixelFormatChoice& choice) {
-            return choice.bitDepth == *bitDepth;
-        });
-    return supportedDepth == choices.end()
-        ? std::nullopt
-        : bitDepth;
-}
 
 // AMCAM_OPTION_BITDEPTH selects 8-bit output or the camera's maximum
 // significant bit depth. Fixed 8-bit sensors have no distinct maximum-depth
@@ -1010,22 +918,14 @@ buildAmcamFeatureDescriptors(
         camera::CameraFeatureGroup::ImageFormat,
         {}, std::move(rawOutputDisabledReason)
     });
-    descriptors.push_back({
-        std::string(camera::RawOutputBitDepthFeature),
-        "Sensor Output Bit Depth", CameraFeatureKind::Integer,
-        std::string("significant bits"),
-        // This feature selects an SDK pixel format, so the same model
-        // policy that gates AmcamPixelFormat must also gate this narrower
-        // RAW significant-bit-depth selector.
-        rawBitDepthHardwareSupported && pixelFormatAllowed,
+    descriptors.push_back(makeRawOutputBitDepthDescriptor(
+        rawBitDepthHardwareSupported,
         rawBitDepthReadable,
-        rawBitDepthHardwareSupported && rawBitDepthWritable &&
-            pixelFormatAllowed && stopped,
-        std::nullopt, std::nullopt, {},
-        camera::CameraFeatureGroup::Sensor,
+        rawBitDepthWritable,
+        pixelFormatAllowed,
+        stopped,
         std::move(rawBitDepthValues),
-        std::move(rawBitDepthDisabledReason)
-    });
+        std::move(rawBitDepthDisabledReason)));
     std::optional<std::string> rawFormatDisabledReason;
     if (!rawModelSupported) {
         rawFormatDisabledReason =

@@ -5,8 +5,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `5080256d777a9cf416f1dde71a3411846dc0fdf4`  
-**Latest CI:** [workflow #45769387254](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45769387254) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
+**Latest reviewed implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713`  
+**Latest CI:** [workflow #45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45769387254) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction. Recheck the live branch tip before each session.
 
 ---
@@ -174,7 +174,7 @@ Continue Phase 6 on `camera-v.2.0`:
 1. Preserve the recorded decision to keep GenTL `DeviceDescriptor`
    provider-specific for now; it carries Producer/interface/device routing
    identity. `ProducerTests` verifies that `openDevice` rejects foreign
-   Producer paths and stale interface IDs with distinct failure codes. No generic multi-provider discovery
+   Producer paths and stale interface IDs with distinct failure codes, and rejects unknown device IDs through the GenTL Producer. No generic multi-provider discovery
    consumer justifies a lossy Common projection; do not implement one unless
    that consumer requirement changes.
 2. Preserve the vector decision: `CameraFeatureEditor` uses `elementCount`

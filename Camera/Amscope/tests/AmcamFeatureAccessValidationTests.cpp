@@ -109,14 +109,14 @@ int main() {
             "RAW bit-depth descriptor must expose the exact supported discrete choices.");
 
     const auto profileDeniedDescriptor = makeRawOutputBitDepthDescriptor(
-        true, true, true, false, true, {8, 10, 12},
-        std::string("Blocked by model profile."));
+        true, true, true, false, true, {8, 10, 12}, std::nullopt);
     require(!profileDeniedDescriptor.isAvailable &&
                 profileDeniedDescriptor.isReadable &&
                 !profileDeniedDescriptor.isWritable &&
                 profileDeniedDescriptor.disabledReason ==
-                    std::optional<std::string>("Blocked by model profile."),
-            "Pixel-format model policy must gate availability and writes without falsifying hardware read capability.");
+                    std::optional<std::string>(
+                        "Pixel-format selection is blocked by the active camera feature profile."),
+            "Pixel-format model policy must gate availability and writes without falsifying hardware read capability, and explain the policy denial.");
 
     const auto streamingDescriptor = makeRawOutputBitDepthDescriptor(
         true, true, true, true, false, {8, 10, 12}, std::nullopt);

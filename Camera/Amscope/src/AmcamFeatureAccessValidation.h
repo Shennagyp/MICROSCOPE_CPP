@@ -185,6 +185,14 @@ inline camera::CameraFeatureDescriptor makeRawOutputBitDepthDescriptor(
     using camera::CameraFeatureKind;
     using camera::CameraFeatureGroup;
 
+    // A profile denial is an actionable policy restriction, not a hardware
+    // capability failure. Keep the reason explicit even when the underlying
+    // pixel-format probe itself succeeded.
+    if (hardwareSupported && !pixelFormatProfileAllows) {
+        disabledReason =
+            "Pixel-format selection is blocked by the active camera feature profile.";
+    }
+
     return CameraFeatureDescriptor{
         std::string(camera::RawOutputBitDepthFeature),
         "Sensor Output Bit Depth",

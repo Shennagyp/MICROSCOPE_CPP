@@ -308,7 +308,7 @@ enum class SpecimenLabelKind {
     Other
 };
 
-enum class SpecimenPreparationRequirementsError {
+enum class SlidePreparationRequirementsError {
     NoConstraint,
     InvalidMethod,
     DuplicateMethod,
@@ -323,11 +323,11 @@ enum class SpecimenPreparationRequirementsError {
 
 // Constraints on the actual preparation record. SampleType stores the allowed
 // preparation envelope; SpecimenPreparation stores the observed preparation.
-class SpecimenPreparationRequirements final {
+class SlidePreparationRequirements final {
 public:
     [[nodiscard]] static Result<
-        SpecimenPreparationRequirements,
-        SpecimenPreparationRequirementsError> create(
+        SlidePreparationRequirements,
+        SlidePreparationRequirementsError> create(
             std::vector<SpecimenPreparationMethod> allowedMethods = {},
             std::vector<SpecimenFixationState> allowedFixationStates = {},
             std::optional<double> minimumSectionThicknessMicrometers = std::nullopt,
@@ -347,7 +347,7 @@ public:
     [[nodiscard]] const std::vector<SpecimenLabelKind>& requiredLabelKinds() const noexcept;
 
 private:
-    SpecimenPreparationRequirements(
+    SlidePreparationRequirements(
         std::vector<SpecimenPreparationMethod> allowedMethods,
         std::vector<SpecimenFixationState> allowedFixationStates,
         std::optional<double> minimumSectionThicknessMicrometers,
@@ -384,9 +384,7 @@ public:
         std::string name,
         SampleMaterialClass materialClass,
         MicroscopyRequirements microscopyRequirements,
-        std::optional<std::string> description = std::nullopt,
-        std::optional<SpecimenPreparationRequirements> preparationRequirements =
-            std::nullopt);
+        std::optional<std::string> description = std::nullopt);
 
     [[nodiscard]] const SampleTypeId& id() const noexcept;
     [[nodiscard]] std::uint64_t revision() const noexcept;
@@ -394,9 +392,6 @@ public:
     [[nodiscard]] SampleMaterialClass materialClass() const noexcept;
     [[nodiscard]] const MicroscopyRequirements& microscopyRequirements() const noexcept;
     [[nodiscard]] const std::optional<std::string>& description() const noexcept;
-    [[nodiscard]] const std::optional<SpecimenPreparationRequirements>&
-    preparationRequirements() const noexcept;
-
 private:
     SampleType(
         SampleTypeId id,
@@ -404,8 +399,7 @@ private:
         std::string name,
         SampleMaterialClass materialClass,
         MicroscopyRequirements microscopyRequirements,
-        std::optional<std::string> description,
-        std::optional<SpecimenPreparationRequirements> preparationRequirements);
+        std::optional<std::string> description);
 
     SampleTypeId id_;
     std::uint64_t revision_;
@@ -413,7 +407,6 @@ private:
     SampleMaterialClass materialClass_;
     MicroscopyRequirements microscopyRequirements_;
     std::optional<std::string> description_;
-    std::optional<SpecimenPreparationRequirements> preparationRequirements_;
 };
 
 enum class SampleTypeCatalogError {
@@ -501,6 +494,128 @@ private:
     std::optional<std::string> description_;
 };
 
+enum class SlideTypeError {
+    EmptyName,
+    InvalidName,
+    InvalidDescription,
+    ZeroRevision
+};
+
+// Reusable physical-slide preparation template. It is separate from SampleType:
+// SampleType describes the source material; SlideType describes slide preparation.
+class SlideType final {
+public:
+    [[nodiscard]] static Result<SlideType, SlideTypeError> create(
+        SlideTypeId id,
+        std::uint64_t revision,
+        std::string name,
+        SlidePreparationRequirements preparationRequirements,
+        std::optional<std::string> description = std::nullopt,
+        std::optional<SlideGeometry> nominalGeometry = std::nullopt);
+
+    [[nodiscard]] const SlideTypeId& id() const noexcept;
+    [[nodiscard]] std::uint64_t revision() const noexcept;
+    [[nodiscard]] const std::string& name() const noexcept;
+    [[nodiscard]] const SlidePreparationRequirements& preparationRequirements() const noexcept;
+    [[nodiscard]] const std::optional<std::string>& description() const noexcept;
+    [[nodiscard]] const std::optional<SlideGeometry>& nominalGeometry() const noexcept;
+
+private:
+    SlideType(
+        SlideTypeId id,
+        std::uint64_t revision,
+        std::string name,
+        SlidePreparationRequirements preparationRequirements,
+        std::optional<std::string> description,
+        std::optional<SlideGeometry> nominalGeometry);
+
+    SlideTypeId id_;
+    std::uint64_t revision_;
+    std::string name_;
+    SlidePreparationRequirements preparationRequirements_;
+    std::optional<std::string> description_;
+    std::optional<SlideGeometry> nominalGeometry_;
+};
+
+enum class SlideTypeCatalogError {
+    EmptyCatalog,
+    ZeroRevision,
+    DuplicateSlideTypeId
+};
+
+class SlideTypeCatalog final {
+public:
+    [[nodiscard]] static Result<SlideTypeCatalog, SlideTypeCatalogError> create(
+        std::uint64_t revision,
+        std::vector<SlideType> slideTypes);
+
+    [[nodiscard]] std::uint64_t revision() const noexcept;
+    [[nodiscard]] const std::vector<SlideType>& slideTypes() const noexcept;
+    [[nodiscard]] const SlideType* find(const SlideTypeId& id) const noexcept;
+
+private:
+    SlideTypeCatalog(std::uint64_t revision, std::vector<SlideType> slideTypes);
+
+    std::uint64_t revision_;
+    std::vector<SlideType> slideTypes_;
+};
+
+enum class SlideError {
+    EmptyName,
+    InvalidName,
+    ZeroRevision,
+    ZeroSampleRevision,
+    ZeroSlideTypeRevision
+};
+
+// A Slide is the physical prepared imaging unit. It pins both the source
+// Sample revision and the exact SlideType revision used to prepare it.
+class Slide final {
+public:
+    [[nodiscard]] static Result<Slide, SlideError> create(
+        SlideId id,
+        std::uint64_t revision,
+        SampleId sampleId,
+        std::uint64_t sampleRevision,
+        SlideTypeId slideTypeId,
+        std::uint64_t slideTypeRevision,
+        std::string name,
+        SlideGeometry geometry,
+        SlidePreparation preparation);
+
+    [[nodiscard]] const SlideId& id() const noexcept;
+    [[nodiscard]] std::uint64_t revision() const noexcept;
+    [[nodiscard]] const SampleId& sampleId() const noexcept;
+    [[nodiscard]] std::uint64_t sampleRevision() const noexcept;
+    [[nodiscard]] const SlideTypeId& slideTypeId() const noexcept;
+    [[nodiscard]] std::uint64_t slideTypeRevision() const noexcept;
+    [[nodiscard]] const std::string& name() const noexcept;
+    [[nodiscard]] const SlideGeometry& geometry() const noexcept;
+    [[nodiscard]] const SlidePreparation& preparation() const noexcept;
+
+private:
+    Slide(
+        SlideId id,
+        std::uint64_t revision,
+        SampleId sampleId,
+        std::uint64_t sampleRevision,
+        SlideTypeId slideTypeId,
+        std::uint64_t slideTypeRevision,
+        std::string name,
+        SlideGeometry geometry,
+        SlidePreparation preparation);
+
+    SlideId id_;
+    std::uint64_t revision_;
+    SampleId sampleId_;
+    std::uint64_t sampleRevision_;
+    SlideTypeId slideTypeId_;
+    std::uint64_t slideTypeRevision_;
+    std::string name_;
+    SlideGeometry geometry_;
+    SlidePreparation preparation_;
+};
+
 enum class SpecimenLabelError {
     EmptyName,
     InvalidName,
@@ -546,7 +661,7 @@ private:
     std::optional<OpticalCompatibilityId> filterSetCompatibilityId_;
 };
 
-enum class SpecimenPreparationError {
+enum class SlidePreparationError {
     InvalidMethod,
     InvalidFixationState,
     InvalidSectionThickness,
@@ -558,9 +673,9 @@ enum class SpecimenPreparationError {
 
 // Actual preparation facts for one specimen instance. Unknown physical facts
 // remain absent; they are not filled from the SampleType template.
-class SpecimenPreparation final {
+class SlidePreparation final {
 public:
-    [[nodiscard]] static Result<SpecimenPreparation, SpecimenPreparationError> create(
+    [[nodiscard]] static Result<SpecimenPreparation, SlidePreparationError> create(
         SpecimenPreparationMethod method,
         SpecimenFixationState fixationState,
         std::optional<double> sectionThicknessMicrometers = std::nullopt,
@@ -578,7 +693,7 @@ public:
     [[nodiscard]] const std::vector<SpecimenLabel>& labels() const noexcept;
 
 private:
-    SpecimenPreparation(
+    SlidePreparation(
         SpecimenPreparationMethod method,
         SpecimenFixationState fixationState,
         std::optional<double> sectionThicknessMicrometers,
@@ -596,100 +711,5 @@ private:
     std::vector<SpecimenLabel> labels_;
 };
 
-enum class SpecimenError {
-    EmptyName,
-    InvalidName,
-    ZeroRevision,
-    ZeroSampleRevision
-};
-
-// A Specimen is one prepared physical imaging instance derived from an exact
-// Sample revision. A sample may produce many independently prepared specimens.
-class Specimen final {
-public:
-    [[nodiscard]] static Result<Specimen, SpecimenError> create(
-        SpecimenId id,
-        std::uint64_t revision,
-        SampleId sampleId,
-        std::uint64_t sampleRevision,
-        std::string name,
-        SpecimenPreparation preparation);
-
-    [[nodiscard]] const SpecimenId& id() const noexcept;
-    [[nodiscard]] std::uint64_t revision() const noexcept;
-    [[nodiscard]] const SampleId& sampleId() const noexcept;
-    [[nodiscard]] std::uint64_t sampleRevision() const noexcept;
-    [[nodiscard]] const std::string& name() const noexcept;
-    [[nodiscard]] const SpecimenPreparation& preparation() const noexcept;
-
-private:
-    Specimen(
-        SpecimenId id,
-        std::uint64_t revision,
-        SampleId sampleId,
-        std::uint64_t sampleRevision,
-        std::string name,
-        SpecimenPreparation preparation);
-
-    SpecimenId id_;
-    std::uint64_t revision_;
-    SampleId sampleId_;
-    std::uint64_t sampleRevision_;
-    std::string name_;
-    SpecimenPreparation preparation_;
-};
-
-enum class SpecimenSlidePlacementError {
-    NonFiniteCoordinate,
-    NonPositiveExtent,
-    OutsideSlide
-};
-
-// A specimen can occupy a bounded region of a physical slide. The placement is
-// bound to a slide-registration revision, so navigation can reject stale maps.
-class SpecimenSlidePlacement final {
-public:
-    [[nodiscard]] static Result<
-        SpecimenSlidePlacement,
-        SpecimenSlidePlacementError> create(
-            SpecimenPlacementId id,
-            SpecimenId specimenId,
-            SlideId slideId,
-            CalibrationRevisionId slideRegistrationRevision,
-            double xMicrometers,
-            double yMicrometers,
-            double widthMicrometers,
-            double heightMicrometers,
-            const SlideGeometry& slideGeometry);
-
-    [[nodiscard]] const SpecimenPlacementId& id() const noexcept;
-    [[nodiscard]] const SpecimenId& specimenId() const noexcept;
-    [[nodiscard]] const SlideId& slideId() const noexcept;
-    [[nodiscard]] const CalibrationRevisionId& slideRegistrationRevision() const noexcept;
-    [[nodiscard]] double xMicrometers() const noexcept;
-    [[nodiscard]] double yMicrometers() const noexcept;
-    [[nodiscard]] double widthMicrometers() const noexcept;
-    [[nodiscard]] double heightMicrometers() const noexcept;
-
-private:
-    SpecimenSlidePlacement(
-        SpecimenPlacementId id,
-        SpecimenId specimenId,
-        SlideId slideId,
-        CalibrationRevisionId slideRegistrationRevision,
-        double xMicrometers,
-        double yMicrometers,
-        double widthMicrometers,
-        double heightMicrometers);
-
-    SpecimenPlacementId id_;
-    SpecimenId specimenId_;
-    SlideId slideId_;
-    CalibrationRevisionId slideRegistrationRevision_;
-    double xMicrometers_;
-    double yMicrometers_;
-    double widthMicrometers_;
-    double heightMicrometers_;
-};
 
 } // namespace microscope::core

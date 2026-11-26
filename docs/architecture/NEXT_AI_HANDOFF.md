@@ -10,7 +10,7 @@
 **Package CI:** [workflow #45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) — both architectures passed 28/28 tests, relocation, all external consumer runtime checks, installed-link and architecture checks; the default-off vendor-runtime install contract passed on Apple Silicon.  
 **Latest prior implementation CI:** [workflow #45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 open but blocked by the AmScope freeze; Phase 7 active by explicit owner authorization on 26 November 2026. Package software CI passes on both architectures; physical-camera acceptance remains pending.  
-**Latest AmScope preview UI-only corrections:** `1de091a1`, `fe897959`, `2b3c1a35`, `522d8648` (main.cpp only; no provider source, tests, public contracts, Optika app or runtime behavior changed). These commits are not yet CI-verified.
+**Latest AmScope preview UI-only corrections:** `1de091a1`, `fe897959`, `2b3c1a35`, `522d8648`, `6447996d` (main.cpp only; no provider source, tests, public contracts, Optika app or runtime behavior changed). These commits are not yet CI-verified.
 
 ---
 

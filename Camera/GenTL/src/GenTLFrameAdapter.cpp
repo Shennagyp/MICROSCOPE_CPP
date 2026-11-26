@@ -19,6 +19,51 @@ constexpr std::uint64_t pfnc16Mono16 = UINT64_C(0x0105);
 constexpr std::uint64_t pfnc16Rgb8 = UINT64_C(0x0401);
 constexpr std::uint64_t nanosecondsPerSecond = UINT64_C(1000000000);
 
+struct BayerFormat final {
+    std::uint64_t pixelFormat;
+    camera::PixelColorFilterArray pattern;
+    std::uint8_t significantBits;
+};
+
+// PFNC 32-bit format identifiers. The 10/12/14/16-bit variants here are
+// unpacked into 16-bit samples; packed variants intentionally remain opaque.
+constexpr BayerFormat bayerFormats[] = {
+    {UINT64_C(0x01080008), camera::PixelColorFilterArray::GRBG, 8},
+    {UINT64_C(0x0110000C), camera::PixelColorFilterArray::GRBG, 10},
+    {UINT64_C(0x01100010), camera::PixelColorFilterArray::GRBG, 12},
+    {UINT64_C(0x01100109), camera::PixelColorFilterArray::GRBG, 14},
+    {UINT64_C(0x0110002E), camera::PixelColorFilterArray::GRBG, 16},
+    {UINT64_C(0x01080009), camera::PixelColorFilterArray::RGGB, 8},
+    {UINT64_C(0x0110000D), camera::PixelColorFilterArray::RGGB, 10},
+    {UINT64_C(0x01100011), camera::PixelColorFilterArray::RGGB, 12},
+    {UINT64_C(0x0110010A), camera::PixelColorFilterArray::RGGB, 14},
+    {UINT64_C(0x0110002F), camera::PixelColorFilterArray::RGGB, 16},
+    {UINT64_C(0x0108000A), camera::PixelColorFilterArray::GBRG, 8},
+    {UINT64_C(0x0110000E), camera::PixelColorFilterArray::GBRG, 10},
+    {UINT64_C(0x01100012), camera::PixelColorFilterArray::GBRG, 12},
+    {UINT64_C(0x0110010B), camera::PixelColorFilterArray::GBRG, 14},
+    {UINT64_C(0x01100030), camera::PixelColorFilterArray::GBRG, 16},
+    {UINT64_C(0x0108000B), camera::PixelColorFilterArray::BGGR, 8},
+    {UINT64_C(0x0110000F), camera::PixelColorFilterArray::BGGR, 10},
+    {UINT64_C(0x01100013), camera::PixelColorFilterArray::BGGR, 12},
+    {UINT64_C(0x0110010C), camera::PixelColorFilterArray::BGGR, 14},
+    {UINT64_C(0x01100031), camera::PixelColorFilterArray::BGGR, 16}
+};
+
+std::optional<BayerFormat> bayerFormat(
+    const DataStreamFrame& source) noexcept {
+    if (source.pixelFormatNamespace !=
+        GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT || !source.pixelFormat) {
+        return std::nullopt;
+    }
+
+    for (const auto& candidate : bayerFormats) {
+        if (candidate.pixelFormat == *source.pixelFormat)
+            return candidate;
+    }
+    return std::nullopt;
+}
+
 bool isPfncNamespace(std::uint64_t value) noexcept {
     return value == GenTL::PIXELFORMAT_NAMESPACE_PFNC_16BIT ||
            value == GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT;
@@ -124,9 +169,36 @@ makeCommonFrame(DataStreamFrame source) {
             std::move(scheme), *source.pixelFormat};
     }
 
+    // Map Bayer sample storage and mosaic pattern independently. This
+    // preserves raw sensor samples for downstream processing; this adapter
+    // never demosaics or changes sample values.
+    if (const auto bayer = bayerFormat(source)) {
+        frame->pixelColorFilterArray = bayer->pattern;
+        const std::size_t bytesPerPixel = bayer->significantBits == 8 ? 1 : 2;
+        const auto reportedByteOrder = pixelByteOrder(source.pixelEndianness);
+        const bool byteOrderIsSafe = bytesPerPixel == 1 ||
+            reportedByteOrder != camera::PixelByteOrder::Unknown;
+        if (byteOrderIsSafe &&
+            payloadSizeMatches(frame->width, frame->height, bytesPerPixel,
+                               frame->pixels.size()) &&
+            strideFits(frame->width, bytesPerPixel)) {
+            frame->pixelFormat = bytesPerPixel == 1
+                ? camera::PixelFormat::Raw8
+                : camera::PixelFormat::Raw16;
+            frame->pixelByteOrder = bytesPerPixel == 1
+                ? camera::PixelByteOrder::NotApplicable
+                : reportedByteOrder;
+            frame->strideBytes = static_cast<std::uint32_t>(
+                static_cast<std::size_t>(frame->width) * bytesPerPixel);
+            frame->significantBitsPerPixel = bayer->significantBits;
+            frame->storageBitsPerPixel = static_cast<std::uint8_t>(
+                bytesPerPixel * 8);
+        }
+    }
+
     // Map only layouts whose component order, storage width, row stride and
-    // byte order are explicit. Packed, planar, Bayer and compressed formats
-    // remain opaque until their exact layout contracts are implemented.
+    // byte order are explicit. Packed, planar and compressed formats remain
+    // opaque until their exact layout contracts are implemented.
     const bool mono8 =
         isPfnc32(source, pfnc32Mono8) ||
         isPfnc16(source, pfnc16Mono8);
@@ -135,6 +207,8 @@ makeCommonFrame(DataStreamFrame source) {
         strideFits(frame->width, 1)) {
         frame->pixelFormat = camera::PixelFormat::Raw8;
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
+        frame->pixelColorFilterArray =
+            camera::PixelColorFilterArray::NotApplicable;
         frame->strideBytes = frame->width;
         frame->significantBitsPerPixel = 8;
         frame->storageBitsPerPixel = 8;
@@ -148,6 +222,8 @@ makeCommonFrame(DataStreamFrame source) {
         strideFits(frame->width, 3)) {
         frame->pixelFormat = camera::PixelFormat::RGB24;
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
+        frame->pixelColorFilterArray =
+            camera::PixelColorFilterArray::NotApplicable;
         frame->strideBytes = frame->width * 3;
         frame->significantBitsPerPixel = 24;
         frame->storageBitsPerPixel = 24;
@@ -168,6 +244,8 @@ makeCommonFrame(DataStreamFrame source) {
         strideFits(frame->width, 2)) {
         frame->pixelFormat = camera::PixelFormat::Raw16;
         frame->pixelByteOrder = byteOrder;
+        frame->pixelColorFilterArray =
+            camera::PixelColorFilterArray::NotApplicable;
         frame->strideBytes = frame->width * 2;
         frame->significantBitsPerPixel = monoSignificantBits;
         frame->storageBitsPerPixel = 16;

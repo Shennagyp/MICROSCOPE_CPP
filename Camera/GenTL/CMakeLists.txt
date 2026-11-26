@@ -15,10 +15,12 @@ add_library(camera_gentl_consumer_bridge STATIC
     src/ConsumerBridge.cpp
     src/GenTLProducerLibrary.cpp
     src/Producer.cpp
+    src/ProducerCatalog.cpp
     src/GenTLFrameAdapter.cpp
     include/camera/gentl/ConsumerBridge.h
     include/camera/gentl/GenTLProducerLibrary.h
     include/camera/gentl/Producer.h
+    include/camera/gentl/ProducerCatalog.h
     include/camera/gentl/GenTLFrameAdapter.h
     include/camera/gentl/GenTL_v1_6.h)
 add_library(Camera::GenTLConsumerBridge ALIAS camera_gentl_consumer_bridge)
@@ -91,6 +93,17 @@ if(BUILD_TESTING)
         PRIVATE Camera::GenTLConsumerBridge)
     add_test(NAME camera_gentl_frame_adapter_tests
         COMMAND camera_gentl_frame_adapter_tests)
+
+    add_executable(camera_gentl_producer_catalog_tests
+        tests/ProducerCatalogTests.cpp)
+    target_compile_features(camera_gentl_producer_catalog_tests PRIVATE cxx_std_17)
+    target_link_libraries(camera_gentl_producer_catalog_tests
+        PRIVATE Camera::GenTLConsumerBridge)
+    add_test(NAME camera_gentl_producer_catalog_tests
+        COMMAND camera_gentl_producer_catalog_tests
+            "$<TARGET_FILE:gentl_test_simulator_cti>")
+    set_tests_properties(camera_gentl_producer_catalog_tests PROPERTIES
+        TIMEOUT 120)
 
     add_executable(camera_gentl_simulator_smoke
         tests/SimulatorSmoke.cpp)

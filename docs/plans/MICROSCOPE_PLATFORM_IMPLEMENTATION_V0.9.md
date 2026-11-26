@@ -424,6 +424,23 @@ The previous `DualSlideCarrierState`-based runtime and queue remain compiled for
 
 Core and Application test executables have been added to their respective CMake test configurations. Source-level assertions cover empty-canvas construction, input validation, independent slide origins, four-corner geometry, overlap rules, arbitrary slide identities, revision invalidation, unit conversion, X/Y-only homing, independent focus Z, correlated feedback, malformed XY observations, off-target measured poses, adapter rejection and bounded queue behavior. **No build, test, debugger or CI execution has been performed here.** Do not describe these tests as passing.
 
-The generic C++ runtime is not yet wired into the SwiftUI composition or the physical stage-driver host. The next implementation boundary is the host adapter/composition that owns the C++ runtime, creates its real device correlation and operation identities, feeds hardware observations into its serialized feedback ingress, and exposes safe lifecycle control to the application.
+The generic C++ runtime is not yet wired into the SwiftUI composition or the physical stage-driver host. The next implementation boundary is the long-lived host composition that owns the C++ stage objects and the concrete physical-stage `IStageMotionPort` adapter. The host supplies the microscope/runtime/device-session correlation once for that session; the persistent `StageWorkingSurfaceNavigationRuntime` allocates operation, step and command identities internally. Hardware observations enter the retained serialized feedback ingress, and the same owner thread advances the existing objects through their lifecycles.
 
 The Z full-range sweep still requires its Application execution state machine and correlated completion handling. The CAD editor, undo/redo, durable layout persistence, calibration workflow, holder-clearance specification and recovery UI also remain outstanding.
+
+## Stateful OOP application and functional-core boundary
+
+The application is one long-lived native process with an object graph rooted in `OptikaB293Composition` and retained by `OptikaB293ApplicationDelegate`. It is not a collection of stateless REST endpoints and must not reconstruct device/session state for individual UI commands.
+
+For the stage capability, the intended retained object graph is:
+- Application composition / microscope session owns the stage subsystem and driver adapter.
+- The stage subsystem owns one current `StageWorkingSurface2D`, one current `StagePosition3D`, calibration/reference state, homing and verification policy, active navigation and the navigation-identity sequence.
+- The session retains one `SerializedOperationRuntime` for device-session and operation/step/command state, one typed control queue and one wake signal.
+- A dedicated owner thread processes feedback and control commands serially. The physical adapter remains alive for the session and submits feedback through the ingress only.
+- UI-facing models hold immutable projections/snapshots and submit domain commands. They do not share or mutate the worker-owned C++ state directly.
+
+The new control queue now contains only a revision-bound `SlideNavigationTarget2D`. It does not carry `OperationId`, `StepId`, `CommandId`, or raw `SlideId + local point` fields. The persistent stage runtime allocates operation correlation identities when it accepts the target. The target's stored registration revision prevents a queued click from being reinterpreted after a slide is redrawn.
+
+The functional-core boundary remains explicit: geometry, coordinate conversion, navigation planning, error-budget evaluation and reducers are deterministic calculations over values. The stateful Application objects own their lifetimes, choose when a candidate result is accepted, mutate the current session state on the owner thread, and publish new immutable snapshots.
+
+The current camera composition already follows the long-lived-object approach. Stage hardware integration remains incomplete because the concrete physical-stage `IStageMotionPort` adapter and its device lifecycle are not yet present in this repository. Do not create a fake adapter or a per-request runtime to fill that gap. Implement the concrete adapter and compose it once into the existing application lifetime root.

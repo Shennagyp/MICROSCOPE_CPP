@@ -10,6 +10,7 @@ enum class LightPathConfigurationRequestFactoryError {
     MicroscopeMismatch,
     LightPathNotInstalled,
     OperationModeDoesNotContainLightPath,
+    OperationModeEquipmentRevisionMismatch,
     CameraResolutionNotResolved,
     ResolvedCameraOperationModeMismatch,
     ResolvedCameraLightPathMismatch,

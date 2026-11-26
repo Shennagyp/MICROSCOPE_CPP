@@ -466,10 +466,63 @@ private:
     std::optional<OpticalCompatibilityId> compatibilityId_;
 };
 
+enum class CameraSensorTechnology {
+    CCD,
+    CMOS,
+    ScientificCMOS,
+    Unknown
+};
+
+enum class CameraShutterType {
+    Global,
+    Rolling,
+    FrameTransfer,
+    GlobalReset,
+    Unknown
+};
+
+enum class CameraSensorColorMode {
+    Monochrome,
+    Color,
+    Unknown
+};
+
+enum class CameraSpecificationProvenance {
+    ManufacturerDatasheet,
+    VendorModelDescriptor,
+    UserVerified,
+    Measured,
+    Unknown
+};
+
+struct CameraQuantumEfficiencySample {
+    double wavelengthNanometers = 0.0;
+    // Fraction of incident photons converted to detected electrons [0, 1].
+    double quantumEfficiency = 0.0;
+};
+
+// Core-side copy of model facts. The Camera project discovers/enriches these
+// facts; Application translates them into Core without adding a Camera::Common
+// dependency to the microscope engine.
+struct CameraSensorCharacteristics {
+    std::optional<CameraSensorTechnology> technology;
+    std::optional<CameraShutterType> shutterType;
+    std::optional<CameraSensorColorMode> colorMode;
+    std::optional<double> readNoiseElectronsRms;
+    std::optional<double> darkCurrentElectronsPerPixelPerSecond;
+    std::optional<double> fullWellCapacityElectrons;
+    std::optional<double> maximumFrameRateFramesPerSecond;
+    std::vector<CameraQuantumEfficiencySample> quantumEfficiency;
+    CameraSpecificationProvenance provenance =
+        CameraSpecificationProvenance::Unknown;
+    std::optional<std::string> provenanceReference;
+};
+
 enum class CameraSpecificationError {
     NoOutputModes,
     DuplicateOutputModeId,
-    SensorRegionOutsideActiveArea
+    SensorRegionOutsideActiveArea,
+    InvalidSensorCharacteristics
 };
 
 // One camera component owns one sensor specification and its supported
@@ -484,7 +537,9 @@ public:
             PositiveMicrometers pixelPitchX,
             PositiveMicrometers pixelPitchY,
             std::vector<CameraOutputMode> outputModes,
-            std::optional<ExposureTimeRange> exposureTimeRange = std::nullopt);
+            std::optional<ExposureTimeRange> exposureTimeRange = std::nullopt,
+            std::optional<CameraSensorCharacteristics> sensorCharacteristics =
+                std::nullopt);
 
     [[nodiscard]] const EquipmentComponentId& componentId() const noexcept;
     [[nodiscard]] const PixelDimensions& activeSensorDimensions() const noexcept;
@@ -493,6 +548,8 @@ public:
     [[nodiscard]] const std::vector<CameraOutputMode>& outputModes() const noexcept;
     [[nodiscard]] const std::optional<ExposureTimeRange>&
     exposureTimeRange() const noexcept;
+    [[nodiscard]] const std::optional<CameraSensorCharacteristics>&
+    sensorCharacteristics() const noexcept;
 
 private:
     CameraSpecification(
@@ -501,7 +558,8 @@ private:
         PositiveMicrometers pixelPitchX,
         PositiveMicrometers pixelPitchY,
         std::vector<CameraOutputMode> outputModes,
-        std::optional<ExposureTimeRange> exposureTimeRange);
+        std::optional<ExposureTimeRange> exposureTimeRange,
+        std::optional<CameraSensorCharacteristics> sensorCharacteristics);
 
     EquipmentComponentId componentId_;
     PixelDimensions activeSensorDimensions_;
@@ -509,6 +567,7 @@ private:
     PositiveMicrometers pixelPitchY_;
     std::vector<CameraOutputMode> outputModes_;
     std::optional<ExposureTimeRange> exposureTimeRange_;
+    std::optional<CameraSensorCharacteristics> sensorCharacteristics_;
 };
 
 } // namespace microscope::core

@@ -251,12 +251,18 @@ CameraPerformanceRequirements::CameraPerformanceRequirements(
     std::optional<double> minimumFrameRateFramesPerSecond,
     std::optional<double> maximumReadNoiseElectronsRms,
     std::optional<double> maximumDarkCurrentElectronsPerPixelPerSecond,
-    std::optional<double> minimumFullWellCapacityElectrons)
+    std::optional<double> minimumFullWellCapacityElectrons,
+    std::optional<double> minimumMeanQuantumEfficiency,
+    bool preferMonochrome,
+    bool preferGlobalShutter)
     : minimumFrameRateFramesPerSecond_(minimumFrameRateFramesPerSecond),
       maximumReadNoiseElectronsRms_(maximumReadNoiseElectronsRms),
       maximumDarkCurrentElectronsPerPixelPerSecond_(
           maximumDarkCurrentElectronsPerPixelPerSecond),
-      minimumFullWellCapacityElectrons_(minimumFullWellCapacityElectrons) {}
+      minimumFullWellCapacityElectrons_(minimumFullWellCapacityElectrons),
+      minimumMeanQuantumEfficiency_(minimumMeanQuantumEfficiency),
+      preferMonochrome_(preferMonochrome),
+      preferGlobalShutter_(preferGlobalShutter) {}
 
 Result<
     CameraPerformanceRequirements,
@@ -268,7 +274,10 @@ Result<
     if (!minimumFrameRateFramesPerSecond &&
         !maximumReadNoiseElectronsRms &&
         !maximumDarkCurrentElectronsPerPixelPerSecond &&
-        !minimumFullWellCapacityElectrons) {
+        !minimumFullWellCapacityElectrons &&
+        !minimumMeanQuantumEfficiency &&
+        !preferMonochrome &&
+        !preferGlobalShutter) {
         return Result<
             CameraPerformanceRequirements,
             CameraPerformanceRequirementsError>::failure(
@@ -281,7 +290,8 @@ Result<
     if (!finite(minimumFrameRateFramesPerSecond) ||
         !finite(maximumReadNoiseElectronsRms) ||
         !finite(maximumDarkCurrentElectronsPerPixelPerSecond) ||
-        !finite(minimumFullWellCapacityElectrons)) {
+        !finite(minimumFullWellCapacityElectrons) ||
+        !finite(minimumMeanQuantumEfficiency)) {
         return Result<
             CameraPerformanceRequirements,
             CameraPerformanceRequirementsError>::failure(
@@ -315,6 +325,14 @@ Result<
             CameraPerformanceRequirementsError>::failure(
                 CameraPerformanceRequirementsError::NonPositiveFullWell);
     }
+    if (minimumMeanQuantumEfficiency &&
+        (*minimumMeanQuantumEfficiency < 0.0 ||
+         *minimumMeanQuantumEfficiency > 1.0)) {
+        return Result<
+            CameraPerformanceRequirements,
+            CameraPerformanceRequirementsError>::failure(
+                CameraPerformanceRequirementsError::InvalidQuantumEfficiency);
+    }
 
     return Result<
         CameraPerformanceRequirements,
@@ -323,7 +341,10 @@ Result<
                 minimumFrameRateFramesPerSecond,
                 maximumReadNoiseElectronsRms,
                 maximumDarkCurrentElectronsPerPixelPerSecond,
-                minimumFullWellCapacityElectrons));
+                minimumFullWellCapacityElectrons,
+                minimumMeanQuantumEfficiency,
+                preferMonochrome,
+                preferGlobalShutter));
 }
 
 const std::optional<double>&
@@ -345,6 +366,19 @@ CameraPerformanceRequirements::maximumDarkCurrentElectronsPerPixelPerSecond()
 const std::optional<double>&
 CameraPerformanceRequirements::minimumFullWellCapacityElectrons() const noexcept {
     return minimumFullWellCapacityElectrons_;
+}
+
+const std::optional<double>&
+CameraPerformanceRequirements::minimumMeanQuantumEfficiency() const noexcept {
+    return minimumMeanQuantumEfficiency_;
+}
+
+bool CameraPerformanceRequirements::preferMonochrome() const noexcept {
+    return preferMonochrome_;
+}
+
+bool CameraPerformanceRequirements::preferGlobalShutter() const noexcept {
+    return preferGlobalShutter_;
 }
 
 MicroscopyRequirements::MicroscopyRequirements(

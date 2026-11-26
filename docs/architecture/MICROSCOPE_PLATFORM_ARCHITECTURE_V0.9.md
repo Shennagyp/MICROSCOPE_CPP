@@ -2,7 +2,7 @@
 
 **Status:** Authoritative target architecture for OPTIKA-B293-DUALSLIDE-APP-v.0.9  
 **Date:** 2026-11-25  
-**Scope:** Microscope domain model, C++ libraries, adapter integration, operation lifecycle, calibration, slides, persistence and frontend independence.
+**Scope:** Microscope equipment/control, optical configuration, operation lifecycle, calibration, stage positioning, acquisition execution, physical slide records, SampleType imaging/preparation requirements, persistence and frontend independence. Patient and laboratory information management are outside scope.
 
 This document is authoritative for microscope-domain semantics and the C++ Core/Application boundary. The product-level long-lived object graph, stateful OOP ownership, native application composition, subsystem lifecycles, concurrency and complete application implementation order are defined in [OPTIKA B293 Application System Architecture v1](OPTIKA_B293_APPLICATION_SYSTEM_ARCHITECTURE_V1.md). The initial C++17 Microscope.Core and Microscope.Application static-library targets and foundational contracts now exist in the repository. They are an incremental foundation: equipment/configuration workflows, full operation execution, JSON loading, adapter composition, persistence and physical hardware integration remain incomplete. The existing native application and camera pipeline remain the implementation baseline during migration.
 
@@ -10,14 +10,14 @@ This document is authoritative for microscope-domain semantics and the C++ Core/
 
 The platform consists of two principal C++ libraries, infrastructure implementations and independent front ends.
 
-1. **Microscope.Core** is the microscope engine. It owns equipment semantics, microscope behavior, configuration, operation planning and execution state, feedback evaluation, calibration, motion, acquisition, slide/image semantics and domain recovery.
+1. **Microscope.Core** is the instrument engine. It owns installed-equipment semantics, optical topology, operation modes, configuration resolution, operation planning/execution, feedback evaluation, calibration, stage motion/positioning, SampleType technical requirements, physical slide details, acquisition and image-capture semantics. It does not own patient, source-sample or laboratory workflow records.
 2. **Microscope.Application** is a separate C++ application library. It loads microscope JSON definitions and deployment data, registers and composes adapters, creates and manages Core runtimes, coordinates application-level workflows and exposes a frontend-neutral API.
 3. Hardware and storage adapters implement contracts declared at the appropriate Core boundary. They perform external I/O and report observations; they do not own microscope policy.
 4. Front ends consume Microscope.Application. They do not implement microscope behavior or call device SDKs.
-5. Each physical microscope is described by JSON data. Runtime state, calibration records and slide data are persisted separately.
+5. Each physical microscope is described by equipment/deployment data. Runtime state, calibration, SampleType definitions, physical slide details, stage registrations and acquisition/image records are persisted separately.
 6. Microscope operations are asynchronous, ordered, correlated and feedback-driven. A request being accepted is not equivalent to a physical action completing or a microscope configuration being verified.
 7. Optical and motion calibration are independent. Optical calibration starts from equipment specifications and can be refined with a microscope ruler slide. It is reused for matching optical configurations, not repeated for every slide.
-8. Sample, Slide and Tile records represent source material, physical preparation and acquired fields separately. Acquisition is recorded against a Slide and the actual Microscope; it cannot start without an active, valid slide session.
+8. SampleType is a reusable, versioned technical requirement profile. A Slide is an independent physical-slide record that directly references one SampleType revision and stores its own actual details/preparation. There is no Sample instance or SampleId between them. A slide-targeted acquisition may reference a Slide; calibration or direct imaging need not invent one.
 9. The live microscope viewer and saved-image viewer are separate presentation workflows. Annotations and measurements are persistent structured data, never destructive overlays on source pixels.
 10. Existing camera acquisition, frame-pool, lease and preview behavior must be preserved during migration.
 
@@ -38,7 +38,8 @@ The following invariants govern implementation:
 - Every asynchronous feedback item is correlated to the operation, step, command and device that produced it.
 - Calibration claims preserve measurement provenance and uncertainty.
 - Unknown physical position or scale remains unknown; it is never replaced by a fabricated value.
-- A slide's historical acquisition configuration and calibration evidence remain interpretable after equipment or calibration changes.
+- A slide's historical SampleType revision, actual preparation details, stage registration, acquisition configuration and calibration evidence remain interpretable after later changes.
+- The Core/Application model must not define Patient, Sample, SampleId, Specimen-as-a-parent-entity, SlideType, diagnosis or clinical accession records. An optional OriginLabId is an opaque external reference only; it does not create a Lab entity or foreign-key relationship.
 - Frontends may differ in technology and layout but use the same application semantics.
 - No generic plugin framework, visual node editor, robotics framework or universal workflow engine is introduced without a concrete requirement.
 
@@ -457,10 +458,10 @@ A microscope-specific binding distinguishes a required component from a preferre
 Resolution is candidate-based, not first-match-based:
 
 1. Resolve the requested microscope equipment-constitution revision and operation-mode revision supplied in memory by Application.
-2. Merge the mode's objective constraints and technique contributions with optional specimen/task imaging requirements and explicit user selections.
+2. Merge the mode's objective constraints and technique contributions with the selected Slide's exact SampleType requirement revision and explicit user selections. For calibration/direct imaging without a Slide, use only the mode and explicit technical request.
 3. Enumerate complete route/component combinations. Validate that every required optical function is present, correctly positioned and compatibility-matched on the candidate paths.
 4. Derive the camera from the imaging path endpoint. Enumerate only that camera's supported output modes. An unrelated camera elsewhere in the microscope is not eligible.
-5. Reject candidates that violate hard constraints. Rank the remaining candidates only by declared preferences, such as a microscope-specific preferred objective or a specimen/task imaging profile.
+5. Reject candidates that violate hard constraints. Rank remaining candidates only by microscope-specific mode preferences and explicit technical preferences in the request. A SampleType may declare preferred techniques or objective constraints, but it must not contain microscope-specific component identities.
 6. Return a structured outcome and the complete candidate set with the reasons/ranking used:
    - Resolved: one candidate is the unique winner under the declared hard constraints and preferences.
    - SelectionRequired: multiple valid candidates remain equally preferred; return the complete alternatives so the caller can ask the user to choose.
@@ -470,19 +471,19 @@ Resolution is candidate-based, not first-match-based:
 
 A multi-microscope host evaluates the same high-level request against each target microscope's own equipment-constitution revision. Component IDs are microscope-scoped and are never assumed to be portable between instruments. If no target microscope is specified, the host may return capable microscope alternatives or request a target; it must not reuse a component identity from another instrument. The request's objective constraints (including NA and optional magnification) remain semantic inputs across instruments.
 
-A specimen/task imaging profile may contribute optical preferences without hard-coding sample-specific branches into the resolver. For example, an H&E histopathology profile may recommend a 0.75 NA objective over a 0.4 NA objective when both satisfy the hard request. That recommendation is data-driven and may be overridden by an explicit user choice or a microscope-specific mode binding. It is not a universal rule that every H&E workflow must use the same objective.
+The selected SampleType may contribute reusable technical requirements and soft preferences—for example, minimum objective NA, allowed techniques or a preferred NA range. Those values are versioned in the SampleType definition. The resolver evaluates them as data; it does not infer a profile from patient, diagnosis, accession or an external workflow label.
 
 #### Objective constraints and sampling adequacy
 
 The objective requirement combines a minimum numerical aperture with an optional requested nominal magnification. If magnification is specified, it constrains the candidate objective/system magnification. If it is omitted, the resolver may choose the lowest installed objective magnification that satisfies the hard NA requirement, the selected imaging technique's optical-resolution model, and the camera-sampling condition. It must not choose an objective solely because it fits mechanically or has sufficient NA.
 
-An objective candidate must also satisfy the declared physical compatibility constraints that apply to the specimen and optical train: immersion medium, working distance/clearance, coverglass design thickness where relevant, chromatic and field correction, compatible tube lens/relay optics, and usable field number versus the active camera sensor area. A sample/task preference cannot override these hard constraints.
+An objective candidate must also satisfy declared physical compatibility constraints relevant to the slide and optical train: immersion medium, working distance/clearance, coverglass design thickness when known, chromatic and field correction, compatible tube lens/relay optics, and usable field number versus the active camera sensor area. A SampleType preference cannot override these hard constraints.
 
 A higher NA can improve the diffraction-limited lateral resolution, but it does not automatically make an image better for every specimen. Higher NA also changes depth of field, working distance, immersion/correction requirements, and the magnification needed to sample the finer optical detail. The condenser is part of the resolution model for transmitted-light imaging; it must not be ignored. The exact resolution criterion therefore belongs to the selected imaging modality/technique, not to a universal formula attached to every objective.
 
 For the supported widefield cases, use the following Rayleigh lateral-resolution models, with all wavelength and distance quantities expressed in consistent units:
 
-- **Transmitted (diascopic) widefield brightfield:** (r_{lat} = 1.22\lambda_{img}/(NA_{obj}+NA_{cond})). Use the effective image-forming/detected wavelength (\lambda_{img}) defined by the acquisition's spectral policy, and the condenser NA actually delivered by the selected aperture state. Do not substitute the condenser's maximum capability for its selected effective NA. Nikon's calculator uses 546 nm as a representative diascopic wavelength; this is a stated reference assumption, not a universal value for broadband H&E illumination.
+- **Transmitted (diascopic) widefield brightfield:** (r_{lat} = 1.22\lambda_{img}/(NA_{obj}+NA_{cond})). Use the effective image-forming/detected wavelength (\lambda_{img}) defined by the acquisition's spectral policy, and the condenser NA actually delivered by the selected aperture state. Do not substitute the condenser's maximum capability for its selected effective NA. Nikon's calculator uses 546 nm as a representative diascopic wavelength; this is a stated reference assumption, not a universal value for broadband visible-light illumination.
 - **Reflected/episcopic widefield reflectance:** (r_{lat} = 0.61\lambda_{img}/NA_{obj}) under the stated widefield Rayleigh approximation, because the objective supplies both illumination and collection cones. Here (\lambda_{img}) is the relevant detected image-forming wavelength under the declared reflectance model.
 - **Epi-fluorescence:** distinguish a scalar estimate from a complete fluorescence model. Nikon's calculator uses the detected emission wavelength in its simplified widefield Rayleigh estimate for episcopic/epifluorescence. That can be retained as a clearly labelled approximation. A physically fuller fluorescence image-formation model must account for both excitation and emission PSFs/transfer functions, their spectral bands, and the illumination/collection pupils. Until the selected model is implemented and its assumptions are recorded, do not present the scalar estimate as a complete fluorescence-resolution result.
 
@@ -521,7 +522,7 @@ For the current CameraOutputMode data, derive the conservative sensor-pixel-per-
 
 The selected LightPath must be resolved before this calculation because it determines the actual camera, camera output modes and all image-forming relay components. The relay optics on a different path or an unconnected camera must never be used to qualify the candidate. If the reference wavelength, camera pixel pitch/mapping, or a magnification-affecting path component is unknown, report sampling adequacy as unknown/insufficient evidence rather than manufacturing a pass.
 
-A specimen/task imaging profile may contribute soft preferences only after hard optical and detector constraints pass. For example, an H&E histopathology profile may rank a 20×/0.75 NA candidate above a 20×/0.4 NA candidate when both meet the requested NA, field-of-view, correction, working-distance and sampling requirements. That is a data-driven workflow preference, not a universal rule that every H&E examination must use a 0.75 NA objective. The user can override a preference, while a required microscope-specific mode binding remains a hard constraint.
+SampleType preferences may rank candidates only after hard optical and detector constraints pass. For example, a SampleType may prefer an NA range or a compatible technique; it must not name a microscope-specific objective ID. The user can override a soft preference, while a required microscope-specific OperationMode binding remains a hard constraint.
 
 #### Camera suitability and mode-specific LightPath calibration
 
@@ -1005,161 +1006,124 @@ Calibration records are owned by the microscope/configuration calibration stores
 
 Each acquisition and physical measurement preserves the calibration revision and relevant values used. A slide is therefore interpretable historically without owning another copy of the calibration system.
 
-## 11. Samples, slides, tiles and acquisition
+## 11. SampleType, physical slides and acquisition
 
-### 11.1 Specimen, preparation and acquisition identities
+### 11.1 SampleType is a reusable technical requirement profile
 
-The model distinguishes three physical/data concepts:
+`SampleType` is intentionally part of the microscope application. It is a versioned definition used to express the microscopy and slide-preparation requirements associated with a kind of material. It is not an individual collected sample and it is not a patient/laboratory record.
 
-- **Sample:** the collected biological or material specimen. It represents source material before or independent of a particular slide preparation.
-- **Slide:** a physical prepared/mounted substrate made from a sample. It represents a preparation, not the sample itself.
-- **Tile:** an acquired image field associated with a particular slide.
+A SampleType contains:
+- Stable `SampleTypeId`, revision, name and description.
+- A broad material class where relevant (biological, botanical, geological, material-science, calibration artifact or other).
+- `MicroscopyRequirements`: required, preferred, supported or prohibited imaging techniques; objective NA/magnification constraints; camera performance requirements; condenser constraints; illumination/spectral/irradiance requirements.
+- Optional `SlidePreparationRequirements`: allowed preparation methods and fixation states, physical thickness ranges, coverglass ranges, mounting-medium requirements and required label/contrast-agent metadata.
 
-The baseline cardinality is:
+The requirement profile is reusable and independent of microscope-specific component IDs. It may state that a technique is required or that an objective must meet a minimum NA; it must not pin a camera, objective component ID, filter ID or other identity belonging to one microscope. The same SampleType can be evaluated against different microscope equipment definitions.
 
-~~~text
-Sample 1 ───── 0..N Slides 1 ───── 0..N Tiles
-   │                         │
-   └── SampleType            └── SlideType
-~~~
+A SampleType catalog stores versioned definitions. A new revision does not silently rewrite existing slides or acquisition history. The exact revision used is explicit.
 
-One sample may produce multiple slides. Each slide belongs to one sample in this baseline model. Do not introduce a many-to-many contribution model unless a concrete workflow requires one physical slide to contain material from multiple samples.
+The model has no Sample entity and no SampleId. Do not add a parent sample record merely to connect a Slide to its type.
 
-SampleType describes the source material/category (for example, blood, bone marrow aspirate, kidney tissue or liver tissue). SlideType describes the preparation/mounting method or preparation category (for example, blood film, bone-marrow smear/aspirate preparation, tissue section or cytology preparation). These taxonomies must not be conflated: a source material does not uniquely determine its preparation.
+### 11.2 Slide is an independent physical record
 
-A sample is not owned by a microscope. A microscope workspace may organize or filter samples and slides for convenience, but instrument association is established by acquisition records:
+A `Slide` is a physical prepared carrier/slide and an imaging target. It directly references one SampleType revision. The relationship is:
 
 ~~~text
-Microscope 1 ───── 0..N AcquisitionRuns
-Sample 1 ───── 0..N Slides 1 ───── 0..N Tiles
-                         ▲
-                         └── AcquisitionRun references the slide/tile being acquired
+SampleType (definition, revisioned)
+    1
+    |
+    | 0..N
+    v
+Slide (physical record)
+    ├── SlideId / revision
+    ├── SampleTypeId / SampleTypeRevision
+    ├── label/name
+    ├── physical SlideGeometry
+    ├── actual SlidePreparation details
+    └── optional OriginLab reference
 ~~~
 
-The user-facing workspace may show a microscope-scoped collection, but this is an application/workspace view rather than physical or domain ownership.
+A Slide contains:
+- Stable `SlideId` and record revision.
+- Required `SampleTypeId` and exact `SampleTypeRevision`.
+- Operator-facing name/label.
+- Physical geometry (dimensions and any explicitly measured/declared physical properties needed by the stage or optics).
+- Actual preparation/details for this physical slide: preparation method, fixation state where applicable, measured section and coverglass thickness, mounting-medium facts and relevant fluorescence/chromogenic label spectral metadata.
+- Optional origin-laboratory identifier, described below.
 
-### 11.2 Sample and sample type
+There is no separate `Sample`, `Specimen` parent record or `SlideType` taxonomy. Reusable allowed-preparation constraints belong to SampleType; actual preparation facts belong to Slide. A Slide's facts are assessed against the exact SampleType revision it references. Unknown physical values remain absent; they must not be filled from SampleType defaults.
 
-A Sample has:
-- Stable SampleId.
-- SampleTypeId when classified; an unclassified sample remains representable without inventing a type.
-- User-facing label and optional external accession/reference. An external accession is not the SampleId.
-- Collection/source metadata and timestamps where available.
-- Creation/update metadata and optional workflow-specific descriptive metadata.
+A SlideType-like preparation template must not be introduced as a second taxonomy unless a concrete requirement later demonstrates that it is semantically independent of SampleType. The current requirement model places the reusable preparation envelope on SampleType.
 
-Sample identity and source metadata must remain independent of slide preparation, microscope identity and acquisition history. A sample can exist before any slide is prepared and may have multiple prepared slides. Patient or other source-system identifiers, when present in a particular deployment, are metadata with their own access/retention policy; they must not be used as the platform's primary identity.
+### 11.3 Optional origin-laboratory reference
 
-### 11.3 Slide and slide type
+A Slide may carry an optional `OriginLabId` when an upstream workflow supplies one. It is an opaque external identifier, not a microscope-owned Lab entity or a foreign key. The microscope application:
+- Preserves and returns the supplied value unchanged.
+- Does not resolve, validate against, synchronize or manage the originating laboratory.
+- Does not require the value for slide creation or acquisition.
+- Does not use it as SlideId, SampleTypeId or an authorization identity.
 
-A Slide has:
-- Stable SlideId.
-- Required SampleId identifying its source sample.
-- SlideTypeId when classified.
-- User-facing label and optional external slide/accession reference.
-- Versioned preparation snapshot, including the SlideType version used.
-- Creation/preparation timestamps where available.
-- A storage/package reference maintained by the persistence adapter.
+If the external lab's IDs are only unique within its own system, store the issuing system/namespace together with OriginLabId so references from different systems cannot collide. Patient identity, clinical accession and source-sample identity are not stored by this application.
 
-A Slide does not carry MicroscopeId as ownership metadata. Its acquisition history is obtained through the Slide's AcquisitionRun records, which identify the actual microscope used.
+### 11.4 Physical slide geometry and stage registration
 
-Slide types are reusable preparation templates such as blood film, bone-marrow smear/aspirate preparation, kidney tissue section, liver tissue section or custom preparation types. They describe how material is prepared on the slide, not the source material taxonomy.
+The physical slide geometry describes the carrier. Its stage placement/registration is separate mechanical state: a measured mapping between slide-local coordinates and the stage-machine coordinate frame, with calibration revision, correspondences, residuals and uncertainty.
 
-A slide receives a preparation/configuration snapshot when created. Updating a reusable slide type must not silently change existing slides.
+Stage navigation uses SlideId plus the exact registration revision. It does not use SampleTypeId to calculate coordinates. Changing SampleType requirements does not alter physical geometry or registration. Replacing/reseating/redrawing a slide invalidates the affected registration and queued targets according to the stage lifecycle.
 
-### 11.4 Tile semantics and positions
+The working surface may contain zero or any number of user-defined slide placements. The workspace origin is not a slide origin. Each placement remains independently registered. A Slide record may exist without a loaded/registered stage placement; stage-local navigation requires valid registration evidence.
 
-A Tile has:
-- Stable TileId and owning SlideId.
-- Optional user-facing field label or display-order hint.
-- Optional slide-local and/or stage-machine position observations, each with coordinate frame, units, source and uncertainty/provenance when available.
-- Creation metadata and optional descriptive metadata.
+### 11.5 Acquisition plan and run
 
-A Tile is the persistent identity of an acquired field/image region within a slide. Its frames are related through ImageFrame.TileId; the Tile does not duplicate frame payload metadata or maintain a second authoritative frame list.
+An `AcquisitionPlan` describes intended microscope work:
+- AcquisitionPlanId and immutable plan revision.
+- Requested OperationMode/configuration and technical acquisition requirements.
+- Optional SlideId and exact Slide revision when the plan targets a registered physical slide.
+- The exact SampleTypeId/revision used for requirement assessment when a SampleType profile is applicable.
+- Field targets in the relevant slide-local or stage-machine coordinate frame, plus requested Z positions, focus sequence, exposure brackets, camera output modes and capture policy where supported.
 
-A tile may retain slide-local and corresponding stage-machine position metadata when registration is available. Position is optional. The system must support unpositioned fields and must not fabricate physical coordinates.
+A plan is not owned by a Patient, Sample, SampleId, accession or laboratory workflow. Calibration-target imaging and direct camera capture may be represented without a Slide. Slide-targeted navigation requires a valid Slide and registration, but a universal “active patient/sample/slide session” is not an acquisition precondition.
 
-A tile's sequence/index or virtual navigation order is not a physical slide coordinate.
-
-The architecture does not require whole-slide scanning or stitching. It supports individual fields of view such as blood-film and bone-marrow cell acquisition workflows.
-
-### 11.5 Mandatory active slide session
-
-No acquisition may start without a valid active slide session.
-
-This condition is enforced by Core when handling acquisition requests, not merely by disabling a button in a frontend.
-
-Application coordinates folder selection/opening and persistence. Core owns the active-session precondition and rejects acquisition without it.
-
-Switching or closing a slide during acquisition requires a safe stop/completion and recovery path.
-
-### 11.6 Acquisition plan versus run
-
-AcquisitionPlan is the intended sequence and settings for one Slide. It contains:
-- AcquisitionPlanId and SlideId.
-- Requested microscope configuration and acquisition policy.
-- Intended field/tile targets and capture dimensions (for example, focal planes and exposure brackets) where applicable.
-- Plan revision and creation metadata.
-
-The plan is immutable once execution begins. Editing the intent after execution requires a new plan revision/identity; it must not rewrite the plan already referenced by a run.
-
-AcquisitionRun is the actual execution record for one Slide and one physical Microscope. It contains:
-- AcquisitionRunId, AcquisitionPlanId, SlideId and actual MicroscopeId.
+An `AcquisitionRun` records one actual execution on one physical Microscope:
+- AcquisitionRunId, optional AcquisitionPlanId and actual MicroscopeId.
+- Optional SlideId and the exact Slide revision when slide-targeted.
+- The SampleTypeId/revision actually used for technical assessment, if any.
+- Optional OriginLabId snapshot when supplied on the selected Slide and needed for external correlation/audit.
 - Runtime/operation correlation and start/end timestamps.
 - Outcome/status, including incomplete and partially completed outcomes.
-- Effective microscope configuration and calibration revisions used.
-- Device observations and actual camera values, with provenance.
-- Produced TileIds and ImageFrameIds.
-- Completed, missing and failed steps/frames.
-- Errors, interruptions and recovery checkpoints/status.
+- Requested/resolved/effective microscope configuration and calibration revisions.
+- Device observations, actual camera values and readback provenance.
+- Produced acquisition fields and ImageFrameIds, completed/missing/failed steps and recovery checkpoints.
 
-A run records what happened, not merely what was planned. The planned settings and actual observed settings remain separately inspectable. A run cannot be reassigned to another Slide or Microscope after execution.
+SampleType requirements guide technical suitability only. The microscope application does not infer or store the upstream patient/sample/laboratory records associated with an acquisition. The calling workflow correlates its own records with the returned AcquisitionRunId.
 
-### 11.7 Frames, Z and exposure
+### 11.6 Acquisition fields and image frames
 
-The data model must support irregular acquisition sets, not assume a dense fixed tensor.
+An `AcquisitionField` represents a field of view or scan target within one AcquisitionRun. It may have a stable AcquisitionFieldId, optional display label/order, optional slide-local or stage-machine target, focus/region geometry and calibration references. A field's order is not a physical coordinate. Unpositioned fields remain representable.
 
-Each original ImageFrame has:
-- ImageFrameId, AcquisitionRunId and TileId.
+Each original `ImageFrame` has:
+- ImageFrameId, AcquisitionRunId and optional AcquisitionFieldId.
 - Immutable pixel-payload reference and integrity metadata.
 - Capture timestamp, delivered pixel dimensions and pixel format.
-- Source camera identity and the applicable readout/ROI/binning context.
+- Source camera identity and readout/ROI/binning context.
 - Actual exposure and other camera settings when supported/reported.
-- Relevant optical configuration/calibration references and source geometry.
+- Relevant optical configuration and calibration references.
 - Position/focus observations when available, preserving source and uncertainty.
 
-Camera-specific fields remain capability-dependent; an unavailable readback is absent/unknown, not replaced with the requested value. Run-level configuration/calibration references may be inherited by frames when identical; frame-level overrides are recorded when actual capture conditions differ.
+Z planes, exposure brackets and camera channels are explicit capture dimensions, not inferred from array position. HDR combines exposures for the same field and focal plane; it must not merge different fields or Z planes. Focus stacking is a separate operation across focal planes. Original frames remain immutable. Incomplete runs remain recoverable and marked incomplete.
 
-Z planes and exposure brackets are explicit relationships or typed capture dimensions, not inferred from array position. HDR combines exposures for the same field and focal plane; it must not merge different fields or different Z planes. Focus stacking is a separate operation across focal planes. Original frames remain immutable.
+### 11.7 Identity and ownership invariants
 
-Incomplete runs are recoverable and marked incomplete.
+Microscope-owned identities include MicroscopeId, SampleTypeId, SlideId, AcquisitionPlanId, AcquisitionRunId, AcquisitionFieldId and ImageFrameId. PatientId and SampleId are not defined by this application. SlideTypeId is not defined because preparation requirements are part of SampleType.
 
-### 11.8 Identity, ownership and cross-record invariants
+The authoritative relationships are:
+- One SampleType revision can be referenced by many Slides.
+- Every Slide references exactly one SampleTypeId and exact SampleType revision.
+- A Slide's optional OriginLabId is an external reference only; no Lab entity is persisted.
+- An AcquisitionPlan/Run may reference a Slide when the acquisition targets that physical carrier; the relationship is optional for calibration and direct imaging.
+- An ImageFrame belongs to exactly one AcquisitionRun and optionally one AcquisitionField belonging to that same run.
 
-All persisted entities use distinct, stable, opaque identifiers: SampleId, SlideId, TileId, AcquisitionPlanId, AcquisitionRunId, ImageFrameId and DerivedImageId. MicroscopeId remains the identity of the physical instrument. Type identifiers such as SampleTypeId and SlideTypeId are separate from instance identifiers.
-
-Identifiers must not be derived from labels, folder names, array positions, dates or microscope identity. Renaming a sample, moving a package or changing a workspace index must not change its identity.
-
-The authoritative ownership and reference rules are:
-
-| Record | Authoritative relationship | Rule |
-|---|---|---|
-| Sample | SampleTypeId | Identifies collected source material; it does not own a persisted list of SlideIds |
-| Slide | SampleId and SlideTypeId | References exactly one source Sample in the baseline model |
-| Tile | SlideId | Belongs to exactly one Slide; its physical position is optional |
-| AcquisitionPlan | SlideId | Describes intended acquisition for one Slide and is immutable after execution begins |
-| AcquisitionRun | SlideId, AcquisitionPlanId, MicroscopeId | Records one actual run on one Slide, using one actual microscope |
-| ImageFrame | AcquisitionRunId and TileId | One captured frame belongs to one run and one tile on the same Slide |
-| DerivedImage | Source frame/derived-image IDs and processing provenance | Never replaces or mutates its source images |
-
-An AcquisitionRun can produce frames for multiple tiles. A Tile can receive frames from multiple runs, which supports reacquisition of an existing field without changing the Tile identity. Every referenced Tile must belong to the Slide referenced by its AcquisitionRun. A frame cannot link a run from one slide to a tile from another.
-
-A frame is an individual capture, not synonymous with a tile. Exposure brackets, Z planes, camera channels and repeat captures are represented as capture metadata and explicit relationships under the run/tile context; they must not be collapsed into a fabricated fixed-dimensional array.
-
-The run obtains its Sample context through its Slide.SampleId. Do not duplicate SampleId on AcquisitionRun as an independently editable relationship. A denormalized sample identity snapshot is permitted only as immutable audit/export metadata and must be validated against the slide relationship when created.
-
-The Slide.SampleId relationship is established when the Slide is created. Correcting a source association is an explicit audited domain operation, not a silent folder move or metadata rewrite. A Sample must not be physically deleted while Slides reference it. Archival/retention is distinct from destructive deletion; sample deletion must never cascade-delete slide packages or acquired image data.
-
-The Sample record does not maintain an authoritative SlideIds collection. Queries such as “slides for sample” are resolved from Slide.SampleId. Any reverse index or workspace collection is a rebuildable projection, not a second authority.
+Do not create authoritative reverse SlideIds collections on SampleType; query Slides by SampleTypeId. Renaming a Slide, moving a package or changing workspace display order does not change its identity. Changes to SampleType are revisioned and do not silently mutate existing Slide references or completed acquisition history.
 
 ## 12. Image documents, annotations and measurements
 
@@ -1184,87 +1148,96 @@ Rendering reconstructs original pixels plus the persisted annotation document. O
 
 DICOM serialization of annotations/measurements is handled through appropriate standards-based representations later; not every annotation belongs inside the WSI pixel object.
 
-## 13. Persistence and DICOM
+## 13. Persistence and imaging-data storage
 
-Core defines semantic persistence contracts for sample records, slide records, tiles, acquisition plans/runs, calibration references, image payloads and annotation documents. Infrastructure implements these contracts. The contracts express domain operations and consistency requirements; they do not expose filesystem paths or vendor storage APIs to Core.
+Microscope persistence covers instrument constitution, deployment bindings, SampleType definitions and revisions, physical Slide records, stage registrations, operation modes, calibration, acquisition plans/runs, image payload references and image documents. It does not persist patient or individual source-sample entities.
 
 ### 13.1 Persistence ownership
 
-- The Sample record is authoritative for sample identity, SampleTypeId and source metadata.
-- The Slide record is authoritative for SlideId, SampleId, SlideTypeId and the versioned preparation snapshot.
-- Tile metadata is owned by its Slide.
-- Acquisition plans and runs are persisted in the context of their Slide. The run records the actual MicroscopeId and the plan it executed.
-- ImageFrame metadata is associated with one AcquisitionRun and one Tile. The image payload itself is stored as an immutable object and referenced by a stable storage reference plus integrity metadata.
-- Derived image payloads and provenance are separate from original frames. Reprocessing creates new derived identities rather than overwriting originals.
-- Microscope calibration revisions remain in the microscope/configuration calibration store. Acquisitions reference the exact revisions used; slide folders do not become owners of calibration history.
-- Workspace catalogs, recent-item lists and Sample-to-Slide reverse lookups are rebuildable indexes. They are not authoritative domain records.
-
-The Sample and Slide packages are independently addressable. A Slide package retains its SampleId relationship even if moved to another workspace. If the Sample record is unavailable, the relationship is unresolved, not silently replaced with a new Sample. A slide can still be inspected as a package, but the application must report that its source Sample record is unavailable.
+- The SampleType catalog is authoritative for reusable, revisioned technical requirements. Each Slide pins the exact SampleType revision used for its preparation/assessment.
+- The Slide record is authoritative for SlideId, SampleTypeId/revision, operator label, physical geometry, actual preparation details and optional external OriginLabId reference.
+- Stage workspace placement/registration records are authoritative only for mechanical dimensions, coordinate transforms and measured registration evidence. They do not own SampleType requirements.
+- OperationMode revisions and LightPath calibration records are authoritative for saved microscope operating intent and measured optical output calibration.
+- Acquisition plans/runs record requested and actual microscope execution. A run identifies the actual MicroscopeId, optional Slide revision, SampleType revision used for assessment and exact configuration/calibration revisions.
+- AcquisitionField metadata belongs to its run. ImageFrame metadata belongs to one run and optionally one field. Payloads are immutable objects referenced by stable storage references plus integrity metadata.
+- Derived-image payloads and provenance are separate from original frames. Reprocessing creates new derived identities rather than overwriting originals.
+- Workspace catalogs and recent-item lists are rebuildable indexes, not authoritative domain records.
+- Patient, Sample and laboratory workflow records remain owned by the calling external system. That system correlates its own records with AcquisitionRunId.
 
 ### 13.1.1 In-memory materialization and residency
 
-The persistence adapter stores and retrieves durable records. It is not consulted for every domain-object read. The Application layer decides when persistent aggregates are loaded, materializes them as validated in-memory objects, and retains them for the duration of active use. Core operates on those objects and their supplied values; it does not perform storage I/O.
+The persistence adapter stores and retrieves durable microscope/application records. It is not consulted for every domain-object read. The Application layer decides when persistent aggregates are loaded, materializes them as validated in-memory objects, and retains them for the duration of active use. Core operates on those objects and their supplied values; it does not perform storage I/O.
 
 The loading and residency rules are:
 
-- Load a persistent aggregate when it is first opened or required by a workflow, using its stable identity. Do not eagerly load the complete Sample/Slide/acquisition workspace at application startup.
-- Materialize the aggregate and the relationship metadata required for that use. Load related records in a bounded batch where practical. A relationship that has not been materialized remains an identity/reference until explicitly requested; accessing an already materialized relationship must not perform hidden storage I/O.
-- Within one active workspace/runtime scope, keep one owner-retained in-memory instance for each active persistent identity. Consumers access it through the owning object's API or receive read-only projections; only the designated owner mutates it. They must not create independent mutable copies of the same active record.
-- Keep an opened object resident while it is selected, referenced by another active object, or used by an in-flight workflow. Release it after it is no longer in use and all dirty state has been committed or explicitly retained for recovery.
+- Load equipment definitions, SampleType definitions/revisions, operation modes, calibration, stage workspace, acquisition or image documents when first required; do not eagerly load the complete acquisition/image workspace at startup.
+- Materialize the aggregate and relationship metadata required for that use. Load related records in bounded batches where practical. Accessing an already materialized relationship must not perform hidden storage I/O.
+- Within one active workspace/runtime scope, keep one owner-retained in-memory instance for each active persistent identity. Consumers access it through the owning object's API or receive read-only projections; only the designated owner mutates it.
+- Keep an opened object resident while selected, referenced by another active object or used by an in-flight workflow. Release it after it is no longer in use and all dirty state has been committed or explicitly retained for recovery.
 - Perform mutations against the in-memory object. Persist them at an explicit save/transaction boundary or a domain checkpoint required for recovery. Do not reread the record after each mutation or before each subsequent operation.
 - A failed persistence write leaves the in-memory object and its dirty state intact and visible as unsaved. It must not be discarded or overwritten by reloading an older durable version.
 - Detect revision conflicts at commit and require explicit reconciliation. Do not silently refresh an active object from storage.
 - Large immutable image payloads may remain file-backed and be decoded through bounded tile/frame buffers. The active image document and its metadata remain ordinary in-memory objects.
 
-This is a lifecycle rule, not a mandate to add a global cache, generic unit-of-work framework or database-aware lazy-loading layer. The existing Application owner for a workspace, document or microscope runtime retains the objects it has activated and shares their references with consumers. Startup loads equipment/deployment definitions, configuration and the catalog/index information needed to present available records; domain aggregates load on demand.
+This is a lifecycle rule, not a mandate to add a global cache, generic unit-of-work framework or database-aware lazy-loading layer. The Application owner for a microscope runtime, stage workspace, acquisition or image document retains the objects it has activated and shares their references with consumers. Startup loads equipment/deployment definitions, current SampleType definitions, configuration and the catalog/index information needed to present available imaging records; larger acquisition/image aggregates load on demand.
 
 A persisted stage position is not physical position evidence after restart. Stage axes must re-establish their references/observations through their hardware lifecycle.
 
-### 13.2 Initial local-first workspace layout
+### 13.2 Initial local-first imaging workspace layout
 
 ~~~text
 Workspace/
-├── samples/
-│   └── {SampleId}/
-│       └── sample.json
+├── microscope/
+│   ├── equipment/
+│   ├── sample-types/
+│   │   └── {SampleTypeId}/
+│   │       └── revisions/
+│   │           └── {Revision}/
+│   ├── operation-modes/
+│   ├── calibration/
+│   └── stage-workspaces/
+│       └── {WorkspaceId}/
+│           └── placements/
+│               └── {SlideId}/
 ├── slides/
 │   └── {SlideId}/
-│       ├── slide.json
-│       ├── configuration/
-│       │   └── revisions/
-│       ├── tiles/
-│       │   └── {TileId}/
-│       │       └── tile.json
-│       ├── acquisition/
-│       │   ├── plans/
-│       │   ├── runs/
-│       │   └── recovery/
+│       └── slide.json
+├── acquisitions/
+│   └── {AcquisitionRunId}/
+│       ├── plan/
+│       ├── run.json
+│       ├── fields/
 │       ├── images/
 │       │   ├── original/
 │       │   └── derived/
-│       ├── annotations/
-│       ├── thumbnails/
+│       ├── recovery/
 │       └── history/
+├── image-documents/
+│   └── {ImageDocumentId}/
+│       ├── annotations/
+│       ├── measurements/
+│       └── thumbnails/
 └── catalog/
     └── indexes (rebuildable)
 ~~~
 
-This is a logical storage layout, not a Core API or a requirement that every adapter use directories. Braced ID directory names are conceptual storage keys, not permission to concatenate an opaque ID directly into a filesystem path. The storage adapter must deterministically encode IDs into safe portable path segments or maintain an explicit ID-to-storage-key mapping; it must prevent traversal, separator interpretation and collisions. The original ID remains in metadata and is not rewritten by path encoding. Image payload filenames/extensions and physical storage layout are also adapter decisions. Metadata records use stable IDs and relative payload references so a Slide package can be moved without changing domain identity.
+This is a logical storage layout, not a Core API or a requirement that every adapter use directories. Braced ID directory names are conceptual storage keys, not permission to concatenate an opaque ID directly into a filesystem path. The storage adapter must deterministically encode IDs into safe portable path segments or maintain an explicit ID-to-storage-key mapping; it must prevent traversal, separator interpretation and collisions. The original ID remains in metadata and is not rewritten by path encoding. Image payload filenames/extensions and physical storage layout are adapter decisions.
 
-A Sample directory does not contain authoritative copies of its Slides. Slide packages are separate so that a slide can be moved, backed up or restored independently; Slide.SampleId preserves its source relationship. The catalog index can be rebuilt by scanning authoritative records or by an adapter-specific index rebuild.
+There is no `samples/` or `patients/` package. The optional OriginLabId is a value on Slide, not a path, folder, foreign key or authority to fetch external laboratory records. External workflows retain their own patient/source records and correlate them to AcquisitionRunId.
 
 ### 13.3 Persistence and recovery invariants
 
-- Validate that SampleId exists before committing a new Slide.
-- Validate that TileId belongs to the run's Slide before accepting a frame record.
+- Validate that a Slide's SampleTypeId and exact SampleTypeRevision resolve before accepting a slide record or using its requirements for acquisition qualification.
+- Validate that a SlideId used for slide-local navigation refers to a current registered mechanical placement in the loaded stage workspace.
+- Validate that an AcquisitionFieldId belongs to the run before accepting a frame record.
 - Persist an AcquisitionRun identity and recoverable initial state before dispatching hardware commands.
 - Record a frame as available only after its immutable payload has been durably stored and its reference/integrity metadata has been committed.
 - Preserve incomplete runs, missing frames and recovery checkpoints. Never infer success from the existence of a folder or plan.
 - Make retries idempotent using stable run/frame identities; duplicate delivery must not create duplicate logical frames.
-- Do not cascade-delete slide packages, frames or derived data when a Sample is archived or its metadata is corrected.
-- Keep original image payloads immutable. Retention/deletion is an explicit policy operation with reference checks, not a side effect of editing Sample or Slide metadata.
+- Do not cascade-delete acquisition/image data as a side effect of changing a SampleType revision, Slide details, stage layout or equipment definition.
+- Keep original image payloads immutable. Retention/deletion is an explicit imaging-data policy operation with reference checks.
 
-A slide remains portable and can be reopened without a connected microscope. DICOM is an interoperability/storage adapter, not the internal domain model. The Core must not force unpositioned fields into physical WSI coordinates. DICOM WSI representation is selected only when its spatial and pixel semantics can be represented truthfully. Exposure brackets must not be misrepresented as Z planes. Different optical scales may require distinct suitable image objects/series. Interoperability constraints are resolved by the DICOM adapter and documented, not hidden in the internal model.
+DICOM is an interoperability/storage adapter, not the internal domain model. The Core must not force unpositioned fields into physical whole-slide coordinates. DICOM WSI representation is selected only when its spatial and pixel semantics can be represented truthfully. Exposure brackets must not be misrepresented as Z planes. Different optical scales may require distinct suitable image objects/series. Interoperability constraints are resolved by the DICOM adapter and documented, not hidden in the internal model.
 
 ## 14. Runtime, concurrency and resource ownership
 
@@ -1476,13 +1449,11 @@ Build, unit tests, integration tests, visual checks and hardware acceptance are 
 - **EffectiveConfiguration:** configuration established by observations at the assurance level supported by the instrument.
 - **OpticalCalibration:** mapping from delivered image coordinates to specimen-space dimensions for a geometry-affecting optical configuration.
 - **MotionCalibration:** mapping from an axis command/feedback coordinate to physical axis displacement.
-- **Sample:** collected source specimen/material, independent of microscope and slide preparation.
-- **SampleType:** taxonomy for source material/category.
-- **Slide:** physical preparation made from one sample in the baseline model.
-- **SlideType:** taxonomy for preparation/mounting method or category.
-- **Tile:** persistent slide-owned image-field identity; physical position is optional and multiple acquisition runs may contribute frames to one tile.
-- **AcquisitionPlan:** immutable intended acquisition specification associated with one slide.
-- **AcquisitionRun:** actual execution record for one slide and one microscope.
-- **ImageFrame:** immutable original capture associated with one run and one tile.
-- **SlideSession:** Core-recognized active slide context required for acquisition.
+- **SampleType:** versioned, reusable imaging and slide-preparation requirement profile; not an individual sample record.
+- **Slide:** independent physical-slide record referencing one SampleType revision and storing its own details/preparation.
+- **OriginLabId:** optional opaque external identifier supplied by an originating laboratory; no Lab entity is owned by the microscope application.
+- **AcquisitionField:** optional field-of-view/scan-target identity within one AcquisitionRun.
+- **AcquisitionPlan:** immutable intended microscope-work specification; a physical Slide reference is optional and explicit.
+- **AcquisitionRun:** actual execution record for one microscope, with optional Slide and SampleType revision references when applicable.
+- **ImageFrame:** immutable original capture associated with one run and optional acquisition field.
 - **Frontend:** a client of Microscope.Application; it is not an owner of microscope behavior.

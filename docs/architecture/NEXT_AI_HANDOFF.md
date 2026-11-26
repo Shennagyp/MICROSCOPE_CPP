@@ -7,7 +7,7 @@
 **Branch:** `camera-v.2.0`  
 **Latest reviewed implementation checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37`  
 **Latest CI:** [workflow #45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
-**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual/physical acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction. Recheck the live branch tip before each session.
+**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction. Recheck the live branch tip before each session.
 
 ---
 
@@ -171,12 +171,14 @@ Phase 8 remains responsible for exact-commit hardware records, supported provide
 ## 9. Immediate next action
 
 Continue Phase 6 on `camera-v.2.0`:
-1. Record and preserve the decision to keep GenTL `DeviceDescriptor`
+1. Preserve the recorded decision to keep GenTL `DeviceDescriptor`
    provider-specific for now; it carries Producer/interface/device routing
    identity and no generic multi-provider discovery consumer justifies a
-   lossy Common projection.
-2. Decide whether per-element vector descriptor metadata has a concrete
-   generic consumer. Do not expand the common contract without one.
+   lossy Common projection. Do not implement a projection unless that consumer
+   requirement changes.
+2. Preserve the decision to defer per-element vector descriptor metadata.
+   Do not expand the common contract unless a concrete generic consumer needs
+   per-element labels/ranges.
 3. Select the next provider-neutral Phase 6 coverage gap. AmScope provider
    tests remain blocked by the explicit AmScope freeze; do not change its
    source, tests, public contracts or behavior.

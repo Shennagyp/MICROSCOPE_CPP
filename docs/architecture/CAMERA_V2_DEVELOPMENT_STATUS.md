@@ -81,7 +81,7 @@ The Qt targets remain opt-in. Do not add Qt dependencies to Camera/Common or the
 
 ## 4. Governing roadmap and original Phase 0–8 ledger
 
-The original *AmScope Native Driver and Camera Module Completion Plan* on `amscope-native-driver-v.0.2` remains the historical source of phase identities. Original Phases 3 and 4 (Qt streaming and reusable UI) remain in the governing roadmap. Phase 3 is accepted by owner direction; Phase 4 is the current critical-path phase. A previous status interpretation that excluded Phases 3 and 4 was incorrect and is superseded by this ledger. The later `AMSCOPE_NATIVE_RELEASE_PLAN.md` is subordinate.
+The original *AmScope Native Driver and Camera Module Completion Plan* on `amscope-native-driver-v.0.2` remains the historical source of phase identities. Original Phases 3 and 4 (Qt streaming and reusable UI) remain in the governing roadmap. Phase 3 is accepted by owner direction. Phase 4 source/offscreen work is complete; visual acceptance remains pending and physical MU503 testing is postponed. Phase 6 is the active software workstream by owner direction. A previous status interpretation that excluded Phases 3 and 4 was incorrect and is superseded by this ledger. The later `AMSCOPE_NATIVE_RELEASE_PLAN.md` is subordinate.
 
 | Phase | Original deliverable | Current assessment |
 |---:|---|---|
@@ -139,6 +139,9 @@ Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | `587ee5e` | Add preview composition smoke | Adds `--self-test-ui` to the existing preview executable; verifies document/dock composition, status bar, Output pane, tri-state capability table and dock save/restore without discovery or user settings. |
 | `37a9b54` | Verify nested widget ownership | Uses QWidget ancestry checks for nested dock contents; the offscreen smoke passes in cross-architecture CI. |
 | `a4fc39b` | Explain RAW bit-depth profile denial | The descriptor factory now supplies an actionable disabled reason when model policy blocks the feature; a regression test checks the exact reason. |
+| `8b9be09`, `977d53b` | Test GenApi port failure recovery | Adds mock read/write fault injection and verifies feature read failure recovery, failed-write no-side-effect behavior, and command execution failure/recovery. The read fault is injected before first feature access to avoid GenApi cache bypass. |
+| `9bb1c4c` | Test malformed GenApi XML handling | Injects malformed XML through the mock remote port; verifies node-map construction rejects it and a later valid node map recovers. |
+| `a07c8a2` | Test unsupported public GenApi node handling | Adds a generic public `Node` reachable from `Root`; verifies scalar descriptor enumeration omits it and direct feature read/write return `Unsupported`. Workflow #45767256996 passed official GenApi 3.5.1 integration on both architectures. |
 
 ### Current Qt and non-Qt CI — checkpoint a4fc39b
 

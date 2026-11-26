@@ -810,6 +810,7 @@ ConfigurationResolution ConfigurationResolver::resolve(
     if (request.lightPathBinding()) {
         const auto& binding = *request.lightPathBinding();
         if (binding.operationModeRevision == 0 ||
+            binding.equipmentDefinitionRevision != equipment.revision() ||
             binding.cameraComponentId != request.cameraComponentId() ||
             binding.cameraModeId != request.cameraModeId()) {
             appendError(

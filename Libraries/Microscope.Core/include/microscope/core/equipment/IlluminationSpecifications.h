@@ -15,6 +15,7 @@ enum class IlluminationSourceTechnology {
     Halogen,
     XenonArc,
     MercuryArc,
+    MetalHalideArc,
     Laser,
     Other,
     Unknown
@@ -55,6 +56,38 @@ private:
 
     PositiveNanometers minimumWavelength_;
     PositiveNanometers maximumWavelength_;
+};
+
+enum class SpectralPowerDistributionError {
+    TooFewSamples,
+    InvalidWavelength,
+    InvalidPower,
+    WavelengthsNotIncreasing,
+    NoPositivePower
+};
+
+struct SpectralPowerSample {
+    double wavelengthNanometers = 0.0;
+    // Relative spectral radiant output. Absolute irradiance is established by
+    // measured light-path calibration, not inferred from this normalized curve.
+    double relativePower = 0.0;
+};
+
+class SpectralPowerDistribution final {
+public:
+    [[nodiscard]] static Result<
+        SpectralPowerDistribution,
+        SpectralPowerDistributionError> create(
+            std::vector<SpectralPowerSample> samples);
+
+    [[nodiscard]] const std::vector<SpectralPowerSample>&
+    samples() const noexcept;
+
+private:
+    explicit SpectralPowerDistribution(
+        std::vector<SpectralPowerSample> samples);
+
+    std::vector<SpectralPowerSample> samples_;
 };
 
 enum class IlluminationIntensityRangeError {
@@ -104,25 +137,31 @@ public:
             IlluminationChannelId id,
             std::optional<SpectralBand> spectralBand,
             IlluminationControlKind controlKind,
-            std::optional<IlluminationIntensityRange> intensityRange);
+            std::optional<IlluminationIntensityRange> intensityRange,
+            std::optional<SpectralPowerDistribution> spectralPowerDistribution =
+                std::nullopt);
 
     [[nodiscard]] const IlluminationChannelId& id() const noexcept;
     [[nodiscard]] const std::optional<SpectralBand>& spectralBand() const noexcept;
     [[nodiscard]] IlluminationControlKind controlKind() const noexcept;
     [[nodiscard]] const std::optional<IlluminationIntensityRange>&
     intensityRange() const noexcept;
+    [[nodiscard]] const std::optional<SpectralPowerDistribution>&
+    spectralPowerDistribution() const noexcept;
 
 private:
     IlluminationChannel(
         IlluminationChannelId id,
         std::optional<SpectralBand> spectralBand,
         IlluminationControlKind controlKind,
-        std::optional<IlluminationIntensityRange> intensityRange);
+        std::optional<IlluminationIntensityRange> intensityRange,
+        std::optional<SpectralPowerDistribution> spectralPowerDistribution);
 
     IlluminationChannelId id_;
     std::optional<SpectralBand> spectralBand_;
     IlluminationControlKind controlKind_;
     std::optional<IlluminationIntensityRange> intensityRange_;
+    std::optional<SpectralPowerDistribution> spectralPowerDistribution_;
 };
 
 enum class IlluminationSpecificationError {

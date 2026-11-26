@@ -381,6 +381,11 @@ CameraModelEnrichmentResult CameraModelDiscoveryEnricher::enrichBoundDevice(
 
     if (normalizedExpectedManufacturer.empty() ||
         normalizedExpectedModel.empty() ||
+        (expectedModelKey.variant && normalizedExpectedVariant.empty()) ||
+        expectedModelKey.manufacturer.find('\0') != std::string::npos ||
+        expectedModelKey.model.find('\0') != std::string::npos ||
+        (expectedModelKey.variant &&
+         expectedModelKey.variant->find('\0') != std::string::npos) ||
         expectedProfileRevision == 0) {
         result.status = CameraModelEnrichmentStatus::BoundProfileNotFound;
         addWarning(

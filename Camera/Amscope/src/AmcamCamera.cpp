@@ -4686,10 +4686,24 @@ AmcamCamera::readFeature(std::string_view name) {
     if (descriptor == descriptors.end())
         return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
                             std::string(name), "Camera feature was not found.");
-    if (!descriptor->isAvailable)
+    const bool rawBitDepthFeature =
+        name == camera::RawOutputBitDepthFeature;
+    const bool pixelFormatProfileAllows = impl_->profileRegistry.allows(
+        impl_->modelCode, AmcamCameraFeature::PixelFormatSelection);
+    const bool retryRawBitDepthProbe = rawBitDepthFeature &&
+        amscope::detail::shouldRetryRawOutputBitDepthProbe(
+            pixelFormatProfileAllows, descriptor->isAvailable);
+    if (rawBitDepthFeature && !pixelFormatProfileAllows)
+        return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
+                            std::string(name),
+                            "Pixel-format selection is blocked by the active camera feature profile.");
+    if (!descriptor->isAvailable && !retryRawBitDepthProbe)
         return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
                             std::string(name), "Camera feature is not available on this device.");
-    if (!descriptor->isReadable)
+    // RAW bit-depth reads re-query the live SDK list/current format below.
+    // Do not let a stale or failed inventory read mask the operation's exact
+    // FeatureUnavailable, FeatureNotReadable, or BackendFailure result.
+    if (!descriptor->isReadable && !rawBitDepthFeature)
         return featureError(CameraFeatureAccessError::Code::FeatureNotReadable,
                             std::string(name), "Camera feature is not readable in the current state.");
 
@@ -5034,16 +5048,34 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
     if (descriptor == descriptors.end())
         return featureError(CameraFeatureAccessError::Code::FeatureNotFound,
                             std::string(name), "Camera feature was not found.");
-    if (!descriptor->isAvailable)
+    const bool rawBitDepthFeature =
+        name == camera::RawOutputBitDepthFeature;
+    const bool pixelFormatProfileAllows = impl_->profileRegistry.allows(
+        impl_->modelCode, AmcamCameraFeature::PixelFormatSelection);
+    const bool retryRawBitDepthProbe = rawBitDepthFeature &&
+        amscope::detail::shouldRetryRawOutputBitDepthProbe(
+            pixelFormatProfileAllows, descriptor->isAvailable);
+    if (rawBitDepthFeature && !pixelFormatProfileAllows)
+        return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
+                            std::string(name),
+                            "Pixel-format selection is blocked by the active camera feature profile.");
+    if (!descriptor->isAvailable && !retryRawBitDepthProbe)
         return featureError(CameraFeatureAccessError::Code::FeatureUnavailable,
                             std::string(name), "Camera feature is not available on this device.");
-    if (!descriptor->isWritable)
+    if (!descriptor->isWritable && !retryRawBitDepthProbe)
         return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
                             std::string(name), "Camera feature is not writable in the current state.");
 
-    auto validation = camera::validateFeatureWrite(*descriptor, value);
-    if (const auto* error = std::get_if<CameraFeatureAccessError>(&validation))
-        return *error;
+    if (retryRawBitDepthProbe) {
+        if (!std::holds_alternative<std::int64_t>(value))
+            return featureError(CameraFeatureAccessError::Code::InvalidValue,
+                                std::string(name),
+                                "RAW output bit depth requires an integer significant-bit value.");
+    } else {
+        auto validation = camera::validateFeatureWrite(*descriptor, value);
+        if (const auto* error = std::get_if<CameraFeatureAccessError>(&validation))
+            return *error;
+    }
 
     if (name == "ExposureAuto") {
         const auto& symbol = std::get<FeatureEnumeration>(value).symbol;

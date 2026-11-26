@@ -98,6 +98,13 @@ int main() {
                     alternateChoices, alternateOnly, AMCAM_PIXELFORMAT_RAW12).has_value(),
             "Readback accepts an alternate representation only when that exact format is in the SDK list.");
 
+    require(shouldRetryRawOutputBitDepthProbe(true, false),
+            "A profile-permitted RAW bit-depth feature must retry an unavailable inventory probe.");
+    require(!shouldRetryRawOutputBitDepthProbe(false, false),
+            "A failed inventory probe must never bypass a profile denial.");
+    require(!shouldRetryRawOutputBitDepthProbe(true, true),
+            "A successfully available descriptor must retain its normal writability checks.");
+
     const auto availableDescriptor = makeRawOutputBitDepthDescriptor(
         true, true, true, true, true, {8, 10, 12}, std::nullopt);
     require(availableDescriptor.name == camera::RawOutputBitDepthFeature &&

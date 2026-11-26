@@ -15,6 +15,14 @@
 
 namespace amscope::detail {
 
+// A descriptor probe can fail transiently or report no current support even
+// though the live operation query can still return a more precise result. Retry
+// only when the model profile permits pixel-format access; never bypass policy.
+inline bool shouldRetryRawOutputBitDepthProbe(
+    bool pixelFormatProfileAllows, bool descriptorAvailable) noexcept {
+    return pixelFormatProfileAllows && !descriptorAvailable;
+}
+
 // Classifies the first PixelFormatSupport query before its count is consumed.
 // E_NOTIMPL is an explicit per-model unsupported result in the vendor SDK;
 // other HRESULT failures are operational errors and must retain their code.

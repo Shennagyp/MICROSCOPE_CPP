@@ -25,6 +25,7 @@ add_library(microscope_application STATIC
     src/RuntimeHandle.cpp
     src/RuntimeWakeSignal.cpp
     src/CameraModelCatalogSqliteStore.cpp
+    src/CameraComponentModelBindingSqliteStore.cpp
     src/CameraModelDiscoveryEnricher.cpp
     src/MicroscopeConfigurationSqliteStore.cpp)
 add_library(Microscope::Application ALIAS microscope_application)
@@ -46,6 +47,18 @@ set_target_properties(microscope_application PROPERTIES
     CXX_EXTENSIONS OFF)
 
 if(BUILD_TESTING)
+    add_executable(microscope_application_camera_component_model_binding_store_tests
+        tests/CameraComponentModelBindingSqliteStoreTests.cpp)
+    target_link_libraries(microscope_application_camera_component_model_binding_store_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_camera_component_model_binding_store_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_camera_component_model_binding_store_tests
+        COMMAND microscope_application_camera_component_model_binding_store_tests)
+
     add_executable(microscope_application_camera_model_discovery_enricher_tests
         tests/CameraModelDiscoveryEnricherTests.cpp)
     target_link_libraries(microscope_application_camera_model_discovery_enricher_tests

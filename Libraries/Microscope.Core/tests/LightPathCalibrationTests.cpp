@@ -149,6 +149,34 @@ void testCalibrationBindingRejectsChangedOpticalConfiguration() {
         20.0));
     check(!changedPath.resolveDriveSetting(calibration),
           "rejects calibration from a different physical LightPath");
+
+    const auto changedEquipmentRevision = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("calibration-microscope"),
+        13,
+        modeId,
+        7,
+        lightPathId,
+        calibration.revisionId(),
+        makeId<EquipmentComponentId>("white-led-source"),
+        makeId<IlluminationChannelId>("white-led-channel"),
+        calibratedComponents,
+        20.0));
+    check(!changedEquipmentRevision.resolveDriveSetting(calibration),
+          "rejects calibration when the microscope equipment constitution revision changes");
+
+    const auto wrongMicroscope = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("another-microscope"),
+        12,
+        modeId,
+        7,
+        lightPathId,
+        calibration.revisionId(),
+        makeId<EquipmentComponentId>("white-led-source"),
+        makeId<IlluminationChannelId>("white-led-channel"),
+        calibratedComponents,
+        20.0));
+    check(!wrongMicroscope.resolveDriveSetting(calibration),
+          "rejects reuse of a calibration belonging to a different microscope");
 }
 
 void testCalibrationRejectsInvalidCurves() {

@@ -360,7 +360,7 @@ Do not run hardware tests in CI. Do not interpret pure test success as proof of 
 
 ## Immediate next implementation task
 
-The Core inbox/runtime and Application StageNavigationRuntime now provide the state and execution path for one active dual-slide navigation. The runtime worker still accepts a host-supplied typed control drain; it does not create a thread or a universal command bus.
+The Core inbox/runtime and Application stage-navigation runtime now provide the state and execution path for stage navigation over the selected slide registration. The runtime worker still accepts a host-supplied typed control drain; it does not create a thread or a universal command bus.
 
 **Next implementation work**
 1. Compose StageNavigationControlQueue::drain and StageNavigationRuntime::processFeedback into the live host's SerializedRuntimeWorker callbacks; publish operation snapshots and machine/slide-local position projections through the Application API.
@@ -376,7 +376,8 @@ Controller-specific STEP/DIR generation and vendor protocols remain in external 
 
 The active Core model is split by physical responsibility:
 
-- StageWorkingSurface2D defines only the XY working-surface bounds and the user-authored variable collection of slide rectangles.
+- StageWorkingSurface2D is created as an empty XY canvas from a user-defined stage-coordinate origin and positive X/Y travel extents. It derives the far boundaries and validates the complete canvas against the configured X/Y axis operating ranges.
+- The canvas starts with zero slide rectangles; the user adds, replaces or removes slide rectangles as immutable layout snapshots. The workspace origin is not silently reused as any slide's stop-point origin.
 - Each CAD rectangle retains its fixed mechanical stop-point endpoint, initial opposite-corner handle, solved opposite endpoint and constrained length/width.
 - SlidePlacement2D maps between stage XY and the selected slide's local XY. It stores no Z, slide thickness, drawing tolerance or stop-point uncertainty.
 - StagePosition3D tracks machine X/Y plus microscope focus Z. positionOnSlide() requires referenced X/Y only; the current focus Z coordinate is exposed independently and cannot affect slide-local XY.
@@ -394,4 +395,6 @@ Physical endstop datum evidence is represented separately from encoder and exter
 
 ### Remaining CAD authoring work
 
-Interactive pointer-driven drawing/editing, incremental constraint solving while dragging, undo/redo, persisted layout revisions and overlap/clearance rules remain outstanding.
+Core can now create a blank workspace from the user's origin and travel extents, then add, replace or remove slide rectangles through immutable snapshots. The rectangle's first endpoint remains a user-supplied slide stop-point coordinate; it is never inferred from the workspace origin.
+
+Interactive pointer-driven drawing/editing, incremental constraint solving while dragging, undo/redo, persisted layout revisions and overlap/clearance policy remain outstanding. The Core currently validates that every solved rectangle fits inside the workspace and that slide identities are unique; it does not yet reject geometric overlap or apply a clearance distance.

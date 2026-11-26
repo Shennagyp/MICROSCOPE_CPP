@@ -49,6 +49,33 @@ OpticalPathStep makeStep(
         std::move(exit)));
 }
 
+PixelDimensions dimensions(std::uint32_t width, std::uint32_t height) {
+    return take(PixelDimensions::create(width, height));
+}
+
+PositiveMicrometers micrometers(double value) {
+    return take(PositiveMicrometers::create(value));
+}
+
+CameraSpecification cameraSpecification(
+    const EquipmentComponentId& componentId,
+    const char* modeId) {
+    const auto mode = take(CameraOutputMode::create(
+        makeId<CameraModeId>(modeId),
+        take(SensorRegionOfInterest::create(0, 0, 640, 480)),
+        take(PixelBinning::create(1, 1)),
+        dimensions(640, 480),
+        CameraPixelLayout::Monochrome,
+        "Mono8"));
+
+    return take(CameraSpecification::create(
+        componentId,
+        dimensions(640, 480),
+        micrometers(3.45),
+        micrometers(3.45),
+        {mode}));
+}
+
 OpticalConnection makeConnection(
     const char* id,
     const OpticalPortId& from,
@@ -129,7 +156,9 @@ EquipmentFixture makeSharedSplitterFixture() {
         EquipmentComponentKind::OpticalElement,
         {makePort("splitter-input", OpticalPortDirection::Input),
          makePort("splitter-output-a", OpticalPortDirection::Output),
-         makePort("splitter-output-b", OpticalPortDirection::Output)})));
+         makePort("splitter-output-b", OpticalPortDirection::Output)},
+        {take(OpticalFunctionCapability::create(
+            OpticalElementFunction::BeamSplitter))})));
 
     fixture.components.push_back(take(EquipmentComponent::create(
         fixture.objectiveAId,
@@ -186,6 +215,188 @@ EquipmentFixture makeSharedSplitterFixture() {
     return fixture;
 }
 
+void testLightPathDerivesOnlyConnectedCameraEndpoints() {
+    auto fixture = makeSharedSplitterFixture();
+
+    const auto cameraCId = makeId<EquipmentComponentId>("camera-disconnected");
+    fixture.components.push_back(take(EquipmentComponent::create(
+        cameraCId,
+        EquipmentComponentKind::ImagingDevice,
+        {makePort("camera-disconnected-input", OpticalPortDirection::Input)})));
+
+    const auto imagingPathA = take(OpticalPath::create(
+        fixture.paths[0].id(),
+        fixture.paths[0].steps(),
+        OpticalPathRole::Imaging));
+    const auto imagingPathB = take(OpticalPath::create(
+        fixture.paths[1].id(),
+        fixture.paths[1].steps(),
+        OpticalPathRole::Imaging));
+    const auto lightPath = take(LightPath::create(
+        makeId<LightPathId>("light-path-dual-camera"),
+        "Dual camera splitter path",
+        {imagingPathA.id(), imagingPathB.id()}));
+
+    auto definition = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        {imagingPathA, imagingPathB},
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-a-mode"),
+         cameraSpecification(fixture.cameraBId, "camera-b-mode"),
+         cameraSpecification(cameraCId, "camera-disconnected-mode")},
+        {},
+        {},
+        {},
+        {lightPath});
+
+    check(static_cast<bool>(definition),
+          "accepts an imaging LightPath with two cameras connected through a declared beam splitter");
+    if (!definition) {
+        return;
+    }
+
+    const auto endpoints = definition.value().cameraEndpointIds(lightPath.id());
+    check(endpoints.size() == 2,
+          "derives two camera endpoints from the imaging route terminal steps");
+    check(endpoints[0] == fixture.cameraAId &&
+          endpoints[1] == fixture.cameraBId,
+          "preserves the camera identities connected to the two splitter branches");
+    check(endpoints[0] != cameraCId && endpoints[1] != cameraCId,
+          "does not include an installed camera that is not connected to the selected LightPath");
+    check(definition.value().cameraEndpointIds(
+              makeId<LightPathId>("unknown-light-path")).empty(),
+          "returns no camera endpoints for an unknown LightPath identity");
+}
+
+void testImagingRouteMustTerminateAtSpecifiedCamera() {
+    auto fixture = makeSharedSplitterFixture();
+    auto truncatedImagingPath = take(OpticalPath::create(
+        makeId<OpticalPathId>("invalid-imaging-route"),
+        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
+         makeStep(fixture.condenserId, fixture.condenserInput, fixture.condenserOutput),
+         makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
+         makeStep(fixture.objectiveAId, fixture.objectiveAInput, std::nullopt)},
+        OpticalPathRole::Imaging));
+
+    auto definition = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        {truncatedImagingPath},
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-a-mode")});
+
+    check(!definition &&
+          definition.error() ==
+              EquipmentDefinitionError::ImagingPathDoesNotTerminateAtCamera,
+          "rejects an imaging route whose terminal component is an objective rather than a connected camera");
+}
+
+void testLightPathMustContainAnImagingRoute() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto illuminationOnlyLightPath = take(LightPath::create(
+        makeId<LightPathId>("illumination-only-light-path"),
+        "Illumination-only route",
+        {fixture.paths.front().id()}));
+
+    auto definition = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        fixture.paths,
+        {},
+        {},
+        {},
+        {},
+        {},
+        {illuminationOnlyLightPath});
+
+    check(!definition &&
+          definition.error() ==
+              EquipmentDefinitionError::LightPathHasNoImagingRoute,
+          "requires a selectable acquisition LightPath to include an imaging route");
+}
+
+void testMultipleCameraLightPathRequiresPhysicalSplitter() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto splitter = std::find_if(
+        fixture.components.begin(),
+        fixture.components.end(),
+        [&fixture](const EquipmentComponent& component) {
+            return component.id() == fixture.splitterId;
+        });
+    if (splitter == fixture.components.end()) {
+        check(false, "test fixture contains its splitter component");
+        return;
+    }
+
+    *splitter = take(EquipmentComponent::create(
+        fixture.splitterId,
+        EquipmentComponentKind::OpticalElement,
+        {makePort("splitter-input", OpticalPortDirection::Input),
+         makePort("splitter-output-a", OpticalPortDirection::Output),
+         makePort("splitter-output-b", OpticalPortDirection::Output)}));
+
+    const auto imagingPathA = take(OpticalPath::create(
+        fixture.paths[0].id(),
+        fixture.paths[0].steps(),
+        OpticalPathRole::Imaging));
+    const auto imagingPathB = take(OpticalPath::create(
+        fixture.paths[1].id(),
+        fixture.paths[1].steps(),
+        OpticalPathRole::Imaging));
+    const auto lightPath = take(LightPath::create(
+        makeId<LightPathId>("light-path-without-splitter"),
+        "Invalid dual camera path",
+        {imagingPathA.id(), imagingPathB.id()}));
+
+    auto definition = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        {imagingPathA, imagingPathB},
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-a-mode"),
+         cameraSpecification(fixture.cameraBId, "camera-b-mode")},
+        {},
+        {},
+        {},
+        {lightPath});
+
+    check(!definition &&
+          definition.error() ==
+              EquipmentDefinitionError::LightPathMultipleCamerasRequireSplitter,
+          "rejects multiple camera endpoints unless imaging routes branch through an explicitly declared beam splitter");
+}
+
+void testLightPathFactoryRejectsDuplicateRoutes() {
+    const auto routeId = makeId<OpticalPathId>("duplicate-light-path-route");
+    const auto duplicateRoutes = LightPath::create(
+        makeId<LightPathId>("duplicate-routes-light-path"),
+        "Duplicate routes",
+        {routeId, routeId});
+    check(!duplicateRoutes &&
+          duplicateRoutes.error() == LightPathError::DuplicateOpticalPath,
+          "rejects duplicate route references inside one LightPath");
+
+    const auto emptyRoutes = LightPath::create(
+        makeId<LightPathId>("empty-routes-light-path"),
+        "Empty routes",
+        {});
+    check(!emptyRoutes &&
+          emptyRoutes.error() == LightPathError::EmptyOpticalPathSet,
+          "rejects an empty route set");
+
+    const auto emptyName = LightPath::create(
+        makeId<LightPathId>("empty-name-light-path"),
+        "",
+        {routeId});
+    check(!emptyName && emptyName.error() == LightPathError::EmptyName,
+          "requires a non-empty selectable LightPath name");
+}
+
 void testStrongEquipmentIdentities() {
     static_assert(!std::is_convertible<
         EquipmentComponentId, DeviceId>::value,
@@ -196,6 +407,9 @@ void testStrongEquipmentIdentities() {
     static_assert(!std::is_convertible<
         OpticalPathId, EquipmentComponentId>::value,
         "optical path and physical component identities must remain distinct");
+    static_assert(!std::is_convertible<
+        LightPathId, OpticalPathId>::value,
+        "light path and physical optical route identities must remain distinct");
 }
 
 void testSharedComponentsAndBranching() {
@@ -576,6 +790,11 @@ void testPathAndPortFactoryValidation() {
 int main() {
     testStrongEquipmentIdentities();
     testSharedComponentsAndBranching();
+    testLightPathDerivesOnlyConnectedCameraEndpoints();
+    testImagingRouteMustTerminateAtSpecifiedCamera();
+    testLightPathMustContainAnImagingRoute();
+    testMultipleCameraLightPathRequiresPhysicalSplitter();
+    testLightPathFactoryRejectsDuplicateRoutes();
     testSharedPhysicalConnectionSupportsOppositePathTraversal();
     testDuplicatePhysicalIdentitiesAreRejected();
     testUnknownConnectionPortIsRejected();

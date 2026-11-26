@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
 **Latest reviewed implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery now tests rejection of foreign Producer, stale interface and unknown device identifiers with distinct failure codes; GenApi negative-path coverage includes malformed XML rejection/recovery, unsupported public IRegister classification, and injected feature/command execution/completion failure recovery.  
-**Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45769387254) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
+**Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction while Phase 4 acceptance remains pending.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
@@ -143,8 +143,8 @@ Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | `9bb1c4c` | Test malformed GenApi XML handling | Injects malformed XML through the mock remote port; verifies node-map construction rejects it and a later valid node map recovers. |
 | `a07c8a2` | Initial unsupported-node fixture | Added a generic `Node` case; superseded by the explicit `IRegister` test below. |
 | `ea356d5` | Test GenApi command completion-query failure recovery | Injects a remote-port read failure while `ICommand::IsDone()` polls completion; verifies `BackendFailure` mapping, then verifies polling resumes. Workflow #45767832186 passed official GenApi 3.5.1 integration on both architectures. |
-| `a455979` | Reject stale GenTL interface descriptors | Verifies `Producer::openDevice` rejects a descriptor whose interface ID is no longer retained, complementing the existing foreign-Producer-path rejection. Workflow #45770024248 passed both architectures. |
-| `5080256` | Keep Producer test failures distinct | Assigns a unique return code to the stale-interface descriptor assertion so it cannot be confused with the later closed-stream assertion; no production behavior changes. Workflow #45770024248 passed both architectures. |
+| `a455979` | Reject stale GenTL interface descriptors | Verifies `Producer::openDevice` rejects a descriptor whose interface ID is no longer retained, complementing the existing foreign-Producer-path rejection. Workflow #45768851121 passed both architectures. |
+| `5080256` | Keep Producer test failures distinct | Assigns a unique return code to the stale-interface descriptor assertion so it cannot be confused with the later closed-stream assertion; no production behavior changes. Workflow #45769387254 passed both architectures. |
 | `85dd6af` | Validate GenTL device identifier routing | The mock `IFOpenDevice` rejects unknown device IDs; `ProducerTests` verifies `openDevice` propagates the failure for a descriptor with a missing device ID. Workflow #45770024248 passed both architectures. |
 
 ### Current Qt and non-Qt CI — checkpoint a4fc39b
@@ -227,7 +227,7 @@ CI evidence:
 No local build/test/debug run or new physical-camera test was performed.
 AmScope source and tests were not modified. The latest GenTL/GenApi-only
 increment is commit `85dd6af1fc71434d16452e4c62ceae6933b2a713`; workflow
-[#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45769387254)
+[#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248)
 passed the GenTL suite and official GenApi 3.5.1 build/integration tests on
 Intel x86_64 and Apple Silicon arm64.
 

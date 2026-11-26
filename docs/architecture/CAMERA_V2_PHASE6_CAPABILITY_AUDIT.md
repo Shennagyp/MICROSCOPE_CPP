@@ -50,7 +50,7 @@ malformed XML rejection/recovery, unsupported public IRegister handling,
 feature read/write failure recovery, command execution failure recovery and
 command-completion polling failure recovery.
 The exact green checkpoint is `85dd6af1fc71434d16452e4c62ceae6933b2a713`,
-workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45769387254).
+workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248).
 
 Phase 6 remains open. AmScope provider-level feature/command behavior remains
 a known gap but is blocked by the explicit AmScope freeze. The GenTL discovery
@@ -217,7 +217,7 @@ supported or hardware-qualified.
    AmScope source, tests, public contracts or behavior.
 3. GenApi malformed XML, unsupported public IRegister, feature read/write
    failure recovery and command execution failure recovery tests are complete
-   at `a455979`; workflow #45770024248 passed Intel x86_64 and Apple Silicon
+   at `85dd6af`; workflow #45770024248 passed Intel x86_64 and Apple Silicon
    arm64 with the official GenApi 3.5.1 integration.
 4. Retain provider-specific GenTL `DeviceDescriptor` for now. It carries the
    Producer/interface/device routing identity needed by `openDevice`; the

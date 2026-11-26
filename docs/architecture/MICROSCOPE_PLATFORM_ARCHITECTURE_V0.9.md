@@ -198,7 +198,32 @@ The C++ object model must make the camera-to-path relationship structural, not a
 - Illumination and imaging routes may be distinct and may share installed components. Phase contrast can therefore require a phase annulus on the condenser/illumination route and a matched phase plate on the imaging route. Technique requirements are evaluated over the routes grouped by the selected LightPath, not over every installed component in the microscope.
 - A LightPath is scoped to one microscope equipment-constitution revision. Its route references must resolve within that same definition.
 
-The current C++ topology already has the foundational physical pieces: `EquipmentComponent`, `OpticalPort`, `OpticalConnection`, ordered `OpticalPathStep`/`OpticalPath`, and `CameraSpecification` attached by component ID. It validates port ownership/direction and continuity between adjacent path steps. It does **not yet** encode route purpose or a named LightPath aggregate, and its current generic path validation does not require an imaging route to terminate at a camera. Those are explicit implementation gaps for the revised configuration phase; they must be closed before path-derived camera resolution is considered implemented.
+The C++ topology now encodes these ownership relationships:
+
+~~~text
+MicroscopeEquipmentDefinition
+├── EquipmentComponents
+│   ├── EquipmentComponent(camera-1, ImagingDevice)
+│   │   └── OpticalPort(camera-1.input)
+│   ├── EquipmentComponent(objective-1, OpticalElement)
+│   └── EquipmentComponent(beam-splitter-1, OpticalElement + BeamSplitter)
+├── CameraSpecifications
+│   └── CameraSpecification(componentId = camera-1)
+├── OpticalConnections
+│   └── objective-1.output ↔ camera-1.input
+├── OpticalPaths
+│   └── OpticalPath(role = Imaging)
+│       └── ... → OpticalPathStep(camera-1, entry = camera-1.input)
+└── LightPaths
+    └── LightPath("Brightfield")
+        └── OpticalPathId(imaging-route-1)
+~~~
+
+The camera is not a child object stored separately inside `LightPath`. The route's final `OpticalPathStep` references the same `EquipmentComponentId` as its `ImagingDevice` and `CameraSpecification`; its entry port is physically joined to the preceding route component by an `OpticalConnection`. `MicroscopeEquipmentDefinition::cameraEndpointIds(lightPathId)` derives the ordered, unique camera endpoint IDs by traversing the LightPath's Imaging routes.
+
+The Core source now includes `OpticalPathRole` (`Imaging`, `Illumination`, `Other`), the `LightPath` aggregate, route-reference validation, imaging-route terminal-camera and CameraSpecification validation, and multi-camera LightPath validation requiring imaging routes to share a declared `BeamSplitter` input and use distinct outputs. The topology tests cover connected camera derivation, exclusion of an unrelated installed camera, an imaging route with a non-camera terminal, LightPaths without imaging routes, and multi-camera branch validation. Those tests have been authored but were not run in this update.
+
+The remaining integration gap is in configuration: the existing `ConfigurationRequest` still carries an explicit camera identity and optical path IDs. Phase 3G must make the selected LightPath a configuration input and derive the selected camera/output modes exclusively from that LightPath. Until that resolver change is complete, the repository has the correct equipment OOP ownership model, but the complete path-derived-camera configuration flow is not yet implemented.
 
 The model deliberately avoids a direct `Objective.Camera` relationship. Objectives and cameras are connected through the actual optical route and its intermediate optical components. This supports multiple objectives, relay optics, splitters, multiple camera ports and microscope-specific topologies without assuming a universal arrangement.
 

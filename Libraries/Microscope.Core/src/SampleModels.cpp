@@ -691,7 +691,7 @@ MicroscopyRequirements::illumination() const noexcept {
     return illumination_;
 }
 
-SpecimenPreparationRequirements::SpecimenPreparationRequirements(
+SlidePreparationRequirements::SlidePreparationRequirements(
     std::vector<SpecimenPreparationMethod> allowedMethods,
     std::vector<SpecimenFixationState> allowedFixationStates,
     std::optional<double> minimumSectionThicknessMicrometers,
@@ -710,9 +710,9 @@ SpecimenPreparationRequirements::SpecimenPreparationRequirements(
       requiredLabelKinds_(std::move(requiredLabelKinds)) {}
 
 Result<
-    SpecimenPreparationRequirements,
-    SpecimenPreparationRequirementsError>
-SpecimenPreparationRequirements::create(
+    SlidePreparationRequirements,
+    SlidePreparationRequirementsError>
+SlidePreparationRequirements::create(
     std::vector<SpecimenPreparationMethod> allowedMethods,
     std::vector<SpecimenFixationState> allowedFixationStates,
     std::optional<double> minimumSectionThicknessMicrometers,
@@ -730,9 +730,9 @@ SpecimenPreparationRequirements::create(
         !requireMountingMedium &&
         requiredLabelKinds.empty()) {
         return Result<
-            SpecimenPreparationRequirements,
-            SpecimenPreparationRequirementsError>::failure(
-                SpecimenPreparationRequirementsError::NoConstraint);
+            SlidePreparationRequirements,
+            SlidePreparationRequirementsError>::failure(
+                SlidePreparationRequirementsError::NoConstraint);
     }
 
     const auto finite = [](const std::optional<double>& value) {
@@ -743,9 +743,9 @@ SpecimenPreparationRequirements::create(
         !finite(minimumCoverglassThicknessMicrometers) ||
         !finite(maximumCoverglassThicknessMicrometers)) {
         return Result<
-            SpecimenPreparationRequirements,
-            SpecimenPreparationRequirementsError>::failure(
-                SpecimenPreparationRequirementsError::NonFiniteThickness);
+            SlidePreparationRequirements,
+            SlidePreparationRequirementsError>::failure(
+                SlidePreparationRequirementsError::NonFiniteThickness);
     }
 
     if ((minimumSectionThicknessMicrometers &&
@@ -757,9 +757,9 @@ SpecimenPreparationRequirements::create(
          *minimumSectionThicknessMicrometers >
              *maximumSectionThicknessMicrometers)) {
         return Result<
-            SpecimenPreparationRequirements,
-            SpecimenPreparationRequirementsError>::failure(
-                SpecimenPreparationRequirementsError::InvalidSectionThicknessRange);
+            SlidePreparationRequirements,
+            SlidePreparationRequirementsError>::failure(
+                SlidePreparationRequirementsError::InvalidSectionThicknessRange);
     }
 
     if ((minimumCoverglassThicknessMicrometers &&
@@ -771,24 +771,24 @@ SpecimenPreparationRequirements::create(
          *minimumCoverglassThicknessMicrometers >
              *maximumCoverglassThicknessMicrometers)) {
         return Result<
-            SpecimenPreparationRequirements,
-            SpecimenPreparationRequirementsError>::failure(
-                SpecimenPreparationRequirementsError::InvalidCoverglassThicknessRange);
+            SlidePreparationRequirements,
+            SlidePreparationRequirementsError>::failure(
+                SlidePreparationRequirementsError::InvalidCoverglassThicknessRange);
     }
 
     std::set<SpecimenPreparationMethod> methods;
     for (const auto method : allowedMethods) {
         if (!isKnownPreparationMethod(method)) {
             return Result<
-                SpecimenPreparationRequirements,
-                SpecimenPreparationRequirementsError>::failure(
-                    SpecimenPreparationRequirementsError::InvalidMethod);
+                SlidePreparationRequirements,
+                SlidePreparationRequirementsError>::failure(
+                    SlidePreparationRequirementsError::InvalidMethod);
         }
         if (!methods.insert(method).second) {
             return Result<
-                SpecimenPreparationRequirements,
-                SpecimenPreparationRequirementsError>::failure(
-                    SpecimenPreparationRequirementsError::DuplicateMethod);
+                SlidePreparationRequirements,
+                SlidePreparationRequirementsError>::failure(
+                    SlidePreparationRequirementsError::DuplicateMethod);
         }
     }
 
@@ -796,15 +796,15 @@ SpecimenPreparationRequirements::create(
     for (const auto state : allowedFixationStates) {
         if (state == SpecimenFixationState::Unknown) {
             return Result<
-                SpecimenPreparationRequirements,
-                SpecimenPreparationRequirementsError>::failure(
-                    SpecimenPreparationRequirementsError::InvalidFixationState);
+                SlidePreparationRequirements,
+                SlidePreparationRequirementsError>::failure(
+                    SlidePreparationRequirementsError::InvalidFixationState);
         }
         if (!fixationStates.insert(state).second) {
             return Result<
-                SpecimenPreparationRequirements,
-                SpecimenPreparationRequirementsError>::failure(
-                    SpecimenPreparationRequirementsError::DuplicateFixationState);
+                SlidePreparationRequirements,
+                SlidePreparationRequirementsError>::failure(
+                    SlidePreparationRequirementsError::DuplicateFixationState);
         }
     }
 
@@ -812,22 +812,22 @@ SpecimenPreparationRequirements::create(
     for (const auto kind : requiredLabelKinds) {
         if (!isKnownLabelKind(kind)) {
             return Result<
-                SpecimenPreparationRequirements,
-                SpecimenPreparationRequirementsError>::failure(
-                    SpecimenPreparationRequirementsError::InvalidLabelKind);
+                SlidePreparationRequirements,
+                SlidePreparationRequirementsError>::failure(
+                    SlidePreparationRequirementsError::InvalidLabelKind);
         }
         if (!labelKinds.insert(kind).second) {
             return Result<
-                SpecimenPreparationRequirements,
-                SpecimenPreparationRequirementsError>::failure(
-                    SpecimenPreparationRequirementsError::DuplicateLabelKind);
+                SlidePreparationRequirements,
+                SlidePreparationRequirementsError>::failure(
+                    SlidePreparationRequirementsError::DuplicateLabelKind);
         }
     }
 
     return Result<
-        SpecimenPreparationRequirements,
-        SpecimenPreparationRequirementsError>::success(
-            SpecimenPreparationRequirements(
+        SlidePreparationRequirements,
+        SlidePreparationRequirementsError>::success(
+            SlidePreparationRequirements(
                 std::move(allowedMethods),
                 std::move(allowedFixationStates),
                 minimumSectionThicknessMicrometers,
@@ -839,41 +839,41 @@ SpecimenPreparationRequirements::create(
 }
 
 const std::vector<SpecimenPreparationMethod>&
-SpecimenPreparationRequirements::allowedMethods() const noexcept {
+SlidePreparationRequirements::allowedMethods() const noexcept {
     return allowedMethods_;
 }
 
 const std::vector<SpecimenFixationState>&
-SpecimenPreparationRequirements::allowedFixationStates() const noexcept {
+SlidePreparationRequirements::allowedFixationStates() const noexcept {
     return allowedFixationStates_;
 }
 
 const std::optional<double>&
-SpecimenPreparationRequirements::minimumSectionThicknessMicrometers() const noexcept {
+SlidePreparationRequirements::minimumSectionThicknessMicrometers() const noexcept {
     return minimumSectionThicknessMicrometers_;
 }
 
 const std::optional<double>&
-SpecimenPreparationRequirements::maximumSectionThicknessMicrometers() const noexcept {
+SlidePreparationRequirements::maximumSectionThicknessMicrometers() const noexcept {
     return maximumSectionThicknessMicrometers_;
 }
 
 const std::optional<double>&
-SpecimenPreparationRequirements::minimumCoverglassThicknessMicrometers() const noexcept {
+SlidePreparationRequirements::minimumCoverglassThicknessMicrometers() const noexcept {
     return minimumCoverglassThicknessMicrometers_;
 }
 
 const std::optional<double>&
-SpecimenPreparationRequirements::maximumCoverglassThicknessMicrometers() const noexcept {
+SlidePreparationRequirements::maximumCoverglassThicknessMicrometers() const noexcept {
     return maximumCoverglassThicknessMicrometers_;
 }
 
-bool SpecimenPreparationRequirements::requireMountingMedium() const noexcept {
+bool SlidePreparationRequirements::requireMountingMedium() const noexcept {
     return requireMountingMedium_;
 }
 
 const std::vector<SpecimenLabelKind>&
-SpecimenPreparationRequirements::requiredLabelKinds() const noexcept {
+SlidePreparationRequirements::requiredLabelKinds() const noexcept {
     return requiredLabelKinds_;
 }
 
@@ -883,15 +883,13 @@ SampleType::SampleType(
     std::string name,
     SampleMaterialClass materialClass,
     MicroscopyRequirements microscopyRequirements,
-    std::optional<std::string> description,
-    std::optional<SpecimenPreparationRequirements> preparationRequirements)
+    std::optional<std::string> description)
     : id_(std::move(id)),
       revision_(revision),
       name_(std::move(name)),
       materialClass_(materialClass),
       microscopyRequirements_(std::move(microscopyRequirements)),
-      description_(std::move(description)),
-      preparationRequirements_(std::move(preparationRequirements)) {}
+      description_(std::move(description)) {}
 
 Result<SampleType, SampleTypeError> SampleType::create(
     SampleTypeId id,
@@ -899,8 +897,7 @@ Result<SampleType, SampleTypeError> SampleType::create(
     std::string name,
     SampleMaterialClass materialClass,
     MicroscopyRequirements microscopyRequirements,
-    std::optional<std::string> description,
-    std::optional<SpecimenPreparationRequirements> preparationRequirements) {
+    std::optional<std::string> description) {
     if (revision == 0) {
         return Result<SampleType, SampleTypeError>::failure(
             SampleTypeError::ZeroRevision);
@@ -933,8 +930,7 @@ Result<SampleType, SampleTypeError> SampleType::create(
             std::move(name),
             materialClass,
             std::move(microscopyRequirements),
-            std::move(description),
-            std::move(preparationRequirements)));
+            std::move(description)));
 }
 
 const SampleTypeId& SampleType::id() const noexcept {
@@ -959,11 +955,6 @@ const MicroscopyRequirements& SampleType::microscopyRequirements() const noexcep
 
 const std::optional<std::string>& SampleType::description() const noexcept {
     return description_;
-}
-
-const std::optional<SpecimenPreparationRequirements>&
-SampleType::preparationRequirements() const noexcept {
-    return preparationRequirements_;
 }
 
 SampleTypeCatalog::SampleTypeCatalog(
@@ -1202,7 +1193,7 @@ SpecimenLabel::filterSetCompatibilityId() const noexcept {
     return filterSetCompatibilityId_;
 }
 
-SpecimenPreparation::SpecimenPreparation(
+SlidePreparation::SlidePreparation(
     SpecimenPreparationMethod method,
     SpecimenFixationState fixationState,
     std::optional<double> sectionThicknessMicrometers,
@@ -1218,8 +1209,8 @@ SpecimenPreparation::SpecimenPreparation(
       mountingMediumRefractiveIndex_(mountingMediumRefractiveIndex),
       labels_(std::move(labels)) {}
 
-Result<SpecimenPreparation, SpecimenPreparationError>
-SpecimenPreparation::create(
+Result<SpecimenPreparation, SlidePreparationError>
+SlidePreparation::create(
     SpecimenPreparationMethod method,
     SpecimenFixationState fixationState,
     std::optional<double> sectionThicknessMicrometers,
@@ -1228,48 +1219,48 @@ SpecimenPreparation::create(
     std::optional<double> mountingMediumRefractiveIndex,
     std::vector<SpecimenLabel> labels) {
     if (!isKnownPreparationMethod(method)) {
-        return Result<SpecimenPreparation, SpecimenPreparationError>::failure(
-            SpecimenPreparationError::InvalidMethod);
+        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+            SlidePreparationError::InvalidMethod);
     }
     if (!isKnownFixationState(fixationState)) {
-        return Result<SpecimenPreparation, SpecimenPreparationError>::failure(
-            SpecimenPreparationError::InvalidFixationState);
+        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+            SlidePreparationError::InvalidFixationState);
     }
     if (sectionThicknessMicrometers &&
         (!std::isfinite(*sectionThicknessMicrometers) ||
          *sectionThicknessMicrometers <= 0.0)) {
-        return Result<SpecimenPreparation, SpecimenPreparationError>::failure(
-            SpecimenPreparationError::InvalidSectionThickness);
+        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+            SlidePreparationError::InvalidSectionThickness);
     }
     if (coverglassThicknessMicrometers &&
         (!std::isfinite(*coverglassThicknessMicrometers) ||
          *coverglassThicknessMicrometers <= 0.0)) {
-        return Result<SpecimenPreparation, SpecimenPreparationError>::failure(
-            SpecimenPreparationError::InvalidCoverglassThickness);
+        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+            SlidePreparationError::InvalidCoverglassThickness);
     }
     if (mountingMediumName &&
         (mountingMediumName->find('\0') != std::string::npos ||
          !hasText(*mountingMediumName))) {
-        return Result<SpecimenPreparation, SpecimenPreparationError>::failure(
-            SpecimenPreparationError::InvalidMountingMediumName);
+        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+            SlidePreparationError::InvalidMountingMediumName);
     }
     if (mountingMediumRefractiveIndex &&
         (!std::isfinite(*mountingMediumRefractiveIndex) ||
          *mountingMediumRefractiveIndex <= 0.0)) {
-        return Result<SpecimenPreparation, SpecimenPreparationError>::failure(
-            SpecimenPreparationError::InvalidMountingMediumRefractiveIndex);
+        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+            SlidePreparationError::InvalidMountingMediumRefractiveIndex);
     }
 
     std::set<std::pair<std::string, SpecimenLabelKind>> labelKeys;
     for (const auto& label : labels) {
         if (!labelKeys.insert({label.name(), label.kind()}).second) {
-            return Result<SpecimenPreparation, SpecimenPreparationError>::failure(
-                SpecimenPreparationError::DuplicateLabel);
+            return Result<SpecimenPreparation, SlidePreparationError>::failure(
+                SlidePreparationError::DuplicateLabel);
         }
     }
 
-    return Result<SpecimenPreparation, SpecimenPreparationError>::success(
-        SpecimenPreparation(
+    return Result<SpecimenPreparation, SlidePreparationError>::success(
+        SlidePreparation(
             method,
             fixationState,
             sectionThicknessMicrometers,
@@ -1279,213 +1270,255 @@ SpecimenPreparation::create(
             std::move(labels)));
 }
 
-SpecimenPreparationMethod SpecimenPreparation::method() const noexcept {
+SpecimenPreparationMethod SlidePreparation::method() const noexcept {
     return method_;
 }
 
-SpecimenFixationState SpecimenPreparation::fixationState() const noexcept {
+SpecimenFixationState SlidePreparation::fixationState() const noexcept {
     return fixationState_;
 }
 
 const std::optional<double>&
-SpecimenPreparation::sectionThicknessMicrometers() const noexcept {
+SlidePreparation::sectionThicknessMicrometers() const noexcept {
     return sectionThicknessMicrometers_;
 }
 
 const std::optional<double>&
-SpecimenPreparation::coverglassThicknessMicrometers() const noexcept {
+SlidePreparation::coverglassThicknessMicrometers() const noexcept {
     return coverglassThicknessMicrometers_;
 }
 
 const std::optional<std::string>&
-SpecimenPreparation::mountingMediumName() const noexcept {
+SlidePreparation::mountingMediumName() const noexcept {
     return mountingMediumName_;
 }
 
 const std::optional<double>&
-SpecimenPreparation::mountingMediumRefractiveIndex() const noexcept {
+SlidePreparation::mountingMediumRefractiveIndex() const noexcept {
     return mountingMediumRefractiveIndex_;
 }
 
-const std::vector<SpecimenLabel>& SpecimenPreparation::labels() const noexcept {
+const std::vector<SpecimenLabel>& SlidePreparation::labels() const noexcept {
     return labels_;
 }
 
-Specimen::Specimen(
-    SpecimenId id,
+SlideType::SlideType(
+    SlideTypeId id,
+    std::uint64_t revision,
+    std::string name,
+    SlidePreparationRequirements preparationRequirements,
+    std::optional<std::string> description,
+    std::optional<SlideGeometry> nominalGeometry)
+    : id_(std::move(id)),
+      revision_(revision),
+      name_(std::move(name)),
+      preparationRequirements_(std::move(preparationRequirements)),
+      description_(std::move(description)),
+      nominalGeometry_(std::move(nominalGeometry)) {}
+
+Result<SlideType, SlideTypeError> SlideType::create(
+    SlideTypeId id,
+    std::uint64_t revision,
+    std::string name,
+    SlidePreparationRequirements preparationRequirements,
+    std::optional<std::string> description,
+    std::optional<SlideGeometry> nominalGeometry) {
+    if (revision == 0) {
+        return Result<SlideType, SlideTypeError>::failure(
+            SlideTypeError::ZeroRevision);
+    }
+    if (name.find('\\0') != std::string::npos) {
+        return Result<SlideType, SlideTypeError>::failure(
+            SlideTypeError::InvalidName);
+    }
+    if (!hasText(name)) {
+        return Result<SlideType, SlideTypeError>::failure(
+            SlideTypeError::EmptyName);
+    }
+    if (description && description->find('\\0') != std::string::npos) {
+        return Result<SlideType, SlideTypeError>::failure(
+            SlideTypeError::InvalidDescription);
+    }
+    if (description && !hasText(*description)) {
+        return Result<SlideType, SlideTypeError>::failure(
+            SlideTypeError::InvalidDescription);
+    }
+
+    return Result<SlideType, SlideTypeError>::success(
+        SlideType(
+            std::move(id),
+            revision,
+            std::move(name),
+            std::move(preparationRequirements),
+            std::move(description),
+            std::move(nominalGeometry)));
+}
+
+const SlideTypeId& SlideType::id() const noexcept {
+    return id_;
+}
+
+std::uint64_t SlideType::revision() const noexcept {
+    return revision_;
+}
+
+const std::string& SlideType::name() const noexcept {
+    return name_;
+}
+
+const SlidePreparationRequirements&
+SlideType::preparationRequirements() const noexcept {
+    return preparationRequirements_;
+}
+
+const std::optional<std::string>& SlideType::description() const noexcept {
+    return description_;
+}
+
+const std::optional<SlideGeometry>& SlideType::nominalGeometry() const noexcept {
+    return nominalGeometry_;
+}
+
+SlideTypeCatalog::SlideTypeCatalog(
+    std::uint64_t revision,
+    std::vector<SlideType> slideTypes)
+    : revision_(revision),
+      slideTypes_(std::move(slideTypes)) {}
+
+Result<SlideTypeCatalog, SlideTypeCatalogError> SlideTypeCatalog::create(
+    std::uint64_t revision,
+    std::vector<SlideType> slideTypes) {
+    if (revision == 0) {
+        return Result<SlideTypeCatalog, SlideTypeCatalogError>::failure(
+            SlideTypeCatalogError::ZeroRevision);
+    }
+    if (slideTypes.empty()) {
+        return Result<SlideTypeCatalog, SlideTypeCatalogError>::failure(
+            SlideTypeCatalogError::EmptyCatalog);
+    }
+
+    std::set<SlideTypeId> ids;
+    for (const auto& slideType : slideTypes) {
+        if (!ids.insert(slideType.id()).second) {
+            return Result<SlideTypeCatalog, SlideTypeCatalogError>::failure(
+                SlideTypeCatalogError::DuplicateSlideTypeId);
+        }
+    }
+
+    return Result<SlideTypeCatalog, SlideTypeCatalogError>::success(
+        SlideTypeCatalog(revision, std::move(slideTypes)));
+}
+
+std::uint64_t SlideTypeCatalog::revision() const noexcept {
+    return revision_;
+}
+
+const std::vector<SlideType>& SlideTypeCatalog::slideTypes() const noexcept {
+    return slideTypes_;
+}
+
+const SlideType* SlideTypeCatalog::find(const SlideTypeId& id) const noexcept {
+    const auto found = std::find_if(
+        slideTypes_.begin(), slideTypes_.end(),
+        [&id](const SlideType& slideType) {
+            return slideType.id() == id;
+        });
+    return found == slideTypes_.end() ? nullptr : &*found;
+}
+
+Slide::Slide(
+    SlideId id,
     std::uint64_t revision,
     SampleId sampleId,
     std::uint64_t sampleRevision,
+    SlideTypeId slideTypeId,
+    std::uint64_t slideTypeRevision,
     std::string name,
-    SpecimenPreparation preparation)
+    SlideGeometry geometry,
+    SlidePreparation preparation)
     : id_(std::move(id)),
       revision_(revision),
       sampleId_(std::move(sampleId)),
       sampleRevision_(sampleRevision),
+      slideTypeId_(std::move(slideTypeId)),
+      slideTypeRevision_(slideTypeRevision),
       name_(std::move(name)),
+      geometry_(std::move(geometry)),
       preparation_(std::move(preparation)) {}
 
-Result<Specimen, SpecimenError> Specimen::create(
-    SpecimenId id,
+Result<Slide, SlideError> Slide::create(
+    SlideId id,
     std::uint64_t revision,
     SampleId sampleId,
     std::uint64_t sampleRevision,
+    SlideTypeId slideTypeId,
+    std::uint64_t slideTypeRevision,
     std::string name,
-    SpecimenPreparation preparation) {
+    SlideGeometry geometry,
+    SlidePreparation preparation) {
     if (revision == 0) {
-        return Result<Specimen, SpecimenError>::failure(
-            SpecimenError::ZeroRevision);
+        return Result<Slide, SlideError>::failure(SlideError::ZeroRevision);
     }
     if (sampleRevision == 0) {
-        return Result<Specimen, SpecimenError>::failure(
-            SpecimenError::ZeroSampleRevision);
+        return Result<Slide, SlideError>::failure(SlideError::ZeroSampleRevision);
     }
-    if (name.find('\0') != std::string::npos) {
-        return Result<Specimen, SpecimenError>::failure(
-            SpecimenError::InvalidName);
+    if (slideTypeRevision == 0) {
+        return Result<Slide, SlideError>::failure(SlideError::ZeroSlideTypeRevision);
+    }
+    if (name.find('\\0') != std::string::npos) {
+        return Result<Slide, SlideError>::failure(SlideError::InvalidName);
     }
     if (!hasText(name)) {
-        return Result<Specimen, SpecimenError>::failure(
-            SpecimenError::EmptyName);
+        return Result<Slide, SlideError>::failure(SlideError::EmptyName);
     }
 
-    return Result<Specimen, SpecimenError>::success(
-        Specimen(
+    return Result<Slide, SlideError>::success(
+        Slide(
             std::move(id),
             revision,
             std::move(sampleId),
             sampleRevision,
+            std::move(slideTypeId),
+            slideTypeRevision,
             std::move(name),
+            std::move(geometry),
             std::move(preparation)));
 }
 
-const SpecimenId& Specimen::id() const noexcept {
+const SlideId& Slide::id() const noexcept {
     return id_;
 }
 
-std::uint64_t Specimen::revision() const noexcept {
+std::uint64_t Slide::revision() const noexcept {
     return revision_;
 }
 
-const SampleId& Specimen::sampleId() const noexcept {
+const SampleId& Slide::sampleId() const noexcept {
     return sampleId_;
 }
 
-std::uint64_t Specimen::sampleRevision() const noexcept {
+std::uint64_t Slide::sampleRevision() const noexcept {
     return sampleRevision_;
 }
 
-const std::string& Specimen::name() const noexcept {
+const SlideTypeId& Slide::slideTypeId() const noexcept {
+    return slideTypeId_;
+}
+
+std::uint64_t Slide::slideTypeRevision() const noexcept {
+    return slideTypeRevision_;
+}
+
+const std::string& Slide::name() const noexcept {
     return name_;
 }
 
-const SpecimenPreparation& Specimen::preparation() const noexcept {
+const SlideGeometry& Slide::geometry() const noexcept {
+    return geometry_;
+}
+
+const SlidePreparation& Slide::preparation() const noexcept {
     return preparation_;
-}
-
-SpecimenSlidePlacement::SpecimenSlidePlacement(
-    SpecimenPlacementId id,
-    SpecimenId specimenId,
-    SlideId slideId,
-    CalibrationRevisionId slideRegistrationRevision,
-    double xMicrometers,
-    double yMicrometers,
-    double widthMicrometers,
-    double heightMicrometers)
-    : id_(std::move(id)),
-      specimenId_(std::move(specimenId)),
-      slideId_(std::move(slideId)),
-      slideRegistrationRevision_(std::move(slideRegistrationRevision)),
-      xMicrometers_(xMicrometers),
-      yMicrometers_(yMicrometers),
-      widthMicrometers_(widthMicrometers),
-      heightMicrometers_(heightMicrometers) {}
-
-Result<
-    SpecimenSlidePlacement,
-    SpecimenSlidePlacementError> SpecimenSlidePlacement::create(
-        SpecimenPlacementId id,
-        SpecimenId specimenId,
-        SlideId slideId,
-        CalibrationRevisionId slideRegistrationRevision,
-        double xMicrometers,
-        double yMicrometers,
-        double widthMicrometers,
-        double heightMicrometers,
-        const SlideGeometry& slideGeometry) {
-    if (!std::isfinite(xMicrometers) ||
-        !std::isfinite(yMicrometers) ||
-        !std::isfinite(widthMicrometers) ||
-        !std::isfinite(heightMicrometers)) {
-        return Result<
-            SpecimenSlidePlacement,
-            SpecimenSlidePlacementError>::failure(
-                SpecimenSlidePlacementError::NonFiniteCoordinate);
-    }
-    if (xMicrometers < 0.0 || yMicrometers < 0.0 ||
-        widthMicrometers <= 0.0 || heightMicrometers <= 0.0) {
-        return Result<
-            SpecimenSlidePlacement,
-            SpecimenSlidePlacementError>::failure(
-                SpecimenSlidePlacementError::NonPositiveExtent);
-    }
-
-    const double right = xMicrometers + widthMicrometers;
-    const double bottom = yMicrometers + heightMicrometers;
-    if (!std::isfinite(right) || !std::isfinite(bottom) ||
-        right > slideGeometry.widthMicrometers() ||
-        bottom > slideGeometry.heightMicrometers()) {
-        return Result<
-            SpecimenSlidePlacement,
-            SpecimenSlidePlacementError>::failure(
-                SpecimenSlidePlacementError::OutsideSlide);
-    }
-
-    return Result<
-        SpecimenSlidePlacement,
-        SpecimenSlidePlacementError>::success(
-            SpecimenSlidePlacement(
-                std::move(id),
-                std::move(specimenId),
-                std::move(slideId),
-                std::move(slideRegistrationRevision),
-                xMicrometers,
-                yMicrometers,
-                widthMicrometers,
-                heightMicrometers));
-}
-
-const SpecimenPlacementId& SpecimenSlidePlacement::id() const noexcept {
-    return id_;
-}
-
-const SpecimenId& SpecimenSlidePlacement::specimenId() const noexcept {
-    return specimenId_;
-}
-
-const SlideId& SpecimenSlidePlacement::slideId() const noexcept {
-    return slideId_;
-}
-
-const CalibrationRevisionId&
-SpecimenSlidePlacement::slideRegistrationRevision() const noexcept {
-    return slideRegistrationRevision_;
-}
-
-double SpecimenSlidePlacement::xMicrometers() const noexcept {
-    return xMicrometers_;
-}
-
-double SpecimenSlidePlacement::yMicrometers() const noexcept {
-    return yMicrometers_;
-}
-
-double SpecimenSlidePlacement::widthMicrometers() const noexcept {
-    return widthMicrometers_;
-}
-
-double SpecimenSlidePlacement::heightMicrometers() const noexcept {
-    return heightMicrometers_;
 }
 
 } // namespace microscope::core

@@ -212,16 +212,23 @@ Source changes now present:
 This does not modify AmScope, the production public API, or installed package
 exports. It does not resolve or replace the separate Swift bridge in production.
 
-**No local build/test/debug run has been performed. No simulator has yet been
-executed, and no compile/CI result for this increment is claimed.** First
-inspect the CI result for the exact source commit. Then qualify a simulator
-whose CTI and license terms permit this use. The Imaging Source Virtual Camera
-Producer is the first candidate for vendor clarification. Do not use Vimba X
-until its published restrictions are confirmed compatible. Aravis fake GV is
-not a CTI Producer and cannot be passed directly to this harness.
+**No local build/test/debug run has been performed and no simulator has been
+executed.** The initial harness baseline passed GenTL bridge CI and package /
+external-consumer CI at commit `7d3a83b4ff87d5a9ee24f04a26f86d00ab6d6976`.
+The follow-up device-index selection change is a later source commit and must
+pass its own CI. The best additional CTI candidate identified is Hikrobot
+MVS's documented `MvProducerVIR.cti`, subject to vendor confirmation of
+third-party GenTL consumer compatibility and license permission; Linux or
+Windows may be required. Critical Link's simulated GenTL Producer is a
+secondary candidate. The Imaging Source Virtual Camera Producer remains a
+candidate but its third-party consumer compatibility and license scope are
+unconfirmed. Do not use Vimba X until its published restrictions are confirmed
+compatible. Aravis fake GV is not a CTI Producer and cannot be passed directly
+to this harness.
 
-The first smoke currently selects the first discovered device and its first
-stream. It is an initial integration probe, not a complete multi-device,
-feature/command, fault-injection or performance qualification. Simulator
+The smoke selects device index 0 by default, accepts an optional device index
+for manual runs, and uses the first stream on the selected device. It remains
+an initial integration probe, not a complete multi-device, feature/command,
+fault-injection or performance qualification. Simulator
 results remain separate from the outstanding physical AmScope and GenTL
 hardware gates.

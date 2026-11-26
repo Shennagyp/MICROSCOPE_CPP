@@ -127,8 +127,7 @@ ownership and frame-sequence counter. The two-device smoke opens both devices
 and both streams concurrently, writes different values to the same register
 address on each remote port, then interleaves frame retrieval and verifies
 that each stream independently starts at frame ID 1 with its own increasing
-timestamps and sequence-varying Mono8 payload. The ordinary single-device
-smoke assertions continue after this isolation check. The simulator compile
+timestamps and sequence-varying Mono8 payload. The smoke then stops the first stream while the second remains active and verifies that the second stream continues delivering frames. The ordinary single-device smoke assertions continue after this isolation check. The simulator compile
 definition only relaxes the mock's fixed discovery-timeout check and
 long-wait cancellation behavior; the normal mock bridge used by the existing
 unit tests retains its original cancellation semantics. The fixture is

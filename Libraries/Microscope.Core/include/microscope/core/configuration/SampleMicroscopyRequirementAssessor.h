@@ -29,8 +29,7 @@ public:
     [[nodiscard]] static SampleMicroscopyAssessment assess(
         const MicroscopeEquipmentDefinition& equipment,
         const SampleType& sampleType,
-        const Sample& sample,
-        const Specimen& specimen,
+        const Slide& slide,
         const ResolvedConfiguration& configuration,
         const OperationMode* operationMode = nullptr);
 };

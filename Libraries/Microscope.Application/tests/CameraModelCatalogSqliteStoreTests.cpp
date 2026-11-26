@@ -139,8 +139,9 @@ void testCameraModelCatalogRoundTripAndOptimisticRevision() {
                       "round-trips zero-valued read-noise measurements");
                 check(profile->sensorCharacteristics().darkCurrentElectronsPerPixelPerSecond == 0.0,
                       "round-trips zero-valued dark-current measurements");
-                check(profile->sensorCharacteristics().activeSensorDimensions ==
-                          camera::ImageResolution{2048, 2048},
+                check(profile->sensorCharacteristics().activeSensorDimensions.has_value() &&
+                      profile->sensorCharacteristics().activeSensorDimensions->width == 2048 &&
+                      profile->sensorCharacteristics().activeSensorDimensions->height == 2048,
                       "restores active sensor dimensions");
                 check(profile->sensorCharacteristics().quantumEfficiency.size() == 4,
                       "restores the full QE response curve");

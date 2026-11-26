@@ -39,6 +39,7 @@ namespace {
     case IlluminationSourceTechnology::Halogen:
     case IlluminationSourceTechnology::XenonArc:
     case IlluminationSourceTechnology::MercuryArc:
+    case IlluminationSourceTechnology::MetalHalideArc:
     case IlluminationSourceTechnology::Laser:
     case IlluminationSourceTechnology::Other:
     case IlluminationSourceTechnology::Unknown:
@@ -73,6 +74,65 @@ double SpectralBand::minimumWavelengthNanometers() const noexcept {
 
 double SpectralBand::maximumWavelengthNanometers() const noexcept {
     return maximumWavelength_.value();
+}
+
+SpectralPowerDistribution::SpectralPowerDistribution(
+    std::vector<SpectralPowerSample> samples)
+    : samples_(std::move(samples)) {}
+
+Result<
+    SpectralPowerDistribution,
+    SpectralPowerDistributionError> SpectralPowerDistribution::create(
+        std::vector<SpectralPowerSample> samples) {
+    if (samples.size() < 2) {
+        return Result<
+            SpectralPowerDistribution,
+            SpectralPowerDistributionError>::failure(
+                SpectralPowerDistributionError::TooFewSamples);
+    }
+
+    double previousWavelength = 0.0;
+    bool hasPositivePower = false;
+    for (const auto& sample : samples) {
+        if (!std::isfinite(sample.wavelengthNanometers) ||
+            sample.wavelengthNanometers <= 0.0) {
+            return Result<
+                SpectralPowerDistribution,
+                SpectralPowerDistributionError>::failure(
+                    SpectralPowerDistributionError::InvalidWavelength);
+        }
+        if (sample.wavelengthNanometers <= previousWavelength) {
+            return Result<
+                SpectralPowerDistribution,
+                SpectralPowerDistributionError>::failure(
+                    SpectralPowerDistributionError::WavelengthsNotIncreasing);
+        }
+        if (!std::isfinite(sample.relativePower) || sample.relativePower < 0.0) {
+            return Result<
+                SpectralPowerDistribution,
+                SpectralPowerDistributionError>::failure(
+                    SpectralPowerDistributionError::InvalidPower);
+        }
+        hasPositivePower = hasPositivePower || sample.relativePower > 0.0;
+        previousWavelength = sample.wavelengthNanometers;
+    }
+
+    if (!hasPositivePower) {
+        return Result<
+            SpectralPowerDistribution,
+            SpectralPowerDistributionError>::failure(
+                SpectralPowerDistributionError::NoPositivePower);
+    }
+
+    return Result<
+        SpectralPowerDistribution,
+        SpectralPowerDistributionError>::success(
+            SpectralPowerDistribution(std::move(samples)));
+}
+
+const std::vector<SpectralPowerSample>&
+SpectralPowerDistribution::samples() const noexcept {
+    return samples_;
 }
 
 IlluminationIntensityRange::IlluminationIntensityRange(
@@ -135,11 +195,13 @@ IlluminationChannel::IlluminationChannel(
     IlluminationChannelId id,
     std::optional<SpectralBand> spectralBand,
     IlluminationControlKind controlKind,
-    std::optional<IlluminationIntensityRange> intensityRange)
+    std::optional<IlluminationIntensityRange> intensityRange,
+    std::optional<SpectralPowerDistribution> spectralPowerDistribution)
     : id_(std::move(id)),
       spectralBand_(std::move(spectralBand)),
       controlKind_(controlKind),
-      intensityRange_(std::move(intensityRange)) {}
+      intensityRange_(std::move(intensityRange)),
+      spectralPowerDistribution_(std::move(spectralPowerDistribution)) {}
 
 Result<
     IlluminationChannel,
@@ -147,7 +209,8 @@ Result<
         IlluminationChannelId id,
         std::optional<SpectralBand> spectralBand,
         IlluminationControlKind controlKind,
-        std::optional<IlluminationIntensityRange> intensityRange) {
+        std::optional<IlluminationIntensityRange> intensityRange,
+        std::optional<SpectralPowerDistribution> spectralPowerDistribution) {
     if (!isKnownControlKind(controlKind)) {
         return Result<
             IlluminationChannel,
@@ -171,6 +234,20 @@ Result<
                 IlluminationChannelError::UnexpectedContinuousRange);
     }
 
+    if (spectralBand && spectralPowerDistribution) {
+        for (const auto& sample : spectralPowerDistribution->samples()) {
+            if (sample.wavelengthNanometers <
+                    spectralBand->minimumWavelengthNanometers() ||
+                sample.wavelengthNanometers >
+                    spectralBand->maximumWavelengthNanometers()) {
+                return Result<
+                    IlluminationChannel,
+                    IlluminationChannelError>::failure(
+                        IlluminationChannelError::InvalidSpectralPowerDistribution);
+            }
+        }
+    }
+
     return Result<
         IlluminationChannel,
         IlluminationChannelError>::success(
@@ -178,7 +255,8 @@ Result<
                 std::move(id),
                 std::move(spectralBand),
                 controlKind,
-                std::move(intensityRange)));
+                std::move(intensityRange),
+                std::move(spectralPowerDistribution)));
 }
 
 const IlluminationChannelId& IlluminationChannel::id() const noexcept {
@@ -197,6 +275,11 @@ IlluminationControlKind IlluminationChannel::controlKind() const noexcept {
 const std::optional<IlluminationIntensityRange>&
 IlluminationChannel::intensityRange() const noexcept {
     return intensityRange_;
+}
+
+const std::optional<SpectralPowerDistribution>&
+IlluminationChannel::spectralPowerDistribution() const noexcept {
+    return spectralPowerDistribution_;
 }
 
 IlluminationSpecification::IlluminationSpecification(

@@ -764,6 +764,11 @@ void assessCameraPerformance(
     return selected;
 }
 
+[[nodiscard]] std::optional<bool> filterBandHasPositiveResponse(
+    const OpticalFilterSpecification& filter,
+    const SpectralBand& band,
+    bool reflection);
+
 void assessFluorescenceFilterSet(
     Diagnostics& diagnostics,
     const MicroscopeEquipmentDefinition& equipment,
@@ -959,11 +964,6 @@ void assessFluorescenceFilterSet(
         });
     return channel == channels.end() ? nullptr : &*channel;
 }
-
-[[nodiscard]] std::optional<bool> filterBandHasPositiveResponse(
-    const OpticalFilterSpecification& filter,
-    const SpectralBand& band,
-    bool reflection);
 
 [[nodiscard]] std::optional<double> spectralPowerAt(
     const SpectralPowerDistribution& spectrum,

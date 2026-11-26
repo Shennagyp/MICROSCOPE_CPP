@@ -472,6 +472,38 @@ private:
     std::optional<OpticalCompatibilityId> compatibilityId_;
 };
 
+enum class FluorescenceEmissionSpectrumError {
+    TooFewSamples,
+    WavelengthsNotIncreasing,
+    InvalidRelativeIntensity,
+    NoPositiveEmission
+};
+
+struct FluorescenceEmissionSample {
+    PositiveNanometers wavelength;
+    double relativeIntensity = 0.0;
+};
+
+// Relative emitted photon distribution for a fluorophore or task-specific
+// emission profile. The samples describe spectral shape; absolute emitted
+// power is not inferred from them.
+class FluorescenceEmissionSpectrum final {
+public:
+    [[nodiscard]] static Result<
+        FluorescenceEmissionSpectrum,
+        FluorescenceEmissionSpectrumError> create(
+            std::vector<FluorescenceEmissionSample> samples);
+
+    [[nodiscard]] const std::vector<FluorescenceEmissionSample>&
+    samples() const noexcept;
+
+private:
+    explicit FluorescenceEmissionSpectrum(
+        std::vector<FluorescenceEmissionSample> samples);
+
+    std::vector<FluorescenceEmissionSample> samples_;
+};
+
 enum class CameraSensorTechnology {
     CCD,
     CMOS,

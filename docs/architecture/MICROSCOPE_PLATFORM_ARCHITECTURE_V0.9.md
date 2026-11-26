@@ -257,6 +257,23 @@ Do not assume sensor pitch alone maps directly to delivered pixels or that horiz
 
 The adapter supplies actual device capabilities and observations. The Core validates them against the definition and requested configuration.
 
+#### Camera model catalog and fluorescence suitability
+
+The repository's `Camera/Common` project owns the backend-neutral discovery contract and the reusable camera model catalog:
+
+- `CameraDeviceInfo` describes a currently enumerated device and the facts available from its backend.
+- `CameraModelProfile` describes a reusable manufacturer/model/variant, including stable model-level capabilities and sensor-characteristic data.
+- `CameraModelCatalog` indexes those profiles by normalized manufacturer, model and optional hardware variant. It does not use serial number or a transient SDK enumeration ID as the model key.
+- A backend enriches discovery only with facts it can establish. Application merges a matching persisted model profile into the live device information and translates the resulting facts into the Core `CameraSpecification`.
+
+Keep dynamic feature descriptors/readbacks separate from static model characteristics. A feature advertised by a connected camera is not necessarily a scientific sensor specification. The AmScope vendor descriptor currently exposes facts including global-shutter, monochrome and sensor-technology flags. It does not establish QE curves, read noise, dark current or full-well capacity. Those values must come from a manufacturer datasheet, verified profile or measurement and retain their provenance. Unknown data must remain unknown; it must not be inferred from preview dimensions, model family guesses or missing feature flags.
+
+Fluorescence suitability is an advisory assessment, not a camera-identity validator. The normal hard execution constraints remain: the selected camera must be the terminal ImagingDevice of the selected LightPath imaging route, must have a declared supported output mode, and must be operable by its current adapter/session. Once those conditions hold, a manually assigned camera remains selectable even when its fluorescence profile is less suitable. Return warnings and the reasons; do not silently replace the manual selection or reject it solely because a preference was missed.
+
+The assessor should evaluate sensor data against the actual detected emission band after the selected dichroic and emission filter. The complete performance model should use wavelength-dependent QE weighted by the fluorophore/emission spectrum and optical transmission, with read noise, dark current, full-well capacity, pixel pitch, output mode and frame rate included where the acquisition requirements make them relevant. A simple unweighted band mean is only a coarse fallback and must be identified as such; it is not a complete spectral sensitivity prediction.
+
+Candidate ranking is separate from manual selection and from hard route validation. Global shutter is a recommendation preference, not an unconditional fluorescence requirement. Recommend a global-shutter camera when two candidates are otherwise equivalently suitable, or when the declared acquisition requirement makes temporal simultaneity/motion distortion decisive. Do not demote a rolling-shutter scientific camera merely because its shutter type is rolling if its sensitivity/noise performance is materially better for the acquisition. Unknown shutter type is not evidence of rolling shutter. A user selection that misses a suitability preference produces a warning that can be acknowledged/overridden; the selected camera identity is retained in the configuration/acquisition snapshot.
+
 ### 5.5 Illumination and condenser
 
 IlluminationSpecification attaches to an installed IlluminationDevice component and contains one or more independently identified channels. A channel may declare a spectral band and intensity-control kind; continuous control requires a finite range with explicit units. One source can therefore expose multiple channels with different spectra and control semantics.
@@ -264,6 +281,26 @@ IlluminationSpecification attaches to an installed IlluminationDevice component 
 CondenserSpecification attaches to an installed OpticalElement component and declares design, immersion medium, aperture NA range and optional working distance. The minimum aperture NA may be zero; it must not exceed the positive maximum.
 
 Illumination and condenser data remain independent of objective classes. Configuration profiles define compatibility and selection relationships between objective, optical path, contrast method, condenser and illumination system in Phase 3.
+
+#### Source spectra, filter sets and illumination state
+
+An illumination source profile must identify its technology (for example LED, halogen/tungsten, xenon arc, mercury arc, metal-halide arc or laser), independently controlled channels, device control semantics and, where available, a wavelength-dependent spectral power distribution. A channel's relative spectral power curve describes spectral shape; it is not an absolute specimen irradiance measurement.
+
+Filters are installed optical components with role-specific spectral characteristics:
+
+- Excitation filter: transmission spectrum on the illumination/excitation route.
+- Dichroic: both reflection and transmission spectra, associated with the relevant illumination and detection directions.
+- Emission filter: transmission spectrum on the imaging/detection route.
+- Neutral-density filter: wavelength-dependent attenuation used to reduce delivered light without changing the illumination source identity.
+- Other optical filters: modeled by their actual role and measured/manufacturer response rather than a generic on/off label.
+
+A filter's role in its `OpticalFilterSpecification` must agree with the installed component's optical-function capability. Compatibility identity links components that belong to the same designed filter cube/set. The filter must also occur on the relevant route in the selected LightPath; an installed filter elsewhere in the microscope cannot satisfy a mode requirement.
+
+For fluorescence, evaluate the excitation side and detection side separately. Excitation power at the specimen depends on the source spectrum, excitation-filter transmission, dichroic reflection in the excitation direction and the selected optical route. Detected signal depends on the fluorophore emission spectrum, collection optics, dichroic transmission, emission-filter transmission and camera QE. Do not infer fluorescence camera suitability from the lamp's nominal color or from a single center wavelength.
+
+A mode-specific illumination target must describe a calibrated physical quantity at a declared measurement plane, not an unqualified LED percentage. The default reference for specimen illumination is irradiance at the specimen plane (for example µW/mm²); the stored calibration also records the source's hardware drive unit/value. For fluorescence workflows, include exposure duration and, when required by the task, cumulative light dose/photobleaching limits. For transmitted brightfield and darkfield, the calibration must reflect the selected objective/condenser/stop/filter geometry and aperture state.
+
+The intensity of a 4× brightfield mode, a 40× brightfield mode and a 4× darkfield mode is not a universal magnification-derived constant. The user can set a different target for each operation mode. A 4× brightfield mode may intentionally use a lower specimen-plane irradiance than the 40× and 4× darkfield modes. Persist those independently calibrated targets; do not assume equal drive percentages produce equal specimen illumination across different routes or optical configurations.
 
 ### 5.6 Stage and axes
 
@@ -468,9 +505,28 @@ The selected LightPath must be resolved before this calculation because it deter
 
 A specimen/task imaging profile may contribute soft preferences only after hard optical and detector constraints pass. For example, an H&E histopathology profile may rank a 20×/0.75 NA candidate above a 20×/0.4 NA candidate when both meet the requested NA, field-of-view, correction, working-distance and sampling requirements. That is a data-driven workflow preference, not a universal rule that every H&E examination must use a 0.75 NA objective. The user can override a preference, while a required microscope-specific mode binding remains a hard constraint.
 
+#### Camera suitability and mode-specific LightPath calibration
+
+The C++ Core now defines the following initial value contracts:
+
+- `CameraSensorCharacteristics` on `CameraSpecification`, including optional technology, shutter type, color mode, QE samples, read noise, dark current, full-well capacity, maximum frame rate and provenance.
+- `CameraSuitabilityAssessor`, which returns warnings and an advisory ranking for fluorescence requirements without rejecting a physically connected, driver-operable camera solely for performance preference mismatches.
+- `OpticalFilterSpecification`, attached to an installed equipment component and containing ordered spectral transmission samples, optional reflection samples and a compatibility identity.
+- `SpectralPowerDistribution` on an illumination channel, describing wavelength-dependent source output.
+- `LightPathCalibration`, a measured drive-to-specimen-irradiance curve bound to a microscope, equipment revision, operation-mode revision, LightPath, source channel and configured optical component identities.
+- `LightPathModeSetting`, the operation mode's desired specimen-plane irradiance and exact calibration revision. It derives a device drive value only when its identity/revision binding matches and the target lies inside the measured calibration interval.
+
+These are typed C++ models, not a completed persistence adapter. Application must own durable storage, revision creation, transaction boundaries and in-memory residency. The camera model catalog is reusable repository-level model data; per-microscope equipment records reference the installed camera component and its model identity. Per-microscope operation modes reference their LightPath mode settings and calibration revisions.
+
+The initial calibration contract is intentionally conservative but not yet a complete physical calibration key. Before hardware calibration is implemented, replace or supplement the component-ID list with a canonical configuration fingerprint covering every state that can affect delivered specimen irradiance: selected routes and route revision; source/channel; objective; condenser/annulus/stop; excitation/neutral-density/dichroic/emission filters; aperture, iris and selector positions; relevant relay/beam-splitter state; and other adjustable optical elements. It must distinguish components that share identity but have different settings. The calibration record must also capture measurement plane, measurement instrument identity/calibration, units, date, uncertainty, environment/measurement conditions, and source-drive limits.
+
+Calibration curves must be monotonic over the supported drive interval for the current interpolation model. If the real source/optical system is non-monotonic or has hysteresis, use separate direction/state curves or a richer model; do not force a single monotonic interpolator over physically different operating branches. Do not extrapolate outside measured calibration points. A filter/objective/stop/aperture/configuration change that alters the optical transfer must invalidate the old fingerprint binding, while an unrelated edit should not invalidate a calibration merely because a global revision number changed if the fingerprint is unchanged and the revision policy explicitly permits reuse.
+
+The selected mode's irradiance target is a desired state. It does not prove the source has reached that value. Runtime must dispatch the derived source setting, obtain available device feedback and/or calibrated measurement evidence, and report the effective state and residual/uncertainty. If the source is fixed or has no intensity control, the mode may store a valid fixed measured output, but the resolver/runtime must not invent a controllable drive.
+
 #### Persistence and revision semantics
 
-Microscope constitution and operation modes are durable, editable application data. The equipment constitution records the actual installed component identities, specifications, ports, connections and optical paths. Operation-mode records contain named technique compositions, objective constraints, declared preferences, and settings. A microscope-specific mode binding may add required/preferred component identities without changing the shared technique definitions.
+Microscope constitution, camera model profiles and operation modes are durable, editable application data. The equipment constitution records installed component identities, specifications, ports, connections, optical paths, filter specifications and illumination-source/channel specifications. Camera model profiles are persisted in the shared Camera model catalog by manufacturer/model/variant and carry profile revisions and provenance; the per-microscope equipment constitution binds the actual installed camera component to the corresponding model profile. Operation-mode records contain named technique compositions, objective constraints, camera preferences (not hard camera requirements unless explicitly declared), LightPath selections and per-LightPath illumination targets. A microscope-specific mode binding may add required/preferred component identities without changing shared technique definitions. Each LightPath mode setting references the exact calibration revision used to translate specimen-plane irradiance into a source drive value.
 
 Application loads the selected equipment and mode revisions into their owner-retained in-memory objects. Core resolution receives those typed values and remains free of persistence I/O. Editing a mode creates a new durable revision at an explicit save boundary. Editing the equipment constitution likewise creates a new revision; a historical acquisition/configuration snapshot keeps the revisions it used. A saved mode edit must not mutate an already-running resolution or silently rewrite historical acquisition configuration.
 

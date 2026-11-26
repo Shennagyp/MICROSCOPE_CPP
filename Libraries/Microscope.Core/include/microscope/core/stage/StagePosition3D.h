@@ -44,6 +44,10 @@ public:
         const AxisPosition&, std::optional<double> additionalErrorBound) const;
     Result<StagePosition3D, StagePosition3DError> afterCommandedDisplacement(
         const AxisDisplacement&, std::optional<double> additionalErrorBound) const;
+    // Invalidate only the XY working-plane estimate after an XY operation
+    // fault. Focus Z has an independent reference lifecycle and is preserved.
+    StagePosition3D invalidateXYReference() const;
+    // A device/session feedback-loss event invalidates every machine axis.
     StagePosition3D invalidateMachineReference() const;
 
     const StageAxisPositionState& x() const noexcept;

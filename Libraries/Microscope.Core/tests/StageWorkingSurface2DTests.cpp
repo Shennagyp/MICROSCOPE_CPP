@@ -75,8 +75,31 @@ void cadRectanglesAreXYOnlyAndVariableCount() {
         slide3->constrainedWidthMicrometers() == 20'000,
         "slide drawing contains only an XY stop datum and length/width constraints");
     check(slide3->solvedOppositeEndpoint().xMicrometers == 210'000 &&
-        slide3->solvedOppositeEndpoint().yMicrometers == 20'000,
+        slide3->solvedOppositeEndpoint().yMicrometers == 50'000,
         "the dimensions solve the opposite corner from the initial handle");
+    const auto corners = slide3->stageCorners();
+    check(corners.stopPoint.xMicrometers == 160'000 &&
+        corners.stopPoint.yMicrometers == 30'000 &&
+        corners.lengthEdgeEnd.xMicrometers == 210'000 &&
+        corners.lengthEdgeEnd.yMicrometers == 30'000 &&
+        corners.widthEdgeEnd.xMicrometers == 160'000 &&
+        corners.widthEdgeEnd.yMicrometers == 50'000 &&
+        corners.oppositeCorner.xMicrometers == 210'000 &&
+        corners.oppositeCorner.yMicrometers == 50'000,
+        "exposes all four stage-coordinate corners from the CAD constraints");
+
+    auto vertical = take(SlideRectangleDefinition2D::create(
+        id<SlideId>("vertical-slide"), id<CalibrationRevisionId>("vertical-v1"),
+        {100'000, 0}, {100'001, 1}, SlideRectangleLengthAxis::StageY,
+        70'000, 25'000));
+    const auto verticalCorners = vertical.stageCorners();
+    check(verticalCorners.lengthEdgeEnd.xMicrometers == 100'000 &&
+        verticalCorners.lengthEdgeEnd.yMicrometers == 70'000 &&
+        verticalCorners.widthEdgeEnd.xMicrometers == 125'000 &&
+        verticalCorners.widthEdgeEnd.yMicrometers == 0 &&
+        verticalCorners.oppositeCorner.xMicrometers == 125'000 &&
+        verticalCorners.oppositeCorner.yMicrometers == 70'000,
+        "maps the four corners correctly when slide length is assigned to stage Y");
 
     auto local = take(surface.toSlide(id<SlideId>("slide-2"), {90'000, 5'000}));
     check(std::abs(local.position.xMicrometers - 10'000) < 1e-9 &&

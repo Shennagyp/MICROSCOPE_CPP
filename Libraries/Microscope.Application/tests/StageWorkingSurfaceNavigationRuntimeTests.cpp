@@ -2,6 +2,7 @@
 #include "microscope/application/motion/StageWorkingSurfaceNavigationControlQueue.h"
 #include "microscope/application/runtime/RuntimeWakeSignal.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>

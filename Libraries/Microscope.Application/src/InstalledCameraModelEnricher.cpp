@@ -72,6 +72,13 @@ InstalledCameraModelEnricher::enrich(
                 makeError(ErrorCode::BindingSetEquipmentRevisionMismatch));
     }
 
+    if (bindingSet.bindingRevision == 0 && !bindingSet.bindings.empty()) {
+        return core::Result<
+            InstalledCameraModelEnrichment,
+            InstalledCameraModelEnrichmentError>::failure(
+                makeError(ErrorCode::InvalidBindingSetRevision));
+    }
+
     if (!containsLightPath(equipment, lightPathId)) {
         return core::Result<
             InstalledCameraModelEnrichment,

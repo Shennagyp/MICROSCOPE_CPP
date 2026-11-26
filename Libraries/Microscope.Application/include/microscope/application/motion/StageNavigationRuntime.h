@@ -1,5 +1,12 @@
 #pragma once
 
+// LEGACY COMPATIBILITY PATH.
+// This runtime is bound to DualSlideCarrierState and its fixed left/right slots.
+// It remains for existing integrations and regression coverage only. Do not use
+// it for new stage navigation. New navigation must use
+// StageWorkingSurfaceNavigationRuntime with StageWorkingSurface2D, which
+// supports an empty canvas and an arbitrary number of independently drawn slides.
+
 #include "microscope/application/motion/StageNavigationExecutor.h"
 #include "microscope/application/motion/StagePositionCommandReducer.h"
 #include "microscope/application/motion/StagePositionFeedbackReducer.h"

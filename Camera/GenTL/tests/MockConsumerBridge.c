@@ -586,19 +586,19 @@ int32_t gentl_consumer_invoke(
                 frameId += 2;
                 next_simulator_frame_ids[event] += 2;
             } else if (strcmp(sequenceMode, "duplicate") == 0) {
+                // Repeat the preceding transport ID once; the next frame
+                // resumes at the next forward ID.
                 frameId = simulator_last_frame_ids[event];
-                if (next_simulator_frame_ids[event] > 1)
-                    --next_simulator_frame_ids[event];
             } else if (strcmp(sequenceMode, "out-of-order") == 0) {
+                // Deliver one older transport ID, then resume at the next
+                // forward ID so the fault remains a single reordered frame.
                 frameId = simulator_last_frame_ids[event] > 1
                     ? simulator_last_frame_ids[event] - 1 : 1;
-                if (next_simulator_frame_ids[event] > 1)
-                    --next_simulator_frame_ids[event];
             } else if (strcmp(sequenceMode, "ambiguous") == 0) {
+                // Same backwards sample under a TL without a declared wrap
+                // model; the Common tracker must not guess a transport loss.
                 frameId = simulator_last_frame_ids[event] > 1
                     ? simulator_last_frame_ids[event] - 1 : 1;
-                if (next_simulator_frame_ids[event] > 1)
-                    --next_simulator_frame_ids[event];
             }
         }
         simulator_last_frame_ids[event] = frameId;

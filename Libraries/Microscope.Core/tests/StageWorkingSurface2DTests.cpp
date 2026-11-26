@@ -272,7 +272,7 @@ void xyReferenceInvalidationPreservesIndependentFocusReference() {
     check(xyInvalidated.z().positionIsUsable() &&
         xyInvalidated.z().position() &&
         xyInvalidated.z().position()->value() == 12'500.0 &&
-        xyInvalidated.z().evidence() == StagePositionEvidence::CalibratedEstimate,
+        xyInvalidated.z().evidence() == StagePositionEvidence::CommandDerivedEstimate,
         "an XY operation fault preserves the independent focus-Z calibration");
 
     const auto allInvalidated = position.invalidateMachineReference();

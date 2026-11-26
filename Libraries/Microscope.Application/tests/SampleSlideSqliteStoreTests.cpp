@@ -355,19 +355,23 @@ void testSlideCannotReferenceAnUnpersistedSampleTypeRevision() {
             return;
         }
         auto store = std::move(opened).value();
-        const auto absentType = makeSampleType(
-            makeId<SampleTypeId>("sample-type-not-saved"),
-            1,
-            "Unpersisted type");
+        const auto sampleTypeId =
+            makeId<SampleTypeId>("sample-type-exact-revision");
+        const auto persistedV1 = makeSampleType(
+            sampleTypeId, 1, "Persisted SampleType v1");
+        const auto unpersistedV2 = makeSampleType(
+            sampleTypeId, 2, "Unpersisted SampleType v2");
+        check(store->saveSampleTypeRevision(persistedV1, 0).isSuccess(),
+              "persists an earlier SampleType revision for the exact-reference test");
         const auto slide = makeSlide(
-            makeId<SlideId>("slide-with-dangling-type"),
+            makeId<SlideId>("slide-with-dangling-type-revision"),
             1,
-            absentType);
+            unpersistedV2);
         const auto saved = store->saveSlideRevision(slide, 0);
         check(!saved.isSuccess() &&
               saved.error().code ==
                   SampleSlideStoreErrorCode::SlideSampleTypeRevisionNotFound,
-              "rejects a Slide whose exact SampleType revision is absent");
+              "rejects a Slide pinned to an unpersisted revision even when an older revision of that SampleType exists");
         const auto current = store->loadCurrentSlide(slide.id());
         check(current && !current.value(),
               "failed Slide writes leave no current pointer or partial record");

@@ -161,8 +161,9 @@ The next Phase 7 work is **not another package implementation pass**. It is the 
    AmScope enumerate/open/read-setting/start/frame/stop/close path, the installed
    Qt preview and descriptor-driven controls, and an installed GenTL consumer
    with a real vendor CTI Producer and physical camera. These tests require
-   physical hardware and are not represented by hosted CI results. Respect the
-   owner's postponement of physical testing; do not simulate or claim it.
+   physical hardware and are not represented by hosted CI results. Do not
+   simulate or claim this evidence. The separate Phase 4 MU503 UI test remains
+   postponed by owner direction.
 2. Resolve AmScope SDK redistribution rights from the actual SDK license terms
    or written vendor permission. The checked-in SDK tree has no license,
    notice or EULA. The public downloads page points users to software licensing

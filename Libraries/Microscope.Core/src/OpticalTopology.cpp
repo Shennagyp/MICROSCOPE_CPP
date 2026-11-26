@@ -61,6 +61,34 @@ namespace {
     return false;
 }
 
+[[nodiscard]] OpticalElementFunction opticalFunctionForFilterRole(
+    OpticalFilterRole role) noexcept {
+    switch (role) {
+    case OpticalFilterRole::Excitation:
+        return OpticalElementFunction::ExcitationFilter;
+    case OpticalFilterRole::Emission:
+        return OpticalElementFunction::EmissionFilter;
+    case OpticalFilterRole::Dichroic:
+        return OpticalElementFunction::DichroicMirror;
+    case OpticalFilterRole::NeutralDensity:
+        return OpticalElementFunction::NeutralDensityFilter;
+    case OpticalFilterRole::Other:
+        return OpticalElementFunction::Other;
+    }
+    return OpticalElementFunction::Other;
+}
+
+[[nodiscard]] const OpticalFunctionCapability* findOpticalFunctionCapability(
+    const EquipmentComponent& component,
+    OpticalElementFunction function) noexcept {
+    for (const auto& capability : component.opticalFunctions()) {
+        if (capability.function() == function) {
+            return &capability;
+        }
+    }
+    return nullptr;
+}
+
 [[nodiscard]] bool imagingRoutesShareDistinctBeamSplitterOutputs(
     const std::vector<const OpticalPath*>& imagingPaths,
     const std::map<EquipmentComponentId, const EquipmentComponent*>& componentIndex) {
@@ -140,6 +168,7 @@ Result<
     case OpticalElementFunction::ExcitationFilter:
     case OpticalElementFunction::EmissionFilter:
     case OpticalElementFunction::DichroicMirror:
+    case OpticalElementFunction::NeutralDensityFilter:
     case OpticalElementFunction::DarkfieldStop:
     case OpticalElementFunction::Other:
         break;
@@ -462,12 +491,14 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     std::vector<IlluminationSpecification> illuminationSpecifications,
     std::vector<StageSpecification> stageSpecifications,
     std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
-    std::vector<LightPath> lightPaths)
+    std::vector<LightPath> lightPaths,
+    std::vector<OpticalFilterSpecification> filterSpecifications)
     : microscopeId_(std::move(microscopeId)),
       components_(std::move(components)),
       connections_(std::move(connections)),
       opticalPaths_(std::move(opticalPaths)),
       lightPaths_(std::move(lightPaths)),
+      filterSpecifications_(std::move(filterSpecifications)),
       objectiveSpecifications_(std::move(objectiveSpecifications)),
       cameraSpecifications_(std::move(cameraSpecifications)),
       condenserSpecifications_(std::move(condenserSpecifications)),
@@ -488,7 +519,8 @@ Result<
         std::vector<IlluminationSpecification> illuminationSpecifications,
         std::vector<StageSpecification> stageSpecifications,
         std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
-        std::vector<LightPath> lightPaths) {
+        std::vector<LightPath> lightPaths,
+        std::vector<OpticalFilterSpecification> filterSpecifications) {
     if (components.empty()) {
         return Result<
             MicroscopeEquipmentDefinition,
@@ -656,6 +688,48 @@ Result<
         if (stageComponentIds.find(carrier.stageComponentId()) == stageComponentIds.end()) {
             return Result<MicroscopeEquipmentDefinition, EquipmentDefinitionError>::failure(
                 EquipmentDefinitionError::DualSlideCarrierReferencesUnknownStage);
+        }
+    }
+
+    std::set<EquipmentComponentId> filterComponentIds;
+    for (const auto& filter : filterSpecifications) {
+        if (!filterComponentIds.insert(filter.componentId()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateFilterSpecification);
+        }
+
+        const auto component = componentIndex.find(filter.componentId());
+        if (component == componentIndex.end()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::FilterReferencesUnknownComponent);
+        }
+        if (component->second->kind() != EquipmentComponentKind::OpticalElement) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::FilterComponentWrongKind);
+        }
+
+        const auto* capability = findOpticalFunctionCapability(
+            *component->second,
+            opticalFunctionForFilterRole(filter.role()));
+        if (capability == nullptr) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::FilterOpticalFunctionMismatch);
+        }
+
+        if (filter.compatibilityId() &&
+            capability->compatibilityId() != filter.compatibilityId()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::FilterCompatibilityMismatch);
         }
     }
 
@@ -924,7 +998,8 @@ Result<
                 std::move(illuminationSpecifications),
                 std::move(stageSpecifications),
                 std::move(dualSlideCarrierSpecifications),
-                std::move(lightPaths)));
+                std::move(lightPaths),
+                std::move(filterSpecifications)));
 }
 
 const MicroscopeId& MicroscopeEquipmentDefinition::microscopeId() const noexcept {
@@ -949,6 +1024,11 @@ MicroscopeEquipmentDefinition::opticalPaths() const noexcept {
 const std::vector<LightPath>&
 MicroscopeEquipmentDefinition::lightPaths() const noexcept {
     return lightPaths_;
+}
+
+const std::vector<OpticalFilterSpecification>&
+MicroscopeEquipmentDefinition::filterSpecifications() const noexcept {
+    return filterSpecifications_;
 }
 
 std::vector<EquipmentComponentId>

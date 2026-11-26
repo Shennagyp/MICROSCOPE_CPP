@@ -519,31 +519,26 @@ private:
 }
 
 template <typename TId>
-[[nodiscard]] bool readStrongId(
-    PayloadReader& reader,
-    TId& id) {
+[[nodiscard]] std::optional<TId> readStrongId(PayloadReader& reader) {
     std::string value;
-    if (!reader.readString(value)) return false;
+    if (!reader.readString(value)) return std::nullopt;
     auto created = TId::create(std::move(value));
-    if (!created) return false;
-    id = std::move(created).value();
-    return true;
+    if (!created) return std::nullopt;
+    return std::move(created).value();
 }
 
 [[nodiscard]] bool readRegistration(
     PayloadReader& reader,
     core::DualSlideSlot expectedSlot,
     const core::SlideId& expectedSlideId,
-    core::SlideRegistration& registration) {
-    core::SlideId slideId = expectedSlideId;
-    core::CalibrationRevisionId revision =
-        core::CalibrationRevisionId::create("invalid-placeholder").value();
+    std::optional<core::SlideRegistration>& registration) {
+    auto slideId = readStrongId<core::SlideId>(reader);
+    auto revision = readStrongId<core::CalibrationRevisionId>(reader);
     std::string slotTag;
     double width = 0.0;
     double height = 0.0;
     double maximumFitResidual = 0.0;
-    if (!readStrongId(reader, slideId) ||
-        !readStrongId(reader, revision) ||
+    if (!slideId || !revision ||
         !reader.readString(slotTag) ||
         !reader.readDouble(width) ||
         !reader.readDouble(height) ||
@@ -553,7 +548,7 @@ template <typename TId>
 
     const auto decodedSlot = parseSlot(slotTag);
     if (!decodedSlot || *decodedSlot != expectedSlot ||
-        slideId != expectedSlideId) {
+        *slideId != expectedSlideId) {
         return false;
     }
 
@@ -604,8 +599,8 @@ template <typename TId>
     std::array<core::SlideCornerMeasurement, 4> corners{
         *measured[0], *measured[1], *measured[2], *measured[3]};
     auto created = core::SlideRegistration::create(
-        std::move(slideId),
-        std::move(revision),
+        std::move(*slideId),
+        std::move(*revision),
         expectedSlot,
         std::move(geometry).value(),
         std::move(corners),
@@ -618,7 +613,7 @@ template <typename TId>
 [[nodiscard]] bool readSlot(
     PayloadReader& reader,
     core::DualSlideSlot expectedSlot,
-    core::SlideSlotState& slot) {
+    std::optional<core::SlideSlotState>& slot) {
     std::string slotTag;
     if (!reader.readString(slotTag)) return false;
     const auto decodedSlot = parseSlot(slotTag);
@@ -628,41 +623,20 @@ template <typename TId>
     if (!reader.readU8(hasSlide) || hasSlide > 1) return false;
     std::optional<core::SlideId> slideId;
     if (hasSlide != 0) {
-        core::SlideId id =
-            core::SlideId::create("invalid-placeholder").value();
-        if (!readStrongId(reader, id)) return false;
-        slideId = std::move(id);
+        slideId = readStrongId<core::SlideId>(reader);
+        if (!slideId) return false;
     }
 
     std::uint8_t hasRegistration = 0;
     if (!reader.readU8(hasRegistration) || hasRegistration > 1) return false;
     std::optional<core::SlideRegistration> registration;
     if (hasRegistration != 0) {
-        if (!slideId) return false;
-        core::SlideRegistration decoded =
-            core::SlideRegistration::create(
-                core::SlideId::create("temporary").value(),
-                core::CalibrationRevisionId::create("temporary").value(),
-                expectedSlot,
-                core::SlideGeometry::create(1.0, 1.0).value(),
-                std::array<core::SlideCornerMeasurement, 4>{
-                    core::SlideCornerMeasurement::create(
-                        core::SlideCorner::TopLeft, {0.0, 0.0},
-                        core::ObservationSource::HardwareReadback, 0.0).value(),
-                    core::SlideCornerMeasurement::create(
-                        core::SlideCorner::TopRight, {1.0, 0.0},
-                        core::ObservationSource::HardwareReadback, 0.0).value(),
-                    core::SlideCornerMeasurement::create(
-                        core::SlideCorner::BottomRight, {1.0, 1.0},
-                        core::ObservationSource::HardwareReadback, 0.0).value(),
-                    core::SlideCornerMeasurement::create(
-                        core::SlideCorner::BottomLeft, {0.0, 1.0},
-                        core::ObservationSource::HardwareReadback, 0.0).value()},
-                0.0).value();
-        if (!readRegistration(reader, expectedSlot, *slideId, decoded)) {
+        if (!slideId ||
+            !readRegistration(
+                reader, expectedSlot, *slideId, registration) ||
+            !registration) {
             return false;
         }
-        registration = std::move(decoded);
     }
 
     auto created = core::SlideSlotState::create(
@@ -696,18 +670,14 @@ template <typename TId>
         const core::DualSlideCarrierSpecification& installedSpecification,
         sqlite3* database) {
     PayloadReader reader(data, size);
-    core::EquipmentComponentId stageComponentId =
-        core::EquipmentComponentId::create("invalid-placeholder").value();
-    core::StageAxisId horizontalAxisId =
-        core::StageAxisId::create("invalid-placeholder").value();
-    core::StageAxisId transverseAxisId =
-        core::StageAxisId::create("invalid-placeholder").value();
+    auto stageComponentId =
+        readStrongId<core::EquipmentComponentId>(reader);
+    auto horizontalAxisId = readStrongId<core::StageAxisId>(reader);
+    auto transverseAxisId = readStrongId<core::StageAxisId>(reader);
     std::string directionTag;
     std::string horizontalUnitTag;
     std::string transverseUnitTag;
-    if (!readStrongId(reader, stageComponentId) ||
-        !readStrongId(reader, horizontalAxisId) ||
-        !readStrongId(reader, transverseAxisId) ||
+    if (!stageComponentId || !horizontalAxisId || !transverseAxisId ||
         !reader.readString(directionTag) ||
         !reader.readString(horizontalUnitTag) ||
         !reader.readString(transverseUnitTag)) {
@@ -725,9 +695,9 @@ template <typename TId>
     if (!direction || !horizontalUnit || !transverseUnit ||
         !specMatches(
             installedSpecification,
-            stageComponentId,
-            horizontalAxisId,
-            transverseAxisId,
+            *stageComponentId,
+            *horizontalAxisId,
+            *transverseAxisId,
             *direction,
             *horizontalUnit,
             *transverseUnit)) {
@@ -739,13 +709,11 @@ template <typename TId>
                 "The persisted carrier registration belongs to a different installed stage/axis configuration."));
     }
 
-    core::SlideSlotState left = core::SlideSlotState::create(
-        core::DualSlideSlot::Left, std::nullopt).value();
-    core::SlideSlotState right = core::SlideSlotState::create(
-        core::DualSlideSlot::Right, std::nullopt).value();
+    std::optional<core::SlideSlotState> left;
+    std::optional<core::SlideSlotState> right;
     if (!readSlot(reader, core::DualSlideSlot::Left, left) ||
         !readSlot(reader, core::DualSlideSlot::Right, right) ||
-        !reader.finished()) {
+        !left || !right || !reader.finished()) {
         return core::Result<
             core::DualSlideCarrierState,
             DualSlideCarrierStoreError>::failure(makeError(
@@ -755,7 +723,7 @@ template <typename TId>
     }
 
     auto created = core::DualSlideCarrierState::create(
-        installedSpecification, std::move(left), std::move(right));
+        installedSpecification, std::move(*left), std::move(*right));
     if (!created) {
         return core::Result<
             core::DualSlideCarrierState,

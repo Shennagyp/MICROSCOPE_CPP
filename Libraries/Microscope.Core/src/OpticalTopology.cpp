@@ -487,7 +487,8 @@ Result<
         std::vector<CondenserSpecification> condenserSpecifications,
         std::vector<IlluminationSpecification> illuminationSpecifications,
         std::vector<StageSpecification> stageSpecifications,
-        std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications) {
+        std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
+        std::vector<LightPath> lightPaths) {
     if (components.empty()) {
         return Result<
             MicroscopeEquipmentDefinition,

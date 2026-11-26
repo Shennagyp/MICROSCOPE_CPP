@@ -145,33 +145,33 @@ The runtime is not a generic workflow platform. It is the execution mechanism fo
 A microscope definition describes the installed instrument:
 
 ~~~text
-Microscope
+MicroscopeEquipmentDefinition
 ├── Identity
-├── OpticalSystem
-│   ├── Components
-│   │   ├── Objectives
-│   │   ├── Lenses and relay optics
-│   │   ├── Condenser and condenser components
-│   │   ├── Filters and optical selectors
-│   │   ├── Phase components
-│   │   ├── Polarization and DIC components
-│   │   ├── Beam splitters and mirrors
-│   │   └── Other optical elements
-│   └── LightPaths
-├── ImagingSystem
-│   └── Cameras and sensor modes
-├── IlluminationSystem
-│   └── Sources and controls
-├── Stage
-│   └── Axes
-└── ConfigurationProfiles
+├── EquipmentComponents
+│   ├── Optical elements
+│   │   ├── Objectives and relay optics
+│   │   ├── Condenser and condenser elements
+│   │   ├── Filters, phase, polarization and DIC elements
+│   │   └── Beam splitters and selectors
+│   ├── Imaging devices
+│   │   └── Camera component + CameraSpecification
+│   ├── Illumination devices
+│   │   └── Source component + IlluminationSpecification
+│   └── Mechanical assemblies
+│       └── Stage and axes
+├── OpticalConnections
+│   └── Physical component-port adjacency
+├── OpticalPaths
+│   └── Ordered directed routes through component ports
+└── LightPaths
+    └── Named arrangements grouping compatible OpticalPaths
 ~~~
 
 These are logical model boundaries, not separate libraries or mandatory class hierarchies.
 
 ### 5.2 Optical topology
 
-A light path is an explicit physical optical route through installed components. Its representation preserves component identity, physical port adjacency and ordered propagation.
+The topology has two distinct levels. An **OpticalPath** is one ordered, directed route through installed components. A **LightPath** is the selectable microscope arrangement that groups the route or routes used together for an observation/acquisition. This distinction matters when illumination and imaging travel through different routes, share components, or branch at a beam splitter. A LightPath is not a second physical copy of its routes or devices.
 
 - A physical OpticalConnection is an undirected adjacency between two ports on different components. Endpoint storage order does not encode propagation direction.
 - Ordered OpticalPathStep values determine propagation direction through each component. Entry/exit port capabilities are validated for that direction.
@@ -185,6 +185,22 @@ A light path is an explicit physical optical route through installed components.
 - Configuration profiles select valid routes and component states in Phase 3.
 
 The model must not assume that all microscopes have the same optical ordering or component inventory.
+
+### 5.2.1 LightPath ownership and camera endpoints
+
+The C++ object model must make the camera-to-path relationship structural, not a UI convention or a loose compatibility list.
+
+- An imaging camera is an installed `EquipmentComponent` whose kind is `ImagingDevice`. It owns optical input port(s). Its sensor/readout capability is described by exactly one `CameraSpecification` keyed by that same `EquipmentComponentId`; the specification is not a second camera identity.
+- An imaging `OpticalPath` has an explicit route role and ends at the camera component. The final `OpticalPathStep` names that camera component and its input port. The preceding route step's output port is joined to that input by an `OpticalConnection`. The equipment-definition validator verifies component ownership, port direction, and physical continuity.
+- A selectable `LightPath` references one or more route IDs. Its camera endpoint(s) are derived by inspecting its imaging routes; it must not maintain a separately editable camera list that can drift out of sync with the topology.
+- For an ordinary single-camera acquisition, the chosen LightPath resolves to exactly one connected camera. The camera's supported `CameraModeId` values are then used to resolve its output mode. A camera that is installed, enumerated by a driver, or present on another LightPath is not a candidate.
+- A LightPath may expose multiple imaging endpoints only when the equipment definition explicitly describes the branches (for example, a physical image splitter/beam splitter and two connected camera routes). This is a multi-camera arrangement, not an arbitrary choice among cameras. The acquisition request must state whether it intends one endpoint or a supported multi-camera capture; simultaneous operation additionally requires the relevant trigger/synchronization capabilities.
+- Illumination and imaging routes may be distinct and may share installed components. Phase contrast can therefore require a phase annulus on the condenser/illumination route and a matched phase plate on the imaging route. Technique requirements are evaluated over the routes grouped by the selected LightPath, not over every installed component in the microscope.
+- A LightPath is scoped to one microscope equipment-constitution revision. Its route references must resolve within that same definition.
+
+The current C++ topology already has the foundational physical pieces: `EquipmentComponent`, `OpticalPort`, `OpticalConnection`, ordered `OpticalPathStep`/`OpticalPath`, and `CameraSpecification` attached by component ID. It validates port ownership/direction and continuity between adjacent path steps. It does **not yet** encode route purpose or a named LightPath aggregate, and its current generic path validation does not require an imaging route to terminate at a camera. Those are explicit implementation gaps for the revised configuration phase; they must be closed before path-derived camera resolution is considered implemented.
+
+The model deliberately avoids a direct `Objective.Camera` relationship. Objectives and cameras are connected through the actual optical route and its intermediate optical components. This supports multiple objectives, relay optics, splitters, multiple camera ports and microscope-specific topologies without assuming a universal arrangement.
 
 ### 5.3 Objectives and magnification
 
@@ -209,9 +225,10 @@ CameraSpecification attaches to the installed ImagingDevice EquipmentComponentId
 - Sensor ROI origin/extents, hardware binning factors and delivered image dimensions as distinct data.
 - The net X/Y sensor-pixel-per-delivered-pixel mapping, derived independently from ROI and delivered dimensions.
 - Capability declarations such as exposure/gain only when specified by the installed equipment data.
-- The optical output/light path to which the camera component is connected.
+- Its physical optical input port(s), represented by the parent `EquipmentComponent` and connected through `OpticalConnection` values.
+- The imaging route(s) and selectable `LightPath` that terminate at this camera component. This membership is derived from the topology, not stored as an independent camera-to-path compatibility list.
 
-Do not assume sensor pitch alone maps directly to delivered pixels or that horizontal and vertical mapping ratios are equal.
+Do not assume sensor pitch alone maps directly to delivered pixels or that horizontal and vertical mapping ratios are equal. A camera is eligible for a requested acquisition only when it is the terminal imaging device of a route included in the selected LightPath.
 
 The adapter supplies actual device capabilities and observations. The Core validates them against the definition and requested configuration.
 
@@ -283,7 +300,7 @@ A request may name exact installed components when the user wants manual control
 
 ### 6.2 Independent configuration dimensions
 
-Objective requirements, selected techniques, optical routes and detector output are related inputs to one configuration-resolution problem. The camera is derived from the selected imaging route's terminal imaging-device component, which must have a CameraSpecification. The request does not independently select a camera identity. A manually supplied camera identity is only an optional assertion/constraint and must equal the camera derived from the route. If a candidate route set contains more than one imaging endpoint, each endpoint participates in a separate complete candidate; the resolver returns alternatives or a selection-required result rather than choosing an unrelated installed camera.
+Objective requirements, selected techniques, the selected LightPath and detector output are related inputs to one configuration-resolution problem. The LightPath groups the OpticalPaths that operate together. Each imaging route terminates at an installed imaging-device component with a matching CameraSpecification, and its final camera input port is physically connected by the route's port adjacency. The camera identity is derived from that endpoint; the request does not independently select an unrelated camera. A manually supplied camera identity is only an optional assertion/constraint and must equal an endpoint derived from the selected LightPath. A single-camera LightPath resolves to one camera. A declared multi-camera LightPath resolves to its connected camera set only when the requested acquisition mode and physical splitter/trigger topology support it.
 
 Examples:
 - Selecting a 4× brightfield requirement resolves a compatible objective, illumination route, and the camera connected to the selected imaging route.
@@ -377,33 +394,50 @@ A specimen/task imaging profile may contribute optical preferences without hard-
 
 #### Objective constraints and sampling adequacy
 
-The objective requirement combines a minimum numerical aperture with an optional requested nominal magnification. If magnification is specified, it constrains the candidate magnification. If it is omitted, the resolver may choose the lowest magnification among objectives that satisfy the required NA and the camera-sampling condition. It must not choose low magnification merely because the objective fits mechanically or its NA is sufficient.
+The objective requirement combines a minimum numerical aperture with an optional requested nominal magnification. If magnification is specified, it constrains the candidate objective/system magnification. If it is omitted, the resolver may choose the lowest installed objective magnification that satisfies the hard NA requirement, the selected imaging technique's optical-resolution model, and the camera-sampling condition. It must not choose an objective solely because it fits mechanically or has sufficient NA.
 
-For the stated 2.3-pixel Rayleigh sampling policy, let:
+An objective candidate must also satisfy the declared physical compatibility constraints that apply to the specimen and optical train: immersion medium, working distance/clearance, coverglass design thickness where relevant, chromatic and field correction, compatible tube lens/relay optics, and usable field number versus the active camera sensor area. A sample/task preference cannot override these hard constraints.
 
-- NA be the selected objective's numerical aperture.
-- lambda be the declared reference wavelength in the image-forming optical path.
-- d_R = 0.61 lambda / NA be the object-space Rayleigh separation under the declared criterion.
-- P_x, P_y be camera sensor pixel pitches.
-- s_x, s_y be conservative effective independent-sensor-sample spacing factors for the selected camera output mode, accounting for hardware binning and any decimation/downscaling represented by its sensor ROI and delivered dimensions. They must never be less than 1; output upscaling cannot create additional independent sensor samples.
-- M_eff be total image-forming magnification, including the objective and any magnification-affecting relay optics in the selected imaging path.
+A higher NA can improve the diffraction-limited lateral resolution, but it does not automatically make an image better for every specimen. Higher NA also changes depth of field, working distance, immersion/correction requirements, and the magnification needed to sample the finer optical detail. The condenser is part of the resolution model for transmitted-light imaging; it must not be ignored. The exact resolution criterion therefore belongs to the selected imaging modality/technique, not to a universal formula attached to every objective.
 
-The effective object-space sampling pitches are:
+For the supported widefield cases, use the following Rayleigh lateral-resolution models, with all wavelength and distance quantities expressed in consistent units:
 
-p_x = (P_x s_x) / M_eff and p_y = (P_y s_y) / M_eff.
+- **Transmitted (diascopic) widefield:** (r_{lat} = 1.22\lambda_{em}/(NA_{obj}+NA_{cond})). Use the condenser NA actually selected for the imaging configuration, not merely the condenser's maximum capability.
+- **Reflected/episcopic widefield, including conventional epifluorescence:** (r_{lat} = 0.61\lambda_{em}/NA_{obj}), because the objective also acts as the condenser.
+- **Confocal:** do not reuse the widefield formula blindly. Resolution depends on the confocal modality, excitation wavelength and pinhole/Airy-unit setting; a modality-specific model is required before the resolver can claim sampling adequacy.
 
-For the current CameraOutputMode data, derive each s conservatively from the maximum of 1, its hardware binning factor, and the corresponding sensor-ROI-to-delivered-dimension ratio. This prevents an upscaled output from claiming better optical sampling than the physical sensor acquired. If the camera performs a different readout or super-resolution process, that capability must be represented explicitly before the resolver can credit it.
+These are optical-resolution estimates under the named model and assumptions, not guarantees of real-world image quality. Aberrations, misalignment, specimen preparation, refractive-index mismatch, focus, objective correction and detector noise can reduce achieved performance. The stored model and returned rationale must identify which criterion and reference wavelength were used. For broadband illumination/detection, the mode must define its reference-wavelength policy; the resolver must not treat an entire spectrum as one exact wavelength.
 
-The candidate satisfies the sampling policy only when both axes meet:
+For a camera-based widefield route, define:
 
-d_R / p_x >= 2.3 and d_R / p_y >= 2.3.
+- (r_{lat}): the selected modality model's Rayleigh lateral separation in the specimen plane.
+- (a_x,a_y): physical sensor pixel pitch in X and Y.
+- (s_x,s_y): effective physical sensor-pixel pitches represented by one delivered image pixel, including the active readout/binning/decimation/downscaling mapping. Derive this from the selected CameraOutputMode's real sensor-region-to-delivered-dimension mapping and the declared hardware binning. Do not multiply two metadata values when they describe the same binning operation. Clamp digital upscaling to no improvement: (s_x,s_y ge 1).
+- (M_{eff}): total specimen-to-sensor image-forming magnification of the selected imaging route. It includes the objective and all relevant system/tube-lens/camera-relay magnification factors in that route. Do not include display zoom or software image enlargement.
 
-Equivalently, the required total magnification must satisfy both axes, so M_eff must be at least the larger of:
-2.3 NA P_x s_x / (0.61 lambda) and 2.3 NA P_y s_y / (0.61 lambda).
+The effective object-space pixel pitches are:
 
-The resolver then chooses the lowest available objective/relay combination whose total magnification reaches that threshold while satisfying the NA requirement. This is a sampling condition, not a statement that the camera's total width/height pixel count alone establishes resolution. Pixel pitch, selected readout/ROI/binning/resampling mode, total optical magnification, NA and wavelength all matter. Interpolation/upscaling may change delivered dimensions but cannot improve the independent sensor sampling or satisfy this criterion by itself. The existing CameraOutputMode sensor-to-delivered-pixel mapping is therefore part of objective qualification, and the camera must first be identified from the imaging route. If required wavelength or relay-magnification data are absent, the resolver must report that sampling adequacy is unknown rather than manufacture a pass.
+(p_{obj,x} = a_x s_x/M_{eff}), and (p_{obj,y} = a_y s_y/M_{eff}).
 
-The 2.3 factor is an explicit system policy that may be configured by an imaging requirement; it is not to be confused with the Rayleigh formula itself. Where illumination is broadband, the mode/technique data must define the reference-wavelength policy (for example, a conservative wavelength selected from the declared band). The resolver must not silently treat an entire broadband spectrum as one exact wavelength.
+The sampling rate in each axis is the Rayleigh separation divided by object-space pixel pitch. Under the default policy (k=2.3), both axes must satisfy:
+
+(r_{lat}/p_{obj,x} \ge 2.3), and (r_{lat}/p_{obj,y} \ge 2.3).
+
+Equivalently, the minimum total image-forming magnification is:
+
+(M_{eff} \ge \max(2.3 a_x s_x/r_{lat},\;2.3 a_y s_y/r_{lat})).
+
+For reflected/episcopic widefield this becomes, per axis, (M_{eff} \ge 2.3 a s NA_{obj}/(0.61\lambda_{em})). For transmitted widefield it becomes (M_{eff} \ge 2.3 a s (NA_{obj}+NA_{cond})/(1.22\lambda_{em})). The resolver chooses the lowest available objective/relay combination that satisfies the selected model, both sensor axes, the requested NA and all other hard constraints.
+
+The 2.3 value is a sampling-policy factor, not a new Rayleigh constant and not the camera's total pixel count. Nikon's microscopy calculator describes 2.3–4 samples per optical resolution distance as a commonly recommended high-resolution range; Hamamatsu recommends at least two and typically 2.5–3 pixels for high-resolution microscopy. The system default may be 2.3 because that is the selected project policy, but it should remain an explicit imaging requirement/policy rather than being confused with the physical Rayleigh criterion.
+
+Sensor pixel **pitch** and effective readout mapping determine sampling interval. Active pixel **count** determines the available sensor dimensions and therefore field of view/image dimensions; by itself it does not make a fixed-pitch pixel sample finer. Approximate specimen field of view is (FOV_x=N_x p_{obj,x}), (FOV_y=N_y p_{obj,y}), where (N_x,N_y) are the delivered active image dimensions. A megapixel count alone is therefore insufficient to qualify resolution.
+
+For the current CameraOutputMode data, derive the conservative sensor-pixel-per-delivered-pixel factor independently for X and Y from the sensor ROI, binning and delivered dimensions. The derivation must reflect actual hardware readout semantics. If the camera performs an undocumented scaling, demosaicing, super-resolution or other transformation, represent that capability explicitly or report sampling adequacy as unknown. Interpolation/upscaling cannot create independent optical samples.
+
+The selected LightPath must be resolved before this calculation because it determines the actual camera, camera output modes and all image-forming relay components. The relay optics on a different path or an unconnected camera must never be used to qualify the candidate. If the reference wavelength, camera pixel pitch/mapping, or a magnification-affecting path component is unknown, report sampling adequacy as unknown/insufficient evidence rather than manufacturing a pass.
+
+A specimen/task imaging profile may contribute soft preferences only after hard optical and detector constraints pass. For example, an H&E histopathology profile may rank a 20×/0.75 NA candidate above a 20×/0.4 NA candidate when both meet the requested NA, field-of-view, correction, working-distance and sampling requirements. That is a data-driven workflow preference, not a universal rule that every H&E examination must use a 0.75 NA objective. The user can override a preference, while a required microscope-specific mode binding remains a hard constraint.
 
 #### Persistence and revision semantics
 
@@ -412,6 +446,31 @@ Microscope constitution and operation modes are durable, editable application da
 Application loads the selected equipment and mode revisions into their owner-retained in-memory objects. Core resolution receives those typed values and remains free of persistence I/O. Editing a mode creates a new durable revision at an explicit save boundary. Editing the equipment constitution likewise creates a new revision; a historical acquisition/configuration snapshot keeps the revisions it used. A saved mode edit must not mutate an already-running resolution or silently rewrite historical acquisition configuration.
 
 Persisted mode definitions are not proof of effective hardware state. A resolved desired configuration remains separate from the observations required to verify that the microscope physically reached it.
+
+### 6.5 Commercial microscope-software comparison
+
+The model follows documented concepts from established microscope-control software while remaining vendor-neutral:
+
+| Commercial software | Documented behavior | Architectural implication |
+|---|---|---|
+| Nikon NIS-Elements | Device Manager defines hardware configurations and light paths between camera and illumination devices. NIS describes a light path as the devices used together; an optical configuration specifies settings for devices in a light path and is associated with one light path. Acquisition instructions explicitly select a light path that includes a camera. | Treat the selectable LightPath as a device/route arrangement. Its camera endpoint is derived from that arrangement; camera settings belong to the selected path configuration, not to a global, unrelated camera list. |
+| ZEISS ZEN | Smart Setup automatically generates settings across microscope types; a prior raw image can be used to reproduce the acquisition experiment. | Keep semantic, editable operation modes distinct from exact acquisition snapshots. Persist the selected hardware settings and revisions needed to reproduce a completed acquisition. |
+| Evident cellSens | Encoded-device support recalls settings such as objectives and light intensity. cellSens supports multichannel/time-lapse workflows; its simultaneous multicolor feature requires two identical cameras or an image splitter. | Preserve device-specific preferences/settings and model multi-camera acquisition as a real optical branch/splitter arrangement, not as arbitrary multiple camera IDs. |
+| Leica LAS X | LAS X provides saved/user settings and integrated camera, magnification and illumination acquisition controls. | A saved operation preset should cover the coordinated imaging setup while keeping hardware capabilities and actual camera identity tied to the installed microscope configuration. |
+
+These products have different hardware support, licensing and model details; the comparison uses their documented behavior as design evidence, not as a claim that their internal software architectures are identical. RP should preserve the useful workflow semantics without importing vendor-specific classes or assuming every microscope has the same motorized components.
+
+Primary references:
+- [Nikon NIS-Elements Device Manager — hardware configurations, Light Paths and Optical Configurations](https://www.nisoftware.net/NikonSaleApplication/Help/Docs-AR/eng_ar/visual.device.manager.html)
+- [Nikon NIS-Elements Experiment Acquisition — select a light path that includes a camera](https://www.nisoftware.net/NikonSaleApplication/Help/Docs-D/eng_d/experiment.acquisition.html)
+- [ZEISS ZEN — Smart Setup and reproducible acquisition](https://www.zeiss.com/microscopy/en/products/software/zeiss-zen.html)
+- [Evident cellSens — encoded devices and simultaneous multicolor acquisition](https://evidentscientific.com/en/products/software/cellsens)
+- [Leica LAS X camera user manual](https://downloads.leica-microsystems.com/K3C/User%20Manual/Leica_Microscope_Camera_User_Manual_EN.pdf)
+
+Primary physics and sampling references:
+- [Nikon Microscopy Resolution Calculator — modality-specific widefield/confocal resolution, total magnification, back-projected pixel size and sampling rate](https://www.microscope.healthcare.nikon.com/microtools/resolution-calculator/)
+- [Hamamatsu — sensor pixel pitch, active pixel count, field of view and recommended camera sampling](https://camera.hamamatsu.com/jp/en/learn/technical_information/thechnical_guide/dissecting_camera/dissecting_camera02.html)
+- [Leica Microsystems — digital microscopy resolution, Nyquist sampling and sensor/display limits](https://www.leica-microsystems.com/science-lab/industrial/understanding-clearly-the-magnification-of-microscopy/)
 
 ## 7. Operations, actions, feedback and completion
 

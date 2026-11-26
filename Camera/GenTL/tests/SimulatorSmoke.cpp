@@ -73,7 +73,19 @@ void verifyTwoDeviceIsolation(
         secondTimestamp = *second->timestampNanoseconds;
     }
 
+    // Stop one stream while the other remains active. Its event
+    // unregistration and queue flush must not cancel the peer stream.
     firstStream.stop();
+    const auto survivingSecondFrame = secondStream.nextFrame(5000);
+    if (!survivingSecondFrame || survivingSecondFrame->incomplete ||
+        survivingSecondFrame->frameId != 4 ||
+        !survivingSecondFrame->timestampNanoseconds ||
+        *survivingSecondFrame->timestampNanoseconds <= secondTimestamp ||
+        survivingSecondFrame->payload.empty() ||
+        survivingSecondFrame->payload.front() != 0x33) {
+        throw std::runtime_error(
+            "Stopping the first device disrupted the second device's active stream.");
+    }
     secondStream.stop();
     firstDevice.close();
     secondDevice.close();

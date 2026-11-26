@@ -1,6 +1,6 @@
 #pragma once
 
-#include "microscope/core/configuration/Configuration.h"
+#include "microscope/core/equipment/MicroscopyTechniques.h"
 #include "microscope/core/equipment/IlluminationSpecifications.h"
 #include "microscope/core/navigation/DualSlideNavigation.h"
 

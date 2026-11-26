@@ -78,6 +78,80 @@ void appendDiagnostic(
     return camera.outputModes().front().id();
 }
 
+void appendSuitability(
+    LightPathCameraCandidate& candidate,
+    const CameraSpecification& camera,
+    const std::optional<FluorescenceCameraRequirements>& requirements,
+    Diagnostics& diagnostics) {
+    if (!requirements) {
+        return;
+    }
+
+    candidate.suitability = CameraSuitabilityAssessor::assessFluorescence(
+        camera, *requirements);
+    for (const auto& warning : candidate.suitability->warnings) {
+        diagnostics.push_back(warning);
+    }
+}
+
+[[nodiscard]] bool isUniqueBestCandidate(
+    const std::vector<LightPathCameraCandidate>& candidates,
+    const std::vector<const CameraSpecification*>& specifications,
+    const FluorescenceCameraRequirements& requirements,
+    std::size_t& bestIndex) noexcept {
+    if (candidates.size() < 2 ||
+        candidates.size() != specifications.size()) {
+        return false;
+    }
+
+    std::optional<std::size_t> uniqueBest;
+    for (std::size_t candidateIndex = 0;
+         candidateIndex < candidates.size();
+         ++candidateIndex) {
+        if (!candidates[candidateIndex].suitability) {
+            continue;
+        }
+
+        bool strictlyBetterThanAll = true;
+        for (std::size_t otherIndex = 0;
+             otherIndex < candidates.size();
+             ++otherIndex) {
+            if (candidateIndex == otherIndex) {
+                continue;
+            }
+            if (!candidates[otherIndex].suitability ||
+                !CameraSuitabilityAssessor::shouldRecommendBefore(
+                    *specifications[candidateIndex],
+                    *candidates[candidateIndex].suitability,
+                    *specifications[otherIndex],
+                    *candidates[otherIndex].suitability,
+                    requirements) ||
+                CameraSuitabilityAssessor::shouldRecommendBefore(
+                    *specifications[otherIndex],
+                    *candidates[otherIndex].suitability,
+                    *specifications[candidateIndex],
+                    *candidates[candidateIndex].suitability,
+                    requirements)) {
+                strictlyBetterThanAll = false;
+                break;
+            }
+        }
+
+        if (strictlyBetterThanAll) {
+            if (uniqueBest) {
+                return false;
+            }
+            uniqueBest = candidateIndex;
+        }
+    }
+
+    if (!uniqueBest) {
+        return false;
+    }
+    bestIndex = *uniqueBest;
+    return true;
+}
+
 
 } // namespace
 

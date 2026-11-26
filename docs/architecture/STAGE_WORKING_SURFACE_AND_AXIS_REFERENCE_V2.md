@@ -105,3 +105,34 @@ The focus Z travel range is defined by the focus axis AxisOperatingRange, not by
 If no limit-switch sensor exists, the focus axis uses a FullRangeSweep toward the configured upper or lower boundary. The procedure commands one full configured travel distance in that direction without requiring a known start coordinate. This depends on the focus mechanism's ContinuousKnobRotationWithoutClash capability so continued knob/drive rotation after the carriage reaches its physical travel boundary cannot cause collision. Without that declared mechanical capability, the Core reference specification rejects the no-switch sweep.
 
 The resulting coordinate is a calibrated estimate unless an independent encoder/external position observation verifies the boundary.
+
+## Current implementation status — variable-count canvas and navigation
+
+The authoritative stage-navigation model is now the variable-count XY working surface, not a left/right carrier abstraction.
+
+Implemented in Core:
+- Empty-canvas creation from a user-supplied stage-coordinate origin and positive X/Y travel extents; far boundaries are derived as origin plus extents and checked against the stage's configured X/Y operating ranges.
+- Zero initial slide rectangles. Each slide is separately added from its own user-selected mechanical stop-point coordinate, CAD handle, length-axis assignment, constrained length and width.
+- Four explicitly exposed stage-coordinate corners for every slide rectangle.
+- Immutable add, replace and remove operations. Add/replace validate identity, workspace containment and positive-area overlap. Exact edge/corner contact is permitted; no unconfigured clearance is invented.
+- Revision-bound slide-local navigation targets, invalidated when the referenced slide registration revision changes.
+- Slot-independent navigation planning to an absolute XY command. Unknown/uncertain X/Y causes X/Y homing only; microscope focus Z is not a prerequisite.
+- Axis-unit conversion at the motion-command boundary, with the working-surface geometry kept in micrometers.
+
+Implemented in the Application library:
+- A variable-canvas navigation executor, owner-thread runtime and bounded request queue.
+- Exact device/session/operation/step/command correlation for movement completion and home-reference feedback.
+- Direct XY movement, X/Y-only home followed by restoration of the same slide-local target, bounded command-estimate and device-observation completion modes.
+- X/Y command feedback reduction and selective XY reference invalidation. A global device/session feedback-loss event still invalidates all machine axes; an XY navigation failure does not discard an independent focus-Z reference.
+- Runtime and planner test targets are registered in CMake. They have been authored but not executed in this environment.
+
+The old `StageNavigationRuntime` and `StageNavigationControlQueue` remain as fixed-slot compatibility paths only. They are not the authoritative model and must not be extended for new slide workflows.
+
+Not yet integrated or implemented:
+- The SwiftUI application composition does not yet instantiate or bridge the generic C++ stage-navigation runtime to the physical driver.
+- The motor-driver/host adapter must provide the stage's actual axis specification, device correlation, command dispatch and feedback ingress.
+- The Z full-range sweep still needs its Application execution lifecycle: correlated `MoveAxesBy`, exact operation-step verification, calibrated-reference promotion, and abort handling for rejection, timeout, fault, cancellation or feedback loss.
+- Interactive CAD drawing/editing, undo/redo, persisted workspace/layout revisions and any physical holder clearance rule remain outstanding.
+- A stage-specific calibration workflow and recovery UI remain outstanding.
+
+Do not claim that the C++ runtime is physically connected to the microscope merely because the library type and test target exist.

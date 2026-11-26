@@ -182,6 +182,7 @@ The topology has two distinct levels. An **OpticalPath** is one ordered, directe
 - Cameras attach to appropriate output ports/paths, not merely to an objective.
 - OpticalElement components may declare typed installed functions such as phase plate, phase annulus, polarizer, analyzer, DIC prism, excitation/emission filter, dichroic mirror or darkfield stop.
 - A function capability may carry an OpticalCompatibilityId so physically mating elements can be matched without embedding behavior in their classes. Duplicate function/compatibility pairs on one component are rejected.
+- A ConfigurationProfile's OpticalFunctionRequirement may constrain the OpticalPathRole on which an installed function must occur. For example, a phase annulus is required on a selected Illumination route while its compatibility-matched phase plate is required on a selected Imaging route. A component elsewhere in the microscope or on the wrong selected route cannot satisfy that requirement.
 - The topology describes equipment; it is not a visual node editor, executable behavior graph or configuration resolver.
 - Configuration profiles select valid routes and component states in Phase 3.
 

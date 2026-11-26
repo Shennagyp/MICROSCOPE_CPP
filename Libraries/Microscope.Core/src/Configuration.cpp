@@ -60,6 +60,16 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool isKnownOpticalPathRole(OpticalPathRole value) noexcept {
+    switch (value) {
+    case OpticalPathRole::Imaging:
+    case OpticalPathRole::Illumination:
+    case OpticalPathRole::Other:
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool isKnownExposurePolicy(ExposurePolicy value) noexcept {
     switch (value) {
     case ExposurePolicy::Manual:
@@ -81,11 +91,15 @@ template <typename TValue>
 
 [[nodiscard]] bool containsOpticalPathComponent(
     const std::vector<const OpticalPath*>& paths,
-    const EquipmentComponentId& componentId) {
+    const EquipmentComponentId& componentId,
+    std::optional<OpticalPathRole> requiredPathRole = std::nullopt) {
     return std::any_of(
         paths.begin(),
         paths.end(),
-        [&componentId](const OpticalPath* path) {
+        [&componentId, &requiredPathRole](const OpticalPath* path) {
+            if (requiredPathRole && path->role() != *requiredPathRole) {
+                return false;
+            }
             return std::any_of(
                 path->steps().begin(),
                 path->steps().end(),
@@ -295,17 +309,20 @@ double ExposurePreset::exposureTimeMicroseconds() const noexcept {
 OpticalFunctionRequirement::OpticalFunctionRequirement(
     OpticalElementFunction function,
     std::optional<OpticalCompatibilityId> compatibilityId,
-    std::uint32_t minimumComponentCount)
+    std::uint32_t minimumComponentCount,
+    std::optional<OpticalPathRole> requiredPathRole)
     : function_(function),
       compatibilityId_(std::move(compatibilityId)),
-      minimumComponentCount_(minimumComponentCount) {}
+      minimumComponentCount_(minimumComponentCount),
+      requiredPathRole_(requiredPathRole) {}
 
 Result<
     OpticalFunctionRequirement,
     OpticalFunctionRequirementError> OpticalFunctionRequirement::create(
         OpticalElementFunction function,
         std::optional<OpticalCompatibilityId> compatibilityId,
-        std::uint32_t minimumComponentCount) {
+        std::uint32_t minimumComponentCount,
+        std::optional<OpticalPathRole> requiredPathRole) {
     if (!isKnownOpticalElementFunction(function)) {
         return Result<
             OpticalFunctionRequirement,
@@ -318,6 +335,12 @@ Result<
             OpticalFunctionRequirementError>::failure(
                 OpticalFunctionRequirementError::ZeroMinimumComponentCount);
     }
+    if (requiredPathRole && !isKnownOpticalPathRole(*requiredPathRole)) {
+        return Result<
+            OpticalFunctionRequirement,
+            OpticalFunctionRequirementError>::failure(
+                OpticalFunctionRequirementError::InvalidPathRole);
+    }
 
     return Result<
         OpticalFunctionRequirement,
@@ -325,7 +348,8 @@ Result<
             OpticalFunctionRequirement(
                 function,
                 std::move(compatibilityId),
-                minimumComponentCount));
+                minimumComponentCount,
+                requiredPathRole));
 }
 
 OpticalElementFunction OpticalFunctionRequirement::function() const noexcept {
@@ -340,6 +364,11 @@ OpticalFunctionRequirement::compatibilityId() const noexcept {
 std::uint32_t
 OpticalFunctionRequirement::minimumComponentCount() const noexcept {
     return minimumComponentCount_;
+}
+
+const std::optional<OpticalPathRole>&
+OpticalFunctionRequirement::requiredPathRole() const noexcept {
+    return requiredPathRole_;
 }
 
 ConfigurationProfile::ConfigurationProfile(
@@ -454,7 +483,9 @@ Result<
             if (requiredOpticalFunctions[i].function() ==
                     requiredOpticalFunctions[j].function() &&
                 requiredOpticalFunctions[i].compatibilityId() ==
-                    requiredOpticalFunctions[j].compatibilityId()) {
+                    requiredOpticalFunctions[j].compatibilityId() &&
+                requiredOpticalFunctions[i].requiredPathRole() ==
+                    requiredOpticalFunctions[j].requiredPathRole()) {
                 return Result<
                     ConfigurationProfile,
                     ConfigurationProfileError>::failure(
@@ -1152,7 +1183,15 @@ ConfigurationResolution ConfigurationResolver::resolve(
                 const bool allowedByProfile = std::any_of(
                     profile->requiredOpticalFunctions().begin(),
                     profile->requiredOpticalFunctions().end(),
-                    [component](const OpticalFunctionRequirement& requirement) {
+                    [component, &selectedPaths, &additionalComponentId](
+                        const OpticalFunctionRequirement& requirement) {
+                        if (requirement.requiredPathRole() &&
+                            !containsOpticalPathComponent(
+                                selectedPaths,
+                                additionalComponentId,
+                                requirement.requiredPathRole())) {
+                            return false;
+                        }
                         return std::any_of(
                             component->opticalFunctions().begin(),
                             component->opticalFunctions().end(),
@@ -1211,8 +1250,16 @@ ConfigurationResolution ConfigurationResolver::resolve(
                 component->kind() != EquipmentComponentKind::OpticalElement) {
                 continue;
             }
-            if (!selectedPaths.empty() &&
-                !containsOpticalPathComponent(selectedPaths, selectedComponentId)) {
+            if (requirement.requiredPathRole()) {
+                if (!containsOpticalPathComponent(
+                        selectedPaths,
+                        selectedComponentId,
+                        requirement.requiredPathRole())) {
+                    continue;
+                }
+            } else if (!selectedPaths.empty() &&
+                       !containsOpticalPathComponent(
+                           selectedPaths, selectedComponentId)) {
                 continue;
             }
 
@@ -1234,7 +1281,7 @@ ConfigurationResolution ConfigurationResolver::resolve(
             appendError(
                 diagnostics,
                 "configuration.optical_function.requirement_not_satisfied",
-                "The selected components do not satisfy a required optical function and compatibility count.",
+                "The selected components do not satisfy a required optical function, route-role, and compatibility count.",
                 "OpticalElementFunction",
                 requirement.compatibilityId()
                     ? std::optional<std::string>(requirement.compatibilityId()->value())

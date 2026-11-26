@@ -22,7 +22,8 @@ enum class ExposurePolicy {
 
 enum class OpticalFunctionRequirementError {
     InvalidFunction,
-    ZeroMinimumComponentCount
+    ZeroMinimumComponentCount,
+    InvalidPathRole
 };
 
 // A profile can require one or more installed optical functions. A compatibility
@@ -34,22 +35,27 @@ public:
         OpticalFunctionRequirementError> create(
             OpticalElementFunction function,
             std::optional<OpticalCompatibilityId> compatibilityId = std::nullopt,
-            std::uint32_t minimumComponentCount = 1);
+            std::uint32_t minimumComponentCount = 1,
+            std::optional<OpticalPathRole> requiredPathRole = std::nullopt);
 
     [[nodiscard]] OpticalElementFunction function() const noexcept;
     [[nodiscard]] const std::optional<OpticalCompatibilityId>&
     compatibilityId() const noexcept;
     [[nodiscard]] std::uint32_t minimumComponentCount() const noexcept;
+    [[nodiscard]] const std::optional<OpticalPathRole>&
+    requiredPathRole() const noexcept;
 
 private:
     OpticalFunctionRequirement(
         OpticalElementFunction function,
         std::optional<OpticalCompatibilityId> compatibilityId,
-        std::uint32_t minimumComponentCount);
+        std::uint32_t minimumComponentCount,
+        std::optional<OpticalPathRole> requiredPathRole);
 
     OpticalElementFunction function_;
     std::optional<OpticalCompatibilityId> compatibilityId_;
     std::uint32_t minimumComponentCount_;
+    std::optional<OpticalPathRole> requiredPathRole_;
 };
 
 enum class IlluminationIntensitySettingError {

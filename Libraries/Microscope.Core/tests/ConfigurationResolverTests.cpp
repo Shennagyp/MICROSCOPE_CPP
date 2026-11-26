@@ -539,9 +539,15 @@ void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
         {fixture.illuminationId},
         {},
         {take(OpticalFunctionRequirement::create(
-             OpticalElementFunction::PhasePlate, phaseCompatibilityId)),
+             OpticalElementFunction::PhasePlate,
+             phaseCompatibilityId,
+             1,
+             OpticalPathRole::Imaging)),
          take(OpticalFunctionRequirement::create(
-             OpticalElementFunction::PhaseAnnulus, phaseCompatibilityId))}));
+             OpticalElementFunction::PhaseAnnulus,
+             phaseCompatibilityId,
+             1,
+             OpticalPathRole::Illumination))}));
     const auto phaseCatalog =
         take(ConfigurationProfileCatalog::create({phaseProfile}));
     const auto phaseRequest = makeRequest(
@@ -555,6 +561,41 @@ void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
         fixture.equipment, phaseCatalog, phaseRequest);
     check(compatible.isResolved(),
           "accepts phase contrast when selected objective phase plate and condenser annulus share a compatibility identity");
+
+    const auto wrongRouteProfile = take(ConfigurationProfile::create(
+        makeId<ConfigurationProfileId>("profile-phase-wrong-route"),
+        ContrastMethod::PhaseContrast,
+        {fixture.objectiveId},
+        {fixture.condenserId},
+        {fixture.fullPathId, fixture.illuminationPathId, fixture.imagingPathId},
+        {fixture.cameraId},
+        {fixture.illuminationId},
+        {},
+        {take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhasePlate,
+             phaseCompatibilityId,
+             1,
+             OpticalPathRole::Illumination)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::PhaseAnnulus,
+             phaseCompatibilityId,
+             1,
+             OpticalPathRole::Imaging))}));
+    const auto wrongRouteCatalog =
+        take(ConfigurationProfileCatalog::create({wrongRouteProfile}));
+    const auto wrongRouteRequest = makeRequest(
+        fixture,
+        {fixture.illuminationPathId, fixture.imagingPathId},
+        fixture.cameraModeId,
+        ContrastMethod::PhaseContrast,
+        wrongRouteProfile.id());
+    const auto wrongRoute = ConfigurationResolver::resolve(
+        fixture.equipment, wrongRouteCatalog, wrongRouteRequest);
+    check(!wrongRoute.isResolved() &&
+          hasDiagnosticCode(
+              wrongRoute,
+              "configuration.optical_function.requirement_not_satisfied"),
+          "rejects phase hardware on incorrect optical path roles despite matching components and compatibility identity");
 
     const auto mismatchedCompatibilityId =
         makeId<OpticalCompatibilityId>("phase-compatibility-unsupported");
@@ -575,7 +616,7 @@ void testPhaseContrastRequiresMatchedPhasePlateAndAnnulus() {
         take(ConfigurationProfileCatalog::create({mismatchedProfile}));
     const auto mismatchedRequest = makeRequest(
         fixture,
-        {fixture.fullPathId},
+        {fixture.illuminationPathId, fixture.imagingPathId},
         fixture.cameraModeId,
         ContrastMethod::PhaseContrast,
         mismatchedProfile.id());
@@ -641,13 +682,25 @@ void testDicRequiresPolarizerAnalyzerAndTwoMatchedPrisms() {
         {fixture.illuminationId},
         {},
         {take(OpticalFunctionRequirement::create(
-             OpticalElementFunction::Polarizer, dicCompatibilityId)),
+             OpticalElementFunction::Polarizer,
+             dicCompatibilityId,
+             1,
+             OpticalPathRole::Illumination)),
          take(OpticalFunctionRequirement::create(
-             OpticalElementFunction::Analyzer, dicCompatibilityId)),
+             OpticalElementFunction::Analyzer,
+             dicCompatibilityId,
+             1,
+             OpticalPathRole::Imaging)),
          take(OpticalFunctionRequirement::create(
              OpticalElementFunction::DifferentialInterferencePrism,
              dicCompatibilityId,
-             2))}));
+             1,
+             OpticalPathRole::Illumination)),
+         take(OpticalFunctionRequirement::create(
+             OpticalElementFunction::DifferentialInterferencePrism,
+             dicCompatibilityId,
+             1,
+             OpticalPathRole::Imaging))}));
     const auto dicCatalog = take(ConfigurationProfileCatalog::create({dicProfile}));
 
     const auto polarizerId = makeId<EquipmentComponentId>("polarizer");
@@ -697,9 +750,15 @@ void testPolarizedLightProfileRequiresMatchedPolarizerAndAnalyzer() {
         {fixture.illuminationId},
         {},
         {take(OpticalFunctionRequirement::create(
-             OpticalElementFunction::Polarizer, compatibilityId)),
+             OpticalElementFunction::Polarizer,
+             compatibilityId,
+             1,
+             OpticalPathRole::Illumination)),
          take(OpticalFunctionRequirement::create(
-             OpticalElementFunction::Analyzer, compatibilityId))}));
+             OpticalElementFunction::Analyzer,
+             compatibilityId,
+             1,
+             OpticalPathRole::Imaging))}));
     const auto catalog = take(ConfigurationProfileCatalog::create({profile}));
     const auto polarizerId = makeId<EquipmentComponentId>("polarizer");
     const auto analyzerId = makeId<EquipmentComponentId>("analyzer");
@@ -742,6 +801,16 @@ void testOpticalFunctionRequirementFactoriesAndSelections() {
           zeroCount.error() ==
               OpticalFunctionRequirementError::ZeroMinimumComponentCount,
           "rejects an optical function requirement with zero minimum count");
+
+    auto invalidPathRole = OpticalFunctionRequirement::create(
+        OpticalElementFunction::PhasePlate,
+        std::nullopt,
+        1,
+        static_cast<OpticalPathRole>(255));
+    check(!invalidPathRole &&
+          invalidPathRole.error() ==
+              OpticalFunctionRequirementError::InvalidPathRole,
+          "rejects an unknown required optical path role");
 
     auto invalidFunction = OpticalFunctionRequirement::create(
         static_cast<OpticalElementFunction>(255));

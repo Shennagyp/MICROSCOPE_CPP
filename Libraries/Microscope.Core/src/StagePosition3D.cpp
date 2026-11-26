@@ -224,6 +224,11 @@ StagePosition3D::positionOnSlide(const StageWorkingSurface2D& surface, const Sli
     if (!linearUnit(x_.unit()) || !linearUnit(y_.unit()))
         return Result<SlidePositionEstimate2D, StagePosition3DError>::failure(
             StagePosition3DError::AxisUnitMismatch);
+    // Resolve the requested Slide identity before examining coordinate
+    // availability: an empty workspace has no slide-local frame to project into.
+    if (!surface.placementFor(id))
+        return Result<SlidePositionEstimate2D, StagePosition3DError>::failure(
+            StagePosition3DError::SlideNotFound);
     if (!x_.positionIsUsable() || !y_.positionIsUsable() ||
         !x_.position() || !y_.position())
         return Result<SlidePositionEstimate2D, StagePosition3DError>::failure(
@@ -231,10 +236,6 @@ StagePosition3D::positionOnSlide(const StageWorkingSurface2D& surface, const Sli
     if (!x_.accumulatedPositionErrorBound() || !y_.accumulatedPositionErrorBound())
         return Result<SlidePositionEstimate2D, StagePosition3DError>::failure(
             StagePosition3DError::PositionUncertaintyUnknown);
-    if (!surface.placementFor(id))
-        return Result<SlidePositionEstimate2D, StagePosition3DError>::failure(
-            StagePosition3DError::SlideNotFound);
-
     const StagePoint2D machine{
         toMicrometers(x_.position()->value(), x_.unit()),
         toMicrometers(y_.position()->value(), y_.unit())

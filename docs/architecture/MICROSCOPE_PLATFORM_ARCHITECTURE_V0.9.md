@@ -374,6 +374,19 @@ Examples:
 - Phase contrast and polarization may be composed only when their combined optical arrangement is physically supported: required elements must occupy their proper conjugate/pupil planes, the polarizer/analyzer state must not invalidate the phase arrangement, and all technique-specific settings must be jointly satisfiable. The resolver must not infer compatibility merely because both functions are present.
 - Changing the selected imaging route can change the available camera and output modes, the total optical magnification, and the applicable optical calibration.
 
+#### Current C++ implementation boundary
+
+The following is the source-level state on the current v0.9 branch; it distinguishes implemented behavior from the target resolver contract:
+
+- **LightPath/camera ownership is implemented.** LightPath references route IDs; each Imaging route terminates at an ImagingDevice component with a CameraSpecification on the same component identity. cameraEndpointIds() derives the connected endpoints. There is no independent camera list inside LightPath, and there should not be one.
+- **Camera resolution is partially integrated.** LightPathCameraResolver derives camera/output-mode candidates and supports manual selection only among endpoints of the selected LightPath. LightPathConfigurationRequestFactory derives the route set and revision-binds that selection. ConfigurationResolver validates the binding. The canonical public request is not yet LightPath-first.
+- **Whole-configuration resolution remains selection-driven.** ConfigurationRequest still requires exact objective, condenser, camera, camera mode, illumination device/channel and route identities. ConfigurationResolver validates those choices against a profile and equipment definition; it does not yet enumerate full objective/condenser/filter/illumination/route alternatives or return a complete discovered configuration.
+- **OperationMode persistence already exists, but its semantics are still narrow.** The current revisioned OperationMode stores one ContrastMethod and per-LightPath calibrated irradiance settings. MicroscopeConfigurationSqliteStore persists its revisions and calibration references. It does not yet persist a composable technique set or required/preferred objective binding.
+- **Sample constraints are portable but are not yet composable end-to-end.** MicroscopyRequirements stores a vector of technique constraints but currently rejects more than one Required technique. SampleMicroscopyRequirementAssessor evaluates the already-resolved single contrast method and selected components; it is a post-resolution compatibility check, not the candidate resolver.
+- **Equipment constitution persistence remains outstanding.** The Core equipment aggregate is revisioned, and camera model catalog/binding plus mode/calibration persistence exist, but the full per-microscope component/port/connection/path/specification/LightPath constitution does not yet have its own durable store.
+
+Do not describe the above partial pieces as a complete automatic resolver. The next coherent change must migrate OperationMode, sample requirements, configuration request/resolution and transition planning together, while extending the existing SQLite mode store rather than creating a competing OperationMode repository.
+
 The implementation must not assume a universal hardcoded filter sequence for every microscope.
 
 Profile settings are desired targets, not hardware state. The optional condenser aperture target must be inside the selected condenser's declared aperture-NA range. An illumination intensity target carries an explicit unit and must be supported by the selected channel's continuous control range with the exact same unit. An exposure preset must be inside the selected camera's declared exposure-time range; a preset cannot be accepted when the camera declares no exposure-time capability range.

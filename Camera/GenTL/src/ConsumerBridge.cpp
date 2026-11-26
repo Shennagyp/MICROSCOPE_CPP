@@ -95,7 +95,20 @@ Consumer ConsumerBridge::createProducer(
             : std::string("The GenTL Consumer rejected the CTI Producer.");
         throw std::runtime_error(message);
     }
-    return Consumer(shared_from_this(), context);
+    return Consumer(
+        shared_from_this(), context,
+        [](const void* owner, void* producerContext, Operation operation,
+           const std::uint64_t* arguments, std::uint32_t argumentCount) noexcept {
+            const auto* bridge = static_cast<const ConsumerBridge*>(owner);
+            if (!bridge || !bridge->invoke_) return -1006; // GC_ERR_INVALID_HANDLE
+            return bridge->invoke_(
+                producerContext, static_cast<std::uint32_t>(operation),
+                arguments, argumentCount);
+        },
+        [](const void* owner, void* producerContext) noexcept {
+            const auto* bridge = static_cast<const ConsumerBridge*>(owner);
+            if (bridge && bridge->destroy_) bridge->destroy_(producerContext);
+        });
 }
 
 std::uint32_t ConsumerBridge::bridgeAbiVersion() const noexcept {
@@ -107,9 +120,14 @@ std::uint32_t ConsumerBridge::genTLHeaderVersion() const noexcept {
 }
 
 Consumer::Consumer(
-    std::shared_ptr<const ConsumerBridge> owner,
-    void* context) noexcept
-    : owner_(std::move(owner)), context_(context) {}
+    std::shared_ptr<const void> owner,
+    void* context,
+    InvokeFunction invoke,
+    DestroyFunction destroy) noexcept
+    : owner_(std::move(owner)),
+      context_(context),
+      invoke_(invoke),
+      destroy_(destroy) {}
 
 Consumer::~Consumer() {
     reset();
@@ -117,42 +135,46 @@ Consumer::~Consumer() {
 
 Consumer::Consumer(Consumer&& other) noexcept
     : owner_(std::move(other.owner_)),
-      context_(std::exchange(other.context_, nullptr)) {}
+      context_(std::exchange(other.context_, nullptr)),
+      invoke_(std::exchange(other.invoke_, nullptr)),
+      destroy_(std::exchange(other.destroy_, nullptr)) {}
 
 Consumer& Consumer::operator=(Consumer&& other) noexcept {
     if (this != &other) {
         reset();
         owner_ = std::move(other.owner_);
         context_ = std::exchange(other.context_, nullptr);
+        invoke_ = std::exchange(other.invoke_, nullptr);
+        destroy_ = std::exchange(other.destroy_, nullptr);
     }
     return *this;
 }
 
 void Consumer::reset() noexcept {
-    if (context_ && owner_) {
-        owner_->destroy_(context_);
+    if (context_ && owner_ && destroy_) {
+        destroy_(owner_.get(), context_);
     }
     context_ = nullptr;
+    invoke_ = nullptr;
+    destroy_ = nullptr;
     owner_.reset();
 }
 
 Consumer::operator bool() const noexcept {
-    return context_ != nullptr && owner_ != nullptr;
+    return context_ != nullptr && owner_ != nullptr && invoke_ != nullptr;
 }
 
 std::int32_t Consumer::invokeRaw(
     Operation operation,
     const std::uint64_t* arguments,
     std::uint32_t argumentCount) const noexcept {
-    if (!context_ || !owner_) {
+    if (!context_ || !owner_ || !invoke_) {
         return -1006; // GC_ERR_INVALID_HANDLE
     }
     if (argumentCount != 0 && !arguments) {
         return -1009; // GC_ERR_INVALID_PARAMETER
     }
-    return owner_->invoke_(
-        context_, static_cast<std::uint32_t>(operation),
-        arguments, argumentCount);
+    return invoke_(owner_.get(), context_, operation, arguments, argumentCount);
 }
 
 } // namespace camera::gentl

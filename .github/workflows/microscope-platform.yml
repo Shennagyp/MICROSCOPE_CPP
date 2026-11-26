@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: microscope-platform-v2-${{ github.ref }}
+  group: microscope-platform-v3-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

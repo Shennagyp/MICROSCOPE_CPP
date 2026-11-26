@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
     std::optional<std::string> selectedId;
     int selectionChanges = 0;
     panel.setSelectionChangedHandler([&](std::optional<std::string> id) {
-        selectedId = std::move(id);
+        selectedId = id;
         ++selectionChanges;
     });
 
@@ -195,6 +195,10 @@ int main(int argc, char** argv) {
     }
 
     panel.setDevices({});
+    if (selectedId.has_value()) {
+        fail("Empty discovery did not clear the selected device ID.");
+        return EXIT_FAILURE;
+    }
     state = {};
     panel.setState(state);
     if (selector->count() != 0 || open->isEnabled()) {

@@ -65,6 +65,7 @@ set_target_properties(amscope_vendor PROPERTIES IMPORTED_LOCATION "${AMSCOPE_VEN
 
 add_library(amscope_driver SHARED
     src/AmcamCamera.cpp
+    src/AmcamFeatureAccessValidation.h
     src/AmcamCameraProfiles.cpp
     src/AmcamEventQueue.h
     src/AmcamSessionPrimitives.h
@@ -157,6 +158,17 @@ if(BUILD_TESTING)
     target_compile_features(amscope_profile_tests PRIVATE cxx_std_17)
     target_include_directories(amscope_profile_tests PRIVATE include)
     add_test(NAME amscope_profile_tests COMMAND amscope_profile_tests)
+
+    add_executable(amscope_feature_access_validation_tests
+        tests/AmcamFeatureAccessValidationTests.cpp
+        src/AmcamFeatureAccessValidation.h)
+    target_compile_features(amscope_feature_access_validation_tests PRIVATE cxx_std_17)
+    target_include_directories(amscope_feature_access_validation_tests PRIVATE
+        src
+        "${AMSCOPE_VENDOR_INCLUDE_DIR}")
+    target_link_libraries(amscope_feature_access_validation_tests PRIVATE Camera::Common)
+    add_test(NAME amscope_feature_access_validation_tests
+        COMMAND amscope_feature_access_validation_tests)
 
     add_executable(amscope_event_queue_tests
         tests/AmcamEventQueueTests.cpp

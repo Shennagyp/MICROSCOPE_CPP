@@ -206,8 +206,8 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 - Separate the independent optical dimensions instead of treating one ContrastMethod enum as the entire acquisition intent: at minimum represent illumination geometry (transmitted/reflected), imaging modality (widefield/spinning-disk/point-scanning where supported), and the selected contrast/optical techniques. A mode may compose multiple technique definitions; explicit incompatibility rules decide whether the union is physically realizable.
 - Evolve OperationMode into an editable, revisioned aggregate containing a set of TechniqueIds, objective constraints, optional microscope-specific objective bindings and existing per-LightPath operating/calibration settings. Preserve manual operation: exact component selections remain optional hard constraints; omitted identities activate equipment-based discovery.
 - Add required and preferred objective bindings scoped to one microscope/equipment revision. A required objective ID is a hard constraint and cannot silently fall back. A preferred objective ID ranks otherwise valid candidates and may fall back with a warning if unavailable. A selected manual objective remains selected when physically valid, even if a soft preference ranks another candidate higher.
-- Keep portable specimen/task constraints separate from microscope-specific identities. Extend ObjectiveMicroscopyRequirements with a soft NA preference/ranking input where needed (for example, a pathology profile may prefer 0.75 NA); do not encode an H&E-specific component ID or a universal hard-coded lens choice in SampleType.
-- Migrate OperationMode, ConfigurationRequest/ResolvedConfiguration, Sample MicroscopyRequirements and SampleMicroscopyRequirementAssessor together. Current OperationMode and ConfigurationRequest each store one ContrastMethod; MicroscopyRequirements permits a vector but currently rejects more than one Required technique; the assessor validates only the resolved single contrast method. Multiple required techniques become conjunctive constraints only when their TechniqueDefinition combination rules permit them. Removing MultipleRequiredTechniques alone would create an invalid half-migration.
+- Keep SampleType as a reusable, versioned technical requirement profile. Its microscopy and optional slide-preparation requirements remain portable across microscope models; it may express NA ranges, allowed/required techniques, camera/condenser/illumination constraints and preparation limits, but never microscope-specific component IDs.
+- Migrate OperationMode, ConfigurationRequest/ResolvedConfiguration, SampleType requirements, Slide details and the requirement assessor together. The assessor must evaluate the selected Slide's actual preparation facts and exact SampleType revision against the resolved configuration. It must not accept a Sample or Patient entity. Current OperationMode and ConfigurationRequest each store one ContrastMethod; MicroscopyRequirements permits a vector but currently rejects more than one Required technique. Multiple required techniques become conjunctive constraints only when their TechniqueDefinition combination rules permit them.
 - Merge technique contributions explicitly and report conflicts when multiple selected techniques demand incompatible components, pupil geometry, routes or settings. Never use last-write-wins for shared settings.
 - Core remains persistence-free. Extend the existing Application MicroscopeConfigurationSqliteStore and its revision/schema migration for the expanded OperationMode; do not create a second competing mode store. The mode/calibration SQLite persistence already exists. Implement the separate durable microscope-equipment-constitution store in Application; it is currently outstanding. Core receives the exact loaded typed equipment/mode values from memory.
 
@@ -247,7 +247,7 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 - For camera-based widefield sampling, calculate (p_obj,a = p_sensor,a * s_a / M_eff) on both axes and require r_lat/p_obj,a >= k (default k=2.3). Keep k as an explicit policy factor, not a Rayleigh constant. The equivalent M_eff lower bound must be computed from the selected camera's pitch and readout mapping on both axes. Nikon documents a 2.3–4× range for high-resolution imaging; the selected project default is 2.3 and remains configurable.
 - In spinning-disk confocal, distinguish system magnification before the disk (affects back-projected pinhole) from camera relay magnification after the disk (affects detector sampling but not pinhole projection). Do not put both factors into one undifferentiated M_eff for pinhole calculations. Point-scanning confocal uses virtual scan-pixel spacing and scan zoom rather than camera sensor pitch; unsupported detector configurations must return unknown.
 - The resolution wavelength must be selected from the mode's declared spectral model, not blindly from the illuminator's nominal peak. For broadband visible brightfield, preserve the selected wavelength/reference-band policy and its provenance; for fluorescence, retain excitation and emission bands separately.
-- Candidate ranking occurs only after all hard NA, optical geometry, path, camera-sampling, working-distance, correction, immersion and field constraints pass. Use specimen/task profile preferences and microscope-specific mode preferences as soft ranking inputs. For example, H&E may prefer 20×/0.75 NA over 20×/0.4 NA when both are physically suitable and adequately sampled; do not hard-code the H&E label to a specific objective. The user's valid manual choice is preserved and may receive a preference warning.
+- Candidate ranking occurs only after all hard NA, optical geometry, path, camera-sampling, working-distance, correction, immersion and field constraints pass. Use SampleType technical preferences and microscope-specific OperationMode preferences as soft ranking inputs. A SampleType may express a preferred NA range or technique, but not a microscope-specific objective ID. The user's valid manual choice is preserved and may receive a preference warning.
 
 **3F–3H acceptance**
 - A 20× phase request discovers a valid matched phase plate/annulus without requiring the user to name those components; the annulus may be on the selected illumination route and the phase plate on the selected imaging route.
@@ -419,21 +419,16 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 
 **Exit:** Core can navigate to any accepted point on either registered slide with a traceable physical error bound; both slide maps remain independent; homing does not imply slide re-registration or erase motion-calibration error.
 
-### Phase 7 — Sample, slides and persistence
-- Define distinct strong identity types for SampleId, SlideId and TileId; identifiers are opaque and independent of labels, paths and display order.
-- Define Sample and SampleType as source-specimen identity and taxonomy.
-- Define Slide and SlideType as physical preparation identity and taxonomy.
-- Enforce the baseline relationship: each Slide references exactly one existing Sample; one Sample may have many Slides.
-- Make Slide.SampleId the authoritative relationship. Do not persist an authoritative SlideIds collection on Sample; provide reverse lookup through a query/index.
-- Define the Sample record fields: stable SampleId, SampleTypeId when classified, display label, optional external accession and source/collection metadata.
-- Define the Slide record fields: stable SlideId, required SampleId, SlideTypeId when classified, display label, physical SlideGeometry, versioned preparation snapshot and package reference.
-- Persist each Slide's independent registration and four corner correspondences, fit residuals, provenance and calibration revision.
-- Define Tile metadata: stable TileId/SlideId, optional display label/order hint and optional slide-local/stage-machine position evidence; never treat display order as physical coordinates.
-- Define the versioned SlideConfigurationSnapshot and immutable Sample/Slide identity semantics.
-- Make Tile belong to one Slide; permit no physical position and do not interpret ordering/index as coordinates.
-- Define archive/deletion constraints: Sample archival does not cascade-delete slides or image data; a referenced Sample cannot be destructively deleted.
-- Define independent Sample and Slide package persistence. Slide packages retain SampleId and remain independently movable; the Sample record is not duplicated inside the Slide package as another authority.
-- Implement on-demand object materialization: load a Sample, Slide, Tile, document or acquisition aggregate when it is opened or first required by a workflow, not by loading the entire workspace at startup.
+### Phase 7 — SampleType, independent slides and persistence
+- Retain SampleType as a versioned reusable requirement profile. It contains microscopy requirements and optional slide-preparation requirements, with no patient, individual Sample or accession identity.
+- Remove the Sample instance model, SampleId and all Sample-parent ownership semantics. Do not introduce a Sample table/package or a reverse Sample-to-Slide collection.
+- Remove SlideType as a separate taxonomy. Reusable allowed-preparation requirements belong to SampleType; actual preparation facts belong to each Slide.
+- Define Slide with a stable SlideId/revision, required SampleTypeId and exact SampleTypeRevision, display label, physical SlideGeometry and actual preparation/details snapshot.
+- Add optional OriginLabId as an opaque external reference on Slide. If IDs are only unique within a source system, persist its namespace/issuer with the value. Do not create a Lab entity or perform lab lookups.
+- Persist each Slide's independent stage registration and four corner correspondences, fit residuals, provenance and calibration revision. Registration remains mechanical and independent of SampleType.
+- Define acquisition-field metadata as a run-owned optional field/target, with optional slide-local/stage-machine position evidence. Display order is never a physical coordinate.
+- A SampleType can be referenced by many Slides; each Slide references exactly one SampleType revision. Do not store an authoritative SlideIds collection on SampleType; provide a query by SampleTypeId.
+- Implement on-demand materialization for SampleType, Slide, registration, acquisition and image aggregates; do not load the entire imaging workspace at startup.
 - Retain each active persistent identity as one canonical in-memory object within its workspace/runtime scope; consumers access it through its owner API or read-only projections, and only the designated owner mutates it.
 - Load required related metadata in bounded batches. Do not use database-backed lazy properties, getter-triggered reads, per-command rereads or N+1 relationship loading.
 - Apply changes to the resident object and persist at explicit transaction/save or recovery-checkpoint boundaries. A failed save must retain the dirty in-memory object; it must not be replaced by a stale reload.
@@ -441,26 +436,26 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 - Keep large image payloads file-backed or tile/frame-decoded through bounded buffers while their document and metadata objects remain resident.
 - Define portable relative payload references and a rebuildable workspace catalog/index.
 - Define deterministic safe storage-key encoding/mapping for opaque IDs; do not use raw IDs as filesystem path segments.
-- Enforce mandatory active slide session in Core.
-- Support opening/browsing Sample and Slide packages without a microscope connected.
+- Require a valid Slide and stage registration only for operations that actually navigate in slide-local coordinates. Direct camera capture and calibration-target workflows must not require an artificial Sample/Slide parent record.
+- Support opening/browsing Slide records and SampleType definitions without a microscope connected.
 
-**Exit:** one sample can have many slides; the two carrier slots independently reference persistent Slide identities; registration does not change Slide/Sample ownership; unpositioned fields remain valid.
+**Exit:** one SampleType definition can be referenced by many independent Slide records; no SampleId relationship exists; optional OriginLabId is preserved as an external reference; stage registration remains independent from SampleType; unpositioned acquisition fields remain valid.
 
 ### Phase 8 — Acquisition
 - Define distinct AcquisitionPlanId, AcquisitionRunId and ImageFrameId identities.
-- Associate each AcquisitionPlan with exactly one Slide; freeze its intended settings when execution begins.
-- Associate each AcquisitionRun with exactly one Slide, one AcquisitionPlan and the actual MicroscopeId used.
-- Resolve the Sample context through Slide.SampleId rather than maintaining a second editable Sample relationship on the run.
-- Define Tile as a stable field identity: a run can produce multiple tiles, and a tile can receive frames from multiple runs.
-- Require each ImageFrame to reference exactly one AcquisitionRun and one Tile belonging to that run's Slide.
-- Define ImageFrame metadata: immutable frame identity, run/tile references, payload reference and integrity metadata, capture timestamp, delivered dimensions/pixel format, camera/readout context and actual settings when available.
+- Allow an AcquisitionPlan and AcquisitionRun to reference a Slide when the acquisition targets a physical slide; that reference is optional for calibration and direct imaging.
+- When a Slide is referenced, capture its exact Slide revision and SampleTypeId/revision used for assessment in the immutable plan/run snapshot. Preserve OriginLabId only when supplied and needed for external correlation.
+- Remove the Sample context lookup through Slide.SampleId; no SampleId exists in this model.
+- Define AcquisitionField as a run-owned field/target. A run can contain multiple fields; repeat acquisitions create new frames against the relevant run/field provenance.
+- Require each ImageFrame to reference exactly one AcquisitionRun and, when field-addressed, one AcquisitionField belonging to that run.
+- Define ImageFrame metadata: immutable frame identity, run/field references, payload reference and integrity metadata, capture timestamp, delivered dimensions/pixel format, camera/readout context and actual settings when available.
 - Preserve original frame payloads immutably and separate payload storage from capture metadata.
 - Keep requested values distinct from actual device observations; missing readbacks remain unknown.
 - Commit a recoverable run identity before dispatch; persist payload/integrity metadata before publishing a frame as available.
 - Add optional position evidence, explicit missing/failed frames, Z planes, exposure brackets and partial-run persistence.
 - Integrate existing camera frame delivery through its adapter without changing the existing bounded frame/lease/preview pipeline.
 
-**Exit:** plans and actual runs remain distinct; every frame has valid run/tile provenance; repeated acquisitions can contribute to an existing tile; cross-slide frame references are rejected; incomplete runs recover correctly; original frames remain immutable; no additional preview queues or pixel copies are introduced.
+**Exit:** plans and actual runs remain distinct; slide-targeted runs retain the exact Slide and SampleType revisions used; direct/calibration captures work without a Slide; every frame has valid run/field provenance; incomplete runs recover correctly; original frames remain immutable; no additional preview queues or pixel copies are introduced.
 
 ### Phase 9 — Image documents and annotation
 - Define persistent annotation document and geometry types.
@@ -482,8 +477,8 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 ## Verification strategy
 
 - **Static/model validation:** identity integrity, graph/topology consistency, schema validation and dependency direction.
-- **Sample/slide contract tests:** unknown SampleId rejection, Sample-to-many-Slides cardinality, distinct SampleType/SlideType semantics, stable IDs after folder moves, non-authoritative reverse indexes and archive/deletion referential integrity.
-- **Acquisition contract tests:** plan/run distinction, actual MicroscopeId capture, one-slide run constraint, frame-to-run/tile consistency, cross-slide rejection, multi-tile runs, repeated tile acquisition, idempotent duplicate frame delivery and interrupted-run recovery.
+- **SampleType/slide contract tests:** SampleType revision pinning, many Slides referencing one SampleType, rejection of unknown SampleType revisions, actual slide-details assessment, optional OriginLabId round-trip, no SampleId or SlideTypeId dependency, stable identities after storage moves and revision-safe updates.
+- **Acquisition contract tests:** plan/run distinction, actual MicroscopeId capture, optional Slide context, SampleType revision snapshot consistency, frame-to-run/field consistency, multiple fields, idempotent duplicate frame delivery and interrupted-run recovery.
 - **Pure unit tests:** configuration resolution, calibration fitting, unit conversion, transition planning and state reducers.
 - **Runtime contract tests:** simulated adapter responses, delayed callbacks, duplicates, stale/late events, queue saturation/feedback-loss latching, reconciliation before verification, timeout, failure and manual confirmation.
 - **Application integration tests:** definition loading, adapter registration, resource conflicts, runtime lifecycle and frontend projections.

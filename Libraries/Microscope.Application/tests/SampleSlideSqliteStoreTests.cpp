@@ -1,5 +1,7 @@
 #include "microscope/application/persistence/SampleSlideSqliteStore.h"
 
+#include <sqlite3.h>
+
 #include <chrono>
 #include <filesystem>
 #include <iostream>
@@ -410,6 +412,73 @@ void testConcurrentStoreHandlesRejectStaleRevisionWriters() {
     removeDatabaseFiles(path);
 }
 
+void testImmutableRevisionRowsRejectDirectSqlMutation() {
+    const auto path = uniqueDatabasePath("microscope-immutable-rows-");
+    const auto typeId = makeId<SampleTypeId>("sample-type-immutable");
+    const auto slideId = makeId<SlideId>("slide-immutable");
+    {
+        auto opened = SampleSlideSqliteStore::open(path);
+        check(static_cast<bool>(opened), "opens the immutable-row persistence store");
+        if (!opened) {
+            removeDatabaseFiles(path);
+            return;
+        }
+        auto store = std::move(opened).value();
+        const auto sampleType = makeSampleType(typeId, 1, "Immutable SampleType");
+        const auto slide = makeSlide(slideId, 1, sampleType);
+        check(store->saveSampleTypeRevision(sampleType, 0).isSuccess(),
+              "writes SampleType revision before immutability checks");
+        check(store->saveSlideRevision(slide, 0).isSuccess(),
+              "writes Slide revision before immutability checks");
+
+        sqlite3* direct = nullptr;
+        const int openedDirect = sqlite3_open(path.c_str(), &direct);
+        check(openedDirect == SQLITE_OK && direct != nullptr,
+              "opens an independent SQLite connection for adversarial mutation");
+        if (openedDirect == SQLITE_OK && direct != nullptr) {
+            const auto execute = [direct](const char* sql) {
+                char* error = nullptr;
+                const int result = sqlite3_exec(direct, sql, nullptr, nullptr, &error);
+                sqlite3_free(error);
+                return result;
+            };
+            const int updateType = execute(
+                "UPDATE sample_type_revision SET payload = zeroblob(1) "
+                "WHERE sample_type_id = 'sample-type-immutable' AND revision = 1");
+            const int deleteType = execute(
+                "DELETE FROM sample_type_revision "
+                "WHERE sample_type_id = 'sample-type-immutable' AND revision = 1");
+            const int updateSlide = execute(
+                "UPDATE slide_revision SET payload = zeroblob(1) "
+                "WHERE slide_id = 'slide-immutable' AND revision = 1");
+            const int deleteSlide = execute(
+                "DELETE FROM slide_revision "
+                "WHERE slide_id = 'slide-immutable' AND revision = 1");
+            check((updateType & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects direct mutation of immutable SampleType revisions");
+            check((deleteType & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects direct deletion of immutable SampleType revisions");
+            check((updateSlide & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects direct mutation of immutable Slide revisions");
+            check((deleteSlide & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects direct deletion of immutable Slide revisions");
+            sqlite3_close_v2(direct);
+        } else if (direct != nullptr) {
+            sqlite3_close_v2(direct);
+        }
+
+        const auto loadedType = store->loadSampleTypeRevision(typeId, 1);
+        const auto loadedSlide = store->loadSlideRevision(slideId, 1);
+        check(loadedType && loadedType.value() &&
+              loadedType.value()->name() == "Immutable SampleType",
+              "rejected direct writes leave the SampleType payload unchanged");
+        check(loadedSlide && loadedSlide.value() &&
+              loadedSlide.value()->sampleTypeRevision() == 1,
+              "rejected direct writes leave the Slide payload and exact revision binding unchanged");
+    }
+    removeDatabaseFiles(path);
+}
+
 void testStoreReopensAndResolvesHistoricalSlideAndSampleType() {
     const auto path = uniqueDatabasePath("microscope-slide-reopen-");
     const auto typeId = makeId<SampleTypeId>("sample-type-reopen");
@@ -454,6 +523,7 @@ int main() {
     testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation();
     testSlideCannotReferenceAnUnpersistedSampleTypeRevision();
     testConcurrentStoreHandlesRejectStaleRevisionWriters();
+    testImmutableRevisionRowsRejectDirectSqlMutation();
     testStoreReopensAndResolvesHistoricalSlideAndSampleType();
 
     if (failures != 0) {

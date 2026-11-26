@@ -78,104 +78,6 @@ void appendDiagnostic(
     return camera.outputModes().front().id();
 }
 
-[[nodiscard]] std::size_t findCandidateIndex(
-    const std::vector<LightPathCameraCandidate>& candidates,
-    const EquipmentComponentId& cameraId) noexcept {
-    for (std::size_t index = 0; index < candidates.size(); ++index) {
-        if (candidates[index].cameraComponentId == cameraId) {
-            return index;
-        }
-    }
-    return candidates.size();
-}
-
-[[nodiscard]] bool appendSuitability(
-    LightPathCameraCandidate& candidate,
-    const CameraSpecification& camera,
-    const std::optional<FluorescenceCameraRequirements>& requirements,
-    Diagnostics& diagnostics) {
-    if (!requirements) {
-        return true;
-    }
-
-    candidate.suitability = CameraSuitabilityAssessor::assessFluorescence(
-        camera, *requirements);
-    for (const auto& warning : candidate.suitability->warnings) {
-        diagnostics.push_back(warning);
-    }
-    return true;
-}
-
-[[nodiscard]] bool isUniqueBestCandidate(
-    const std::vector<LightPathCameraCandidate>& candidates,
-    const std::vector<const CameraSpecification*>& specifications,
-    const FluorescenceCameraRequirements& requirements,
-    std::size_t& bestIndex) noexcept {
-    if (candidates.size() < 2 ||
-        candidates.size() != specifications.size()) {
-        return false;
-    }
-
-    std::optional<std::size_t> uniqueBest;
-    for (std::size_t candidateIndex = 0;
-         candidateIndex < candidates.size();
-         ++candidateIndex) {
-        if (!candidates[candidateIndex].suitability) {
-            continue;
-        }
-
-        bool strictlyBetterThanAll = true;
-        for (std::size_t otherIndex = 0;
-             otherIndex < candidates.size();
-             ++otherIndex) {
-            if (candidateIndex == otherIndex) {
-                continue;
-            }
-            if (!candidates[otherIndex].suitability ||
-                !CameraSuitabilityAssessor::shouldRecommendBefore(
-                    *specifications[candidateIndex],
-                    *candidates[candidateIndex].suitability,
-                    *specifications[otherIndex],
-                    *candidates[otherIndex].suitability,
-                    requirements) ||
-                CameraSuitabilityAssessor::shouldRecommendBefore(
-                    *specifications[otherIndex],
-                    *candidates[otherIndex].suitability,
-                    *specifications[candidateIndex],
-                    *candidates[candidateIndex].suitability,
-                    requirements)) {
-                strictlyBetterThanAll = false;
-                break;
-            }
-        }
-
-        if (strictlyBetterThanAll) {
-            if (uniqueBest) {
-                return false;
-            }
-            uniqueBest = candidateIndex;
-        }
-    }
-
-    if (!uniqueBest) {
-        return false;
-    }
-
-    bestIndex = *uniqueBest;
-    return true;
-}
-
-LightPathCameraResolution makeResolution(
-    LightPathCameraResolutionStatus status,
-    std::optional<ResolvedLightPathCamera> selected,
-    std::vector<LightPathCameraCandidate> candidates,
-    Diagnostics diagnostics) {
-    return LightPathCameraResolution(
-        status,
-        std::move(selected),
-        std::move(candidates),
-        std::move(diagnostics));
-}
 
 } // namespace
 
@@ -230,7 +132,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             "light_path_camera.path_unknown",
             "The requested LightPath is not part of this microscope equipment definition.",
             lightPathId.value());
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Unsupported,
             std::nullopt, {}, std::move(diagnostics));
     }
@@ -242,7 +144,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             "light_path_camera.operation_mode_microscope_mismatch",
             "The selected operation mode belongs to a different microscope.",
             lightPathId.value());
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Unsupported,
             std::nullopt, {}, std::move(diagnostics));
     }
@@ -254,7 +156,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             "light_path_camera.path_not_configured_by_mode",
             "The selected operation mode does not contain a setting for this LightPath.",
             lightPathId.value());
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Unsupported,
             std::nullopt, {}, std::move(diagnostics));
     }
@@ -267,7 +169,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             "light_path_camera.no_imaging_camera_endpoint",
             "The selected LightPath has no connected camera endpoint on an Imaging route.",
             lightPathId.value());
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Unsupported,
             std::nullopt, {}, std::move(diagnostics));
     }
@@ -283,7 +185,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             "The manually selected camera is not connected to an Imaging route in the selected LightPath. The selection cannot be used for this configuration.",
             lightPathId.value(),
             manuallySelectedCameraId->value());
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Unsupported,
             std::nullopt, {}, std::move(diagnostics));
     }
@@ -324,7 +226,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                     "The manually selected camera does not support the requested output mode.",
                     lightPathId.value(),
                     endpointId.value());
-                return makeResolution(
+                return LightPathCameraResolution(
                     LightPathCameraResolutionStatus::Unsupported,
                     std::nullopt, {}, std::move(diagnostics));
             }
@@ -346,7 +248,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 "No camera endpoint on this LightPath supports the requested camera output mode.",
                 lightPathId.value());
         }
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Unsupported,
             std::nullopt, {}, std::move(diagnostics));
     }
@@ -365,14 +267,14 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 "The selected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
                 candidate.cameraComponentId.value());
-            return makeResolution(
+            return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::InputRequired,
                 std::nullopt,
                 std::move(candidates),
                 std::move(diagnostics));
         }
 
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Resolved,
             ResolvedLightPathCamera{
                 lightPathId, candidate.cameraComponentId, *selectedModeId},
@@ -385,7 +287,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             candidate.recommended = candidates.size() == 1;
         }
         if (candidates.size() == 1) {
-            return makeResolution(
+            return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::Resolved,
                 ResolvedLightPathCamera{
                     lightPathId,
@@ -407,7 +309,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 "The connected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
                 candidates.front().cameraComponentId.value());
-            return makeResolution(
+            return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::InputRequired,
                 std::nullopt,
                 std::move(candidates),
@@ -415,7 +317,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
         }
 
         candidates.front().recommended = true;
-        return makeResolution(
+        return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Resolved,
             ResolvedLightPathCamera{
                 lightPathId,
@@ -435,7 +337,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 ? cameraModeId
                 : singleOutputModeId(*specifications[bestIndex]);
             if (selectedModeId) {
-                return makeResolution(
+                return LightPathCameraResolution(
                     LightPathCameraResolutionStatus::Resolved,
                     ResolvedLightPathCamera{
                         lightPathId,
@@ -452,7 +354,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 "The best-ranked connected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
                 candidates[bestIndex].cameraComponentId.value());
-            return makeResolution(
+            return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::InputRequired,
                 std::nullopt,
                 std::move(candidates),
@@ -467,7 +369,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
         "Multiple cameras are physically connected to the selected LightPath and no unique suitability winner was established. Select one of the listed camera endpoints.",
         lightPathId.value());
 
-    return makeResolution(
+    return LightPathCameraResolution(
         LightPathCameraResolutionStatus::SelectionRequired,
         std::nullopt,
         std::move(candidates),

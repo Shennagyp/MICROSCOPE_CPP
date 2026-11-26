@@ -14,6 +14,8 @@ The `Consumer` object owns the dispatch boundary and retains the underlying impl
 - **Native CTI backend (default):** in-process C++ dispatch to the CTI's GenTL exports.
 - **Versioned C ABI bridge (optional):** `ConsumerBridge` can load a separately built consumer implementation when an application explicitly injects one. It is not required by `Producer::open(ctiPath)`.
 
+Installed Producer discovery follows the GenTL environment convention. `ProducerCatalog` reads `GENICAM_GENTL64_PATH` (colon-separated directories on macOS/UNIX), scans each directory for `.cti` files, canonicalizes and deduplicates paths, and attempts each Producer independently. One broken or incompatible CTI is reported in `failures` and does not suppress devices discovered from other Producers. Successful catalog entries retain the exact `Producer` instance and interface handles used for their device discovery, so their descriptors can be passed directly to that entry's `producer.openDevice()`. A scan may successfully return zero devices when no camera is connected.
+
 AmScope remains a separate native backend. Neither backend leaks vendor-specific SDK calls through `Camera.Common`.
 
 ## Build and test
@@ -29,6 +31,7 @@ ctest --test-dir build/gentl --output-on-failure
 The ordinary GenTL suite includes:
 - C ABI bridge compatibility and Consumer/Producer lifecycle tests;
 - direct CTI symbol loading and dispatch tests;
+- installed CTI path discovery, canonical-path deduplication, partial-failure isolation, and retained descriptor ownership;
 - frame metadata and PFNC projection tests;
 - a loadable in-repository `.cti` simulator exercised through the **same native C++ path used by production**;
 - two-device isolation, concurrent streaming, monotonic frame IDs/timestamps, payload progression, and independent stream shutdown.
@@ -49,10 +52,32 @@ GenApi is optional at build time because it depends on the official GenICam SDK.
 
 ## Production C++ API
 
-No separate Consumer library is necessary:
+No separate Consumer library is necessary. To discover installed CTIs and devices, use the catalog:
+
+```cpp
+auto catalog = camera::gentl::ProducerCatalog::discoverDevices();
+
+for (const auto& failure : catalog.failures) {
+    // Report failure.producerPath and failure.message without hiding
+    // cameras discovered from other CTI Producers.
+}
+
+for (auto& entry : catalog.producers) {
+    for (const auto& descriptor : entry.devices) {
+        // entry.producer owns the retained interface handles for descriptor.
+        auto device = entry.producer.openDevice(descriptor);
+        // Use device.dataStreamIds(), GenApi access and frame acquisition.
+    }
+}
+```
+
+Each successful entry keeps its Producer alive. Do not detach its `DeviceDescriptor` from `entry.producer` and attempt to open it through another Producer instance.
+
+No separate Consumer library is necessary. For an application that already knows the CTI path, the direct API remains:
 
 ```cpp
 #include "camera/gentl/Producer.h"
+#include "camera/gentl/ProducerCatalog.h"
 #include "camera/gentl/GenTLFrameAdapter.h"
 #include "camera/gentl/GenApiDeviceAccess.h"
 

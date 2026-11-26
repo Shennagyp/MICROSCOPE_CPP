@@ -2,7 +2,7 @@
 
 **Architecture reference:** ../architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
-**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration and Phase 4 operation runtime/stage navigation are in progress. Core now has the stage/navigation model, bounded feedback inbox and serialized operation-state owner. Application now has the runtime wake primitive, owner-loop entry point and dual-slide X/Y feedback reducer.
+**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration and Phase 4 operation runtime/stage navigation are in progress. Core now has the stage/navigation model, bounded feedback inbox and serialized operation-state owner. Application now has the runtime wake primitive, owner-loop entry point and legacy dual-slide X/Y feedback reducer. A new fixed ten-slide 3D working-surface and axis-reference Core contract has been added as the target model for hardware-coordinate migration.
 
 ## Objective
 
@@ -370,3 +370,38 @@ The Core inbox/runtime and Application StageNavigationRuntime now provide the st
 5. Bind real external driver libraries through IStageMotionPort and perform user-side hardware acceptance. The main library must not implement STEP/DIR pulse generation or vendor protocols.
 
 Controller-specific STEP/DIR generation and vendor protocols remain in external driver libraries.
+
+
+## Stage working-surface and axis-reference update
+
+The Core now contains an initial fixed physical model in
+`microscope/core/stage/StageWorkingSurface3D.h`:
+
+- One 3D stage working volume maps to exactly ten fixed slide placements.
+- Each slide has its own mechanical stop-point origin, dimensions and rigid
+  right-handed XYZ coordinate frame.
+- Forward mapping converts a slide-local target into stage coordinates.
+- Inverse mapping converts a stage coordinate into the selected slide frame,
+  even when the stage is between slides or outside the selected slide footprint.
+- The inverse result separately reports whether the position is inside the
+  slide geometry and inside the overall working volume.
+
+Core also contains an axis-specific reference state in
+`microscope/core/stage/StageAxisReference.h`:
+
+- A physical-endstop procedure requires an active observation for the
+  configured axis and end.
+- A full-stroke procedure requires a measured starting datum at the opposite
+  calibrated boundary and a completed traversal to the configured boundary.
+- Encoder/external measurement establishes a measured full-stroke reference.
+  Calibrated open-loop completion establishes only an estimated software
+  endstop and preserves that evidence distinction.
+- An interrupted full-stroke traversal is invalidated rather than retained as
+  a valid reference.
+
+This is an initial Core contract milestone, not end-to-end hardware support.
+The live three-axis position aggregator, axis reference motion executor,
+driver feedback correlation, calibration/placement persistence and frontend
+projection remain outstanding. Existing two-slide X/Y code remains available
+as a legacy path during migration; it must not be treated as the target
+physical working-surface model.

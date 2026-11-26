@@ -145,6 +145,18 @@ void testPersistableCameraModelCatalog() {
     require(multiVariantCatalog->findExact(ambiguousIdentity) == nullptr,
             "does not silently choose an exact profile when its variant is unknown");
 
+    auto genericProfile = CameraModelProfile::create(
+        CameraModelKey{"Example Imaging", "SCMOS-2048", std::nullopt},
+        capabilities,
+        sensor);
+    require(genericProfile.has_value(),
+            "allows a generic profile where the manufacturer does not distinguish variants");
+    auto genericAndSpecificCatalog = CameraModelCatalog::create(
+        {*genericProfile, *profileOtherVariant}, 5);
+    require(genericAndSpecificCatalog.has_value() &&
+            genericAndSpecificCatalog->findExact(ambiguousIdentity) == nullptr,
+            "does not use a generic profile when variant-specific profiles also exist");
+
     auto duplicateCatalog = CameraModelCatalog::create({*profile, *profile});
     require(!duplicateCatalog,
             "rejects duplicate stable model keys rather than using last-wins behavior");

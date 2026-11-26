@@ -35,8 +35,11 @@ and lifecycle-request pending flags.
 The panel does not enumerate devices, interpret backend errors, own a camera
 session, schedule operations, or know about a vendor API. In particular, the
 host remains responsible for opaque-ID routing, request ordering, generations,
-and session lifetime. A faulted session remains closeable but cannot be started
-or stopped through this panel. Its compact two-row layout puts device selection
+and session lifetime. The selection-changed callback reports the selected ID
+unchanged within the current discovery result. A new setDevices snapshot resets
+the selection to the new result set; IDs are enumeration handles, not stable
+physical-camera identities across disconnect/replug. A faulted session remains
+closeable but cannot be started or stopped through this panel. Its compact two-row layout puts device selection
 and refresh on the first row and Open/Start/Stop/Close on the second. The
 AmScope host places this panel in the Camera Explorer tool window; feature
 settings and descriptor groups live in a separate Camera Properties tool
@@ -44,8 +47,9 @@ window. Both panes are dockable, tabifiable, floatable, and included in the
 persisted workspace layout.
 
 The `camera_qt_widgets_camera_control_panel_tests` offscreen test covers
-device-label/opaque-ID preservation, callback dispatch, empty discovery,
-pending-state gating, and Closed/Open/Streaming/Faulted action availability.
+device-label/opaque-ID pass-through, selection-change notification, selection
+reset on a new discovery snapshot, empty discovery, pending-state gating, and
+Closed/Open/Streaming/Faulted action availability.
 
 ## CameraCommandPanel
 

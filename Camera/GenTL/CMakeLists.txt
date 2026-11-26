@@ -133,6 +133,15 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 120)
     endforeach()
 
+    foreach(_delivery_case IN ITEMS incomplete-frame empty-frame)
+        add_test(NAME camera_gentl_simulator_${_delivery_case}
+            COMMAND camera_gentl_simulator_smoke
+                "$<TARGET_FILE:gentl_test_simulator_cti>"
+                "0" "--${_delivery_case}")
+        set_tests_properties(camera_gentl_simulator_${_delivery_case}
+            PROPERTIES TIMEOUT 120)
+    endforeach()
+
     add_executable(camera_gentl_producer_catalog_tests
         tests/ProducerCatalogTests.cpp)
     target_compile_features(camera_gentl_producer_catalog_tests PRIVATE cxx_std_17)

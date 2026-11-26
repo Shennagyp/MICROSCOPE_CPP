@@ -102,13 +102,15 @@ int main(int argc, char** argv) {
             << "Usage: camera_gentl_simulator_smoke "
             << "<vendor-producer.cti> [device-index] "
             << "[--verify-two-device-isolation|--sequence-gap|--sequence-duplicate|"
-               "--sequence-out-of-order|--sequence-ambiguous]\n";
+               "--sequence-out-of-order|--sequence-ambiguous|"
+               "--incomplete-frame|--empty-frame]\n";
         return 64;
     }
 
     std::size_t selectedDeviceIndex = 0;
     bool verifyMultiDeviceIsolation = false;
     std::string sequenceMode;
+    std::string deliveryMode;
     if (argc >= 3) {
         const std::string option = argv[2];
         if (option == "--verify-two-device-isolation") {
@@ -136,6 +138,10 @@ int main(int argc, char** argv) {
             setenv("MOCK_GENTL_SIMULATOR_TLTYPE", "GEV", 1);
         } else if (option == "--sequence-ambiguous") {
             sequenceMode = "ambiguous";
+        } else if (option == "--incomplete-frame") {
+            deliveryMode = "incomplete";
+        } else if (option == "--empty-frame") {
+            deliveryMode = "empty";
         } else {
             std::cerr << "Unknown simulator smoke option.\n";
             return 67;
@@ -143,6 +149,8 @@ int main(int argc, char** argv) {
     }
     if (!sequenceMode.empty())
         setenv("MOCK_GENTL_SIMULATOR_SEQUENCE_MODE", sequenceMode.c_str(), 1);
+    if (!deliveryMode.empty())
+        setenv("MOCK_GENTL_SIMULATOR_DELIVERY_MODE", deliveryMode.c_str(), 1);
 
     try {
         auto producer = camera::gentl::Producer::open(argv[1]);
@@ -213,13 +221,17 @@ int main(int argc, char** argv) {
                         "Timed out waiting for simulated frame " +
                         std::to_string(index + 1) + ".");
                 }
-                if (frame->incomplete) {
+                const bool expectedIncomplete =
+                    deliveryMode == "incomplete" && index == 2;
+                const bool expectedEmpty =
+                    deliveryMode == "empty" && index == 2;
+                if (frame->incomplete != expectedIncomplete) {
                     throw std::runtime_error(
-                        "The Producer returned an incomplete frame.");
+                        "The Producer incomplete-buffer status did not match the injected case.");
                 }
-                if (frame->payload.size() != 16) {
+                if (frame->payload.size() != (expectedEmpty ? 0U : 16U)) {
                     throw std::runtime_error(
-                        "The deterministic simulator returned an unexpected payload size.");
+                        "The deterministic simulator returned an unexpected filled payload size.");
                 }
                 if (!frame->frameId || !frame->timestampNanoseconds ||
                     (sequenceMode.empty() &&
@@ -231,10 +243,10 @@ int main(int argc, char** argv) {
                     throw std::runtime_error(
                         "Frame IDs or timestamps were not reported consistently.");
                 }
-                if (frame->payload.front() !=
+                if (!expectedEmpty && frame->payload.front() !=
                     static_cast<std::uint8_t>(0x30 + index)) {
                     throw std::runtime_error(
-                        "Frame payload did not advance with the simulated frame sequence.");
+                        "Frame payload did not advance with the simulated delivery sequence.");
                 }
                 previousFrameId = *frame->frameId;
                 previousTimestampNanoseconds = *frame->timestampNanoseconds;
@@ -245,6 +257,10 @@ int main(int argc, char** argv) {
 
                 const auto commonFrame =
                     camera::gentl::makeCommonFrame(*frame);
+                if ((expectedIncomplete || expectedEmpty) == commonFrame.has_value()) {
+                    throw std::runtime_error(
+                        "Incomplete/empty payload acceptance did not match the adapter contract.");
+                }
 
                 std::cout << "Frame " << (index + 1)
                           << ": bytes=" << frame->payload.size()
@@ -290,8 +306,12 @@ int main(int argc, char** argv) {
                 statistics.queuedBuffers != 4 ||
                 statistics.buffersAwaitingDelivery != 0 ||
                 statistics.integrity.observedBuffers != requiredFrames ||
-                statistics.integrity.completeImages != requiredFrames ||
-                statistics.integrity.incompleteBuffers != 0 ||
+                statistics.integrity.completeImages != requiredFrames -
+                    ((deliveryMode == "incomplete" || deliveryMode == "empty") ? 1U : 0U) ||
+                statistics.integrity.incompleteBuffers !=
+                    (deliveryMode == "incomplete" ? 1U : 0U) ||
+                statistics.integrity.invalidPayloads !=
+                    (deliveryMode == "empty" ? 1U : 0U) ||
                 statistics.integrity.sequenceGaps != (sequenceMode == "gap" ? 1u : 0u) ||
                 statistics.integrity.missingFrames != (sequenceMode == "gap" ? 2u : 0u) ||
                 statistics.integrity.duplicateFrameIds !=
@@ -315,6 +335,7 @@ int main(int argc, char** argv) {
             unsetenv("MOCK_GENTL_SIMULATOR_UNDERRUNS");
             unsetenv("MOCK_GENTL_SIMULATOR_SEQUENCE_MODE");
             unsetenv("MOCK_GENTL_SIMULATOR_TLTYPE");
+            unsetenv("MOCK_GENTL_SIMULATOR_DELIVERY_MODE");
             stream.stop();
         }
 

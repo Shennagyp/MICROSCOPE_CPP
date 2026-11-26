@@ -199,6 +199,8 @@ static BUFFER_HANDLE queued_buffers[32];
 static size_t queued_buffer_count;
 static uint64_t stream_frame_ids[16];
 static uint64_t stream_timestamps_ns[16];
+static int simulator_buffer_incomplete[16];
+static int simulator_buffer_empty[16];
 static uint64_t next_simulator_frame_ids[2] = {1, 1};
 static uint64_t simulator_last_frame_ids[2];
 static uint64_t simulator_delivered_buffers[2];
@@ -579,6 +581,13 @@ int32_t gentl_consumer_invoke(
         if (index == stream_buffer_count || stream_owners[index] != owner)
             return GC_ERR_INVALID_BUFFER;
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        const char* deliveryMode = getenv("MOCK_GENTL_SIMULATOR_DELIVERY_MODE");
+        simulator_buffer_incomplete[index] =
+            deliveryMode && strcmp(deliveryMode, "incomplete") == 0 &&
+            simulator_delivered_buffers[event] == 2;
+        simulator_buffer_empty[index] =
+            deliveryMode && strcmp(deliveryMode, "empty") == 0 &&
+            simulator_delivered_buffers[event] == 2;
         uint64_t frameId = next_simulator_frame_ids[event]++;
         const char* sequenceMode = getenv("MOCK_GENTL_SIMULATOR_SEQUENCE_MODE");
         if (sequenceMode && simulator_delivered_buffers[event] == 2) {
@@ -812,12 +821,20 @@ int32_t gentl_consumer_invoke(
             return write_scalar(type, output, size, INFO_DATATYPE_PTR, &value, sizeof(value));
         }
         case BUFFER_INFO_SIZE_FILLED: {
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            const size_t value = simulator_buffer_empty[index] ? 0 : 16;
+#else
             const size_t value = 16;
+#endif
             return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
         }
         case BUFFER_INFO_IS_INCOMPLETE:
         case BUFFER_INFO_IMAGEPRESENT: {
-            const bool8_t value = command == BUFFER_INFO_IMAGEPRESENT;
+            bool8_t value = command == BUFFER_INFO_IMAGEPRESENT;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            if (command == BUFFER_INFO_IS_INCOMPLETE)
+                value = simulator_buffer_incomplete[index] ? 1 : 0;
+#endif
             return write_scalar(type, output, size, INFO_DATATYPE_BOOL8, &value, sizeof(value));
         }
         case BUFFER_INFO_FRAMEID: {

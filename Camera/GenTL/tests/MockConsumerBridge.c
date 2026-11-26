@@ -41,7 +41,7 @@ static const char mock_xml[] =
     "    <pFeature>TriggerMode</pFeature>\n" \
     "    <pFeature>Temperature</pFeature>\n" \
     "    <pFeature>DeviceLabel</pFeature>\n" \
-    "    <pFeature>RawRegister</pFeature>\n" \
+    "    <pFeature>Device</pFeature>\n" \
     "    <pFeature>AcquisitionControl</pFeature>\n" \
     "  </Category>\n" \
     "  <Category Name=\"AcquisitionControl\">\n" \
@@ -148,14 +148,6 @@ static const char mock_xml[] =
     "    <Sign>Unsigned</Sign>\n" \
     "    <Endianess>BigEndian</Endianess>\n" \
     "  </IntReg>\n" \
-    "  <Register Name=\"RawRegister\">\n" \
-    "    <Address>0x1010</Address>\n" \
-    "    <Length>2</Length>\n" \
-    "    <AccessMode>RO</AccessMode>\n" \
-    "    <pPort>Device</pPort>\n" \
-    "    <Sign>Unsigned</Sign>\n" \
-    "    <Endianess>BigEndian</Endianess>\n" \
-    "  </Register>\n" \
     "  <Port Name=\"Device\">\n" \
     "    <ToolTip>Default device port</ToolTip>\n" \
     "  </Port>\n" \

@@ -177,6 +177,41 @@ void testSpectralBandAndIntensityRangeValidation() {
           "requires continuous control ranges to have increasing bounds");
 }
 
+void testSpectralPowerDistribution() {
+    auto spectrum = SpectralPowerDistribution::create({
+        {400.0, 0.1},
+        {450.0, 0.8},
+        {500.0, 0.3}});
+    check(static_cast<bool>(spectrum),
+          "accepts a wavelength-dependent source spectrum");
+    if (spectrum) {
+        check(spectrum.value().samples().size() == 3,
+              "retains every spectral power sample");
+    }
+
+    auto nonIncreasing = SpectralPowerDistribution::create({
+        {450.0, 0.1},
+        {440.0, 0.8}});
+    check(!nonIncreasing &&
+          nonIncreasing.error() ==
+              SpectralPowerDistributionError::WavelengthsNotIncreasing,
+          "rejects non-increasing spectral wavelength samples");
+
+    auto negativePower = SpectralPowerDistribution::create({
+        {400.0, -0.1},
+        {500.0, 0.4}});
+    check(!negativePower &&
+          negativePower.error() == SpectralPowerDistributionError::InvalidPower,
+          "rejects negative relative spectral power");
+
+    auto zeroSpectrum = SpectralPowerDistribution::create({
+        {400.0, 0.0},
+        {500.0, 0.0}});
+    check(!zeroSpectrum &&
+          zeroSpectrum.error() == SpectralPowerDistributionError::NoPositivePower,
+          "rejects an all-zero spectral power distribution");
+}
+
 void testIlluminationChannelControlSemantics() {
     auto continuousWithoutRange = IlluminationChannel::create(
         makeId<IlluminationChannelId>("continuous-without-range"),
@@ -425,6 +460,7 @@ void testEquipmentAggregateValidatesCondenserAndIlluminationBindings() {
 
 int main() {
     testSpectralBandAndIntensityRangeValidation();
+    testSpectralPowerDistribution();
     testIlluminationChannelControlSemantics();
     testMultiChannelIlluminationSpecification();
     testCondenserSpecificationValidation();

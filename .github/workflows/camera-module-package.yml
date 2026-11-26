@@ -41,6 +41,7 @@ jobs:
           echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
       - name: Download official GenICam package
         run: |
+          mkdir -p build
           curl --fail --location --retry 3 \
             https://www.emva.org/wp-content/uploads/GenICam_Package_2026.07.zip \
             --output build/GenICam_Package_2026.07.zip
@@ -114,6 +115,16 @@ jobs:
           otool -L build/consumer-amscope/camera_module_amscope_consumer
           otool -L build/consumer-genapi/camera_module_genapi_consumer
           otool -L build/consumer-qt/camera_module_qt_consumer
+          lipo build/camera-relocated/lib/libcamera_amscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
+          lipo build/camera-relocated/lib/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
+          lipo build/camera-relocated/lib/libcamera_gentl_consumer_bridge.a -verify_arch "${{ matrix.architecture }}"
+          lipo build/camera-relocated/lib/libcamera_gentl_genapi.a -verify_arch "${{ matrix.architecture }}"
+          lipo build/camera-relocated/lib/libcamera_qt_core.a -verify_arch "${{ matrix.architecture }}"
+          lipo build/camera-relocated/lib/libcamera_qt_widgets.a -verify_arch "${{ matrix.architecture }}"
+          lipo build/camera-relocated/lib/libcamera_amscope_qt.a -verify_arch "${{ matrix.architecture }}"
+          lipo build/consumer-amscope/camera_module_amscope_consumer -verify_arch "${{ matrix.architecture }}"
+          lipo build/consumer-genapi/camera_module_genapi_consumer -verify_arch "${{ matrix.architecture }}"
+          lipo build/consumer-qt/camera_module_qt_consumer -verify_arch "${{ matrix.architecture }}"
           build/consumer-common/camera_module_common_consumer
           build/consumer-gentl/camera_module_gentl_consumer
           build/consumer-amscope/camera_module_amscope_consumer

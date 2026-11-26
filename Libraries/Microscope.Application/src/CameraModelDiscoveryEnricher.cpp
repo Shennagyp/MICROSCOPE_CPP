@@ -489,4 +489,199 @@ CameraModelDiscoveryEnricher::toCoreSensorCharacteristics(
         : std::nullopt;
 }
 
+core::Result<
+    CameraSpecificationProjectionResult,
+    core::CameraSpecificationError>
+CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
+    const core::CameraSpecification& installedSpecification,
+    const ::camera::CameraDeviceInfo& enrichedDevice) {
+    std::vector<CameraModelEnrichmentWarning> warnings;
+
+    const auto addProjectionWarning = [&](std::string code, std::string message) {
+        warnings.push_back({std::move(code), std::move(message)});
+    };
+
+    if (enrichedDevice.sensorCharacteristics) {
+        const auto& discovered = *enrichedDevice.sensorCharacteristics;
+        const auto& installedDimensions =
+            installedSpecification.activeSensorDimensions();
+
+        if (discovered.activeSensorDimensions &&
+            (discovered.activeSensorDimensions->width != installedDimensions.width() ||
+             discovered.activeSensorDimensions->height != installedDimensions.height())) {
+            addProjectionWarning(
+                "camera.model_profile.active_sensor_dimensions_mismatch",
+                "The exact camera model profile reports active sensor dimensions that differ from the installed microscope CameraSpecification. The installed equipment value was retained.");
+        }
+
+        if (discovered.pixelPitchXMicrometers &&
+            !nearlyEqual(
+                *discovered.pixelPitchXMicrometers,
+                installedSpecification.pixelPitchXMicrometers())) {
+            addProjectionWarning(
+                "camera.model_profile.pixel_pitch_x_mismatch",
+                "The exact camera model profile reports a different horizontal pixel pitch. The installed microscope CameraSpecification value was retained.");
+        }
+
+        if (discovered.pixelPitchYMicrometers &&
+            !nearlyEqual(
+                *discovered.pixelPitchYMicrometers,
+                installedSpecification.pixelPitchYMicrometers())) {
+            addProjectionWarning(
+                "camera.model_profile.pixel_pitch_y_mismatch",
+                "The exact camera model profile reports a different vertical pixel pitch. The installed microscope CameraSpecification value was retained.");
+        }
+    }
+
+    auto projectedSensor =
+        toCoreSensorCharacteristics(enrichedDevice);
+    auto mergedSensor = installedSpecification.sensorCharacteristics();
+
+    if (projectedSensor) {
+        if (!mergedSensor) {
+            mergedSensor = *projectedSensor;
+        } else {
+            auto& target = *mergedSensor;
+            const auto& source = *projectedSensor;
+
+            const auto mergeEnum = [&](auto& targetValue,
+                                       const auto& sourceValue,
+                                       auto unknownValue,
+                                       const char* fieldName) {
+                if (!targetValue || *targetValue == unknownValue) {
+                    if (sourceValue && *sourceValue != unknownValue) {
+                        targetValue = sourceValue;
+                    }
+                    return;
+                }
+                if (sourceValue && *sourceValue != unknownValue &&
+                    *targetValue != *sourceValue) {
+                    addProjectionWarning(
+                        "camera.model_profile.sensor_characteristic_conflict",
+                        std::string("The exact camera model profile conflicts with the installed CameraSpecification for ") +
+                            fieldName + "; the installed value was retained.");
+                }
+            };
+
+            const auto mergeDouble = [&](std::optional<double>& targetValue,
+                                         const std::optional<double>& sourceValue,
+                                         const char* fieldName) {
+                if (!targetValue) {
+                    targetValue = sourceValue;
+                    return;
+                }
+                if (sourceValue &&
+                    !nearlyEqual(*targetValue, *sourceValue)) {
+                    addProjectionWarning(
+                        "camera.model_profile.sensor_characteristic_conflict",
+                        std::string("The exact camera model profile conflicts with the installed CameraSpecification for ") +
+                            fieldName + "; the installed value was retained.");
+                }
+            };
+
+            mergeEnum(
+                target.technology,
+                source.technology,
+                core::CameraSensorTechnology::Unknown,
+                "sensor technology");
+            mergeEnum(
+                target.shutterType,
+                source.shutterType,
+                core::CameraShutterType::Unknown,
+                "shutter type");
+            mergeEnum(
+                target.colorMode,
+                source.colorMode,
+                core::CameraSensorColorMode::Unknown,
+                "sensor color mode");
+
+            mergeDouble(
+                target.readNoiseElectronsRms,
+                source.readNoiseElectronsRms,
+                "read noise");
+            mergeDouble(
+                target.darkCurrentElectronsPerPixelPerSecond,
+                source.darkCurrentElectronsPerPixelPerSecond,
+                "dark current");
+            mergeDouble(
+                target.fullWellCapacityElectrons,
+                source.fullWellCapacityElectrons,
+                "full-well capacity");
+            mergeDouble(
+                target.maximumFrameRateFramesPerSecond,
+                source.maximumFrameRateFramesPerSecond,
+                "maximum frame rate");
+
+            if (target.quantumEfficiency.empty()) {
+                target.quantumEfficiency = source.quantumEfficiency;
+            } else if (!source.quantumEfficiency.empty()) {
+                bool sameCurve =
+                    target.quantumEfficiency.size() ==
+                    source.quantumEfficiency.size();
+                if (sameCurve) {
+                    for (std::size_t index = 0;
+                         index < target.quantumEfficiency.size();
+                         ++index) {
+                        if (!nearlyEqual(
+                                target.quantumEfficiency[index].wavelengthNanometers,
+                                source.quantumEfficiency[index].wavelengthNanometers) ||
+                            !nearlyEqual(
+                                target.quantumEfficiency[index].quantumEfficiency,
+                                source.quantumEfficiency[index].quantumEfficiency)) {
+                            sameCurve = false;
+                            break;
+                        }
+                    }
+                }
+                if (!sameCurve) {
+                    addProjectionWarning(
+                        "camera.model_profile.sensor_characteristic_conflict",
+                        "The exact camera model profile QE curve differs from the installed CameraSpecification; the installed QE curve was retained.");
+                }
+            }
+
+            if (target.provenance == core::CameraSpecificationProvenance::Unknown &&
+                source.provenance != core::CameraSpecificationProvenance::Unknown) {
+                target.provenance = source.provenance;
+            }
+            if (!target.provenanceReference && source.provenanceReference) {
+                target.provenanceReference = source.provenanceReference;
+            }
+        }
+    }
+
+    auto pixelPitchX = core::PositiveMicrometers::create(
+        installedSpecification.pixelPitchXMicrometers());
+    auto pixelPitchY = core::PositiveMicrometers::create(
+        installedSpecification.pixelPitchYMicrometers());
+    if (!pixelPitchX || !pixelPitchY) {
+        return core::Result<
+            CameraSpecificationProjectionResult,
+            core::CameraSpecificationError>::failure(
+                core::CameraSpecificationError::InvalidSensorCharacteristics);
+    }
+
+    auto specification = core::CameraSpecification::create(
+        installedSpecification.componentId(),
+        installedSpecification.activeSensorDimensions(),
+        std::move(pixelPitchX).value(),
+        std::move(pixelPitchY).value(),
+        installedSpecification.outputModes(),
+        installedSpecification.exposureTimeRange(),
+        std::move(mergedSensor));
+
+    if (!specification) {
+        return core::Result<
+            CameraSpecificationProjectionResult,
+            core::CameraSpecificationError>::failure(specification.error());
+    }
+
+    return core::Result<
+        CameraSpecificationProjectionResult,
+        core::CameraSpecificationError>::success(
+            CameraSpecificationProjectionResult{
+                std::move(specification).value(),
+                std::move(warnings)});
+}
+
 } // namespace microscope::application::camera_support

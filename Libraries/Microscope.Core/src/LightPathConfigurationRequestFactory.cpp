@@ -93,7 +93,7 @@ LightPathConfigurationRequestFactory::create(
         return Result<
             ConfigurationRequest,
             LightPathConfigurationRequestFactoryError>::failure(
-                LightPathConfigurationRequestFactoryError::CameraResolutionNotResolved);
+                LightPathConfigurationRequestFactoryError::ResolvedCameraOperationModeMismatch);
     }
 
     if (selected.lightPathId != lightPathId) {

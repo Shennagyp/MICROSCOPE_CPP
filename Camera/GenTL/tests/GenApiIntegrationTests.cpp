@@ -164,13 +164,6 @@ int main(int argc, char** argv) {
             require(gain && gain->isAvailable,
                     "Gain did not become available after its selector condition changed.");
 
-            auto initialRead = access.features().readFeature("Gain");
-            auto* initialValue = std::get_if<camera::CameraFeatureValue>(&initialRead);
-            require(initialValue != nullptr, "GenApi Gain read failed.");
-            auto* initialGain = std::get_if<std::int64_t>(initialValue);
-            require(initialGain && *initialGain == 0,
-                    "GenApi Gain initial register value was not zero.");
-
             setenv("MOCK_GENTL_FAIL_PORT_READ_ADDRESS", "0x1000", 1);
             auto failedGainRead = access.features().readFeature("Gain");
             unsetenv("MOCK_GENTL_FAIL_PORT_READ_ADDRESS");
@@ -188,6 +181,13 @@ int main(int argc, char** argv) {
                         std::get_if<std::int64_t>(recoveredGainValue) &&
                         *std::get_if<std::int64_t>(recoveredGainValue) == 0,
                     "GenApi feature read did not recover after a transient port failure.");
+
+            auto initialRead = access.features().readFeature("Gain");
+            auto* initialValue = std::get_if<camera::CameraFeatureValue>(&initialRead);
+            require(initialValue != nullptr, "GenApi Gain read failed.");
+            auto* initialGain = std::get_if<std::int64_t>(initialValue);
+            require(initialGain && *initialGain == 0,
+                    "GenApi Gain initial register value was not zero.");
 
             const camera::CameraFeatureValue requestedGain{std::int64_t{42}};
             auto writeResult = access.features().writeFeature("Gain", requestedGain);

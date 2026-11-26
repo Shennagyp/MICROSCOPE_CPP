@@ -306,6 +306,7 @@ void testSlideAssessmentUsesPinnedSampleTypeAndObservedSlideFacts() {
         1,
         sampleType.id(),
         sampleType.revision(),
+        "OPT-COMPAT-001",
         "Compatible slide",
         geometry,
         compatiblePreparation));
@@ -331,6 +332,7 @@ void testSlideAssessmentUsesPinnedSampleTypeAndObservedSlideFacts() {
         1,
         sampleType.id(),
         sampleType.revision(),
+        "OPT-INCOMPAT-001",
         "Out-of-spec slide",
         geometry,
         incompatiblePreparation));
@@ -351,6 +353,7 @@ void testSlideAssessmentUsesPinnedSampleTypeAndObservedSlideFacts() {
         1,
         sampleType.id(),
         sampleType.revision() - 1,
+        "OPT-STALE-001",
         "Slide pinned to a stale SampleType revision",
         geometry,
         compatiblePreparation));

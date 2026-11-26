@@ -1982,6 +1982,7 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         1,
         sampleType.id(),
         sampleType.revision(),
+        "BLOOD-CAL-001",
         "Stained smear on glass",
         geometry,
         preparation));
@@ -2016,6 +2017,7 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         1,
         strictSampleType.id(),
         strictSampleType.revision(),
+        "IRR-001",
         "High irradiance preparation",
         geometry,
         preparation));
@@ -2052,6 +2054,7 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         1,
         incompatiblePreparationType.id(),
         incompatiblePreparationType.revision(),
+        "SECTION-001",
         "Smear used as section",
         geometry,
         preparation));

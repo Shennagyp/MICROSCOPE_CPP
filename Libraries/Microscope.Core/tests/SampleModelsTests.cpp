@@ -148,6 +148,55 @@ void testSamplePinsSampleTypeRevisionAndSpecimenPinsSampleRevision() {
           "allows one source Sample to produce multiple independently tracked Specimens");
 }
 
+void testCondenserAndSpecimenPlaneIlluminationRequirements() {
+    const auto condenser = take(CondenserMicroscopyRequirements::create(
+        0.25,
+        0.90,
+        {CondenserDesign::Abbe, CondenserDesign::Achromatic},
+        {CondenserImmersionMedium::Air}));
+    check(condenser.minimumApertureNA() == std::optional<double>{0.25} &&
+          condenser.maximumApertureNA() == std::optional<double>{0.90},
+          "retains condenser aperture NA bounds as specimen-side requirements");
+    check(condenser.allowedDesigns().size() == 2 &&
+          condenser.allowedImmersionMedia().front() == CondenserImmersionMedium::Air,
+          "retains condenser design and immersion constraints");
+
+    const auto band = take(SpectralBand::create(
+        take<PositiveNanometers>(PositiveNanometers::create(500.0)),
+        take<PositiveNanometers>(PositiveNanometers::create(560.0))));
+    const auto illumination = take(IlluminationMicroscopyRequirements::create(
+        25.0,
+        125.0,
+        band,
+        true));
+    check(illumination.minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() ==
+              std::optional<double>{25.0} &&
+          illumination.maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() ==
+              std::optional<double>{125.0},
+          "stores specimen-plane irradiance limits in physical calibrated units");
+    check(illumination.requiredSpectralBand().has_value() &&
+          illumination.requireContinuouslyAdjustableSource(),
+          "stores spectral and continuous-control requirements independently of source drive units");
+
+    const auto inverted = IlluminationMicroscopyRequirements::create(
+        150.0, 100.0);
+    check(!inverted &&
+          inverted.error() == IlluminationRequirementsError::InvertedIrradianceRange,
+          "rejects an inverted specimen-plane irradiance interval");
+
+    const auto requirements = take(MicroscopyRequirements::create(
+        {{ContrastMethod::Brightfield,
+          MicroscopyTechniqueConstraintKind::Required}},
+        std::nullopt,
+        std::nullopt,
+        false,
+        condenser,
+        illumination));
+    check(requirements.condenser().has_value() &&
+          requirements.illumination().has_value(),
+          "composes condenser and illumination requirements into the reusable SampleType microscopy contract");
+}
+
 void testFluorescentLabelStoresSpectralProfileAndFilterCompatibility() {
     const auto excitation = take(SpectralBand::create(
         take<PositiveNanometers>(PositiveNanometers::create(470.0)),
@@ -280,6 +329,7 @@ void testSpecimenSlidePlacementIsBoundedAndRegistrationRevisioned() {
 int main() {
     testSampleTypeAndCatalogRevisionContracts();
     testSamplePinsSampleTypeRevisionAndSpecimenPinsSampleRevision();
+    testCondenserAndSpecimenPlaneIlluminationRequirements();
     testFluorescentLabelStoresSpectralProfileAndFilterCompatibility();
     testFluorescenceMetadataRequirementNeedsFluorescenceTechnique();
     testSpecimenSlidePlacementIsBoundedAndRegistrationRevisioned();

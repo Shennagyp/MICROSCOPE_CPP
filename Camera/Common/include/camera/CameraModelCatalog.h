@@ -105,7 +105,9 @@ inline bool validSensorCharacteristics(
         !nonNegativeFinite(sensor.readNoiseElectronsRms) ||
         !nonNegativeFinite(sensor.darkCurrentElectronsPerPixelPerSecond) ||
         !positiveFinite(sensor.fullWellCapacityElectrons) ||
-        !positiveFinite(sensor.maximumFrameRateFramesPerSecond)) {
+        !positiveFinite(sensor.maximumFrameRateFramesPerSecond) ||
+        (sensor.provenanceReference &&
+         sensor.provenanceReference->empty())) {
         return false;
     }
 
@@ -297,6 +299,8 @@ inline std::optional<CameraModelProfile> CameraModelProfile::create(
         key.model.find('\0') != std::string::npos ||
         (key.variant && key.variant->find('\0') != std::string::npos) ||
         sourceReference.find('\0') != std::string::npos ||
+        (sensorCharacteristics.provenanceReference &&
+         sensorCharacteristics.provenanceReference->find('\0') != std::string::npos) ||
         detail::normalizeCameraModelText(key.manufacturer).empty() ||
         detail::normalizeCameraModelText(key.model).empty() ||
         (key.variant && detail::normalizeCameraModelText(*key.variant).empty()) ||

@@ -68,7 +68,9 @@ If a future acquisition contract explicitly requires global shutter (for example
   - The earlier LightPath topology remains the owner of route membership; filters still need to be validated against the selected LightPath during resolver integration.
 - `Libraries/Microscope.Core/include/microscope/core/configuration/CameraSuitability.h` and `src/CameraSuitability.cpp`
   - `CameraSuitabilityAssessor` returns warning diagnostics and advisory ranking for fluorescence requests.
-  - The current first-pass QE calculation is an unweighted mean over the requested emission band. It is explicitly incomplete for full fluorescence-system prediction.
+  - When a fluorophore emission spectrum, dichroic and emission-filter specifications are supplied, it integrates emission × dichroic transmission × emission-filter transmission × camera QE. It partitions at all input sample knots and applies three-point Gauss–Legendre quadrature to the product of piecewise-linear curves.
+  - It requires all curves to cover the full requested emission band; there is no extrapolation. The previous unweighted band mean is only a warned fallback when the spectral inputs are absent.
+- `FluorescenceEmissionSpectrum` is now a Core value type for a relative spectral photon-flux distribution, distinct from source spectral power distribution. `OpticalFilterSpecification` exposes bounded linear transmission/reflection interpolation.
 - `Libraries/Microscope.Core/src/Configuration.cpp`
   - A legacy profile camera allow-list mismatch is now a warning, not a resolution error. Route endpoint and driver-operability constraints remain separate.
 - `Libraries/Microscope.Core/include/microscope/core/configuration/LightPathCalibration.h` and `src/LightPathCalibration.cpp`
@@ -150,7 +152,7 @@ These are user-configured calibration outcomes, not universal rules. Do not fabr
 2. **OperationMode aggregate and persistence groundwork are implemented.** Core has a revisioned aggregate owning one LightPath setting per path; Application persists revisions and verifies calibration bindings. The aggregate does not yet include the full declarative technique composition/objective requirement model.
 3. **Resolver integration is not complete.** The current `ConfigurationRequest`/resolver still has legacy explicit camera/path selection. Make LightPath the configuration input and derive camera endpoint/output-mode choices from its imaging routes. Keep manual camera selection as an optional assertion/choice among cameras connected to that LightPath only.
 4. **Camera discovery enrichment is implemented; Core projection is not.** Application enriches `CameraDeviceInfo` from an exact persisted catalog profile and reports conflicts/ambiguity. It must still project the selected route-derived camera data into the Core `CameraSpecification` at the configuration boundary. Do not add a Core dependency on `Camera::Common` or vendor SDKs.
-5. **Spectral calculation is incomplete.** The current mean-QE band calculation must be replaced by emission-spectrum/filter/dichroic weighted integration. Implement interpolation with defined behavior for incomplete spectral coverage and preserve unknown evidence as warning.
+5. **Full fluorescence spectral model is incomplete.** Detector-side emission-spectrum × dichroic-transmission × emission-filter-transmission × camera-QE integration is now implemented in Core, with bounded interpolation and weighted integration for piecewise-linear curves. Remaining: feed the fluorophore/task emission profile and exact installed detector filters from OperationMode/LightPath resolution; implement the excitation-side source SPD × excitation-filter transmission × dichroic reflection and combine both sides with collection-path throughput, exposure, readout mode, signal/noise and photobleaching constraints.
 6. **Filter route validation is incomplete.** Equipment validation establishes installed-component/filter-role consistency. The resolver must additionally prove each required filter belongs to the selected LightPath and the correct directional route.
 7. **Calibration key is incomplete.** A component ID set does not encode optical state. Add a canonical fingerprint/snapshot for all irradiation-affecting adjustable settings: route revision, objective, condenser, annulus/stop, source/channel, filters, aperture/iris/selector states, splitters/relay and geometry. Include meter identity/calibration, measurement plane, conditions, date and uncertainty.
 8. **Calibration workflow is not implemented.** No measurement procedure, UI, adapter command/feedback or runtime verification currently applies these values to physical illumination. Do not claim a mode's target has been achieved until supported evidence is observed.
@@ -186,11 +188,11 @@ Continue in this order; do not skip directly to UI or physical testing.
 - Verify excitation filters on excitation routes, emission filters on detection routes, dichroic direction, compatibility IDs and filter spectral data.
 - When more than one connected camera is explicitly exposed by a physical splitter arrangement, require the acquisition request to distinguish single-camera from multi-camera execution. Do not assume synchronization.
 
-### Step 5 — Finish fluorescence spectral suitability
-- Introduce a fluorophore/emission-spectrum requirement (or task profile reference) separate from source spectrum.
-- Integrate emission spectrum × dichroic transmission × emission-filter transmission × camera QE over the detected band.
-- Evaluate exposure/readout and sensor metrics with the acquisition mode's relevant requirements.
-- Keep all performance mismatches and unknown sensor data warning-only when the selected camera is physically connected and operable.
+### Step 5 — Complete fluorescence spectral suitability
+- **Implemented in Core:** `FluorescenceEmissionSpectrum`, filter transmission/reflection interpolation and detector-side weighted QE integration using emission × dichroic transmission × emission-filter transmission × camera QE.
+- **Remaining:** source the fluorophore/emission profile and exact detector filter specifications from the selected operation mode/LightPath. Keep the coarse band mean marked as a fallback only.
+- Implement the excitation-side source SPD × excitation-filter transmission × dichroic reflection calculation, then compose it with fluorophore excitation response, collection-path throughput, exposure/readout and relevant signal/noise/dose constraints.
+- Keep performance mismatches and unknown sensor data warning-only when the selected camera is physically connected and operable.
 - Rank global shutter after task-relevant sensitivity/noise evidence, unless a specific timing requirement makes shutter type hard.
 
 ### Step 6 — Integrate operation modes and LightPath calibration

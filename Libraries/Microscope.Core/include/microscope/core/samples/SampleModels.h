@@ -11,21 +11,23 @@
 
 namespace microscope::core {
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class SampleMaterialClass {
-    Biological,
-    Botanical,
-    Geological,
-    MaterialScience,
-    CalibrationArtifact,
-    Other,
-    Unknown
+    Biological = 0,
+    Botanical = 1,
+    Geological = 2,
+    MaterialScience = 3,
+    CalibrationArtifact = 4,
+    Other = 5,
+    Unknown = 6
 };
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class MicroscopyTechniqueConstraintKind {
-    Required,
-    Preferred,
-    Supported,
-    Prohibited
+    Required = 0,
+    Preferred = 1,
+    Supported = 2,
+    Prohibited = 3
 };
 
 struct MicroscopyTechniqueConstraint final {
@@ -281,31 +283,34 @@ private:
     std::optional<IlluminationMicroscopyRequirements> illumination_;
 };
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class SpecimenPreparationMethod {
-    Smear,
-    TissueSection,
-    CellCulture,
-    WholeMount,
-    Suspension,
-    Cytospin,
-    FreshUnfixed,
-    Other,
-    Unknown
+    Smear = 0,
+    TissueSection = 1,
+    CellCulture = 2,
+    WholeMount = 3,
+    Suspension = 4,
+    Cytospin = 5,
+    FreshUnfixed = 6,
+    Other = 7,
+    Unknown = 8
 };
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class SpecimenFixationState {
-    Live,
-    Unfixed,
-    Fixed,
-    Killed,
-    Unknown
+    Live = 0,
+    Unfixed = 1,
+    Fixed = 2,
+    Killed = 3,
+    Unknown = 4
 };
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class SpecimenLabelKind {
-    Fluorescent,
-    Chromogenic,
-    Histochemical,
-    Other
+    Fluorescent = 0,
+    Chromogenic = 1,
+    Histochemical = 2,
+    Other = 3
 };
 
 enum class SlidePreparationRequirementsError {

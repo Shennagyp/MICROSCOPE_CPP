@@ -467,6 +467,121 @@ double CameraOutputMode::sensorPixelsPerDeliveredPixelY() const noexcept {
            static_cast<double>(deliveredDimensions_.height());
 }
 
+namespace {
+
+[[nodiscard]] bool isKnownOpticalFilterRole(OpticalFilterRole role) noexcept {
+    switch (role) {
+    case OpticalFilterRole::Excitation:
+    case OpticalFilterRole::Emission:
+    case OpticalFilterRole::Dichroic:
+    case OpticalFilterRole::NeutralDensity:
+    case OpticalFilterRole::Other:
+        return true;
+    }
+    return false;
+}
+
+} // namespace
+
+OpticalFilterSpecification::OpticalFilterSpecification(
+    EquipmentComponentId componentId,
+    OpticalFilterRole role,
+    std::vector<OpticalFilterSpectralSample> spectralResponse,
+    std::optional<OpticalCompatibilityId> compatibilityId)
+    : componentId_(std::move(componentId)),
+      role_(role),
+      spectralResponse_(std::move(spectralResponse)),
+      compatibilityId_(std::move(compatibilityId)) {}
+
+Result<
+    OpticalFilterSpecification,
+    OpticalFilterSpecificationError> OpticalFilterSpecification::create(
+        EquipmentComponentId componentId,
+        OpticalFilterRole role,
+        std::vector<OpticalFilterSpectralSample> spectralResponse,
+        std::optional<OpticalCompatibilityId> compatibilityId) {
+    if (!isKnownOpticalFilterRole(role)) {
+        return Result<
+            OpticalFilterSpecification,
+            OpticalFilterSpecificationError>::failure(
+                OpticalFilterSpecificationError::InvalidRole);
+    }
+    if (spectralResponse.size() < 2) {
+        return Result<
+            OpticalFilterSpecification,
+            OpticalFilterSpecificationError>::failure(
+                OpticalFilterSpecificationError::TooFewSamples);
+    }
+
+    double previousWavelength = 0.0;
+    for (const auto& sample : spectralResponse) {
+        const double wavelength = sample.wavelength.value();
+        if (wavelength <= previousWavelength) {
+            return Result<
+                OpticalFilterSpecification,
+                OpticalFilterSpecificationError>::failure(
+                    OpticalFilterSpecificationError::WavelengthsNotIncreasing);
+        }
+        previousWavelength = wavelength;
+
+        if (!std::isfinite(sample.transmissionFraction) ||
+            sample.transmissionFraction < 0.0 ||
+            sample.transmissionFraction > 1.0) {
+            return Result<
+                OpticalFilterSpecification,
+                OpticalFilterSpecificationError>::failure(
+                    OpticalFilterSpecificationError::InvalidTransmission);
+        }
+
+        if (sample.reflectionFraction &&
+            (!std::isfinite(*sample.reflectionFraction) ||
+             *sample.reflectionFraction < 0.0 ||
+             *sample.reflectionFraction > 1.0 ||
+             sample.transmissionFraction + *sample.reflectionFraction > 1.000001)) {
+            return Result<
+                OpticalFilterSpecification,
+                OpticalFilterSpecificationError>::failure(
+                    OpticalFilterSpecificationError::InvalidReflection);
+        }
+
+        if (role == OpticalFilterRole::Dichroic &&
+            !sample.reflectionFraction) {
+            return Result<
+                OpticalFilterSpecification,
+                OpticalFilterSpecificationError>::failure(
+                    OpticalFilterSpecificationError::DichroicRequiresTransmissionAndReflection);
+        }
+    }
+
+    return Result<
+        OpticalFilterSpecification,
+        OpticalFilterSpecificationError>::success(
+            OpticalFilterSpecification(
+                std::move(componentId),
+                role,
+                std::move(spectralResponse),
+                std::move(compatibilityId)));
+}
+
+const EquipmentComponentId&
+OpticalFilterSpecification::componentId() const noexcept {
+    return componentId_;
+}
+
+OpticalFilterRole OpticalFilterSpecification::role() const noexcept {
+    return role_;
+}
+
+const std::vector<OpticalFilterSpectralSample>&
+OpticalFilterSpecification::spectralResponse() const noexcept {
+    return spectralResponse_;
+}
+
+const std::optional<OpticalCompatibilityId>&
+OpticalFilterSpecification::compatibilityId() const noexcept {
+    return compatibilityId_;
+}
+
 CameraSpecification::CameraSpecification(
     EquipmentComponentId componentId,
     PixelDimensions activeSensorDimensions,

@@ -94,6 +94,8 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
     const auto microscopeId = makeId<MicroscopeId>("binding-test-microscope");
     const auto objectiveId = makeId<EquipmentComponentId>("objective-main");
     const auto cameraId = makeId<EquipmentComponentId>("camera-main");
+    const auto objectiveInput =
+        makeId<OpticalPortId>("objective-main-input");
     const auto objectiveOutput =
         makeId<OpticalPortId>("objective-main-output");
     const auto cameraInput = makeId<OpticalPortId>("camera-main-input");
@@ -102,7 +104,9 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
         objectiveId,
         EquipmentComponentKind::OpticalElement,
         {take(OpticalPort::create(
-            objectiveOutput, OpticalPortDirection::Output))}));
+             objectiveInput, OpticalPortDirection::Input)),
+         take(OpticalPort::create(
+             objectiveOutput, OpticalPortDirection::Output))}));
     const auto cameraComponent = take(EquipmentComponent::create(
         cameraId,
         EquipmentComponentKind::ImagingDevice,

@@ -51,4 +51,45 @@ Use a fresh build directory when changing CMake generators. CMake does not
 allow an existing build tree configured with one generator to be reused with
 another.
 
+## Build the SwiftUI application alongside the Qt preview
+
+The SwiftUI application and the Qt preview are separate frontends over the same
+AmScope driver. They can be enabled in one macOS build without replacing,
+disabling, or linking Qt into the SwiftUI executable. Use a separate build
+directory so this combined configuration does not change the standalone
+launcher configuration above.
+
+With Qt 6 (Core and Widgets), Swift, CMake and Ninja installed:
+
+```bash
+cmake -S . -B build/dual-ui-ninja -G Ninja \
+  -DOPTIKA_BUILD_NATIVE_APP=ON \
+  -DOPTIKA_BUILD_AMSCOPE=ON \
+  -DAMSCOPE_BUILD_QT_ADAPTER=ON \
+  -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+  -DBUILD_TESTING=ON \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build/dual-ui-ninja \
+  --target optika_b293_dualslide_app amscope_preview --parallel
+ctest --test-dir build/dual-ui-ninja --output-on-failure
+```
+
+The native bundle is
+`build/dual-ui-ninja/Application/OptikaB293/optika_b293_dualslide_app.app`;
+the Qt preview executable is
+`build/dual-ui-ninja/Camera/Amscope/amscope_preview`.
+
+Launch either frontend independently:
+
+```bash
+open build/dual-ui-ninja/Application/OptikaB293/optika_b293_dualslide_app.app
+./build/dual-ui-ninja/Camera/Amscope/amscope_preview
+```
+
+The SwiftUI target links `Microscope::Application`, `Microscope::Core` and
+`Amscope::Driver`. The Qt target continues to link `Amscope::Qt` and
+`Camera::QtWidgets`. Neither frontend owns or changes the other's UI code.
+
 This target is the current native macOS frontend and transitional implementation. The target platform separates the C++ `Microscope.Core` and `Microscope.Application` libraries from this frontend. Microscope definitions are JSON data, and microscope behavior migrates into Core incrementally. See the [platform architecture](../../docs/architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md), [Core/Application public contracts](../../docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md), [C++ library build guide](../../Libraries/README.md) and [implementation plan](../../docs/plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md). The existing AmScope driver and preview pipeline remain reusable capabilities and must be preserved during migration.

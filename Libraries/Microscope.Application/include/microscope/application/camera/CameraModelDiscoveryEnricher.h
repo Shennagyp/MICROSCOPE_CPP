@@ -3,6 +3,7 @@
 #include "camera/CameraModelCatalog.h"
 #include "microscope/core/equipment/OpticalSpecifications.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -13,6 +14,9 @@ enum class CameraModelEnrichmentStatus {
     InsufficientIdentity,
     NoMatchingProfile,
     CandidateSelectionRequired,
+    BoundProfileNotFound,
+    BoundProfileRevisionMismatch,
+    BoundProfileIdentityMismatch,
     ExactProfileApplied,
     ExactProfileAppliedWithConflicts
 };
@@ -27,6 +31,7 @@ struct CameraModelEnrichmentWarning {
 // are reported and the live backend fact takes precedence for that field.
 struct CameraModelEnrichmentResult {
     ::camera::CameraDeviceInfo deviceInfo;
+    std::optional<core::EquipmentComponentId> equipmentComponentId;
     CameraModelEnrichmentStatus status =
         CameraModelEnrichmentStatus::InsufficientIdentity;
     std::vector<::camera::CameraModelKey> candidateProfiles;
@@ -53,6 +58,17 @@ public:
     [[nodiscard]] static CameraModelEnrichmentResult enrich(
         const ::camera::CameraDeviceInfo& discoveredDevice,
         const ::camera::CameraModelCatalog& catalog);
+
+    // Enriches the runtime device assigned to one installed camera component
+    // using that component's persisted model-profile key and exact profile
+    // revision. Missing runtime identity is supplied by the binding; any known
+    // conflicting identity or stale profile revision blocks enrichment.
+    [[nodiscard]] static CameraModelEnrichmentResult enrichBoundDevice(
+        const ::camera::CameraDeviceInfo& discoveredDevice,
+        const ::camera::CameraModelCatalog& catalog,
+        const core::EquipmentComponentId& cameraComponentId,
+        const ::camera::CameraModelKey& expectedModelKey,
+        std::uint64_t expectedProfileRevision);
 
     // Projects enriched backend-neutral facts into the persistence-free Core
     // sensor model. Active sensor dimensions and pixel pitch remain on the

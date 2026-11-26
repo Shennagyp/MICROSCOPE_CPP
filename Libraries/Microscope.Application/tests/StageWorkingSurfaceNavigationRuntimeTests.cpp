@@ -117,14 +117,13 @@ application::motion::StageWorkingSurfaceNavigationVerificationPolicy verificatio
 
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> actionCompleted(
     const core::RuntimeDeviceCorrelation& device,
-    const core::OperationId& operation, const core::StepId& step,
-    const core::CommandId& command) {
+    const core::OperationCorrelation& correlation) {
     auto axes = take(core::StageAxisSet::create({
         id<core::StageAxisId>("x"), id<core::StageAxisId>("y")}));
     auto payload = take(core::StageMotionActionCompletion::create(
         core::StageMotionAction::MoveAxesTo, axes));
     auto metadata = take(core::FeedbackMetadata::create(
-        core::FeedbackCorrelation{device, core::OperationCorrelation{operation, step, command}},
+        core::FeedbackCorrelation{device, correlation},
         core::FeedbackKind::DeviceActionCompleted,
         core::ObservationSource::HardwareReadback));
     return core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
@@ -133,10 +132,10 @@ core::FeedbackEnvelope<core::StageMotionFeedbackPayload> actionCompleted(
 
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> positionFeedback(
     const core::RuntimeDeviceCorrelation& device,
-    const core::OperationId& operation, const core::StepId& step,
-    const core::CommandId& command, const char* axisId, double value) {
+    const core::OperationCorrelation& correlation,
+    const char* axisId, double value) {
     auto metadata = take(core::FeedbackMetadata::create(
-        core::FeedbackCorrelation{device, core::OperationCorrelation{operation, step, command}},
+        core::FeedbackCorrelation{device, correlation},
         core::FeedbackKind::DeviceStateObserved,
         core::ObservationSource::HardwareReadback));
     return core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
@@ -145,14 +144,13 @@ core::FeedbackEnvelope<core::StageMotionFeedbackPayload> positionFeedback(
 
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> invalidUnitPositionFeedback(
     const core::RuntimeDeviceCorrelation& device,
-    const core::OperationId& operation, const core::StepId& step,
-    const core::CommandId& command) {
+    const core::OperationCorrelation& correlation) {
     auto invalidObservation = take(core::AxisPositionObservation::create(
         take(core::AxisPosition::create(
             id<core::StageAxisId>("x"), 30.0, core::AxisCoordinateUnit::Millimeters)),
         0.01, core::StagePositionEvidence::EncoderMeasured));
     auto metadata = take(core::FeedbackMetadata::create(
-        core::FeedbackCorrelation{device, core::OperationCorrelation{operation, step, command}},
+        core::FeedbackCorrelation{device, correlation},
         core::FeedbackKind::DeviceStateObserved,
         core::ObservationSource::HardwareReadback));
     return core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
@@ -161,12 +159,11 @@ core::FeedbackEnvelope<core::StageMotionFeedbackPayload> invalidUnitPositionFeed
 
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> homeReference(
     const core::RuntimeDeviceCorrelation& device,
-    const core::OperationId& operation, const core::StepId& step,
-    const core::CommandId& command) {
+    const core::OperationCorrelation& correlation) {
     auto payload = take(core::StageHomeReferenceObservation::create({
         observation("x", 0.0, 0.2), observation("y", 0.0, 0.2)}));
     auto metadata = take(core::FeedbackMetadata::create(
-        core::FeedbackCorrelation{device, core::OperationCorrelation{operation, step, command}},
+        core::FeedbackCorrelation{device, correlation},
         core::FeedbackKind::HomeReferenceEstablished,
         core::ObservationSource::HardwareReadback));
     return core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
@@ -223,6 +220,12 @@ const core::OperationCorrelation& lastOperation(
     return *port.lastOperation;
 }
 
+core::SlideNavigationTarget2D navigationTarget(
+    const core::StageWorkingSurface2D& surface,
+    const char* slideId, core::SlidePoint2D point) {
+    return take(surface.createNavigationTarget(id<core::SlideId>(slideId), point));
+}
+
 struct RuntimeFixture final {
     application::runtime::RuntimeWakeSignal wake;
     core::RuntimeDeviceCorrelation device{
@@ -264,8 +267,7 @@ void testDirectNavigationSupportsAnArbitrarySlideIdentity() {
     take(navigation.bindOwnerThread());
 
     auto started = take(navigation.beginRequest(
-        id<core::SlideId>("slide-c"), {10000.0, 5000.0},
-        navigationIds("direct-op", "direct-step", "direct-cmd", "direct-home-step", "direct-home-cmd")));
+        navigationTarget(surface, "slide-c", {10000.0, 5000.0})));
     check(started.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched,
         "the third user-drawn slide dispatches directly without a fixed slot");
@@ -282,9 +284,7 @@ void testDirectNavigationSupportsAnArbitrarySlideIdentity() {
         std::abs(targetForY->value() - 5000.0) < 1e-9,
         "the slide-local point is transformed through the selected slide registration");
 
-    auto feedback = fixture.process(actionCompleted(
-        fixture.device, id<core::OperationId>("direct-op"),
-        id<core::StepId>("direct-step"), id<core::CommandId>("direct-cmd")));
+    auto feedback = fixture.process(actionCompleted(fixture.device, lastOperation(port)));
     auto completed = take(navigation.processFeedback(feedback));
     check(completed.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted &&
@@ -312,8 +312,7 @@ void testHomeReferencesOnlyXYThenRestoresTheSlideTarget() {
     take(navigation.bindOwnerThread());
 
     auto started = take(navigation.beginRequest(
-        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
-        navigationIds("home-op", "home-step", "home-cmd", "restored-step", "restored-cmd")));
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
     check(started.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::HomingDispatched &&
         port.homeCalls == 1 && port.moveToCalls == 0,
@@ -323,9 +322,7 @@ void testHomeReferencesOnlyXYThenRestoresTheSlideTarget() {
         port.lastHome->axes().axes()[1] == surface.yAxisId(),
         "slide navigation homes X and Y only");
 
-    auto home = fixture.process(homeReference(
-        fixture.device, id<core::OperationId>("home-op"),
-        id<core::StepId>("home-step"), id<core::CommandId>("home-cmd")));
+    auto home = fixture.process(homeReference(fixture.device, lastOperation(port)));
     auto restored = take(navigation.processFeedback(home));
     check(restored.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::RestoredMoveDispatched &&
@@ -334,9 +331,7 @@ void testHomeReferencesOnlyXYThenRestoresTheSlideTarget() {
     check(port.lastMove && port.lastMove->targets().size() == 2,
         "the restored absolute move still contains only XY");
 
-    auto completion = fixture.process(actionCompleted(
-        fixture.device, id<core::OperationId>("home-op"),
-        id<core::StepId>("restored-step"), id<core::CommandId>("restored-cmd")));
+    auto completion = fixture.process(actionCompleted(fixture.device, lastOperation(port)));
     auto completed = take(navigation.processFeedback(completion));
     check(completed.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted &&
@@ -360,27 +355,20 @@ void testDeviceReadbackVerifiesBothAxesAndNotOne() {
     take(navigation.bindOwnerThread());
 
     take(navigation.beginRequest(
-        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
-        navigationIds("observed-op", "observed-step", "observed-cmd", "observed-home-step", "observed-home-cmd")));
-    auto complete = fixture.process(actionCompleted(
-        fixture.device, id<core::OperationId>("observed-op"),
-        id<core::StepId>("observed-step"), id<core::CommandId>("observed-cmd")));
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    auto complete = fixture.process(actionCompleted(fixture.device, lastOperation(port)));
     auto awaiting = take(navigation.processFeedback(complete));
     check(awaiting.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::AwaitingPositionFeedback,
         "device-readback policy waits for both fresh correlated axis observations");
 
-    auto x = fixture.process(positionFeedback(
-        fixture.device, id<core::OperationId>("observed-op"),
-        id<core::StepId>("observed-step"), id<core::CommandId>("observed-cmd"), "x", 30000.2));
+    auto x = fixture.process(positionFeedback(fixture.device, lastOperation(port), "x", 30000.2));
     auto waitingForY = take(navigation.processFeedback(x));
     check(waitingForY.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::AwaitingPositionFeedback,
         "one axis observation cannot verify a coordinated XY move");
 
-    auto y = fixture.process(positionFeedback(
-        fixture.device, id<core::OperationId>("observed-op"),
-        id<core::StepId>("observed-step"), id<core::CommandId>("observed-cmd"), "y", 30000.2));
+    auto y = fixture.process(positionFeedback(fixture.device, lastOperation(port), "y", 30000.2));
     auto completed = take(navigation.processFeedback(y));
     check(completed.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted,
@@ -405,13 +393,9 @@ void testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ() {
     take(navigation.bindOwnerThread());
 
     take(navigation.beginRequest(
-        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
-        navigationIds("bad-feedback-op", "bad-feedback-step", "bad-feedback-cmd",
-            "bad-feedback-home-step", "bad-feedback-home-cmd")));
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
 
-    auto invalid = fixture.process(invalidUnitPositionFeedback(
-        fixture.device, id<core::OperationId>("bad-feedback-op"),
-        id<core::StepId>("bad-feedback-step"), id<core::CommandId>("bad-feedback-cmd")));
+    auto invalid = fixture.process(invalidUnitPositionFeedback(fixture.device, lastOperation(port)));
     auto rejected = navigation.processFeedback(invalid);
     check(!rejected &&
         rejected.error().code ==
@@ -419,7 +403,7 @@ void testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ() {
         "a correlated XY observation with the wrong axis unit is rejected");
 
     const auto snapshot = take(fixture.runtime->operationSnapshot(
-        id<core::OperationId>("bad-feedback-op")));
+        lastOperation(port).operationId));
     check(snapshot.status() == core::OperationStatus::Failed,
         "invalid correlated XY feedback fails the active navigation operation");
     check(!navigation.position().x().positionIsUsable() &&
@@ -443,24 +427,16 @@ void testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation() {
     take(navigation.bindOwnerThread());
 
     take(navigation.beginRequest(
-        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
-        navigationIds("off-target-op", "off-target-step", "off-target-cmd",
-            "off-target-home-step", "off-target-home-cmd")));
-    auto completed = fixture.process(actionCompleted(
-        fixture.device, id<core::OperationId>("off-target-op"),
-        id<core::StepId>("off-target-step"), id<core::CommandId>("off-target-cmd")));
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    auto completed = fixture.process(actionCompleted(fixture.device, lastOperation(port)));
     auto awaiting = take(navigation.processFeedback(completed));
     check(awaiting.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::AwaitingPositionFeedback,
         "the measured policy waits for readback before evaluating the achieved pose");
 
-    auto x = fixture.process(positionFeedback(
-        fixture.device, id<core::OperationId>("off-target-op"),
-        id<core::StepId>("off-target-step"), id<core::CommandId>("off-target-cmd"), "x", 40000.0));
+    auto x = fixture.process(positionFeedback(fixture.device, lastOperation(port), "x", 40000.0));
     take(navigation.processFeedback(x));
-    auto y = fixture.process(positionFeedback(
-        fixture.device, id<core::OperationId>("off-target-op"),
-        id<core::StepId>("off-target-step"), id<core::CommandId>("off-target-cmd"), "y", 30000.0));
+    auto y = fixture.process(positionFeedback(fixture.device, lastOperation(port), "y", 30000.0));
     auto rejected = take(navigation.processFeedback(y));
     check(rejected.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
@@ -485,21 +461,17 @@ void testAdapterRejectionClosesOperationWithoutLeavingPendingStep() {
     take(navigation.bindOwnerThread());
 
     const auto rejected = take(navigation.beginRequest(
-        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
-        navigationIds("rejected-op", "rejected-step", "rejected-cmd",
-            "rejected-home-step", "rejected-home-cmd")));
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
     check(rejected.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
         "an explicit adapter rejection fails the navigation immediately");
     const auto failedSnapshot = take(fixture.runtime->operationSnapshot(
-        id<core::OperationId>("rejected-op")));
+        *rejected.operationId));
     check(failedSnapshot.status() == core::OperationStatus::Failed,
         "a rejected command closes its Pending operation step as a failed operation");
 
     const auto retried = take(navigation.beginRequest(
-        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
-        navigationIds("retry-op", "retry-step", "retry-cmd",
-            "retry-home-step", "retry-home-cmd")));
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
     check(retried.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched,
         "the failed operation releases the runtime for the next valid request");

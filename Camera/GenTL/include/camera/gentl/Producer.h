@@ -1,5 +1,6 @@
 #pragma once
 
+#include "camera/AcquisitionIntegrityTracker.h"
 #include "camera/gentl/ConsumerBridge.h"
 #include "camera/gentl/GenTL_v1_6.h"
 
@@ -43,6 +44,17 @@ struct DataStreamFrame {
     std::optional<bool> dataLargerThanBuffer;
     std::optional<bool> isComposite;
     bool incomplete = false;
+};
+
+struct DataStreamStatistics {
+    camera::AcquisitionIntegritySnapshot integrity;
+    std::optional<std::string> transportType;
+    std::optional<std::uint64_t> producerDeliveredBuffers;
+    std::optional<std::uint64_t> producerBufferUnderruns;
+    std::optional<std::uint64_t> producerFramesStarted;
+    std::optional<std::size_t> announcedBuffers;
+    std::optional<std::size_t> queuedBuffers;
+    std::optional<std::size_t> buffersAwaitingDelivery;
 };
 
 class ProducerContext;
@@ -107,6 +119,10 @@ public:
     // buffer is requeued, so the result has independent lifetime.
     std::optional<DataStreamFrame> nextFrame(
         std::uint64_t timeoutMilliseconds = 1000);
+
+    // Combines protocol-neutral continuity accounting with optional native
+    // GenTL stream counters. Missing optional counters remain absent.
+    DataStreamStatistics statistics();
 
     void stop();
 

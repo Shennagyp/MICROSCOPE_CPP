@@ -32,6 +32,7 @@ struct AcquisitionIntegritySnapshot {
     std::uint64_t nonImagePayloads = 0;
     std::uint64_t invalidPayloads = 0;
     std::uint64_t frameWaitTimeouts = 0;
+    std::uint64_t bufferStarvationEvents = 0;
     std::uint64_t buffersWithoutSequence = 0;
     std::uint64_t sequenceGaps = 0;
     std::uint64_t missingFrames = 0;
@@ -95,6 +96,13 @@ public:
     void recordFrameWaitTimeout() noexcept {
         std::lock_guard<std::mutex> guard(mutex_);
         increment(snapshot_.frameWaitTimeouts);
+    }
+
+    // Adds provider-reported events such as receive-buffer starvation. The
+    // source counter and its reset semantics remain the adapter's responsibility.
+    void recordBufferStarvationEvents(std::uint64_t count = 1) noexcept {
+        std::lock_guard<std::mutex> guard(mutex_);
+        add(snapshot_.bufferStarvationEvents, count);
     }
 
     [[nodiscard]] AcquisitionIntegritySnapshot snapshot() const noexcept {

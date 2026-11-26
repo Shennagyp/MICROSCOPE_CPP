@@ -785,6 +785,18 @@ struct DataStreamSession::Impl {
             throw std::runtime_error(
                 "DevOpenDataStream succeeded without returning a DS_HANDLE.");
 
+        transportType = readOptionalInfoString(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetInfo, stream, GenTL::STREAM_INFO_TLTYPE,
+                    type, value, size);
+            });
+        if (transportType && *transportType == "GEV") {
+            // GenTL 1.6 specifies GigE Vision frame IDs as one-based 16-bit
+            // counters wrapping to one. Other TL types remain unassumed.
+            integrity.configureSequenceCounter({65535, 1});
+        }
+
         const auto payloadSize = readTypedInfo<std::size_t>(
             [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
                 return context->consumer.invoke(
@@ -972,6 +984,9 @@ struct DataStreamSession::Impl {
     bool closing = false;
     bool closed = false;
     std::size_t activeCalls = 0;
+    std::optional<std::string> transportType;
+    camera::AcquisitionIntegrityTracker integrity;
+    std::optional<std::uint64_t> lastObservedUnderrunCounter;
 };
 
 DataStreamSession::DataStreamSession(
@@ -1025,7 +1040,71 @@ void DataStreamSession::start() {
         GenTL::ACQ_START_FLAGS_DEFAULT,
         GENTL_INFINITE),
         "DSStartAcquisition");
+    impl_->integrity.reset();
+    impl_->lastObservedUnderrunCounter.reset();
     impl_->started = true;
+}
+
+DataStreamStatistics DataStreamSession::statistics() {
+    if (!impl_) throw std::logic_error("The GenTL data stream is closed.");
+
+    auto* state = impl_.get();
+    std::lock_guard<std::mutex> stateGuard(state->mutex);
+    if (state->closed || state->stopping || !state->stream)
+        throw std::logic_error("The GenTL data stream is closed.");
+
+    const auto context = state->device->context;
+    std::lock_guard<std::mutex> contextGuard(context->mutex);
+    if (context->quarantined)
+        throw std::runtime_error("The GenTL Producer context is quarantined.");
+
+    DataStreamStatistics result;
+    result.transportType = state->transportType;
+    const auto readStreamInfo = [&](auto command, auto expectedType,
+                                    const char* name) {
+        using Value = decltype(expectedType);
+        return readTypedInfo<Value>(
+            [&](GenTL::INFO_DATATYPE* type, void* value, std::size_t* size) {
+                return context->consumer.invoke(
+                    Operation::dsGetInfo, state->stream, command,
+                    type, value, size);
+            }, expectedType, name);
+    };
+
+    result.producerDeliveredBuffers = readStreamInfo(
+        GenTL::STREAM_INFO_NUM_DELIVERED,
+        std::uint64_t{}, "DSGetInfo(NUM_DELIVERED)");
+    result.producerBufferUnderruns = readStreamInfo(
+        GenTL::STREAM_INFO_NUM_UNDERRUN,
+        std::uint64_t{}, "DSGetInfo(NUM_UNDERRUN)");
+    result.producerFramesStarted = readStreamInfo(
+        GenTL::STREAM_INFO_NUM_STARTED,
+        std::uint64_t{}, "DSGetInfo(NUM_STARTED)");
+    result.announcedBuffers = readStreamInfo(
+        GenTL::STREAM_INFO_NUM_ANNOUNCED,
+        std::size_t{}, "DSGetInfo(NUM_ANNOUNCED)");
+    result.queuedBuffers = readStreamInfo(
+        GenTL::STREAM_INFO_NUM_QUEUED,
+        std::size_t{}, "DSGetInfo(NUM_QUEUED)");
+    result.buffersAwaitingDelivery = readStreamInfo(
+        GenTL::STREAM_INFO_NUM_AWAIT_DELIVERY,
+        std::size_t{}, "DSGetInfo(NUM_AWAIT_DELIVERY)");
+
+    if (result.producerBufferUnderruns) {
+        const auto current = *result.producerBufferUnderruns;
+        const auto previous = state->lastObservedUnderrunCounter;
+        if (!previous) {
+            state->integrity.recordBufferStarvationEvents(current);
+        } else if (current >= *previous) {
+            state->integrity.recordBufferStarvationEvents(current - *previous);
+        }
+        // A decreasing source counter is a counter reset, not a negative
+        // number of starvation events. Re-establish its baseline.
+        state->lastObservedUnderrunCounter = current;
+    }
+
+    result.integrity = state->integrity.snapshot();
+    return result;
 }
 
 std::optional<DataStreamFrame> DataStreamSession::nextFrame(
@@ -1069,7 +1148,10 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
         &eventSize,
         timeoutMillisecondsToNanoseconds(timeoutMilliseconds));
 
-    if (status == GenTL::GC_ERR_TIMEOUT) return std::nullopt;
+    if (status == GenTL::GC_ERR_TIMEOUT) {
+        state->integrity.recordFrameWaitTimeout();
+        return std::nullopt;
+    }
     if (status == GenTL::GC_ERR_ABORT ||
         status == GenTL::GC_ERR_INVALID_HANDLE) {
         // Close may unregister the event after this call has acquired its
@@ -1290,6 +1372,18 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
         check(context->consumer.invoke(
             Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle),
             "DSQueueBuffer(requeue)");
+
+        const auto deliveryStatus =
+            (frame.incomplete || frame.dataLargerThanBuffer.value_or(false))
+                ? camera::FrameDeliveryStatus::Incomplete
+                : (!frame.imagePresent.value_or(false) ||
+                   !frame.payloadType ||
+                   *frame.payloadType != GenTL::PAYLOAD_TYPE_IMAGE)
+                    ? camera::FrameDeliveryStatus::NonImagePayload
+                    : frame.payload.empty()
+                        ? camera::FrameDeliveryStatus::InvalidPayload
+                        : camera::FrameDeliveryStatus::CompleteImage;
+        state->integrity.recordBuffer(frame.frameId, deliveryStatus);
     } catch (...) {
         std::lock_guard<std::mutex> guard(context->mutex);
         if (!context->quarantined) {

@@ -10,8 +10,10 @@ namespace camera::gentl {
 // Converts a complete, image-bearing GenTL buffer into the Common frame
 // contract when the metadata can be represented without losing layout facts.
 // Unknown pixel formats remain Unknown while their raw identifier and bytes
-// are preserved. Non-image, incomplete, chunked, or offset/padded buffers are
-// not projected into the simpler Common frame type.
+// are preserved. Complete image payloads with validated image offset and row/
+// trailing padding are projected without stripping or rearranging payload bytes.
+// Non-image, incomplete, chunked, composite and unsupported multipart payloads
+// remain outside the single-raster Common frame projection.
 std::optional<camera::FramePtr>
 makeCommonFrame(DataStreamFrame source);
 

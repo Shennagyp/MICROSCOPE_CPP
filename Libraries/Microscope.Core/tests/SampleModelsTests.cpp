@@ -13,7 +13,7 @@ int failures = 0;
 void check(bool condition, const char* message) {
     if (!condition) {
         ++failures;
-        std::cerr << "FAIL: " << message << '\\n';
+        std::cerr << "FAIL: " << message << '\n';
     }
 }
 
@@ -259,9 +259,9 @@ int main() {
     testFluorescentSlideLabelPreservesSpectralProfile();
     testFluorescenceMetadataRequiresFluorescenceTechnique();
     if (failures != 0) {
-        std::cerr << failures << " sample/slide model contract test(s) failed.\\n";
+        std::cerr << failures << " sample/slide model contract test(s) failed.\n";
         return 1;
     }
-    std::cout << "All sample/slide model contract tests passed.\\n";
+    std::cout << "All sample/slide model contract tests passed.\n";
     return 0;
 }

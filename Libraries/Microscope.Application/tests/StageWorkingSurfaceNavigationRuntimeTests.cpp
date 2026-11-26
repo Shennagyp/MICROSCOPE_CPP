@@ -506,6 +506,42 @@ void testAdapterRejectionClosesOperationWithoutLeavingPendingStep() {
         "the failed operation releases the runtime for the next valid request");
 }
 
+void testQueuedTargetIsRejectedAfterSlideRegistrationChanges() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto originalSurface = workingSurface(stage);
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        originalSurface, referencedPosition(originalSurface, stage), homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    auto queue = take(application::motion::StageWorkingSurfaceNavigationControlQueue::create(
+        2, fixture.wake));
+    const auto oldTarget = take(originalSurface.createNavigationTarget(
+        id<core::SlideId>("slide-b"), {10000.0, 10000.0}));
+    const application::motion::StageWorkingSurfaceNavigationControlRequest request{oldTarget};
+    check(queue->submit(request) ==
+        application::motion::StageWorkingSurfaceNavigationControlSubmitStatus::Enqueued,
+        "the owner queue accepts a target tied to the current slide registration");
+
+    const auto revisedSlideB = take(core::SlideRectangleDefinition2D::create(
+        id<core::SlideId>("slide-b"), id<core::CalibrationRevisionId>("slide-b-v2"),
+        {5000.0, 0.0}, {25000.0, 20000.0},
+        core::SlideRectangleLengthAxis::StageY, 20000.0, 15000.0));
+    const auto revisedSurface = take(originalSurface.replacingSlideRectangle(revisedSlideB));
+    take(navigation.replaceWorkingSurface(revisedSurface));
+
+    auto drained = take(queue->drain(navigation));
+    check(drained.outcomes.size() == 1 && drained.outcomes.front().error &&
+        drained.outcomes.front().error->code ==
+            application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::PlanningRejected,
+        "an old queued target is rejected after the slide registration revision changes");
+    check(!drained.outcomes.front().operationId && port.moveToCalls == 0 && port.homeCalls == 0,
+        "a stale queued target creates no operation identity and dispatches no physical command");
+}
+
 void testBoundedControlQueueDispatchesOnTheOwnerThread() {
     RuntimeFixture fixture;
     const auto stage = stageSpecification();
@@ -518,25 +554,28 @@ void testBoundedControlQueueDispatchesOnTheOwnerThread() {
 
     auto queue = take(application::motion::StageWorkingSurfaceNavigationControlQueue::create(
         1, fixture.wake));
-    const application::motion::StageWorkingSurfaceNavigationControlRequest request{
-        id<core::SlideId>("slide-b"), {10000.0, 10000.0},
-        navigationIds("queue-op", "queue-step", "queue-cmd", "queue-home-step", "queue-home-cmd")};
+    const auto target = take(surface.createNavigationTarget(
+        id<core::SlideId>("slide-b"), {10000.0, 10000.0}));
+    const application::motion::StageWorkingSurfaceNavigationControlRequest request{target};
     check(queue->submit(request) ==
         application::motion::StageWorkingSurfaceNavigationControlSubmitStatus::Enqueued,
-        "the generic bounded queue accepts a variable-slide request");
+        "the generic bounded queue accepts an immutable revision-bound slide target");
 
-    auto overflow = request;
-    overflow.identities.operationId = id<core::OperationId>("overflow-op");
-    check(queue->submit(overflow) ==
+    check(queue->submit(request) ==
         application::motion::StageWorkingSurfaceNavigationControlSubmitStatus::QueueFull,
-        "the queue rejects overflow without replacing an accepted request");
+        "the queue rejects overflow without replacing an accepted target");
 
     auto drained = take(queue->drain(navigation));
     check(drained.outcomes.size() == 1 && port.moveToCalls == 1 &&
         drained.outcomes.front().update &&
         drained.outcomes.front().update->disposition ==
             application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched,
-        "the serialized owner drain dispatches one accepted generic navigation request");
+        "the persistent owner runtime dispatches one queued slide target");
+    check(drained.outcomes.front().operationId &&
+        drained.outcomes.front().update->operationId &&
+        drained.outcomes.front().operationId == drained.outcomes.front().update->operationId &&
+        drained.outcomes.front().operationId->value().find("stage-navigation/") == 0,
+        "the stage runtime allocates and publishes its own operation identity");
 }
 
 } // namespace
@@ -548,6 +587,7 @@ int main() {
     testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ();
     testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation();
     testAdapterRejectionClosesOperationWithoutLeavingPendingStep();
+    testQueuedTargetIsRejectedAfterSlideRegistrationChanges();
     testBoundedControlQueueDispatchesOnTheOwnerThread();
     if (failures != 0) {
         std::cerr << failures << " working-surface navigation runtime test(s) failed\n";

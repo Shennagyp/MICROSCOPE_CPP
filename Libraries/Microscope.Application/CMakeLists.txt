@@ -27,6 +27,7 @@ add_library(microscope_application STATIC
     src/CameraModelCatalogSqliteStore.cpp
     src/CameraComponentModelBindingSqliteStore.cpp
     src/CameraModelDiscoveryEnricher.cpp
+    src/InstalledCameraModelEnricher.cpp
     src/MicroscopeConfigurationSqliteStore.cpp)
 add_library(Microscope::Application ALIAS microscope_application)
 

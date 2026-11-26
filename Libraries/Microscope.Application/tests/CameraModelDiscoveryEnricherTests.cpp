@@ -166,15 +166,91 @@ void testExactProfileEnrichesMissingSensorFacts() {
     }
 }
 
+void testBoundDeviceUsesExactPersistentProfileAndSuppliesMissingIdentity() {
+    const auto catalog = makeCatalog({makeProfile("Rev-C", true, 1.2)});
+    auto discovered = makeDiscoveredDevice();
+    discovered.identity.manufacturer.reset();
+    discovered.identity.model.reset();
+    discovered.identity.modelVariant.reset();
+    const auto componentId =
+        take<microscope::core::EquipmentComponentId>(
+            microscope::core::EquipmentComponentId::create("bound-camera-1"));
+    const camera::CameraModelKey modelKey{
+        "Example Imaging",
+        "FluoroCam-2K",
+        std::optional<std::string>{"Rev-C"}};
+
+    const auto result = CameraModelDiscoveryEnricher::enrichBoundDevice(
+        discovered, catalog, componentId, modelKey, 2);
+
+    check(result.status == CameraModelEnrichmentStatus::ExactProfileApplied,
+          "applies the exact persisted model profile for the selected installed camera component");
+    check(result.equipmentComponentId == componentId,
+          "retains the installed equipment component identity through enrichment");
+    check(result.deviceInfo.identity.manufacturer ==
+              std::optional<std::string>{"Example Imaging"} &&
+          result.deviceInfo.identity.model ==
+              std::optional<std::string>{"FluoroCam-2K"} &&
+          result.deviceInfo.identity.modelVariant ==
+              std::optional<std::string>{"Rev-C"},
+          "fills missing runtime manufacturer/model/variant identity from the explicit equipment binding");
+    check(result.deviceInfo.identity.serialNumber ==
+              discovered.identity.serialNumber,
+          "retains the connected device serial as runtime identity without making it the model key");
+    check(result.deviceInfo.sensorCharacteristics &&
+          result.deviceInfo.sensorCharacteristics->quantumEfficiency.size() == 4,
+          "enriches sensor characteristics from the bound exact model profile");
+}
+
+void testBoundDeviceRejectsRuntimeIdentityAndProfileRevisionConflicts() {
+    const auto catalog = makeCatalog({makeProfile("Rev-C", true, 1.2)});
+    const auto componentId =
+        take<microscope::core::EquipmentComponentId>(
+            microscope::core::EquipmentComponentId::create("bound-camera-2"));
+    const camera::CameraModelKey modelKey{
+        "Example Imaging",
+        "FluoroCam-2K",
+        std::optional<std::string>{"Rev-C"}};
+
+    auto conflictingDevice = makeDiscoveredDevice();
+    conflictingDevice.identity.model = "Different-Camera-Model";
+    const auto identityConflict = CameraModelDiscoveryEnricher::enrichBoundDevice(
+        conflictingDevice, catalog, componentId, modelKey, 2);
+    check(identityConflict.status ==
+              CameraModelEnrichmentStatus::BoundProfileIdentityMismatch,
+          "does not apply a persisted model binding to a conflicting live device identity");
+    check(!identityConflict.deviceInfo.sensorCharacteristics ||
+          !identityConflict.deviceInfo.sensorCharacteristics->readNoiseElectronsRms,
+          "does not merge the bound model sensor profile after an identity conflict");
+
+    const auto staleProfile = CameraModelDiscoveryEnricher::enrichBoundDevice(
+        makeDiscoveredDevice(), catalog, componentId, modelKey, 1);
+    check(staleProfile.status ==
+              CameraModelEnrichmentStatus::BoundProfileRevisionMismatch,
+          "does not apply a stale persisted model-profile revision");
+    check(!staleProfile.deviceInfo.sensorCharacteristics ||
+          !staleProfile.deviceInfo.sensorCharacteristics->readNoiseElectronsRms,
+          "does not enrich sensor data when the bound profile revision is stale");
+}
+
 void testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeometry() {
     const auto catalog = makeCatalog({makeProfile("Rev-C", true, 1.2)});
-    const auto discovered = makeDiscoveredDevice();
-    const auto enriched = CameraModelDiscoveryEnricher::enrich(
-        discovered, catalog);
+    auto discovered = makeDiscoveredDevice();
+    discovered.identity.manufacturer.reset();
+    discovered.identity.model.reset();
+    discovered.identity.modelVariant.reset();
 
     const auto componentId =
         take<microscope::core::EquipmentComponentId>(
             microscope::core::EquipmentComponentId::create("installed-camera-1"));
+    const auto enriched = CameraModelDiscoveryEnricher::enrichBoundDevice(
+        discovered,
+        catalog,
+        componentId,
+        camera::CameraModelKey{
+            "Example Imaging", "FluoroCam-2K",
+            std::optional<std::string>{"Rev-C"}},
+        2);
     const auto activeDimensions =
         take(microscope::core::PixelDimensions::create(1024, 768));
     const auto cameraMode = take(microscope::core::CameraOutputMode::create(
@@ -323,6 +399,8 @@ void testLiveBackendConflictsAreRetainedAndReported() {
 
 int main() {
     testExactProfileEnrichesMissingSensorFacts();
+    testBoundDeviceUsesExactPersistentProfileAndSuppliesMissingIdentity();
+    testBoundDeviceRejectsRuntimeIdentityAndProfileRevisionConflicts();
     testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeometry();
     testIncompleteIdentityRequiresCandidateSelection();
     testProjectionRejectsAmbiguousModelIdentity();

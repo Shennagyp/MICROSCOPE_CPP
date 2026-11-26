@@ -3,6 +3,9 @@
 #include <sqlite3.h>
 
 #include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <string>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -142,6 +145,48 @@ Slide makeSlide(
         makeSlidePreparation(),
         {},
         std::move(originLabId)));
+}
+
+void appendU32(std::vector<std::uint8_t>& bytes, std::uint32_t value) {
+    for (unsigned shift = 0; shift < 32; shift += 8) {
+        bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xffU));
+    }
+}
+
+void appendU64(std::vector<std::uint8_t>& bytes, std::uint64_t value) {
+    for (unsigned shift = 0; shift < 64; shift += 8) {
+        bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xffU));
+    }
+}
+
+void appendReal(std::vector<std::uint8_t>& bytes, double value) {
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    appendU64(bytes, bits);
+}
+
+void appendString(std::vector<std::uint8_t>& bytes, const std::string& value) {
+    appendU32(bytes, static_cast<std::uint32_t>(value.size()));
+    bytes.insert(bytes.end(), value.begin(), value.end());
+}
+
+// Exact legacy Slide payload v1 layout: name, no OriginLabId, geometry,
+// preparation enum/optionals and zero specimen labels. There is no code or
+// stain section in this format.
+std::vector<std::uint8_t> makeLegacySlidePayloadV1() {
+    std::vector<std::uint8_t> bytes;
+    appendString(bytes, "Legacy slide name");
+    bytes.push_back(0U); // no OriginLabId
+    appendReal(bytes, 75000.0);
+    appendReal(bytes, 25000.0);
+    appendU32(bytes, static_cast<std::uint32_t>(SpecimenPreparationMethod::Unknown));
+    appendU32(bytes, static_cast<std::uint32_t>(SpecimenFixationState::Unknown));
+    bytes.push_back(0U); // no section thickness
+    bytes.push_back(0U); // no coverglass thickness
+    bytes.push_back(0U); // no mounting medium
+    bytes.push_back(0U); // no refractive index
+    appendU32(bytes, 0U); // no specimen labels
+    return bytes;
 }
 
 std::string uniqueDatabasePath(const char* prefix) {
@@ -678,6 +723,90 @@ void testStoreReopensAndResolvesHistoricalSlideAndSampleType() {
 }
 
 
+void testLegacySlidePayloadV1RestoresWithoutInventingCodeOrStain() {
+    const auto path = uniqueDatabasePath("microscope-slide-v1-compatibility-");
+    const auto typeId = makeId<SampleTypeId>("sample-type-v1-compatibility");
+    const auto slideId = makeId<SlideId>("slide-v1-compatibility");
+
+    auto opened = SampleSlideSqliteStore::open(path);
+    check(static_cast<bool>(opened), "opens the store for legacy Slide payload test");
+    if (!opened) {
+        removeDatabaseFiles(path);
+        return;
+    }
+    auto store = std::move(opened).value();
+    const auto sampleType = makeSampleType(typeId, 1, "Legacy SampleType");
+    check(store->saveSampleTypeRevision(sampleType, 0).isSuccess(),
+          "persists the exact SampleType revision referenced by the legacy Slide");
+
+    const auto payload = makeLegacySlidePayloadV1();
+    sqlite3* direct = nullptr;
+    const int openResult = sqlite3_open(path.c_str(), &direct);
+    check(openResult == SQLITE_OK && direct != nullptr,
+          "opens a second SQLite connection to seed the historical v1 row");
+    if (openResult == SQLITE_OK && direct != nullptr) {
+        sqlite3_stmt* statement = nullptr;
+        const char* sql =
+            "INSERT INTO slide_revision "
+            "(slide_id, revision, sample_type_id, sample_type_revision, "
+            "payload_format_version, payload) VALUES (?, 1, ?, 1, 1, ?)";
+        const int prepareResult = sqlite3_prepare_v2(direct, sql, -1, &statement, nullptr);
+        check(prepareResult == SQLITE_OK && statement != nullptr,
+              "prepares an immutable historical Slide v1 row");
+        if (prepareResult == SQLITE_OK && statement != nullptr) {
+            sqlite3_bind_text(
+                statement, 1, slideId.value().c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(
+                statement, 2, typeId.value().c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_blob(
+                statement,
+                3,
+                payload.data(),
+                static_cast<int>(payload.size()),
+                SQLITE_TRANSIENT);
+            const int step = sqlite3_step(statement);
+            check(step == SQLITE_DONE,
+                  "seeds the Slide v1 payload using its historical format version");
+        }
+        sqlite3_finalize(statement);
+    }
+    if (direct != nullptr) {
+        sqlite3_close(direct);
+    }
+
+    const auto loaded = store->loadSlideRevision(slideId, 1);
+    check(loaded && loaded.value().has_value(),
+          "loads a historical Slide v1 record");
+    if (loaded && loaded.value()) {
+        check(!loaded.value()->code(),
+              "does not reinterpret the historical Slide name as a Slide code");
+        check(loaded.value()->stains().empty(),
+              "does not invent stain identity for a historical Slide");
+        check(loaded.value()->name() == "Legacy slide name" &&
+              loaded.value()->geometry().widthMicrometers() == 75000.0 &&
+              loaded.value()->geometry().heightMicrometers() == 25000.0,
+              "preserves historical name and physical geometry");
+    }
+
+    const auto nextLegacyRevision = take(Slide::restoreLegacy(
+        slideId,
+        2,
+        typeId,
+        1,
+        "Legacy slide name",
+        take(SlideGeometry::create(75000.0, 25000.0)),
+        take(SlidePreparation::create(
+            SpecimenPreparationMethod::Unknown,
+            SpecimenFixationState::Unknown))));
+    const auto attemptedLegacyWrite = store->saveSlideRevision(nextLegacyRevision, 1);
+    check(!attemptedLegacyWrite &&
+          attemptedLegacyWrite.error().code ==
+              SampleSlideStoreErrorCode::SlideCodeRequired,
+          "requires an explicit code before a legacy Slide can be written as a new revision");
+
+    removeDatabaseFiles(path);
+}
+
 void testMultipleSlidesShareOneSampleTypeAndUnknownFactsRemainAbsent() {
     const auto path = uniqueDatabasePath("microscope-shared-sample-type-");
     const auto typeId = makeId<SampleTypeId>("sample-type-blood-film");
@@ -805,6 +934,7 @@ int main() {
     testImmutableRevisionRowsRejectDirectSqlMutation();
     testStoreReopensAndResolvesHistoricalSlideAndSampleType();
     testMultipleSlidesShareOneSampleTypeAndUnknownFactsRemainAbsent();
+    testLegacySlidePayloadV1RestoresWithoutInventingCodeOrStain();
 
     if (failures != 0) {
         std::cerr << failures << " SampleType/Slide SQLite persistence test(s) failed.\n";

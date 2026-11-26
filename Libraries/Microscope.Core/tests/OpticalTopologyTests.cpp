@@ -144,12 +144,12 @@ EquipmentFixture makeSharedSplitterFixture() {
         {}};
 
     fixture.components.push_back(take(EquipmentComponent::create(
-        fixture.sourceId,
+        makeId<EquipmentComponentId>("camera-resolver-source"),
         EquipmentComponentKind::IlluminationDevice,
         {makePort("source-output", OpticalPortDirection::Output)})));
 
     fixture.components.push_back(take(EquipmentComponent::create(
-        fixture.condenserId,
+        makeId<EquipmentComponentId>("camera-resolver-condenser"),
         EquipmentComponentKind::OpticalElement,
         {makePort("condenser-input", OpticalPortDirection::Input),
          makePort("condenser-output", OpticalPortDirection::Output)})));
@@ -164,7 +164,7 @@ EquipmentFixture makeSharedSplitterFixture() {
             OpticalElementFunction::BeamSplitter))})));
 
     fixture.components.push_back(take(EquipmentComponent::create(
-        fixture.objectiveAId,
+        makeId<EquipmentComponentId>("camera-resolver-objective"),
         EquipmentComponentKind::OpticalElement,
         {makePort("objective-a-input", OpticalPortDirection::Input),
          makePort("objective-a-output", OpticalPortDirection::Output)})));
@@ -201,16 +201,16 @@ EquipmentFixture makeSharedSplitterFixture() {
 
     fixture.paths.push_back(take(OpticalPath::create(
         makeId<OpticalPathId>("transmitted-path-a"),
-        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
-         makeStep(fixture.condenserId, fixture.condenserInput, fixture.condenserOutput),
+        {makeStep(makeId<EquipmentComponentId>("camera-resolver-source"), std::nullopt, fixture.sourceOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-condenser"), fixture.condenserInput, fixture.condenserOutput),
          makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
-         makeStep(fixture.objectiveAId, fixture.objectiveAInput, fixture.objectiveAOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-objective"), fixture.objectiveAInput, fixture.objectiveAOutput),
          makeStep(fixture.cameraAId, fixture.cameraAInput, std::nullopt)})));
 
     fixture.paths.push_back(take(OpticalPath::create(
         makeId<OpticalPathId>("transmitted-path-b"),
-        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
-         makeStep(fixture.condenserId, fixture.condenserInput, fixture.condenserOutput),
+        {makeStep(makeId<EquipmentComponentId>("camera-resolver-source"), std::nullopt, fixture.sourceOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-condenser"), fixture.condenserInput, fixture.condenserOutput),
          makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputB),
          makeStep(fixture.objectiveBId, fixture.objectiveBInput, fixture.objectiveBOutput),
          makeStep(fixture.cameraBId, fixture.cameraBInput, std::nullopt)})));
@@ -278,10 +278,10 @@ void testImagingRouteMustTerminateAtSpecifiedCamera() {
     auto fixture = makeSharedSplitterFixture();
     auto truncatedImagingPath = take(OpticalPath::create(
         makeId<OpticalPathId>("invalid-imaging-route"),
-        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
-         makeStep(fixture.condenserId, fixture.condenserInput, fixture.condenserOutput),
+        {makeStep(makeId<EquipmentComponentId>("camera-resolver-source"), std::nullopt, fixture.sourceOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-condenser"), fixture.condenserInput, fixture.condenserOutput),
          makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
-         makeStep(fixture.objectiveAId, fixture.objectiveAInput, std::nullopt)},
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-objective"), fixture.objectiveAInput, std::nullopt)},
         OpticalPathRole::Imaging));
 
     auto definition = MicroscopeEquipmentDefinition::create(
@@ -645,10 +645,10 @@ void testPathTraversalDirectionIsValidatedIndependently() {
     auto fixture = makeSharedSplitterFixture();
     fixture.paths[0] = take(OpticalPath::create(
         makeId<OpticalPathId>("transmitted-path-a"),
-        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
-         makeStep(fixture.condenserId, fixture.condenserOutput, fixture.condenserInput),
+        {makeStep(makeId<EquipmentComponentId>("camera-resolver-source"), std::nullopt, fixture.sourceOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-condenser"), fixture.condenserOutput, fixture.condenserInput),
          makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
-         makeStep(fixture.objectiveAId, fixture.objectiveAInput, fixture.objectiveAOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-objective"), fixture.objectiveAInput, fixture.objectiveAOutput),
          makeStep(fixture.cameraAId, fixture.cameraAInput, std::nullopt)}));
 
     auto definition = MicroscopeEquipmentDefinition::create(
@@ -682,10 +682,10 @@ void testPathPortMustBelongToItsComponent() {
     auto fixture = makeSharedSplitterFixture();
     fixture.paths[0] = take(OpticalPath::create(
         makeId<OpticalPathId>("transmitted-path-a"),
-        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
-         makeStep(fixture.condenserId, fixture.splitterInput, fixture.condenserOutput),
+        {makeStep(makeId<EquipmentComponentId>("camera-resolver-source"), std::nullopt, fixture.sourceOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-condenser"), fixture.splitterInput, fixture.condenserOutput),
          makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
-         makeStep(fixture.objectiveAId, fixture.objectiveAInput, fixture.objectiveAOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-objective"), fixture.objectiveAInput, fixture.objectiveAOutput),
          makeStep(fixture.cameraAId, fixture.cameraAInput, std::nullopt)}));
 
     auto definition = MicroscopeEquipmentDefinition::create(
@@ -703,10 +703,10 @@ void testMissingIntermediateEntryIsRejected() {
     auto fixture = makeSharedSplitterFixture();
     fixture.paths[0] = take(OpticalPath::create(
         makeId<OpticalPathId>("transmitted-path-a"),
-        {makeStep(fixture.sourceId, std::nullopt, fixture.sourceOutput),
-         makeStep(fixture.condenserId, std::nullopt, fixture.condenserOutput),
+        {makeStep(makeId<EquipmentComponentId>("camera-resolver-source"), std::nullopt, fixture.sourceOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-condenser"), std::nullopt, fixture.condenserOutput),
          makeStep(fixture.splitterId, fixture.splitterInput, fixture.splitterOutputA),
-         makeStep(fixture.objectiveAId, fixture.objectiveAInput, fixture.objectiveAOutput),
+         makeStep(makeId<EquipmentComponentId>("camera-resolver-objective"), fixture.objectiveAInput, fixture.objectiveAOutput),
          makeStep(fixture.cameraAId, fixture.cameraAInput, std::nullopt)}));
 
     auto definition = MicroscopeEquipmentDefinition::create(
@@ -905,9 +905,9 @@ OperationMode makeCameraResolverMode(
         1,
         lightPathId,
         makeId<CalibrationRevisionId>("camera-resolver-calibration"),
-        fixture.sourceId,
+        makeId<EquipmentComponentId>("camera-resolver-source"),
         makeId<IlluminationChannelId>("camera-resolver-channel"),
-        {fixture.objectiveAId},
+        {makeId<EquipmentComponentId>("camera-resolver-objective")},
         6.0));
     return take(OperationMode::create(
         fixture.microscopeId,
@@ -1186,11 +1186,11 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         imaging.lightPath.id(),
         cameraResolution,
         makeId<ConfigurationProfileId>("camera-request-factory-profile"),
-        fixture.objectiveAId,
-        fixture.condenserId,
-        fixture.sourceId,
+        makeId<EquipmentComponentId>("camera-resolver-objective"),
+        makeId<EquipmentComponentId>("camera-resolver-condenser"),
+        makeId<EquipmentComponentId>("camera-resolver-source"),
         makeId<IlluminationChannelId>("camera-request-factory-channel"),
-        ExposurePolicy::Automatic);
+        ExposurePolicy{});
     check(static_cast<bool>(request),
           "creates the legacy request only from a resolved LightPath camera choice");
     if (request) {
@@ -1216,11 +1216,11 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         imaging.lightPath.id(),
         cameraResolution,
         makeId<ConfigurationProfileId>("camera-request-factory-profile-stale-mode"),
-        fixture.objectiveAId,
-        fixture.condenserId,
-        fixture.sourceId,
+        makeId<EquipmentComponentId>("camera-resolver-objective"),
+        makeId<EquipmentComponentId>("camera-resolver-condenser"),
+        makeId<EquipmentComponentId>("camera-resolver-source"),
         makeId<IlluminationChannelId>("camera-request-factory-channel"),
-        ExposurePolicy::Automatic);
+        ExposurePolicy{});
     check(!staleModeResolution &&
           staleModeResolution.error() ==
               LightPathConfigurationRequestFactoryError::ResolvedCameraOperationModeMismatch,
@@ -1236,11 +1236,11 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         imaging.lightPath.id(),
         cameraResolution,
         makeId<ConfigurationProfileId>("camera-request-factory-profile-2"),
-        fixture.objectiveAId,
-        fixture.condenserId,
-        fixture.sourceId,
+        makeId<EquipmentComponentId>("camera-resolver-objective"),
+        makeId<EquipmentComponentId>("camera-resolver-condenser"),
+        makeId<EquipmentComponentId>("camera-resolver-source"),
         makeId<IlluminationChannelId>("camera-request-factory-channel"),
-        ExposurePolicy::Automatic);
+        ExposurePolicy{});
     check(!mismatch &&
           mismatch.error() ==
               LightPathConfigurationRequestFactoryError::OperationModeDoesNotContainLightPath,

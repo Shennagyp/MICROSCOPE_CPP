@@ -468,6 +468,21 @@ public:
         auto positionReduction = StagePosition3DFeedbackReducer::reduce(
             position_, feedback, false);
         if (!positionReduction) {
+            const auto* rejectedObservation =
+                std::get_if<core::AxisPositionObservation>(&envelope.payload());
+            const bool rejectedActiveXYObservation =
+                active_ && metadata.kind() == core::FeedbackKind::DeviceStateObserved &&
+                matchesCommand(feedback, active_->execution.commandContext) &&
+                rejectedObservation != nullptr &&
+                (rejectedObservation->position().axisId() == surface_.xAxisId() ||
+                 rejectedObservation->position().axisId() == surface_.yAxisId());
+            if (rejectedActiveXYObservation) {
+                position_ = position_.invalidateXYReference();
+                auto failed = failMoveVerification();
+                if (!failed) {
+                    return failed;
+                }
+            }
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
                 std::nullopt, std::nullopt, std::nullopt,
@@ -924,6 +939,8 @@ private:
                 active_->xObservation->source);
             if (!updated) {
                 position_ = position_.invalidateXYReference();
+                auto failed = failMoveVerification();
+                if (!failed) return failed;
                 return failure(
                     StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -936,6 +953,9 @@ private:
                 active_->yObservation->observation,
                 active_->yObservation->source);
             if (!updated) {
+                position_ = position_.invalidateXYReference();
+                auto failed = failMoveVerification();
+                if (!failed) return failed;
                 return failure(
                     StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -963,6 +983,9 @@ private:
                 active_->xObservation->observation,
                 active_->xObservation->source);
             if (!x) {
+                position_ = position_.invalidateXYReference();
+                auto failed = failMoveVerification();
+                if (!failed) return failed;
                 return failure(
                     StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -973,6 +996,9 @@ private:
                 active_->yObservation->observation,
                 active_->yObservation->source);
             if (!y) {
+                position_ = position_.invalidateXYReference();
+                auto failed = failMoveVerification();
+                if (!failed) return failed;
                 return failure(
                     StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -990,6 +1016,14 @@ private:
             return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected);
         }
         if (!positionWithinTarget(verificationPosition, direct->command)) {
+            if (verificationPolicy_.mode() ==
+                StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate) {
+                // A command-derived estimate outside the acceptance envelope is
+                // not independent evidence of the actual mechanical position.
+                position_ = position_.invalidateXYReference();
+            }
+            // Measured but off-target positions remain valid measurements; only
+            // the operation fails. The caller can inspect/recover from that pose.
             return failMoveVerification();
         }
 

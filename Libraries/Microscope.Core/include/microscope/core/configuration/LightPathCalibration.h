@@ -50,8 +50,6 @@ public:
     [[nodiscard]] const CalibrationRevisionId& revisionId() const noexcept;
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] std::uint64_t equipmentDefinitionRevision() const noexcept;
-    [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
-    [[nodiscard]] std::uint64_t equipmentDefinitionRevision() const noexcept;
     [[nodiscard]] const OperationModeId& operationModeId() const noexcept;
     [[nodiscard]] std::uint64_t operationModeRevision() const noexcept;
     [[nodiscard]] const LightPathId& lightPathId() const noexcept;
@@ -82,8 +80,6 @@ private:
         std::vector<LightPathCalibrationPoint> points);
 
     CalibrationRevisionId revisionId_;
-    MicroscopeId microscopeId_;
-    std::uint64_t equipmentDefinitionRevision_;
     MicroscopeId microscopeId_;
     std::uint64_t equipmentDefinitionRevision_;
     OperationModeId operationModeId_;

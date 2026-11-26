@@ -195,6 +195,11 @@ StagePosition3D::afterCommandedDisplacement(const AxisDisplacement& displacement
     return Result<StagePosition3D, StagePosition3DError>::failure(StagePosition3DError::AxisMismatch);
 }
 
+StagePosition3D StagePosition3D::invalidateXYReference() const {
+    return StagePosition3D(
+        x_.invalidateMachineReference(), y_.invalidateMachineReference(), z_);
+}
+
 StagePosition3D StagePosition3D::invalidateMachineReference() const {
     return StagePosition3D(x_.invalidateMachineReference(),
         y_.invalidateMachineReference(), z_.invalidateMachineReference());

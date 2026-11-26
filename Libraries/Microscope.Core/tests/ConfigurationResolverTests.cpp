@@ -3,6 +3,8 @@
 #include "microscope/core/configuration/LightPathCameraResolver.h"
 #include "microscope/core/configuration/LightPathConfigurationRequestFactory.h"
 #include "microscope/core/configuration/OperationMode.h"
+#include "microscope/core/configuration/SampleMicroscopyRequirementAssessor.h"
+#include "microscope/core/samples/SampleModels.h"
 
 #include <algorithm>
 #include <iostream>
@@ -1671,6 +1673,151 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
     }
 }
 
+void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarnings() {
+    const auto fixture = makeConfigurationFixture();
+    const auto objectiveRequirements = take(
+        ObjectiveMicroscopyRequirements::create(
+            10.0,
+            40.0,
+            0.25,
+            {ObjectiveImmersionMedium::Air}));
+    const auto cameraRequirements = take(
+        CameraPerformanceRequirements::create(
+            30.0,
+            1.0,
+            std::nullopt,
+            15000.0));
+    const auto microscopyRequirements = take(MicroscopyRequirements::create(
+        {{ContrastMethod::Brightfield,
+          MicroscopyTechniqueConstraintKind::Required},
+         {ContrastMethod::PhaseContrast,
+          MicroscopyTechniqueConstraintKind::Preferred}},
+        objectiveRequirements,
+        cameraRequirements));
+    const auto sampleType = take(SampleType::create(
+        makeId<SampleTypeId>("sample-type-blood-film-test"),
+        3,
+        "Peripheral blood film",
+        SampleMaterialClass::Biological,
+        microscopyRequirements));
+    const auto sample = take(Sample::create(
+        makeId<SampleId>("sample-blood-film-001"),
+        4,
+        sampleType.id(),
+        sampleType.revision(),
+        "Blood film accession 001",
+        "Peripheral blood smear",
+        "Homo sapiens"));
+    const auto preparation = take(SpecimenPreparation::create(
+        SpecimenPreparationMethod::Smear,
+        SpecimenFixationState::Fixed,
+        std::nullopt,
+        170.0,
+        "Synthetic mounting medium"));
+    const auto specimen = take(Specimen::create(
+        makeId<SpecimenId>("specimen-blood-film-001"),
+        1,
+        sample.id(),
+        sample.revision(),
+        "Fixed stained smear",
+        preparation));
+
+    const auto request = makeRequest(
+        fixture,
+        {fixture.fullPathId},
+        fixture.cameraModeId,
+        ContrastMethod::Brightfield);
+    const auto configuration = ConfigurationResolver::resolve(
+        fixture.equipment, fixture.profiles, request);
+    check(configuration.isResolved(),
+          "builds a valid equipment configuration before sample requirement assessment");
+    if (!configuration.resolvedConfiguration()) {
+        return;
+    }
+
+    const auto assessment = SampleMicroscopyRequirementAssessor::assess(
+        fixture.equipment,
+        sampleType,
+        sample,
+        specimen,
+        *configuration.resolvedConfiguration());
+    check(assessment.isCompatible(),
+          "accepts a resolved Brightfield configuration satisfying sample technique and objective requirements");
+    check(assessment.hasWarnings(),
+          "reports unknown camera performance data without blocking the manually selected operable camera");
+    check(hasDiagnosticCode(configuration, "configuration.profile.not_found") == false,
+          "keeps sample type requirements independent of the microscope's equipment-specific profile catalog");
+
+    const auto strictObjectiveRequirements = take(
+        ObjectiveMicroscopyRequirements::create(
+            10.0,
+            40.0,
+            0.90,
+            {ObjectiveImmersionMedium::Air}));
+    const auto strictRequirements = take(MicroscopyRequirements::create(
+        {{ContrastMethod::Brightfield,
+          MicroscopyTechniqueConstraintKind::Required}},
+        strictObjectiveRequirements));
+    const auto strictSampleType = take(SampleType::create(
+        makeId<SampleTypeId>("sample-type-blood-film-high-na"),
+        1,
+        "High-NA fluorescence cell detail",
+        SampleMaterialClass::Biological,
+        strictRequirements));
+    const auto strictSample = take(Sample::create(
+        makeId<SampleId>("sample-blood-film-high-na"),
+        1,
+        strictSampleType.id(),
+        strictSampleType.revision(),
+        "High-NA sample",
+        "Thin cellular specimen"));
+    const auto strictSpecimen = take(Specimen::create(
+        makeId<SpecimenId>("specimen-blood-film-high-na"),
+        1,
+        strictSample.id(),
+        strictSample.revision(),
+        "High-NA preparation",
+        preparation));
+    const auto strictAssessment = SampleMicroscopyRequirementAssessor::assess(
+        fixture.equipment,
+        strictSampleType,
+        strictSample,
+        strictSpecimen,
+        *configuration.resolvedConfiguration());
+    check(!strictAssessment.isCompatible() &&
+          std::any_of(
+              strictAssessment.diagnostics().begin(),
+              strictAssessment.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "sample.microscopy.objective_na_below_minimum";
+              }),
+          "rejects an objective that fails a hard sample-type numerical-aperture requirement");
+
+    const auto wrongTypeSample = take(Sample::create(
+        makeId<SampleId>("sample-blood-film-wrong-type-revision"),
+        1,
+        sampleType.id(),
+        sampleType.revision() - 1,
+        "Old type revision",
+        "Peripheral blood smear"));
+    const auto wrongTypeAssessment = SampleMicroscopyRequirementAssessor::assess(
+        fixture.equipment,
+        sampleType,
+        wrongTypeSample,
+        specimen,
+        *configuration.resolvedConfiguration());
+    check(!wrongTypeAssessment.isCompatible() &&
+          std::any_of(
+              wrongTypeAssessment.diagnostics().begin(),
+              wrongTypeAssessment.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "sample.microscopy.sample_type_revision_mismatch";
+              }),
+          "rejects evaluation when the Sample was created against another SampleType revision");
+}
+
 void testProfileRequiredComponentMustBeOnSelectedPaths() {
     const auto fixture = makeConfigurationFixture();
     const auto missingRequiredComponent =
@@ -1724,6 +1871,7 @@ int main() {
     testCameraProfileMismatchWarnsButDoesNotBlockManualSelection();
     testResolverRejectsCameraNotConnectedToSelectedImagingPath();
     testLightPathCameraDiagnosticsSurviveConfigurationResolution();
+    testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarnings();
     testProfileRequiredComponentMustBeOnSelectedPaths();
 
     if (failures != 0) {

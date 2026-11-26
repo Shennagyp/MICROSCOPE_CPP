@@ -66,7 +66,7 @@ int runProducerTests(int argc, char** argv) {
         } catch (const std::invalid_argument&) {
             rejectedStaleInterface = true;
         }
-        if (!rejectedStaleInterface) return 21;
+        if (!rejectedStaleInterface) return 34;
 
         auto device = producer.openDevice(descriptor);
         if (!device || device.deviceId() != "device0") return 7;

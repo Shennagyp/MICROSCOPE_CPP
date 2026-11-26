@@ -1,3 +1,4 @@
+#include "camera/gentl/GenTLFrameAdapter.h"
 #include "camera/gentl/ProducerCatalog.h"
 
 #include <cstdlib>
@@ -6,6 +7,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -81,29 +83,50 @@ int main(int argc, char** argv) {
             return 5;
         }
 
-        const auto report =
+        auto report =
             camera::gentl::ProducerCatalog::discoverDevices(5000);
         if (report.producerPaths != paths) return 6;
         if (report.failures.size() != 1 ||
             report.failures.front().producerPath !=
                 std::filesystem::canonical(brokenCti)) return 7;
-        if (report.devices.size() != 4) return 8;
+        if (report.producers.size() != 2) return 8;
 
         std::set<std::string> discoveredProducers;
-        for (const auto& device : report.devices) {
-            if (device.producerPath.empty() ||
-                device.interfaceId.empty() ||
-                device.deviceId.empty()) return 9;
-            discoveredProducers.insert(device.producerPath);
+        std::size_t discoveredDeviceCount = 0;
+        for (const auto& entry : report.producers) {
+            if (!entry.producer || entry.devices.size() != 2) return 9;
+            for (const auto& device : entry.devices) {
+                if (device.producerPath != entry.producer.ctiPath().string() ||
+                    device.interfaceId.empty() || device.deviceId.empty()) return 10;
+                discoveredProducers.insert(device.producerPath);
+                ++discoveredDeviceCount;
+            }
         }
-        if (discoveredProducers.size() != 2 ||
+        if (discoveredDeviceCount != 4 || discoveredProducers.size() != 2 ||
             discoveredProducers.count(std::filesystem::canonical(firstCti).string()) == 0 ||
             discoveredProducers.count(std::filesystem::canonical(secondCti).string()) == 0) {
-            return 10;
+            return 11;
         }
+
+        // Catalog descriptors remain usable because their owning Producer
+        // retains the exact interface handles used during discovery.
+        auto& selectedProducer = report.producers.front().producer;
+        auto selectedDevice = selectedProducer.openDevice(
+            report.producers.front().devices.front());
+        const auto streamIds = selectedDevice.dataStreamIds();
+        if (!selectedDevice || streamIds.empty()) return 12;
+
+        auto stream = selectedDevice.openDataStream(streamIds.front(), 3);
+        stream.start();
+        auto frame = stream.nextFrame(5000);
+        if (!frame || frame->incomplete || frame->payload.empty()) return 13;
+        const auto common = camera::gentl::makeCommonFrame(std::move(*frame));
+        if (!common || !*common || (*common)->pixels.empty()) return 14;
+        stream.stop();
+        selectedDevice.close();
     } catch (...) {
         std::filesystem::remove_all(root);
-        return 9;
+        return 15;
     }
 
     std::filesystem::remove_all(root);

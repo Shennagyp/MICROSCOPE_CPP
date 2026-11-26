@@ -16,6 +16,7 @@ add_library(microscope_core STATIC
     src/IlluminationSpecifications.cpp
     src/StageSpecifications.cpp
     src/StageWorkingSurface3D.cpp
+    src/StagePosition3D.cpp
     src/StageAxisReference.cpp
     src/StageMotionPort.cpp
     src/StageAxisPositionState.cpp

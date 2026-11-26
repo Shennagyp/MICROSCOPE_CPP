@@ -7,7 +7,7 @@
 
 The stage is one physical 3D working volume. It is not a dynamically resized collection of slide slots. The installed hardware definition contains exactly ten fixed slide placements in a fixed-size array.
 
-Each placement contains a slide identity, registration revision, physical length/width/thickness, a mechanical stop-point datum that defines its local origin, and a right-handed orthonormal local X/Y/Z basis expressed in stage coordinates.
+Each placement contains a slide identity, registration revision, physical length/width/thickness, a mechanical stop-point datum that defines its local origin, stop-point uncertainty, and a right-handed orthonormal local X/Y/Z basis expressed in stage coordinates. The working volume is explicitly bound to three distinct installed linear StageAxisIds; its micrometer bounds are checked against the corresponding configured axis travel (including unit conversion).
 
 A stage coordinate is projected through the selected slide's inverse rigid transform. Projection remains defined when the stage is between slides or outside a slide footprint. The returned inside-slide and inside-working-volume flags are separate facts.
 
@@ -37,3 +37,12 @@ An unknown starting position cannot become known by commanding one nominal strok
 ## Integration boundary
 
 This commit adds deterministic Core geometry and axis-reference state contracts. It does not yet connect the 3D position model to the live three-axis feedback aggregator, motion driver, reference-command executor, calibration persistence or SwiftUI projection. The old DualSlideCarrierState remains a legacy two-slide path during migration; the new model is the intended fixed ten-slide working-surface representation.
+
+
+## Live three-axis position projection
+
+StagePosition3D is an immutable Core aggregate of the installed X, Y and Z StageAxisPositionState values. It accepts observations one axis at a time and only promotes a homing observation when the caller has already verified the corresponding reference procedure. A slide-relative estimate is unavailable until all three axes are referenced and have finite uncertainty bounds.
+
+The inverse mapping returns coordinates even outside the selected slide footprint. It reports inside-slide and inside-working-volume independently. Local uncertainty is bounded conservatively by projecting each machine-axis error bound onto the slide basis and adding the stop-point datum uncertainty. Evidence and source are retained per axis.
+
+This remains a Core model. The Application worker must still own incoming device feedback, update this state serially, publish immutable snapshots and coordinate all three axis-reference operations.

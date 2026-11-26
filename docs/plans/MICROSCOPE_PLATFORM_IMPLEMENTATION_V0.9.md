@@ -405,3 +405,14 @@ driver feedback correlation, calibration/placement persistence and frontend
 projection remain outstanding. Existing two-slide X/Y code remains available
 as a legacy path during migration; it must not be treated as the target
 physical working-surface model.
+
+
+### Stage 6 update — fixed 3D working surface and actual position projection
+
+Core now defines a fixed ten-slide 3D working-surface map. The volume is bound to explicit installed X/Y/Z linear axes and validated against their operating ranges. Each physical slide has a stop-point origin, independent rigid pose, dimensions, registration revision and datum uncertainty.
+
+StagePosition3D now aggregates the three immutable axis position states. It accepts axis observations, accepts reference observations only after external operation verification, and projects the current machine XYZ coordinate into the selected slide frame. The projection retains position evidence, source, uncertainty and independent inside-slide/inside-working-volume flags. It does not discard coordinates merely because the stage is between physical slides.
+
+Tests were added for fixed ten-slide mapping, rotated 3D coordinate transforms, stop-point uncertainty propagation, physical endstop reference, full-stroke software-endstop reference and projection from three measured axis positions. These tests have been registered but were not executed in this environment.
+
+Still outstanding: Application worker integration of three-axis feedback, stage reference-motion execution and correlation, hardware adapter, calibration persistence, stop/fault/timeouts and frontend-neutral live position snapshots.

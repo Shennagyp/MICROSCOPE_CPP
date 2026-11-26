@@ -215,6 +215,8 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 - Derive camera identity from the selected imaging route's camera endpoint. Remove camera identity as an unrelated selection dimension; retain an optional explicit camera override only as a validation constraint, which must match a camera on that route.
 - Enumerate supported output modes only for the path-derived camera. If a route set has multiple camera endpoints or several equally valid complete configurations, return the valid alternatives and a selection-required outcome.
 - Return a complete resolved desired configuration. The transition planner must consume that resolved value, not reach back into an incomplete original request for independently supplied component IDs.
+- Give resolution explicit outcomes: Resolved, SelectionRequired (valid alternatives tied), InputRequired (an essential intent field is absent), and Unsupported (no valid configuration). SelectionRequired returns complete alternatives; InputRequired names the required semantic inputs. A null magnification alone is not InputRequired when NA and sampling data permit automatic selection.
+- In a multi-microscope host, evaluate the same semantic request against each instrument's own constitution. Never reuse component IDs across microscopes. Return capable microscope alternatives or request a target when the host cannot choose safely.
 - Return no candidate with diagnostics when no installed route satisfies the combined mode and technique requirements.
 
 **3H — Objective constraints and camera sampling**
@@ -232,7 +234,8 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 - Two connected camera/route candidates are returned as alternatives; equal-ranked candidates require explicit selection.
 - A per-microscope preferred objective resolves a valid tie; a required objective binding rejects fallback.
 - For two 20× objectives with NA 0.4 and 0.75, an H&E imaging preference ranks 0.75 higher when both otherwise satisfy the request.
-- When magnification is unspecified, the lowest objectively adequate magnification is selected only after both NA and the 2.3-Rayleigh sampling condition have been evaluated.
+- When magnification is unspecified, the lowest objectively adequate magnification is selected only after both NA and the 2.3-Rayleigh sampling condition have been evaluated; the required total magnification is calculated from both sensor axes and output-pixel mapping.
+- Missing mandatory intent such as a minimum objective NA may produce InputRequired; null magnification by itself does not.
 - Tests cover non-square pixel pitch, binned and unbinned output modes, insufficient sampling, missing wavelength, absent relay-magnification metadata and the candidate alternatives/selection-required states.
 
 ### Phase 4 — Core operation runtime

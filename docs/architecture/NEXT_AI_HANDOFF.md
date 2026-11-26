@@ -161,9 +161,10 @@ The next Phase 7 work is **not another package implementation pass**. It is the 
    AmScope enumerate/open/read-setting/start/frame/stop/close path, the installed
    Qt preview and descriptor-driven controls, and an installed GenTL consumer
    with a real vendor CTI Producer and physical camera. These tests require
-   physical hardware and are not represented by hosted CI results. Do not
-   simulate or claim this evidence. The separate Phase 4 MU503 UI test remains
-   postponed by owner direction.
+   physical hardware and are not represented by hosted CI results. Simulator
+   runs may provide separate GenTL software-integration evidence, but must not
+   be represented as physical-camera evidence. The separate Phase 4 MU503 UI
+   test remains postponed by owner direction.
 2. Resolve AmScope SDK redistribution rights from the actual SDK license terms
    or written vendor permission. The checked-in SDK tree has no license,
    notice or EULA. The public downloads page points users to software licensing
@@ -179,6 +180,14 @@ The next Phase 7 work is **not another package implementation pass**. It is the 
    long-duration/recovery, deployment and release-acceptance phase.
 
 Do not repeat the completed Phase 7 package build/consumer work unless package
-inputs change or a regression requires it. The next software action is driven
-by an identified packaging defect; otherwise the remaining Phase 7 gates need
-physical evidence and the actual SDK licensing document.
+inputs change or a regression requires it. The next software task is the
+simulator-backed GenTL qualification plan in
+[CAMERA_V2_SIMULATOR_QUALIFICATION.md](CAMERA_V2_SIMULATOR_QUALIFICATION.md).
+First resolve the existing C++ CTI-consumer integration gap with a test-only
+shim around the already-present `GenTLProducerLibrary`; do not alter the
+AmScope provider or production public contracts. The Imaging Source virtual
+Producer is the first vendor candidate to qualify, subject to CTI compatibility
+and license confirmation. Do not use Vimba X until its published license
+restrictions are confirmed compatible with this intended test use. Aravis is
+a protocol-level fake GigE Vision camera, not a CTI Producer. Simulator runs
+supplement but never replace physical hardware evidence.

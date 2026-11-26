@@ -42,4 +42,10 @@ if(BUILD_TESTING)
         tests/FrameRateEstimatorTests.cpp)
     target_link_libraries(camera_common_frame_rate_tests PRIVATE Camera::Common)
     add_test(NAME camera_common_frame_rate_tests COMMAND camera_common_frame_rate_tests)
+    add_executable(camera_common_acquisition_integrity_tests
+        tests/AcquisitionIntegrityTrackerTests.cpp)
+    target_link_libraries(camera_common_acquisition_integrity_tests PRIVATE Camera::Common)
+    add_test(NAME camera_common_acquisition_integrity_tests
+        COMMAND camera_common_acquisition_integrity_tests)
+
 endif()

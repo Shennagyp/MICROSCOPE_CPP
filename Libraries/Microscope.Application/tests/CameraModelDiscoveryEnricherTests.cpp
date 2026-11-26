@@ -36,7 +36,7 @@ camera::CameraModelProfile makeProfile(
     capabilities.set(camera::CameraCapability::ExternalTrigger, false);
 
     camera::CameraSensorCharacteristics sensor;
-    sensor.technology = camera::CameraSensorTechnology::ScientificCMOS;
+    sensor.technology = camera::CameraSensorTechnology::CMOS;
     sensor.shutterType = globalShutter
         ? camera::CameraShutterType::Global
         : camera::CameraShutterType::Rolling;

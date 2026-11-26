@@ -409,6 +409,63 @@ private:
     PositiveMicroseconds maximum_;
 };
 
+enum class OpticalFilterRole {
+    Excitation,
+    Emission,
+    Dichroic,
+    NeutralDensity,
+    Other
+};
+
+struct OpticalFilterSpectralSample {
+    PositiveNanometers wavelength;
+    double transmissionFraction = 0.0;
+    std::optional<double> reflectionFraction;
+};
+
+enum class OpticalFilterSpecificationError {
+    InvalidRole,
+    TooFewSamples,
+    InvalidTransmission,
+    InvalidReflection,
+    WavelengthsNotIncreasing,
+    DichroicRequiresTransmissionAndReflection
+};
+
+// Installed spectral filter data. The transmission/reflection curve is a
+// measured or manufacturer-specified response, not a binary passband label.
+// Angle/polarization dependencies may be represented by separate filter
+// profiles when the manufacturer's data make them material.
+class OpticalFilterSpecification final {
+public:
+    [[nodiscard]] static Result<
+        OpticalFilterSpecification,
+        OpticalFilterSpecificationError> create(
+            EquipmentComponentId componentId,
+            OpticalFilterRole role,
+            std::vector<OpticalFilterSpectralSample> spectralResponse,
+            std::optional<OpticalCompatibilityId> compatibilityId = std::nullopt);
+
+    [[nodiscard]] const EquipmentComponentId& componentId() const noexcept;
+    [[nodiscard]] OpticalFilterRole role() const noexcept;
+    [[nodiscard]] const std::vector<OpticalFilterSpectralSample>&
+    spectralResponse() const noexcept;
+    [[nodiscard]] const std::optional<OpticalCompatibilityId>&
+    compatibilityId() const noexcept;
+
+private:
+    OpticalFilterSpecification(
+        EquipmentComponentId componentId,
+        OpticalFilterRole role,
+        std::vector<OpticalFilterSpectralSample> spectralResponse,
+        std::optional<OpticalCompatibilityId> compatibilityId);
+
+    EquipmentComponentId componentId_;
+    OpticalFilterRole role_;
+    std::vector<OpticalFilterSpectralSample> spectralResponse_;
+    std::optional<OpticalCompatibilityId> compatibilityId_;
+};
+
 enum class CameraSpecificationError {
     NoOutputModes,
     DuplicateOutputModeId,

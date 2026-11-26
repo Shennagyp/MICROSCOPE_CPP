@@ -168,6 +168,18 @@ template <typename TValue>
     return it == equipment.illuminationSpecifications().end() ? nullptr : &*it;
 }
 
+[[nodiscard]] const LightPath* findLightPath(
+    const MicroscopeEquipmentDefinition& equipment,
+    const LightPathId& lightPathId) {
+    const auto it = std::find_if(
+        equipment.lightPaths().begin(),
+        equipment.lightPaths().end(),
+        [&lightPathId](const LightPath& value) {
+            return value.id() == lightPathId;
+        });
+    return it == equipment.lightPaths().end() ? nullptr : &*it;
+}
+
 [[nodiscard]] const OpticalPath* findOpticalPath(
     const MicroscopeEquipmentDefinition& equipment,
     const OpticalPathId& pathId) {
@@ -588,6 +600,25 @@ ConfigurationRequest::ConfigurationRequest(
       selectedAdditionalOpticalComponentIds_(
           std::move(selectedAdditionalOpticalComponentIds)) {}
 
+ConfigurationRequest::ConfigurationRequest(
+    ConfigurationRequest base,
+    LightPathConfigurationBinding lightPathBinding,
+    Diagnostics cameraSelectionDiagnostics)
+    : profileId_(std::move(base.profileId_)),
+      contrastMethod_(base.contrastMethod_),
+      objectiveComponentId_(std::move(base.objectiveComponentId_)),
+      condenserComponentId_(std::move(base.condenserComponentId_)),
+      opticalPathIds_(std::move(base.opticalPathIds_)),
+      cameraComponentId_(std::move(base.cameraComponentId_)),
+      cameraModeId_(std::move(base.cameraModeId_)),
+      illuminationComponentId_(std::move(base.illuminationComponentId_)),
+      illuminationChannelId_(std::move(base.illuminationChannelId_)),
+      exposurePolicy_(base.exposurePolicy_),
+      selectedAdditionalOpticalComponentIds_(
+          std::move(base.selectedAdditionalOpticalComponentIds_)),
+      lightPathBinding_(std::move(lightPathBinding)),
+      cameraSelectionDiagnostics_(std::move(cameraSelectionDiagnostics)) {}
+
 Result<
     ConfigurationRequest,
     ConfigurationRequestError> ConfigurationRequest::create(
@@ -707,6 +738,15 @@ ExposurePolicy ConfigurationRequest::exposurePolicy() const noexcept {
     return exposurePolicy_;
 }
 
+const std::optional<LightPathConfigurationBinding>&
+ConfigurationRequest::lightPathBinding() const noexcept {
+    return lightPathBinding_;
+}
+
+const Diagnostics& ConfigurationRequest::cameraSelectionDiagnostics() const noexcept {
+    return cameraSelectionDiagnostics_;
+}
+
 ResolvedConfiguration::ResolvedConfiguration(
     MicroscopeId microscopeId,
     ConfigurationRequest request,
@@ -765,7 +805,55 @@ ConfigurationResolution ConfigurationResolver::resolve(
     const MicroscopeEquipmentDefinition& equipment,
     const ConfigurationProfileCatalog& catalog,
     const ConfigurationRequest& request) {
-    Diagnostics diagnostics;
+    Diagnostics diagnostics = request.cameraSelectionDiagnostics();
+
+    if (request.lightPathBinding()) {
+        const auto& binding = *request.lightPathBinding();
+        if (binding.operationModeRevision == 0 ||
+            binding.cameraComponentId != request.cameraComponentId() ||
+            binding.cameraModeId != request.cameraModeId()) {
+            appendError(
+                diagnostics,
+                "configuration.light_path.binding_invalid",
+                "The LightPath camera binding is incomplete or does not match the camera and output mode in the request.",
+                "LightPath",
+                binding.lightPathId.value());
+        }
+
+        const auto* selectedLightPath =
+            findLightPath(equipment, binding.lightPathId);
+        if (selectedLightPath == nullptr) {
+            appendError(
+                diagnostics,
+                "configuration.light_path.not_installed",
+                "The LightPath bound to this request is not present in the installed equipment definition.",
+                "LightPath",
+                binding.lightPathId.value());
+        } else {
+            if (selectedLightPath->opticalPathIds() != request.opticalPathIds()) {
+                appendError(
+                    diagnostics,
+                    "configuration.light_path.route_set_mismatch",
+                    "The request's optical route set differs from the routes owned by its selected LightPath.",
+                    "LightPath",
+                    binding.lightPathId.value());
+            }
+
+            const auto endpoints =
+                equipment.cameraEndpointIds(binding.lightPathId);
+            if (std::find(
+                    endpoints.begin(), endpoints.end(),
+                    binding.cameraComponentId) == endpoints.end()) {
+                appendError(
+                    diagnostics,
+                    "configuration.light_path.camera_not_connected",
+                    "The camera bound to this request is not a terminal imaging endpoint of the selected LightPath.",
+                    "EquipmentComponent",
+                    binding.cameraComponentId.value());
+            }
+        }
+    }
+
     const auto* profile = findProfile(catalog, request.profileId());
     if (profile == nullptr) {
         appendError(

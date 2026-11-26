@@ -2,7 +2,7 @@
 
 **Branch:** `camera-v.2.0`  
 **Purpose:** Add vendor-independent software integration evidence for the GenTL consumer without claiming physical-camera qualification.  
-**Status:** The external-CTI harness and a first-party test-only CTI simulator target are implemented in source. The device-index baseline passed both workflows at `337bc58fc25de903b1c8e103261d9e89bc7d9c60`. The new in-repository CTI simulator smoke is awaiting CI validation. No vendor simulator has been executed.
+**Status:** The test-only CTI simulator now models two independent devices and streams, with concurrent-open, per-port register-isolation and interleaved frame-sequence assertions. The implementation is committed on `camera-v.2.0`; cross-architecture CI validation is pending. No vendor simulator has been executed.
 
 ## 1. Qualification boundary
 
@@ -183,3 +183,19 @@ The current vendor evidence does not justify downloading or executing any extern
 - Aravis fake GV is a network GigE Vision simulator, not a CTI. It can only qualify a separate GEV transport implementation, not this direct CTI loader.
 
 Do not create a green CI gate that silently skips the simulator. Once a vendor approves a CTI, run it on a compatible isolated runner and preserve the exact package/version/hash and test logs. The first-party, test-only simulated CTI fixture is now implemented and awaits CI validation. Keep its evidence separate from vendor interoperability and do not use it to replace vendor or physical qualification.
+
+
+## 9. Two-device simulator isolation increment
+
+The in-repository simulator is being extended beyond device-index selection. It now exposes two distinct device descriptors on one interface and models separate device, port, stream, event and buffer ownership. Register storage and command-poll state are isolated per remote port. Each stream has its own event lifecycle, acquisition state, buffer queue ownership and frame-ID counter.
+
+The in-repository simulator CTest invokes the smoke executable with `--verify-two-device-isolation`. That mode:
+1. Opens both discovered device sessions at the same time.
+2. Confirms distinct device IDs and serial numbers.
+3. Writes different byte sequences to the same register address through each remote port and verifies no cross-device register leakage.
+4. Opens and starts one data stream on each device.
+5. Interleaves frame retrieval and verifies independent frame IDs, timestamps and changing payload bytes.
+6. Stops both streams and closes both device sessions.
+7. Continues the original five-frame single-device smoke with the expected continued frame sequence.
+
+This is still a first-party fixture. It validates the project's handling of concurrent device sessions and stream ownership; it is not vendor interoperability evidence. The normal mock target is built without CAMERA_GENTL_SIMULATOR_MODE; its single-device fixture and pending-wait cancellation semantics must remain unchanged. CI must pass on both supported architectures before this increment is marked verified.

@@ -36,6 +36,14 @@ struct SampleSlideStoreError final {
     std::string detail;
 };
 
+// A coherent read of one immutable Slide revision and the exact immutable
+// SampleType definition it pins. This must not substitute the current
+// SampleType revision when the Slide references historical requirements.
+struct PersistedSlideWithSampleType final {
+    core::Slide slide;
+    core::SampleType sampleType;
+};
+
 // Stores immutable SampleType and Slide revisions. A Slide is linked to the
 // exact SampleTypeId/revision it was prepared against; updating a SampleType
 // never rewrites or invalidates that historical reference.
@@ -90,6 +98,18 @@ public:
         SampleSlideStoreError> loadCurrentSlide(
             const core::SlideId& slideId);
 
+    // Resolves the exact SampleType revision pinned by a persisted Slide.
+    [[nodiscard]] core::Result<
+        std::optional<PersistedSlideWithSampleType>,
+        SampleSlideStoreError> loadSlideWithPinnedSampleType(
+            const core::SlideId& slideId,
+            std::uint64_t slideRevision);
+
+    [[nodiscard]] core::Result<
+        std::optional<PersistedSlideWithSampleType>,
+        SampleSlideStoreError> loadCurrentSlideWithPinnedSampleType(
+            const core::SlideId& slideId);
+
 private:
     explicit SampleSlideSqliteStore(sqlite3* database) noexcept;
 
@@ -106,6 +126,12 @@ private:
         SampleSlideStoreError> loadSlideRevisionUnlocked(
             const core::SlideId& slideId,
             std::uint64_t revision);
+
+    [[nodiscard]] core::Result<
+        std::optional<PersistedSlideWithSampleType>,
+        SampleSlideStoreError> loadSlideWithPinnedSampleTypeUnlocked(
+            const core::SlideId& slideId,
+            std::uint64_t slideRevision);
 
     sqlite3* database_ = nullptr;
     std::mutex mutex_;

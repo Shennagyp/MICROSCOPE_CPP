@@ -351,7 +351,11 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
         return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Resolved,
             ResolvedLightPathCamera{
-                lightPathId, candidate.cameraComponentId, *selectedModeId},
+                operationMode.id(),
+                operationMode.revision(),
+                lightPathId,
+                candidate.cameraComponentId,
+                *selectedModeId},
             std::move(candidates),
             std::move(diagnostics));
     }
@@ -364,6 +368,8 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::Resolved,
                 ResolvedLightPathCamera{
+                    operationMode.id(),
+                    operationMode.revision(),
                     lightPathId,
                     candidates.front().cameraComponentId,
                     *cameraModeId},
@@ -394,6 +400,8 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
         return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Resolved,
             ResolvedLightPathCamera{
+                operationMode.id(),
+                operationMode.revision(),
                 lightPathId,
                 candidates.front().cameraComponentId,
                 *selectedModeId},
@@ -414,6 +422,8 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 return LightPathCameraResolution(
                     LightPathCameraResolutionStatus::Resolved,
                     ResolvedLightPathCamera{
+                        operationMode.id(),
+                        operationMode.revision(),
                         lightPathId,
                         candidates[bestIndex].cameraComponentId,
                         *selectedModeId},

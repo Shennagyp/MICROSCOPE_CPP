@@ -128,10 +128,13 @@ original cancellation semantics. The fixture is test-only and is not installed
 or exported.
 
 This is real dynamic loading of a CTI-shaped GenTL Producer and integration
-coverage of the project's native C++ loader/consumer path. It is **not** proof
-of interoperability with an independent vendor Producer, a real transport
-layer, or physical camera hardware. It does not replace the vendor CTI smoke
-below.
+coverage of the project's native C++ loader/consumer path. When the official
+GenApi SDK is enabled, `camera_gentl_genapi_tests` also uses this same simulated
+CTI through the native shim and exercises feature enumeration, availability,
+read/write validation, enumeration values, command execution, port failures,
+read-only access and malformed-XML recovery. It is **not** proof of
+interoperability with an independent vendor Producer, a real transport layer,
+or physical camera hardware. It does not replace the vendor CTI smoke below.
 
 Run it with the ordinary test build:
 

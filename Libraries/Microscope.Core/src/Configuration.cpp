@@ -211,6 +211,25 @@ void appendError(
     }
 }
 
+void appendWarning(
+    Diagnostics& diagnostics,
+    std::string code,
+    std::string message,
+    std::optional<std::string> entityType = std::nullopt,
+    std::optional<std::string> entityId = std::nullopt) {
+    auto diagnostic = Diagnostic::create(
+        DiagnosticSeverity::Warning,
+        std::move(code),
+        std::move(message),
+        DiagnosticContext{
+            std::move(entityType),
+            std::move(entityId),
+            std::nullopt});
+    if (diagnostic) {
+        diagnostics.push_back(std::move(diagnostic).value());
+    }
+}
+
 } // namespace
 
 IlluminationIntensitySetting::IlluminationIntensitySetting(
@@ -811,10 +830,10 @@ ConfigurationResolution ConfigurationResolver::resolve(
     }
 
     if (!contains(profile->compatibleCameraIds(), request.cameraComponentId())) {
-        appendError(
+        appendWarning(
             diagnostics,
-            "configuration.camera.not_compatible",
-            "The selected camera is not allowed by the configuration profile.",
+            "configuration.camera.not_preferred_by_profile",
+            "The selected camera is outside this profile's preferred camera set. It remains selectable because it is physically connected and its selected output mode is available; review fluorescence sensitivity and sensor suitability warnings before acquisition.",
             "EquipmentComponent",
             request.cameraComponentId().value());
     }

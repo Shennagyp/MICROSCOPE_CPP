@@ -8,6 +8,7 @@
 #include "microscope/core/result/Result.h"
 
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace microscope::core {
@@ -21,6 +22,7 @@ enum class EquipmentComponentKind {
 };
 
 enum class OpticalElementFunction {
+    BeamSplitter,
     PhasePlate,
     PhaseAnnulus,
     Polarizer,
@@ -185,24 +187,69 @@ private:
     std::optional<OpticalPortId> exitPortId_;
 };
 
-enum class OpticalPathError {
-    TooFewSteps
+enum class OpticalPathRole {
+    Imaging,
+    Illumination,
+    Other
 };
 
+enum class OpticalPathError {
+    TooFewSteps,
+    InvalidRole
+};
+
+// One ordered, directed physical route. A selectable LightPath groups the
+// route or routes used together for an observation/acquisition.
 class OpticalPath final {
 public:
     [[nodiscard]] static Result<OpticalPath, OpticalPathError> create(
         OpticalPathId id,
-        std::vector<OpticalPathStep> steps);
+        std::vector<OpticalPathStep> steps,
+        OpticalPathRole role = OpticalPathRole::Other);
 
     [[nodiscard]] const OpticalPathId& id() const noexcept;
+    [[nodiscard]] OpticalPathRole role() const noexcept;
     [[nodiscard]] const std::vector<OpticalPathStep>& steps() const noexcept;
 
 private:
-    OpticalPath(OpticalPathId id, std::vector<OpticalPathStep> steps);
+    OpticalPath(
+        OpticalPathId id,
+        std::vector<OpticalPathStep> steps,
+        OpticalPathRole role);
 
     OpticalPathId id_;
     std::vector<OpticalPathStep> steps_;
+    OpticalPathRole role_;
+};
+
+enum class LightPathError {
+    EmptyName,
+    EmptyOpticalPathSet,
+    DuplicateOpticalPath
+};
+
+// A named, selectable arrangement of optical routes. Camera identities are
+// deliberately not stored here: they are derived from Imaging route endpoints.
+class LightPath final {
+public:
+    [[nodiscard]] static Result<LightPath, LightPathError> create(
+        LightPathId id,
+        std::string name,
+        std::vector<OpticalPathId> opticalPathIds);
+
+    [[nodiscard]] const LightPathId& id() const noexcept;
+    [[nodiscard]] const std::string& name() const noexcept;
+    [[nodiscard]] const std::vector<OpticalPathId>& opticalPathIds() const noexcept;
+
+private:
+    LightPath(
+        LightPathId id,
+        std::string name,
+        std::vector<OpticalPathId> opticalPathIds);
+
+    LightPathId id_;
+    std::string name_;
+    std::vector<OpticalPathId> opticalPathIds_;
 };
 
 enum class EquipmentDefinitionError {
@@ -242,7 +289,16 @@ enum class EquipmentDefinitionError {
     PathExitPortDirectionMismatch,
     MissingPathEntryPort,
     MissingPathExitPort,
-    MissingRouteConnection
+    UnexpectedPathEntryPortAtSource,
+    UnexpectedPathExitPortAtTerminal,
+    MissingRouteConnection,
+    ImagingPathDoesNotTerminateAtCamera,
+    ImagingPathCameraSpecificationMissing,
+    DuplicateLightPathId,
+    UnknownLightPathOpticalPath,
+    LightPathHasNoImagingRoute,
+    LightPathMultipleCamerasRequireSplitter,
+    LightPathSplitterBranchesNotDistinct
 };
 
 // Immutable definition of the equipment physically installed in one
@@ -263,12 +319,16 @@ public:
             std::vector<CondenserSpecification> condenserSpecifications = {},
             std::vector<IlluminationSpecification> illuminationSpecifications = {},
             std::vector<StageSpecification> stageSpecifications = {},
-            std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications = {});
+            std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications = {},
+            std::vector<LightPath> lightPaths = {});
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponent>& components() const noexcept;
     [[nodiscard]] const std::vector<OpticalConnection>& connections() const noexcept;
     [[nodiscard]] const std::vector<OpticalPath>& opticalPaths() const noexcept;
+    [[nodiscard]] const std::vector<LightPath>& lightPaths() const noexcept;
+    [[nodiscard]] std::vector<EquipmentComponentId> cameraEndpointIds(
+        const LightPathId& lightPathId) const;
     [[nodiscard]] const std::vector<ObjectiveSpecification>&
     objectiveSpecifications() const noexcept;
     [[nodiscard]] const std::vector<CameraSpecification>&
@@ -293,12 +353,14 @@ private:
         std::vector<CondenserSpecification> condenserSpecifications,
         std::vector<IlluminationSpecification> illuminationSpecifications,
         std::vector<StageSpecification> stageSpecifications,
-        std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications);
+        std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
+        std::vector<LightPath> lightPaths);
 
     MicroscopeId microscopeId_;
     std::vector<EquipmentComponent> components_;
     std::vector<OpticalConnection> connections_;
     std::vector<OpticalPath> opticalPaths_;
+    std::vector<LightPath> lightPaths_;
     std::vector<ObjectiveSpecification> objectiveSpecifications_;
     std::vector<CameraSpecification> cameraSpecifications_;
     std::vector<CondenserSpecification> condenserSpecifications_;

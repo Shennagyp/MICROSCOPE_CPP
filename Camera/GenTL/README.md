@@ -110,6 +110,37 @@ auto done = genApi.commands().isCommandDone("AcquisitionStart");
 
 Use the combined owner when both surfaces are required. Do not open a second device session merely to separate feature and command access.
 
+## In-repository GenTL simulator smoke (CI)
+
+When `BUILD_TESTING=ON`, CMake builds the existing deterministic mock
+GenTL Producer a second time as a loadable `.cti` shared library in a
+simulator-specific mode. It is registered as
+`camera_gentl_inrepo_simulator_smoke` and runs through:
+
+`GenTLProducerLibrary` -> test-only native C ABI shim -> `ConsumerBridge`
+-> `Producer` -> device/stream -> Common frame projection.
+
+The simulator fixture exposes one deterministic mock camera, GenApi XML,
+one data stream and repeatable Mono8 frames. Its simulator compile definition
+only relaxes the mock's fixed discovery-timeout check and long-wait cancellation
+behavior; the normal mock bridge used by the existing unit tests retains its
+original cancellation semantics. The fixture is test-only and is not installed
+or exported.
+
+This is real dynamic loading of a CTI-shaped GenTL Producer and integration
+coverage of the project's native C++ loader/consumer path. It is **not** proof
+of interoperability with an independent vendor Producer, a real transport
+layer, or physical camera hardware. It does not replace the vendor CTI smoke
+below.
+
+Run it with the ordinary test build:
+
+```sh
+cmake -S Camera/GenTL -B build/gentl -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build/gentl --parallel
+ctest --test-dir build/gentl -R camera_gentl_inrepo_simulator_smoke --output-on-failure
+```
+
 ## Vendor CTI / simulator smoke (opt-in)
 
 The test build now includes a **test-only** native C ABI shim backed by the

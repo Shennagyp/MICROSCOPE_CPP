@@ -13,9 +13,9 @@
 namespace microscope::application::motion {
 
 struct StageWorkingSurfaceNavigationControlRequest final {
-    core::SlideId slideId;
-    core::SlidePoint2D destination;
-    StageWorkingSurfaceNavigationOperationIdentity identities;
+    // Captured from an immutable working-surface snapshot on the UI/model side.
+    // The owner-thread runtime rejects it if the slide registration changed.
+    core::SlideNavigationTarget2D target;
 };
 
 enum class StageWorkingSurfaceNavigationControlSubmitStatus {
@@ -29,7 +29,7 @@ enum class StageWorkingSurfaceNavigationControlQueueCreationError {
 };
 
 struct StageWorkingSurfaceNavigationControlRequestOutcome final {
-    core::OperationId operationId;
+    std::optional<core::OperationId> operationId;
     std::optional<StageWorkingSurfaceNavigationRuntimeUpdate> update;
     std::optional<StageWorkingSurfaceNavigationRuntimeError> error;
 };
@@ -120,16 +120,14 @@ public:
                 break;
             }
 
-            const auto operationId = request->identities.operationId;
-            auto dispatched = navigation.beginRequest(
-                request->slideId, request->destination,
-                std::move(request->identities));
+            auto dispatched = navigation.beginRequest(request->target);
             if (dispatched) {
+                auto update = std::move(dispatched).value();
                 result.outcomes.push_back(StageWorkingSurfaceNavigationControlRequestOutcome{
-                    operationId, std::move(dispatched).value(), std::nullopt});
+                    update.operationId, std::move(update), std::nullopt});
             } else {
                 result.outcomes.push_back(StageWorkingSurfaceNavigationControlRequestOutcome{
-                    operationId, std::nullopt, dispatched.error()});
+                    std::nullopt, std::nullopt, dispatched.error()});
             }
         }
 

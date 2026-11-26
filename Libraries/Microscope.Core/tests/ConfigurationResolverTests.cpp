@@ -1,5 +1,8 @@
 #include "microscope/core/configuration/Configuration.h"
 #include "microscope/core/configuration/ConfigurationTransition.h"
+#include "microscope/core/configuration/LightPathCameraResolver.h"
+#include "microscope/core/configuration/LightPathConfigurationRequestFactory.h"
+#include "microscope/core/configuration/OperationMode.h"
 
 #include <algorithm>
 #include <iostream>
@@ -1477,6 +1480,120 @@ void testResolverRejectsCameraNotConnectedToSelectedImagingPath() {
           "rejects a camera that is not the terminal endpoint of a selected Imaging route");
 }
 
+void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
+    const auto fixture = makeConfigurationFixture();
+    const auto lightPathId =
+        makeId<LightPathId>("configuration-brightfield-light-path");
+    const auto lightPath = take(LightPath::create(
+        lightPathId,
+        "Brightfield",
+        {fixture.illuminationPathId, fixture.imagingPathId}));
+
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.equipment.microscopeId(),
+        fixture.equipment.components(),
+        fixture.equipment.connections(),
+        fixture.equipment.opticalPaths(),
+        fixture.equipment.objectiveSpecifications(),
+        fixture.equipment.cameraSpecifications(),
+        fixture.equipment.condenserSpecifications(),
+        fixture.equipment.illuminationSpecifications(),
+        fixture.equipment.stageSpecifications(),
+        fixture.equipment.dualSlideCarrierSpecifications(),
+        {lightPath},
+        fixture.equipment.filterSpecifications()));
+
+    const auto operationModeId =
+        makeId<OperationModeId>("configuration-brightfield-mode");
+    const auto modeSetting = take(LightPathModeSetting::create(
+        fixture.microscopeId,
+        1,
+        operationModeId,
+        1,
+        lightPathId,
+        makeId<CalibrationRevisionId>("configuration-brightfield-calibration"),
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        {fixture.objectiveId, fixture.condenserId},
+        12.0));
+    const auto operationMode = take(OperationMode::create(
+        fixture.microscopeId,
+        operationModeId,
+        1,
+        "Brightfield",
+        ContrastMethod::Brightfield,
+        {modeSetting}));
+
+    FluorescenceCameraRequirements fluorescenceRequirements{
+        take(SpectralBand::create(
+            take(PositiveNanometers::create(400.0)),
+            take(PositiveNanometers::create(700.0)))),
+        0.75,
+        2.0,
+        0.1,
+        20000.0,
+        30.0,
+        true,
+        true};
+
+    const auto cameraResolution = LightPathCameraResolver::resolve(
+        equipment,
+        operationMode,
+        lightPathId,
+        fixture.cameraId,
+        fixture.cameraModeId,
+        fluorescenceRequirements);
+    check(cameraResolution.isResolved(),
+          "resolves the single camera endpoint on the selected LightPath");
+
+    const auto request = LightPathConfigurationRequestFactory::create(
+        equipment,
+        operationMode,
+        lightPathId,
+        cameraResolution,
+        fixture.brightfieldProfileId,
+        fixture.objectiveId,
+        fixture.condenserId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        ExposurePolicy::Manual);
+    check(static_cast<bool>(request),
+          "creates a LightPath-bound ConfigurationRequest");
+
+    if (!request) {
+        return;
+    }
+    check(request.value().lightPathBinding().has_value(),
+          "generated request retains its resolved LightPath binding");
+    check(!request.value().cameraSelectionDiagnostics().empty(),
+          "generated request retains the camera assessor's warning diagnostics");
+
+    const auto resolution =
+        ConfigurationResolver::resolve(equipment, fixture.profiles, request.value());
+    check(resolution.isResolved(),
+          "the existing profile resolver accepts a coherent LightPath-derived request");
+    check(hasDiagnosticCode(
+              resolution,
+              "camera.fluorescence.sensor_profile_unknown"),
+          "camera suitability warnings are retained in ConfigurationResolution");
+    if (resolution.resolvedConfiguration()) {
+        const auto& resolvedRequest =
+            resolution.resolvedConfiguration()->request();
+        check(resolvedRequest.lightPathBinding().has_value(),
+              "resolved configuration retains its LightPath binding");
+        if (resolvedRequest.lightPathBinding()) {
+            const auto& binding = *resolvedRequest.lightPathBinding();
+            check(binding.operationModeId == operationMode.id() &&
+                  binding.operationModeRevision == operationMode.revision() &&
+                  binding.lightPathId == lightPathId,
+                  "resolved configuration retains the exact mode and LightPath identity");
+            check(binding.cameraComponentId == fixture.cameraId &&
+                  binding.cameraModeId == fixture.cameraModeId,
+                  "resolved configuration retains the derived camera and selected output mode");
+        }
+    }
+}
+
 void testProfileRequiredComponentMustBeOnSelectedPaths() {
     const auto fixture = makeConfigurationFixture();
     const auto missingRequiredComponent =
@@ -1529,6 +1646,7 @@ int main() {
     testResolverEnforcesPathCompatibilityAndIlluminationChannel();
     testCameraProfileMismatchWarnsButDoesNotBlockManualSelection();
     testResolverRejectsCameraNotConnectedToSelectedImagingPath();
+    testLightPathCameraDiagnosticsSurviveConfigurationResolution();
     testProfileRequiredComponentMustBeOnSelectedPaths();
 
     if (failures != 0) {

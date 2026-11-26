@@ -11,6 +11,7 @@ namespace microscope::core {
 
 enum class OperationModeError {
     EmptyName,
+    InvalidName,
     InvalidContrastMethod,
     ZeroRevision,
     NoLightPathSettings,

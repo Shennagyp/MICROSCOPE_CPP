@@ -204,6 +204,7 @@ makeCommonFrame(DataStreamFrame source) {
             frame->pixelFormat = bytesPerPixel == 1
                 ? camera::PixelFormat::Raw8
                 : camera::PixelFormat::Raw16;
+            frame->pixelPacking = camera::PixelPacking::NotPacked;
             frame->pixelByteOrder = bytesPerPixel == 1
                 ? camera::PixelByteOrder::NotApplicable
                 : reportedByteOrder;

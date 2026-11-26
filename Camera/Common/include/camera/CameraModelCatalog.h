@@ -253,7 +253,10 @@ public:
             *identity.manufacturer,
             *identity.model,
             identity.modelVariant};
-        if (identity.modelVariant) {
+        const bool hasVariantIdentity =
+            identity.modelVariant &&
+            !detail::normalizeCameraModelText(*identity.modelVariant).empty();
+        if (hasVariantIdentity) {
             for (const auto& profile : profiles_) {
                 if (detail::sameCameraModelKey(profile.key(), query)) {
                     return &profile;

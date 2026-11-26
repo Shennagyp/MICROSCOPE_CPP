@@ -191,3 +191,37 @@ and license confirmation. Do not use Vimba X until its published license
 restrictions are confirmed compatible with this intended test use. Aravis is
 a protocol-level fake GigE Vision camera, not a CTI Producer. Simulator runs
 supplement but never replace physical hardware evidence.
+
+
+## Simulator qualification status — 26 November 2026
+
+The simulator work is now an authorized supplemental software-qualification
+track. Read [CAMERA_V2_SIMULATOR_QUALIFICATION.md](CAMERA_V2_SIMULATOR_QUALIFICATION.md)
+before continuing.
+
+Source changes now present:
+- `Camera/GenTL/tests/NativeConsumerBridge.cpp`: test-only C ABI shim over
+  the existing direct `GenTLProducerLibrary` CTI loader.
+- `Camera/GenTL/tests/SimulatorSmoke.cpp`: opt-in smoke using the existing
+  `ConsumerBridge` and `Producer` APIs; it checks discovery, device open,
+  GenApi XML retrieval, five complete frames, stream stop and device close.
+- `Camera/GenTL/CMakeLists.txt`: builds the test-only targets and registers
+  the smoke only when `CAMERA_GENTL_SIMULATOR_CTI` is supplied.
+- `Camera/GenTL/README.md`: records setup, coverage and evidence limits.
+
+This does not modify AmScope, the production public API, or installed package
+exports. It does not resolve or replace the separate Swift bridge in production.
+
+**No local build/test/debug run has been performed. No simulator has yet been
+executed, and no compile/CI result for this increment is claimed.** First
+inspect the CI result for the exact source commit. Then qualify a simulator
+whose CTI and license terms permit this use. The Imaging Source Virtual Camera
+Producer is the first candidate for vendor clarification. Do not use Vimba X
+until its published restrictions are confirmed compatible. Aravis fake GV is
+not a CTI Producer and cannot be passed directly to this harness.
+
+The first smoke currently selects the first discovered device and its first
+stream. It is an initial integration probe, not a complete multi-device,
+feature/command, fault-injection or performance qualification. Simulator
+results remain separate from the outstanding physical AmScope and GenTL
+hardware gates.

@@ -33,6 +33,9 @@ int main() {
         require(stats.frameWaitTimeouts == 1, "wait timeouts are separate");
         require(stats.sequenceGaps == 1, "one sequence gap is detected");
         require(stats.missingFrames == 2, "the exact missing-frame count is retained");
+        tracker.recordBufferStarvationEvents(3);
+        require(tracker.snapshot().bufferStarvationEvents == 3,
+                "provider-reported buffer starvation is kept as a separate signal");
         require(stats.buffersWithoutSequence == 1,
                 "unsequenced buffers are counted without inventing an ID");
     }
@@ -85,7 +88,7 @@ int main() {
         tracker.recordBuffer(201, camera::FrameDeliveryStatus::CompleteImage);
         const auto stats = tracker.snapshot();
         require(stats.observedBuffers == 2 && stats.sequenceGaps == 0 &&
-                    stats.missingFrames == 0,
+                    stats.missingFrames == 0 && stats.bufferStarvationEvents == 0,
                 "reset starts a clean accounting interval");
     }
 

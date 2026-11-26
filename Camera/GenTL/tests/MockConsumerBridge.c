@@ -200,6 +200,9 @@ static size_t queued_buffer_count;
 static uint64_t stream_frame_ids[16];
 static uint64_t stream_timestamps_ns[16];
 static uint64_t next_simulator_frame_ids[2] = {1, 1};
+static uint64_t simulator_delivered_buffers[2];
+static uint64_t simulator_buffer_underruns[2];
+static uint64_t simulator_frames_started[2];
 static atomic_int event_wait_entered = 0;
 static atomic_int event_unregistered = 0;
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
@@ -558,6 +561,8 @@ int32_t gentl_consumer_invoke(
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
         if (atomic_load_explicit(&simulator_event_unregistered[event], memory_order_acquire) ||
             !simulator_stream_acquiring[event]) return GC_ERR_TIMEOUT;
+        if (getenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT"))
+            return GC_ERR_TIMEOUT;
 #endif
         if (queuedIndex == queued_buffer_count) return GC_ERR_TIMEOUT;
         if (*size < sizeof(EVENT_NEW_BUFFER_DATA)) {
@@ -576,6 +581,8 @@ int32_t gentl_consumer_invoke(
         stream_frame_ids[index] = next_simulator_frame_ids[event]++;
         stream_timestamps_ns[index] =
             UINT64_C(123456789) + stream_frame_ids[index] * UINT64_C(1000000);
+        ++simulator_delivered_buffers[event];
+        ++simulator_frames_started[event];
         for (size_t i = 0; i < 16; ++i) {
             stream_memory[index][i] =
                 (uint8_t)(0x30 + i + (uint8_t)(stream_frame_ids[index] - 1));
@@ -641,6 +648,18 @@ int32_t gentl_consumer_invoke(
         if (index < 0) return GC_ERR_INVALID_HANDLE;
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
         simulator_stream_acquiring[index] = 1;
+        simulator_delivered_buffers[index] = 0;
+        simulator_buffer_underruns[index] = 0;
+        simulator_frames_started[index] = 0;
+        {
+            const char* injected = getenv("MOCK_GENTL_SIMULATOR_UNDERRUNS");
+            if (injected && *injected) {
+                char* end = 0;
+                const unsigned long long value = strtoull(injected, &end, 10);
+                if (end != injected && *end == '\\0')
+                    simulator_buffer_underruns[index] = (uint64_t)value;
+            }
+        }
 #endif
         return GC_ERR_SUCCESS;
     }
@@ -657,6 +676,49 @@ int32_t gentl_consumer_invoke(
         if (argument_count != 5 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_HANDLE;
         const int32_t command = (int32_t)arguments[1];
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        const int stream = stream_index((DS_HANDLE)pointer(arguments[0]));
+        if (command == STREAM_INFO_TLTYPE)
+            return write_info_string((INFO_DATATYPE*)pointer(arguments[2]),
+                pointer(arguments[3]), (size_t*)pointer(arguments[4]), "MockGenTL");
+        if (command == STREAM_INFO_NUM_DELIVERED)
+            return write_scalar((INFO_DATATYPE*)pointer(arguments[2]),
+                pointer(arguments[3]), (size_t*)pointer(arguments[4]),
+                INFO_DATATYPE_UINT64, &simulator_delivered_buffers[stream],
+                sizeof(simulator_delivered_buffers[stream]));
+        if (command == STREAM_INFO_NUM_UNDERRUN)
+            return write_scalar((INFO_DATATYPE*)pointer(arguments[2]),
+                pointer(arguments[3]), (size_t*)pointer(arguments[4]),
+                INFO_DATATYPE_UINT64, &simulator_buffer_underruns[stream],
+                sizeof(simulator_buffer_underruns[stream]));
+        if (command == STREAM_INFO_NUM_STARTED)
+            return write_scalar((INFO_DATATYPE*)pointer(arguments[2]),
+                pointer(arguments[3]), (size_t*)pointer(arguments[4]),
+                INFO_DATATYPE_UINT64, &simulator_frames_started[stream],
+                sizeof(simulator_frames_started[stream]));
+        if (command == STREAM_INFO_NUM_ANNOUNCED ||
+            command == STREAM_INFO_NUM_QUEUED ||
+            command == STREAM_INFO_NUM_AWAIT_DELIVERY) {
+            size_t value = 0;
+            if (command == STREAM_INFO_NUM_ANNOUNCED) {
+                for (size_t i = 0; i < stream_buffer_count; ++i)
+                    if (stream_owners[i] == (DS_HANDLE)pointer(arguments[0])) ++value;
+            } else if (command == STREAM_INFO_NUM_QUEUED) {
+                for (size_t i = 0; i < queued_buffer_count; ++i) {
+                    for (size_t j = 0; j < stream_buffer_count; ++j) {
+                        if (queued_buffers[i] == stream_handles[j] &&
+                            stream_owners[j] == (DS_HANDLE)pointer(arguments[0])) {
+                            ++value;
+                            break;
+                        }
+                    }
+                }
+            }
+            return write_scalar((INFO_DATATYPE*)pointer(arguments[2]),
+                pointer(arguments[3]), (size_t*)pointer(arguments[4]),
+                INFO_DATATYPE_SIZET, &value, sizeof(value));
+        }
+#endif
         const size_t value = command == STREAM_INFO_PAYLOAD_SIZE ? 64 :
             command == STREAM_INFO_BUF_ANNOUNCE_MIN ? 2 : 0;
         if (value == 0) return GC_ERR_NOT_AVAILABLE;

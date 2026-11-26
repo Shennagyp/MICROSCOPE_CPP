@@ -175,7 +175,17 @@ int main(int argc, char** argv) {
 
         {
             auto stream = device.openDataStream(streamIds.front(), 4);
+            // The simulator injects two producer-reported underruns and one
+            // host wait timeout. These are intentionally distinct counters.
+            if (setenv("MOCK_GENTL_SIMULATOR_UNDERRUNS", "2", 1) != 0)
+                throw std::runtime_error("Could not configure simulator underruns.");
             stream.start();
+            if (setenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT", "1", 1) != 0)
+                throw std::runtime_error("Could not configure simulator timeout.");
+            const auto forcedTimeout = stream.nextFrame(1);
+            unsetenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT");
+            if (forcedTimeout)
+                throw std::runtime_error("The simulator failed to inject the wait timeout.");
 
             constexpr std::size_t requiredFrames = 5;
             const std::size_t sequenceOffset = verifyMultiDeviceIsolation ? 3 : 0;
@@ -234,6 +244,32 @@ int main(int argc, char** argv) {
                 std::cout << '\n';
             }
 
+            const auto statistics = stream.statistics();
+            if (statistics.transportType != std::optional<std::string>("MockGenTL") ||
+                statistics.producerDeliveredBuffers != requiredFrames ||
+                statistics.producerBufferUnderruns != 2 ||
+                statistics.producerFramesStarted != requiredFrames ||
+                statistics.announcedBuffers != 4 ||
+                statistics.queuedBuffers != 4 ||
+                statistics.buffersAwaitingDelivery != 0 ||
+                statistics.integrity.observedBuffers != requiredFrames ||
+                statistics.integrity.completeImages != requiredFrames ||
+                statistics.integrity.incompleteBuffers != 0 ||
+                statistics.integrity.sequenceGaps != 0 ||
+                statistics.integrity.missingFrames != 0 ||
+                statistics.integrity.frameWaitTimeouts != 1 ||
+                statistics.integrity.bufferStarvationEvents != 2) {
+                throw std::runtime_error(
+                    "Acquisition statistics did not preserve the producer, "
+                    "sequence and host-timeout distinctions.");
+            }
+            std::cout << "Acquisition integrity passed: delivered="
+                      << *statistics.producerDeliveredBuffers
+                      << " underruns=" << *statistics.producerBufferUnderruns
+                      << " host-timeouts=" << statistics.integrity.frameWaitTimeouts
+                      << " missing-frames=" << statistics.integrity.missingFrames
+                      << " queued=" << *statistics.queuedBuffers << '\\n';
+            unsetenv("MOCK_GENTL_SIMULATOR_UNDERRUNS");
             stream.stop();
         }
 

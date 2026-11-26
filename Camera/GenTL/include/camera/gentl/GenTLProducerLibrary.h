@@ -16,7 +16,8 @@ namespace camera::gentl {
 // Loads a vendor CTI Producer and dispatches directly to its standard GenTL
 // C exports. This is the native C++ Consumer boundary; no intermediary C ABI
 // bridge or application-specific runtime is required.
-class GenTLProducerLibrary final {
+class GenTLProducerLibrary final
+    : public std::enable_shared_from_this<GenTLProducerLibrary> {
 public:
     static std::shared_ptr<GenTLProducerLibrary> load(
         const std::filesystem::path& ctiPath);
@@ -27,6 +28,10 @@ public:
     GenTLProducerLibrary& operator=(const GenTLProducerLibrary&) = delete;
 
     const std::filesystem::path& path() const noexcept;
+
+    // Creates a Consumer whose dispatch calls this CTI's GenTL exports
+    // directly. The Consumer retains this library until every session closes.
+    Consumer createConsumer();
 
     std::int32_t invokeRaw(
         Operation operation,

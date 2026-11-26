@@ -331,6 +331,49 @@ void testIncompleteIdentityRequiresCandidateSelection() {
           "does not merge an ambiguous candidate's sensor characteristics");
 }
 
+void testCoreCameraProjectionRejectsDifferentInstalledComponentIdentity() {
+    const auto catalog = makeCatalog({makeProfile("Rev-C", true, 1.2)});
+    const auto discovered = makeDiscoveredDevice();
+    const auto boundComponentId =
+        take<microscope::core::EquipmentComponentId>(
+            microscope::core::EquipmentComponentId::create("camera-bound-to-profile"));
+    const auto enrichment = CameraModelDiscoveryEnricher::enrichBoundDevice(
+        discovered,
+        catalog,
+        boundComponentId,
+        camera::CameraModelKey{
+            "Example Imaging", "FluoroCam-2K",
+            std::optional<std::string>{"Rev-C"}},
+        2);
+
+    const auto dimensions =
+        take(microscope::core::PixelDimensions::create(2048, 2048));
+    const auto mode = take(microscope::core::CameraOutputMode::create(
+        take<microscope::core::CameraModeId>(
+            microscope::core::CameraModeId::create("unrelated-camera-mode")),
+        take(microscope::core::SensorRegionOfInterest::create(0, 0, 2048, 2048)),
+        take(microscope::core::PixelBinning::create(1, 1)),
+        dimensions,
+        microscope::core::CameraPixelLayout::Monochrome,
+        "Mono8"));
+    const auto anotherInstalledCamera = take(
+        microscope::core::CameraSpecification::create(
+            take<microscope::core::EquipmentComponentId>(
+                microscope::core::EquipmentComponentId::create("different-installed-camera")),
+            dimensions,
+            take(microscope::core::PositiveMicrometers::create(6.5)),
+            take(microscope::core::PositiveMicrometers::create(6.5)),
+            {mode}));
+
+    const auto projection =
+        CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
+            anotherInstalledCamera, enrichment);
+    check(!projection &&
+          projection.error().code ==
+              CameraSpecificationProjectionErrorCode::EquipmentComponentMismatch,
+          "does not attach one camera component's persisted model binding to another installed camera specification");
+}
+
 void testProjectionRejectsAmbiguousModelIdentity() {
     const auto catalog = makeCatalog({
         makeProfile("Rev-B", true, 1.2),
@@ -404,6 +447,7 @@ int main() {
     testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeometry();
     testIncompleteIdentityRequiresCandidateSelection();
     testProjectionRejectsAmbiguousModelIdentity();
+    testCoreCameraProjectionRejectsDifferentInstalledComponentIdentity();
     testLiveBackendConflictsAreRetainedAndReported();
 
     if (failures != 0) {

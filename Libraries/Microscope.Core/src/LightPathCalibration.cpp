@@ -90,6 +90,9 @@ LightPathCalibration::create(
         return Result<LightPathCalibration, LightPathCalibrationError>::failure(
             LightPathCalibrationError::DuplicateOpticalComponent);
     }
+    std::sort(
+        configuredOpticalComponentIds.begin(),
+        configuredOpticalComponentIds.end());
 
     double previousDrive = -1.0;
     double previousIrradiance = -1.0;
@@ -253,6 +256,9 @@ LightPathModeSetting::create(
         return Result<LightPathModeSetting, LightPathModeSettingError>::failure(
             LightPathModeSettingError::DuplicateOpticalComponent);
     }
+    std::sort(
+        configuredOpticalComponentIds.begin(),
+        configuredOpticalComponentIds.end());
 
     return Result<LightPathModeSetting, LightPathModeSettingError>::success(
         LightPathModeSetting(

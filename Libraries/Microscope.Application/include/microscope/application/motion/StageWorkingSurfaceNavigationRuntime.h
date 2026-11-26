@@ -414,19 +414,17 @@ public:
                     : StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched);
         }
         if (dispatch == DispatchDisposition::Rejected) {
-            const auto* dispatchError =
-                std::get_if<StageMotionDispatchError>(&active_->execution.dispatch);
-            if (dispatchError != nullptr &&
-                dispatchError->code == StageMotionDispatchErrorCode::RuntimeDispatchRejected) {
-                auto failed = operationRuntime_->recordPreDispatchFailure(
-                    active_->identities.operationId,
-                    active_->execution.commandContext.operation().stepId);
-                if (!failed) {
-                    return failure(
-                        StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
-                        std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                        std::nullopt, failed.error());
-                }
+            // Every known rejection means no motion command was accepted by the
+            // adapter/runtime. Close the Pending step rather than orphaning a
+            // Running operation. Indeterminate submissions are handled above.
+            auto failed = operationRuntime_->recordPreDispatchFailure(
+                active_->identities.operationId,
+                active_->execution.commandContext.operation().stepId);
+            if (!failed) {
+                return failure(
+                    StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
+                    std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                    std::nullopt, failed.error());
             }
             const auto snapshot = operationRuntime_->operationSnapshot(
                 active_->identities.operationId);
@@ -869,6 +867,16 @@ private:
         auto created = operationRuntime_->createStep(
             operationId, active_->identities.restoredMoveStepId);
         if (!created) {
+            // The physical home step is already verified. Finalize the operation
+            // as failed when the runtime can still advance its lifecycle.
+            auto verifying = operationRuntime_->beginOperationVerification(operationId);
+            if (verifying) {
+                auto finalized = operationRuntime_->recordOperationVerification(
+                    operationId, false);
+                if (finalized) {
+                    active_.reset();
+                }
+            }
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -881,6 +889,17 @@ private:
             active_->identities.restoredMoveCommandId,
             *port_, *operationRuntime_);
         if (!continuation) {
+            // The restored step exists but no command was dispatched. Close it
+            // as a pre-dispatch failure so the operation cannot remain Running.
+            auto failed = operationRuntime_->recordPreDispatchFailure(
+                operationId, active_->identities.restoredMoveStepId);
+            if (!failed) {
+                return failure(
+                    StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
+                    std::nullopt, continuation.error().code, std::nullopt,
+                    std::nullopt, std::nullopt, failed.error());
+            }
+            active_.reset();
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
                 std::nullopt, continuation.error().code, std::nullopt,
@@ -902,19 +921,14 @@ private:
             return success(StageWorkingSurfaceNavigationRuntimeDisposition::SubmissionIndeterminate);
         }
 
-        const auto* dispatchError =
-            std::get_if<StageMotionDispatchError>(&active_->execution.dispatch);
-        if (dispatchError != nullptr &&
-            dispatchError->code == StageMotionDispatchErrorCode::RuntimeDispatchRejected) {
-            const auto& operation = active_->execution.commandContext.operation();
-            auto failed = operationRuntime_->recordPreDispatchFailure(
-                operation.operationId, operation.stepId);
-            if (!failed) {
-                return failure(
-                    StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
-                    std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                    std::nullopt, failed.error());
-            }
+        const auto& operation = active_->execution.commandContext.operation();
+        auto failed = operationRuntime_->recordPreDispatchFailure(
+            operation.operationId, operation.stepId);
+        if (!failed) {
+            return failure(
+                StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, failed.error());
         }
         const auto snapshot = operationRuntime_->operationSnapshot(operationId);
         active_.reset();

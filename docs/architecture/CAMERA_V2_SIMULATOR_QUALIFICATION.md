@@ -2,7 +2,7 @@
 
 **Branch:** `camera-v.2.0`  
 **Purpose:** Add vendor-independent software integration evidence for the GenTL consumer without claiming physical-camera qualification.  
-**Status:** Test-only harness source is implemented. CI passed for the initial harness baseline at `7d3a83b4ff87d5a9ee24f04a26f86d00ab6d6976`; the subsequent device-index selection change is awaiting its own CI result. No simulator has been executed.
+**Status:** Test-only harness source is implemented. The device-index selection change is CI-validated at `337bc58fc25de903b1c8e103261d9e89bc7d9c60`; both GenTL bridge and package/external-consumer workflows passed on Intel x86_64 and Apple Silicon arm64. No simulator has been executed.
 
 ## 1. Qualification boundary
 
@@ -30,9 +30,9 @@ References:
 **Do not use this candidate for this project unless the license holder confirms the intended test use is permitted.** Allied Vision's published Vimba X terms restrict use to the stated intended-use scope, including restrictions concerning third-party cameras and using the software to create control software. A free download is not a general-purpose redistribution or test-use grant:
 - https://www.alliedvision.com/de/protected-downloads/download/21
 
-### The Imaging Source Virtual Camera GenTL Producer — first candidate for vendor clarification
+### The Imaging Source Virtual Camera GenTL Producer — technically strong, legally blocked pending written clarification
 
-The official package is named *GenTL Producer for Virtual Cameras*. It simulates one or more configurable camera devices and streams images. The current package page lists Windows 10/11, Ubuntu 22.04+, and macOS 26+; macOS support is described as an initial release.
+The official package is explicitly named *GenTL Producer for Virtual Cameras* and describes configurable one-or-more virtual devices with image streaming. Version 1.1.1.158 (16 November 2026) lists Windows 10/11, Ubuntu 22.04+ and macOS 26+. This is the clearest current product description of a dedicated simulator delivered as a GenTL Producer. The package page does not spell out the CTI filename or promise third-party consumer compatibility.
 
 References:
 - https://dl-gui.theimagingsource.com/en_US/307fff26-bbdb-592d-a5f7-c1f8dba99e00/
@@ -41,17 +41,17 @@ References:
 The product page says it is used with IC Imaging Control 4 SDK or IC Capture 4. Unlike the TIS GigE/USB3 Producer pages, it does not expressly document third-party consumer compatibility. TIS's published EULA says the software may be used solely to operate TIS cameras, converters and frame grabbers:
 - https://www.theimagingsource.com/de-de/service/end-user-license-agreement/
 
-Before making this the automated simulator dependency, verify that the virtual Producer exposes a normal GenTL CTI usable by this project's consumer and that third-party consumer testing is permitted. Do not redistribute the vendor package or CTI.
+The EULA grants use solely for operating TIS cameras, video signal converters, frame grabbers and related TIS products. Therefore, do not use this package to test this generic camera-control application without a written exception from TIS. Written confirmation must explicitly cover third-party GenTL consumers, virtual cameras, internal CI/test use and redistribution or installation on CI runners. Do not redistribute the vendor package or CTI. This is technically a strong candidate but not an approved dependency.
 
 ### Hikrobot MVS Virtual Device / `MvProducerVIR.cti` — additional CTI candidate
 
-Hikrobot's MVS documentation identifies `MvProducerVIR.cti` as its virtual-camera GenTL Producer. The MVS user guide describes adding virtual camera models and also selecting the virtual Producer CTI through the application's GenTL device list. The current MVS download page lists release 5.1.1 (build 20261015) and documents an expanded Virtual Device tool, including Linux32 and AArch64 support.
+Hikrobot's MVS 4.0 user manual identifies `MvProducerVIR.cti` as a virtual-camera CTI and describes `MyProducerVIR.cti` as a selectable virtual Producer. The manual is from 2022, not current. MVS 5.1.0 release notes mention expanded Virtual Device support on Linux32 and AArch64; the current MVS 5.1.1 download page lists Windows, Linux x86 and AArch64 packages, but does not establish that the virtual CTI is available in each package or on Linux x86_64.
 
 References:
 - https://www.hikrobotics.com/en/machinevision/service/download/
 - https://cncu.co.za/FlatCUT-Flatbed-Cutting-Machine/MDR%20Oscillating%20Blade%20CNC%20Router/Hikrobot%20MVS%20%28Machine%20Vision%20Software%29%20STD%204.0.0%20%28221208%29%20Installation/Applications/Win64/doc/User_Manual_English/pdf.pdf
 
-This is now a stronger practical candidate than a simulator exposed only through a vendor SDK because the documented virtual device is represented by a CTI filename. However, the available documentation does not yet establish that `MvProducerVIR.cti` is supported by arbitrary third-party GenTL consumers, nor does it settle the license scope for this project's test use. It is also not established as a macOS simulator. Treat it as a **Linux/Windows candidate pending vendor confirmation**, not as a selected or validated dependency. Ask Hikrobot to confirm third-party GenTL consumer interoperability, supported MVS/CTI versions and permission for internal testing.
+The CTI filename and GenTL listing make this worth vendor clarification, but the old manual does not establish current package availability, third-party GenTL interoperability, Linux x86_64 support or license permission for this project's use. It is not established as a macOS simulator. Treat it as an unverified Windows/Linux candidate, not a selected dependency. Ask Hikrobot to confirm the exact current CTI file, host architectures, third-party consumer interoperability and permission for internal CI testing.
 
 ### Critical Link GenTL Producer simulation — secondary candidate
 
@@ -102,7 +102,7 @@ reported as opaque rather than treated as CTI failures. CMake registers it with 
 5. Prefer an opt-in/manual CI job or a separately provisioned runner if vendor download/license conditions prevent safe automatic installation. Do not make normal package CI depend on a vendor installer.
 6. Keep AmScope provider source, tests, public contracts and runtime behavior frozen. Do not modify the Optika v0.9 application or restart Phase 5.
 
-The initial harness baseline passed both GitHub Actions workflows at commit `7d3a83b4ff87d5a9ee24f04a26f86d00ab6d6976` (GenTL bridge CI and package/external-consumer CI). The optional simulator test was not registered because no CTI path was supplied. The follow-up device-index selection source change is a later commit and must pass its own CI. No local build/test/debug run or simulator execution has occurred.
+The device-index source change in `Camera/GenTL/tests/SimulatorSmoke.cpp` passed both replacement GitHub Actions workflows at tested commit `337bc58fc25de903b1c8e103261d9e89bc7d9c60`: [GenTL bridge #45781919824](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45781919824) and [package/external-consumer #45781919810](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45781919810). Both workflows passed Intel x86_64 and Apple Silicon arm64. The optional simulator test was not registered because no CTI path was supplied. No local build/test/debug run or simulator execution has occurred.
 
 ## 5. Acceptance criteria
 
@@ -127,3 +127,14 @@ Simulator-backed CTI integration is supplemental **software qualification** for 
 - SDK redistribution or release acceptance.
 
 No local build, test, or debugger run is authorized in this environment. Use CI evidence or owner-run simulator evidence and update this document with exact results.
+
+
+## Candidate selection conclusion — 26 November 2026
+
+The current vendor evidence does not justify downloading or executing any external simulator under the project's existing constraints:
+- TIS Virtual Camera is a genuine dedicated GenTL Producer with a current package, but the published EULA restricts use to operating TIS products. Obtain written permission before using it as a generic test simulator.
+- Hikrobot documents a virtual-camera CTI in an older MVS manual, but current CTI availability, Linux x86_64 support, third-party interoperability and license permission are unresolved.
+- Vimba X has a genuine simulator CTI, but its license restrictions remain unresolved for this purpose.
+- Aravis fake GV is a network GigE Vision simulator, not a CTI. It can only qualify a separate GEV transport implementation, not this direct CTI loader.
+
+Do not create a green CI gate that silently skips the simulator. Once a vendor approves a CTI, run it on a compatible isolated runner and preserve the exact package/version/hash and test logs. In the meantime, evaluate a first-party, test-only simulated CTI fixture (implementing only the GenTL 1.6 calls exercised by this project) as a deterministic integration test. Keep that fixture separate from claims of vendor interoperability and do not use it to replace vendor or physical qualification.

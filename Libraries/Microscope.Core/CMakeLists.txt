@@ -23,6 +23,7 @@ add_library(microscope_core STATIC
     src/StagePositionState.cpp
     src/DualSlideNavigation.cpp
     src/StageNavigationPlanner.cpp
+    src/StageWorkingSurfaceNavigationPlanner.cpp
     src/Configuration.cpp
     src/ConfigurationTransition.cpp
     src/OperationStateMachine.cpp)
@@ -193,6 +194,17 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF)
     add_test(NAME microscope_core_stage_navigation_planner_tests
         COMMAND microscope_core_stage_navigation_planner_tests)
+
+    add_executable(microscope_core_working_surface_navigation_planner_tests
+        tests/StageWorkingSurfaceNavigationPlannerTests.cpp)
+    target_link_libraries(microscope_core_working_surface_navigation_planner_tests
+        PRIVATE Microscope::Core)
+    set_target_properties(microscope_core_working_surface_navigation_planner_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(NAME microscope_core_working_surface_navigation_planner_tests
+        COMMAND microscope_core_working_surface_navigation_planner_tests)
 
     add_executable(microscope_core_bounded_feedback_inbox_tests
         tests/BoundedFeedbackInboxTests.cpp)

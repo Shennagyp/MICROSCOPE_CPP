@@ -1,5 +1,6 @@
 #include "microscope/application/camera/CameraModelDiscoveryEnricher.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -21,14 +22,14 @@ void addWarning(
 }
 
 template <typename TValue>
-void mergeOptionalValue(
+bool mergeOptionalValue(
     std::optional<TValue>& runtimeValue,
     const std::optional<TValue>& modelValue,
     std::vector<Warning>& warnings,
     const char* fieldName) {
     if (!runtimeValue && modelValue) {
         runtimeValue = modelValue;
-        return;
+        return true;
     }
     if (runtimeValue && modelValue && *runtimeValue != *modelValue) {
         addWarning(
@@ -37,16 +38,17 @@ void mergeOptionalValue(
             std::string("The live camera backend and persisted model profile disagree on ") +
                 fieldName + "; the live backend value was retained.");
     }
+    return false;
 }
 
-void mergeOptionalDouble(
+bool mergeOptionalDouble(
     std::optional<double>& runtimeValue,
     const std::optional<double>& modelValue,
     std::vector<Warning>& warnings,
     const char* fieldName) {
     if (!runtimeValue && modelValue) {
         runtimeValue = modelValue;
-        return;
+        return true;
     }
     if (runtimeValue && modelValue &&
         !nearlyEqual(*runtimeValue, *modelValue)) {
@@ -56,6 +58,7 @@ void mergeOptionalDouble(
             std::string("The live camera backend and persisted model profile disagree on ") +
                 fieldName + "; the live backend value was retained.");
     }
+    return false;
 }
 
 [[nodiscard]] bool sameResolution(
@@ -123,8 +126,6 @@ void mergeSensorCharacteristics(
 
     const auto runtimeGlobalShutter =
         runtimeCapabilities.status(::camera::CameraCapability::GlobalShutter);
-    const auto modelGlobalShutter =
-        modelCapabilities.status(::camera::CameraCapability::GlobalShutter);
     const bool globalShutterConflict =
         runtimeGlobalShutter != ::camera::CapabilityStatus::Unknown &&
         modelSensor.shutterType.has_value() &&
@@ -140,8 +141,6 @@ void mergeSensorCharacteristics(
 
     const auto runtimeMonochrome =
         runtimeCapabilities.status(::camera::CameraCapability::MonochromeSensor);
-    const auto modelMonochrome =
-        modelCapabilities.status(::camera::CameraCapability::MonochromeSensor);
     const bool colorModeConflict =
         runtimeMonochrome != ::camera::CapabilityStatus::Unknown &&
         modelSensor.colorMode.has_value() &&
@@ -155,14 +154,14 @@ void mergeSensorCharacteristics(
             "The persisted sensor color mode conflicts with the live monochrome capability; the model color mode was not substituted.");
     }
 
-    mergeOptionalValue(
+    usedModelData |= mergeOptionalValue(
         merged.technology,
         modelSensor.technology,
         warnings,
         "sensor technology");
 
     if (!globalShutterConflict) {
-        mergeOptionalValue(
+        usedModelData |= mergeOptionalValue(
             merged.shutterType,
             modelSensor.shutterType,
             warnings,
@@ -170,7 +169,7 @@ void mergeSensorCharacteristics(
     }
 
     if (!colorModeConflict) {
-        mergeOptionalValue(
+        usedModelData |= mergeOptionalValue(
             merged.colorMode,
             modelSensor.colorMode,
             warnings,
@@ -190,32 +189,32 @@ void mergeSensorCharacteristics(
             "The live camera backend and persisted model profile disagree on active sensor dimensions; the live backend value was retained.");
     }
 
-    mergeOptionalDouble(
+    usedModelData |= mergeOptionalDouble(
         merged.pixelPitchXMicrometers,
         modelSensor.pixelPitchXMicrometers,
         warnings,
         "X pixel pitch");
-    mergeOptionalDouble(
+    usedModelData |= mergeOptionalDouble(
         merged.pixelPitchYMicrometers,
         modelSensor.pixelPitchYMicrometers,
         warnings,
         "Y pixel pitch");
-    mergeOptionalDouble(
+    usedModelData |= mergeOptionalDouble(
         merged.readNoiseElectronsRms,
         modelSensor.readNoiseElectronsRms,
         warnings,
         "read noise");
-    mergeOptionalDouble(
+    usedModelData |= mergeOptionalDouble(
         merged.darkCurrentElectronsPerPixelPerSecond,
         modelSensor.darkCurrentElectronsPerPixelPerSecond,
         warnings,
         "dark current");
-    mergeOptionalDouble(
+    usedModelData |= mergeOptionalDouble(
         merged.fullWellCapacityElectrons,
         modelSensor.fullWellCapacityElectrons,
         warnings,
         "full-well capacity");
-    mergeOptionalDouble(
+    usedModelData |= mergeOptionalDouble(
         merged.maximumFrameRateFramesPerSecond,
         modelSensor.maximumFrameRateFramesPerSecond,
         warnings,

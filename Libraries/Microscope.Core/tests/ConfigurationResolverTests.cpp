@@ -1546,6 +1546,39 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
     check(cameraResolution.isResolved(),
           "resolves the single camera endpoint on the selected LightPath");
 
+    const auto newerEquipmentRevision = take(MicroscopeEquipmentDefinition::create(
+        fixture.equipment.microscopeId(),
+        fixture.equipment.components(),
+        fixture.equipment.connections(),
+        fixture.equipment.opticalPaths(),
+        fixture.equipment.objectiveSpecifications(),
+        fixture.equipment.cameraSpecifications(),
+        fixture.equipment.condenserSpecifications(),
+        fixture.equipment.illuminationSpecifications(),
+        fixture.equipment.stageSpecifications(),
+        fixture.equipment.dualSlideCarrierSpecifications(),
+        {lightPath},
+        fixture.equipment.filterSpecifications(),
+        2));
+    const auto staleModeCameraResolution = LightPathCameraResolver::resolve(
+        newerEquipmentRevision,
+        operationMode,
+        lightPathId,
+        fixture.cameraId,
+        fixture.cameraModeId,
+        fluorescenceRequirements);
+    check(staleModeCameraResolution.status() ==
+              LightPathCameraResolutionStatus::Unsupported,
+          "rejects a mode calibrated against an earlier equipment-definition revision");
+    check(std::any_of(
+              staleModeCameraResolution.diagnostics().begin(),
+              staleModeCameraResolution.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "light_path_camera.equipment_revision_mismatch";
+              }),
+          "reports the equipment revision mismatch explicitly");
+
     const auto fluorescenceProfileId =
         makeId<ConfigurationProfileId>("profile-lightpath-fluorescence");
     const auto fluorescenceProfile = take(ConfigurationProfile::create(
@@ -1586,6 +1619,16 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
         ConfigurationResolver::resolve(equipment, fluorescenceProfiles, request.value());
     check(resolution.isResolved(),
           "the existing profile resolver accepts a coherent LightPath-derived request");
+
+    const auto staleEquipmentResolution =
+        ConfigurationResolver::resolve(
+            newerEquipmentRevision, fluorescenceProfiles, request.value());
+    check(!staleEquipmentResolution.isResolved() &&
+          hasDiagnosticCode(
+              staleEquipmentResolution,
+              "configuration.light_path.binding_invalid"),
+          "rechecks the bound equipment revision after the request has been created");
+
     check(hasDiagnosticCode(
               resolution,
               "camera.fluorescence.sensor_profile_unknown"),

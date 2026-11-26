@@ -1482,6 +1482,26 @@ void testResolverRejectsCameraNotConnectedToSelectedImagingPath() {
 
 void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
     const auto fixture = makeConfigurationFixture();
+    check(fixture.equipment.revision() == 1,
+          "existing equipment fixtures receive explicit revision one by default");
+    const auto zeroRevisionEquipment = MicroscopeEquipmentDefinition::create(
+        fixture.equipment.microscopeId(),
+        fixture.equipment.components(),
+        fixture.equipment.connections(),
+        fixture.equipment.opticalPaths(),
+        fixture.equipment.objectiveSpecifications(),
+        fixture.equipment.cameraSpecifications(),
+        fixture.equipment.condenserSpecifications(),
+        fixture.equipment.illuminationSpecifications(),
+        fixture.equipment.stageSpecifications(),
+        fixture.equipment.dualSlideCarrierSpecifications(),
+        {},
+        fixture.equipment.filterSpecifications(),
+        0);
+    check(!zeroRevisionEquipment &&
+          zeroRevisionEquipment.error() == EquipmentDefinitionError::ZeroRevision,
+          "rejects an equipment constitution with revision zero");
+
     const auto lightPathId =
         makeId<LightPathId>("configuration-brightfield-light-path");
     const auto lightPath = take(LightPath::create(

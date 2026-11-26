@@ -718,22 +718,38 @@ If position feedback is absent, Core records command-derived position as an esti
 
 No mechanical transmission construction details are required by the Core model.
 
-### 10.4 OPTIKA dual-slide carrier and slide registration
+### 10.4 Stage XY working surface and user-authored slide registration
 
-The OPTIKA B293 dual-slide carrier is one horizontal stage plane with two side-by-side slide slots. It is not a vertical rack and does not add a slide-selection Z axis. Both slots use the same installed stage's two linear in-plane axes.
+The OPTIKA B293 has one horizontal motorized stage plane. The plane is modeled by the installed stage's two in-plane linear axes. Microscope focus Z is a separate axis with its own travel range, reference and position lifecycle. It is not a slide-selection axis and is not part of a slide rectangle.
 
-The static DualSlideCarrierSpecification is attached to the stage component and identifies horizontal and transverse in-plane axes plus the positive-X direction from left slot to right slot. It declares exactly two positions: Left and Right. The equipment definition may omit this specification for microscopes without this carrier.
+The new working surface is an initially empty XY canvas. The user supplies its machine-coordinate origin and positive X/Y travel extents. The far boundary is derived from origin plus extent and checked against the configured stage-axis operating ranges. The canvas origin is not automatically the origin of any slide.
 
-Each physical Slide has its own SlideGeometry (width and height in micrometers) and independent SlideRegistration. Each registration records four distinct corner correspondences: TopLeft (0,0), TopRight (width,0), BottomRight (width,height), BottomLeft (0,height). Every correspondence maps into the common stage machine-coordinate plane in physical micrometers and retains observation provenance and uncertainty.
+Each physical slide is added independently through constrained CAD geometry. The user supplies:
+- The fixed mechanical stop-point endpoint in stage coordinates; this becomes the slide-local origin.
+- An initial opposite-corner handle that determines positive/negative direction on the two axes.
+- Whether constrained slide length is assigned to StageX or StageY.
+- Constrained length and width.
 
-Core fits an affine 2D mapping from all four corners and checks the maximum per-corner residual against an explicit acceptance threshold. Each SlideRegistration revision retains the configured acceptance threshold, actual maximum residual, RMS residual and per-corner residuals. The fourth point validates the affine model rather than being ignored. Left and right slides have independent transforms; a shared transform must never be assumed. Registration has its own CalibrationRevisionId. A navigation target captures SlideId, slide-local position and the registration revision used to create it.
+The dimensions solve the final opposite corner while the stop-point remains fixed. The model retains the initial handle, solved corner and all four stage-coordinate corners. Geometry is axis-aligned in the stage XY plane; it is not an affine calibration fitted from four independent sensor measurements.
 
-The affine registration error envelope includes the maximum corner uncertainty and maximum fit residual. For a point inside the rectangular slide, the four-corner affine interpolation weights have a maximum L1 norm of 1.5; Core applies this factor before propagating stage-plane uncertainty through the inverse transform. Position estimates are not reported for a selected slide when the stage coordinate maps outside that slide's physical rectangle.
+The number of slide rectangles is variable. A new canvas contains zero slide rectangles. There are no implicit left/right slots, fixed-ten slots, pre-populated slide dimensions or inferred slide placements. A slide must fit wholly inside the canvas. Positive-area overlap between distinct slide rectangles is rejected; exact edge/corner contact is allowed. A mechanical clearance margin is introduced only when its physical value and owner are explicitly specified.
 
-Carrier occupancy is runtime state, separate from equipment definition and persistent Slide identity. Either slot may be empty or occupied but not registered. One SlideId cannot occupy both slots. Selecting another slide changes which transform Core uses; it does not move the stage.
+A slide's registration has a stable SlideId and a unique revision identity. Replacing geometry or moving/reseating a slide requires a new revision; reusing the same revision for changed geometry is rejected. A navigation target captures SlideId, slide-local XY and the exact registration revision. A queued target is rejected if that registration has changed before execution. Selecting a physical slide changes the coordinate frame used for a navigation request; it does not itself move the stage.
 
-StageNavigationPlanner selects direct movement only when both in-plane axis references are valid and their accumulated error bounds remain within the configured per-axis thresholds. If either axis requires homing, the planner homes both axes because they jointly define one stage-plane coordinate. It preserves the original SlideId/local point/registration revision and resolves the absolute machine target again after the home operation is verified. A changed registration revision rejects the restoration instead of silently using a new slide placement. Removing/reseating a slide requires a new registration revision; homing alone does not repair slide placement.
+For a constrained slide rectangle, slide-local point (u,v) maps into machine stage coordinates through the rectangle's orthogonal XY basis:
 
+    p_stage = stopPoint + axisX * u + axisY * v
+
+The inverse applies the transpose of the same orthonormal basis. The local transform is a 2D mapping. It has no slide-local Z, thickness, surface-height or stop-point uncertainty field. A selected slide determines the XY reference frame only.
+
+StagePosition3D is the single machine-coordinate authority for X, Y and focus Z. Slide-local position is derived from machine X/Y and the selected slide's current registration; it is not maintained as a competing position state. XY projection does not require focus Z to be homed. Z observations or movement do not alter slide-local XY.
+
+StageNavigationPlanner selects direct XY movement only when both in-plane axis references are usable and their accumulated uncertainty remains within the configured per-axis policy. If either X or Y requires homing, both are homed because together they define the XY machine coordinate. The original revision-bound slide-local target is restored only after the exact correlated X/Y home fact and operation step are verified. A changed registration revision rejects restoration. Homing does not repair a slide that was moved or reseated.
+
+The focus-Z reference procedure is configured separately. With a physical limit switch, the matching limit observation establishes the configured reference. Without a switch, a FullRangeSweep may be used only when the focus mechanism declares ContinuousKnobRotationWithoutClash. Without an independent encoder/external boundary observation, the completed sweep establishes a calibrated estimate, not measured position.
+
+The working surface and slide registrations are runtime/document state owned by the persistent stage subsystem and saved through the application persistence boundary. They are not static microscope-equipment specification and are not camera-preview pane identities.
+ 
 ### 10.5 Slide/acquisition calibration history
 
 Calibration records are owned by the microscope/configuration calibration stores, not duplicated inside every slide.

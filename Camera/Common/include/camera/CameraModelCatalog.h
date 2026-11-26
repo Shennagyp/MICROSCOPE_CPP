@@ -294,6 +294,10 @@ inline std::optional<CameraModelProfile> CameraModelProfile::create(
     CameraSensorCharacteristics sensorCharacteristics,
     std::uint64_t profileRevision,
     std::string sourceReference) {
+    if (sourceReference.empty() &&
+        sensorCharacteristics.provenanceReference) {
+        sourceReference = *sensorCharacteristics.provenanceReference;
+    }
     if (!sourceReference.empty() &&
         sensorCharacteristics.provenanceReference &&
         *sensorCharacteristics.provenanceReference != sourceReference) {

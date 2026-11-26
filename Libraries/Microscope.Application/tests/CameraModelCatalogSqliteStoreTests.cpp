@@ -124,6 +124,9 @@ void testCameraModelCatalogRoundTripAndOptimisticRevision() {
                 check(profile->sourceReference() ==
                           "manufacturer-datasheet:scmos-2048-rev-b",
                       "restores the sensor evidence reference");
+                check(profile->sensorCharacteristics().provenanceReference ==
+                          profile->sourceReference(),
+                      "restores the sensor-level provenance reference from the canonical profile source reference");
                 check(profile->capabilities().supports(
                           camera::CameraCapability::GlobalShutter),
                       "restores the known global-shutter capability");

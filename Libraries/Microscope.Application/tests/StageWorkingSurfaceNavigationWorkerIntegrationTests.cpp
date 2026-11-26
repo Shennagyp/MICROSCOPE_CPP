@@ -167,7 +167,7 @@ public:
                 pendingContext->runtimeDevice(),
                 pendingContext->operation()},
             core::FeedbackKind::DeviceActionCompleted,
-            core::ObservationSource::HardwareReadback));
+            core::ObservationSource::DeviceEvent));
         auto envelope = core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
             metadata,
             core::StageMotionFeedbackPayload{completed});

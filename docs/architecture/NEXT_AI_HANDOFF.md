@@ -2,54 +2,54 @@
 
 ## 0. Current workstream — WSI acquisition integrity and GenTL completion (27 November 2026)
 
-The owner requires the remaining camera features to be implemented in a staged sequence: finish GenTL-side functionality and its tests first, keep the documentation and this handoff synchronized, then extend the validated protocol-neutral semantics through other protocol adapters.
+The owner requires remaining camera capabilities to be implemented in a staged sequence: finish GenTL-side functionality and tests first, keep documentation/handoff synchronized, then extend validated protocol-neutral semantics through other protocol adapters.
 
 ### Ownership classification
 
-- **GenTL transport:** CTI loading, Producer/interface/device/stream handles, stream buffers/events, transport counters, frame transport metadata and multipart buffer-part APIs.
-- **GenApi/GenICam:** typed feature nodes and register nodes. This is the device feature model layered over the transport, not GenTL itself.
-- **PFNC:** pixel-format identifiers and packing definitions. These are wire/image-layout semantics, not transport operations.
-- **Camera.Common:** backend-neutral frame layout, part views, sequence/integrity telemetry and separate byte-register abstractions where those semantics are common.
-- **General implementation quality:** throughput, allocation/copy control, bounds validation, concurrency, teardown/drain and failure recovery. These are cross-cutting constraints, not separate GenTL features.
+- **GenTL transport:** CTI/Producer/interface/device/stream handles, buffers/events, transport counters, frame metadata and multipart buffer-part APIs.
+- **GenApi/GenICam:** typed feature nodes and register nodes; layered over transport, not a GenTL feature itself.
+- **PFNC:** pixel-format identifiers and packed/unpacked raster layouts; not a transport API.
+- **Camera.Common:** backend-neutral frame layout, part views, sequence/integrity telemetry and common byte-register value contract.
+- **General implementation quality:** throughput, allocation/copy control, bounds validation, concurrency, teardown/drain and recovery. These constraints apply across protocols rather than defining a protocol feature.
 
-### Accepted source checkpoint
+### Latest accepted source and CI
 
-- Branch: camera-v.2.0.
-- Latest accepted source commit: `0d3328ad4636436cf05f07eda02af0cf31577058`.
-- GenTL bridge workflow [#45912574859](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45912574859) passed on Intel x86_64 and Apple Silicon arm64, including simulator CTest and official GenApi integration.
-- Package/external-consumer workflow [#45912574857](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45912574857) passed on Intel x86_64 and Apple Silicon arm64.
-- No physical camera is available. In-repository CTI tests are not independent vendor CTI or physical-camera evidence.
+- Branch: `camera-v.2.0`.
+- Latest accepted source commit: `992d4162a4aa16fa8215370ba4ea1b8fd5673486`.
+- GenTL bridge [workflow #45913589920](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45913589920): passed on Intel x86_64 and Apple Silicon arm64, including GenTL simulator CTests and official GenApi 3.5.1 integration.
+- Package/external-consumer [workflow #45913589940](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45913589940): passed on Intel x86_64 and Apple Silicon arm64, including install/relocation and external consumer checks.
+- No physical camera is available. The in-repository CTI remains software integration evidence, not vendor-CTI or hardware qualification.
 
 ### Implemented and verified
 
-1. `Camera/Common/include/camera/CameraFrames.h`: full payload, image start offset, row padding and trailing padding are represented without stripping or rearrangement. `imageData()` is the no-copy start-of-image pointer; `strideBytes` includes row padding.
-2. `Camera/GenTL/src/GenTLFrameAdapter.cpp`: supported single-raster layouts are projected only when overflow-safe byte accounting validates. Unknown, inconsistent, multipart, planar or compressed payloads remain opaque at this point. No demosaic, sample unpacking or normalization copy occurs.
-3. `Camera/Common/include/camera/AcquisitionIntegrityTracker.h`: bounded-memory accounting for complete/incomplete/non-image/invalid payloads, optional sequence IDs, exact forward gaps, duplicates, out-of-order IDs, ambiguous backward transitions, declared wrap models, host wait timeouts and provider-reported starvation.
-4. `Camera/GenTL/include/camera/gentl/Producer.h` and `Producer.cpp`: `DataStreamSession::statistics()` exposes optional Producer counters and a Common integrity snapshot. Host `EventGetData` timeout is not treated as a Producer underrun. `TLTYPE=GEV` configures only the documented one-based 16-bit GigE Vision counter.
-5. The test-only CTI exposes stream statistics. The smoke injects two Producer underruns and one host wait timeout, then asserts five complete consecutive image frames and stream queue/counter state.
+1. `Camera/Common/include/camera/CameraFrames.h`: full payload, image start offset, row padding and trailing padding are represented without stripping/rearrangement. `imageData()` is the no-copy image-start pointer; `strideBytes` includes X padding.
+2. `Camera/GenTL/src/GenTLFrameAdapter.cpp`: supported single-raster layouts are projected only after overflow-safe byte accounting. Unknown/inconsistent/multipart/planar/compressed payloads remain opaque. There is no demosaic, sample unpack or normalization copy.
+3. `Camera/Common/include/camera/AcquisitionIntegrityTracker.h`: bounded-memory accounting for complete/incomplete/non-image/invalid buffers; optional sequence IDs; forward gaps/missing IDs; duplicates; out-of-order and ambiguous backwards transitions; configured wrap models; host wait timeouts; Producer starvation events.
+4. `DataStreamSession::statistics()`: optional typed Producer counters and Common integrity snapshot. `EventGetData` timeout is separate from `STREAM_INFO_NUM_UNDERRUN`. Only `TLTYPE=GEV` receives the known one-based 16-bit GigE Vision counter model.
+5. The simulator exercises normal and injected fault cases: exact forward frame-ID gap; duplicate; out-of-order under GEV; ambiguous backwards transition on an unspecified transport; separate Producer underrun and host wait timeout; independent timestamps and payload sequence.
 
-### Next bounded implementation and test sequence
+### Next implementation and test order
 
-**A — WSI continuity and recovery.** Extend the simulator by one controlled fault case at a time: frame-ID gaps; duplicate/out-of-order IDs; resets and wrap; incomplete/empty payloads; sustained frame delivery; buffer queue exhaustion and recovery; active-wait stop; stop/reopen. For each case assert what is observable and what is deliberately not inferred.
+**A — Complete acquisition lifecycle/recovery qualification.** Add incomplete and empty payload fault injection; sustained capture; queue depletion/starvation and recovery; stop while an active waiter is blocked; stop/reopen; stream interruption/restart and recovery. Keep counters for host timeout, Producer underrun, incomplete payload, frame ID loss and downstream storage loss distinct. Existing unit/simulator coverage already includes wrap behaviour, gap, duplicate, out-of-order and ambiguous backwards transition.
 
-**B — PFNC 14-bit packed layouts.** Add Mono14p and each defined Bayer14p pattern using verified PFNC identifiers and explicit 14-bit row-byte calculation. Include odd/even widths, row padding, image offset, trailing padding, invalid payload length and exact byte preservation. Do not demosaic or unpack in Camera.
+**B — PFNC packed 14-bit layouts.** Add Mono14p and BayerGR/RG/GB/BG14p using verified identifiers. Explicitly test byte-aligned row size for odd/even widths, image prefix offset, X/Y padding, malformed payload size and byte preservation. Do not unpack or demosaic in Camera.
 
-**C — GenTL multipart.** Add optional dispatch for `DSGetNumBufferParts` and `DSGetBufferPartInfo`. Query the part count and typed metadata; validate each part base address/size lies inside the filled buffer payload and convert it to an offset/length view. Add Common `FramePart` metadata for part type/format namespace/format, dimensions/offsets/padding and source/region/purpose IDs. Keep the existing owned payload as the only byte backing; no flattened duplicate buffer. Treat unsupported producer functions as `NotImplemented`/absent, not a fatal failure for single-part streams.
+**C — GenTL multipart.** Add optional dispatch for `DSGetNumBufferParts` / `DSGetBufferPartInfo`. Validate part base+size against filled payload with overflow-safe address/range checks; convert pointers to offset/length views before requeueing. Add Common `FramePart` metadata for type/format namespace/format, dimensions/offset/padding and source/region/purpose IDs. All parts share the existing owned payload; do not flatten/repack. Missing optional Producer functions must not break ordinary single-part streams.
 
-**D — GenApi Register.** Add a separate Common byte-register access contract and an optional GenApi adapter for public `IRegister` nodes, with length limits, access checks, buffer validation, serialized calls through the shared node map and tests against XML-backed simulator register nodes. Do not expose internal `IntReg` implementation nodes as public feature descriptors.
+**D — GenApi public IRegister.** Implement a distinct bounded byte-register access contract and optional GenApi adapter for public `IRegister`: length bounds, access mode, buffer validation, node-map serialization and XML-backed tests. Do not expose implementation nodes such as `IntReg` as public descriptors.
 
-**Terminology correction:** GenApi 3.5.1 has scalar `IInteger` and public `IRegister`; it does not define a standard public node interface named `IIntegerVector`. The Common feature model currently contains an IntegerVector variant, but that does not make it a standard GenApi node. Do not create an adapter based on a nonexistent standard interface. If an actual vendor XML exposes an array/vector feature, classify and model it from that vendor's schema.
+**Terminology:** GenApi 3.5.1 exposes scalar `IInteger` and public `IRegister`; it does not define a standard public interface named `IIntegerVector`. Do not invent a fake mapping. If an actual camera XML provides a vector-like feature, model that as a vendor extension based on its schema.
 
-**E — external interoperability.** Keep a supported third-party CTI and physical camera as separate qualification gates. The first-party CTI simulator validates our consumer path; it does not certify vendor interoperability. Do not use a Producer whose license prohibits third-party generic testing without written permission.
+**E — Independent interoperability gate.** The in-repo CTI validates the consumer stack but does not prove compatibility with an independent vendor CTI. Select a supported/appropriately licensed external Producer when available; do not assume redistribution or generic-load rights.
 
-**F — cross-protocol reuse.** Only once A–D pass exact-commit CI on both architectures, map the validated Common frame-layout and acquisition-integrity contracts through AmScope/Amcam and other supported backends. Keep each backend's transport counters, wrap width, timestamp base and missing metadata semantics specific to the adapter. Do not fold GenTL types into Common.
+**F — Cross-protocol extension.** Only after A–D are implemented and pass exact-commit CI on both architectures should the validated Common frame-layout/integrity semantics be mapped through AmScope/Amcam and other camera protocols. Backend transport counters, clock domains and frame-ID wrap semantics remain in their adapters. No Optika UI, slide/rack/tile scanning, stitching or image-processing code enters Camera.
 
-### Performance and architecture invariants
+### Performance/lifecycle invariants
 
-- The GenTL stream copies each filled payload once into owned storage before requeueing the announced buffer. Preserve that lifetime boundary. Do not add a second full-frame copy to normalize offsets, padding or multipart parts.
-- FrameStreamMailbox is a latest-frame preview handoff, not a lossless WSI capture queue or tile archive.
-- Camera library owns acquisition frame delivery and telemetry only. No slide/rack/tile scheduling, stitching, image processing, GUI or microscope application policy enters Common.
-- Update `Camera/GenTL/README.md`, `CAMERA_V2_DEVELOPMENT_STATUS.md` and this handoff in the same implementation increment or immediately after the verified commit. Record source hash, CI run IDs, architectures, tests, and vendor/hardware evidence separately.
+- Copy each filled GenTL payload once into owned storage before its announced buffer is requeued; do not add another full-frame copy to strip padding or flatten multipart data.
+- Keep acquisition queues bounded and expose failure/recovery states; the latest-frame `FrameStreamMailbox` is preview handoff, not a durable WSI tile queue.
+- Keep the camera library independent of the microscope application and presentation layers.
+- Update `Camera/GenTL/README.md`, the status ledger and this handoff with every accepted source/CI milestone. Separate source implementation, simulator tests, cross-architecture CI, independent CTI and physical hardware evidence.
 
 > Read this file and `CAMERA_V2_DEVELOPMENT_STATUS.md` before changing source.
 > The status ledger is the phase-history authority; this file is the operational continuation guide.

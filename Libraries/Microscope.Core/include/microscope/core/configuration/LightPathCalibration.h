@@ -113,6 +113,8 @@ public:
     [[nodiscard]] static Result<
         LightPathModeSetting,
         LightPathModeSettingError> create(
+            MicroscopeId microscopeId,
+            std::uint64_t equipmentDefinitionRevision,
             OperationModeId operationModeId,
             std::uint64_t operationModeRevision,
             LightPathId lightPathId,
@@ -122,6 +124,8 @@ public:
             std::vector<EquipmentComponentId> configuredOpticalComponentIds,
             double targetIrradianceMicrowattsPerSquareMillimeter);
 
+    [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
+    [[nodiscard]] std::uint64_t equipmentDefinitionRevision() const noexcept;
     [[nodiscard]] const OperationModeId& operationModeId() const noexcept;
     [[nodiscard]] std::uint64_t operationModeRevision() const noexcept;
     [[nodiscard]] const LightPathId& lightPathId() const noexcept;
@@ -148,6 +152,8 @@ private:
         std::vector<EquipmentComponentId> configuredOpticalComponentIds,
         double targetIrradianceMicrowattsPerSquareMillimeter);
 
+    MicroscopeId microscopeId_;
+    std::uint64_t equipmentDefinitionRevision_;
     OperationModeId operationModeId_;
     std::uint64_t operationModeRevision_;
     LightPathId lightPathId_;

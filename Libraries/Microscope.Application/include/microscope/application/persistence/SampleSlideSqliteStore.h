@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 struct sqlite3;
 
@@ -81,6 +82,11 @@ public:
         SampleSlideStoreError> loadCurrentSampleType(
             const core::SampleTypeId& sampleTypeId);
 
+    // Current definitions for workspace/catalog display, ordered by stable ID.
+    [[nodiscard]] core::Result<
+        std::vector<core::SampleType>,
+        SampleSlideStoreError> loadCurrentSampleTypes();
+
     // A Slide revision is committed only when the exact referenced SampleType
     // revision already exists. The first Slide revision uses expected=0.
     [[nodiscard]] core::Status<SampleSlideStoreError> saveSlideRevision(
@@ -109,6 +115,12 @@ public:
         std::optional<PersistedSlideWithSampleType>,
         SampleSlideStoreError> loadCurrentSlideWithPinnedSampleType(
             const core::SlideId& slideId);
+
+    // Current Slides and the exact SampleType revisions they pin, ordered by
+    // stable SlideId. This is the workspace's coherent discovery read.
+    [[nodiscard]] core::Result<
+        std::vector<PersistedSlideWithSampleType>,
+        SampleSlideStoreError> loadCurrentSlidesWithPinnedSampleTypes();
 
 private:
     explicit SampleSlideSqliteStore(sqlite3* database) noexcept;

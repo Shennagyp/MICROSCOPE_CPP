@@ -469,12 +469,12 @@ This section distinguishes repository facts from architecture targets.
 | Preview capture | Gallery saves currently displayed frame to PNG | Keep distinct from true still acquisition and domain AcquisitionRun |
 | Stage Core | C++17 XY working surface, slide geometry, machine XYZ state, axis reference and planners | Continue with stateful owner/runtime and hardware integration |
 | Stage Application | Generic navigation executor/runtime/queue code exists as an incomplete migration slice | Reconcile against this ownership model before further implementation; no physical stage adapter is currently integrated |
-| C++ platform | Core and Application libraries exist as separate CMake targets | The native app target still needs deliberate linking/composition with them |
+| C++ platform | Core and Application libraries exist as separate CMake targets; the native app CMake target now links both | The Swift/Objective-C++ composition does not yet instantiate the stage runtime or call the C++ model; real stage specifications, a narrow bridge and the physical-stage adapter remain outstanding |
 | Persistence | UserDefaults for current configuration/layout preference and PNG files for gallery | Implement versioned microscope/slide/calibration/acquisition records and recoverability |
 | Processing | No complete processing subsystem | Add concrete image processing as pure operations over immutable source data when required |
 | Runtime verification | Test sources and CMake registrations exist | Compilation, test execution, hardware checks and UI acceptance remain separate evidence gates |
 
-The existence of a class or test target does not mean the capability is connected to the manufactured hardware. The native app target must explicitly link and compose `Microscope::Core` and `Microscope::Application` when the bridge/runtime integration is ready; the current app CMake target links the AmScope driver and macOS frameworks, not those two platform libraries.
+The existence of a class or test target—and even a CMake link dependency—does not mean the capability is instantiated or connected to the manufactured hardware. The native app CMake target now links `Microscope::Core` and `Microscope::Application`; the remaining host integration is to supply real installed-axis specifications, create and retain the stateful C++ objects through the existing composition lifetime, and connect a narrow Objective-C++ bridge to the real physical-stage adapter. Do not construct a dummy stage specification or mock driver in production composition.
 
 ## 12. Implementation order
 

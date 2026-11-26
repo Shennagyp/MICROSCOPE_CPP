@@ -960,7 +960,7 @@ The loading and residency rules are:
 
 - Load a persistent aggregate when it is first opened or required by a workflow, using its stable identity. Do not eagerly load the complete Sample/Slide/acquisition workspace at application startup.
 - Materialize the aggregate and the relationship metadata required for that use. Load related records in a bounded batch where practical. A relationship that has not been materialized remains an identity/reference until explicitly requested; accessing an already materialized relationship must not perform hidden storage I/O.
-- Within one active workspace/runtime scope, keep one in-memory instance for each active persistent identity. Consumers share the same instance; they must not create independent mutable copies of the same active record.
+- Within one active workspace/runtime scope, keep one owner-retained in-memory instance for each active persistent identity. Consumers access it through the owning object's API or receive read-only projections; only the designated owner mutates it. They must not create independent mutable copies of the same active record.
 - Keep an opened object resident while it is selected, referenced by another active object, or used by an in-flight workflow. Release it after it is no longer in use and all dirty state has been committed or explicitly retained for recovery.
 - Perform mutations against the in-memory object. Persist them at an explicit save/transaction boundary or a domain checkpoint required for recovery. Do not reread the record after each mutation or before each subsequent operation.
 - A failed persistence write leaves the in-memory object and its dirty state intact and visible as unsaved. It must not be discarded or overwritten by reloading an older durable version.

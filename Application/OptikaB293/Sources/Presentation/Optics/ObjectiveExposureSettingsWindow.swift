@@ -2,9 +2,9 @@ import SwiftUI
 import Combine
 
 private final class ObjectiveExposureSettingsViewState: ObservableObject {
-    @Published var viewState.exposureDraft = ""
-    @Published var viewState.isEditingExposure = false
-    @Published var viewState.saveMessage = ""
+    @Published var exposureDraft = ""
+    @Published var isEditingExposure = false
+    @Published var saveMessage = ""
 }
 
 struct ObjectiveExposureSettingsWindow: View {

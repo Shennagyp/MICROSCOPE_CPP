@@ -223,7 +223,7 @@ Every state item has one authoritative owner. Other components receive observati
 | Stage machine XYZ position | Stage capability | One machine-coordinate authority |
 | Per-axis home/reference and uncertainty | Stage capability | Independent axis lifecycle; XY and focus Z are separate |
 | Active operation and step status | The workflow/capability that created it | One owner; correlation is not caller-generated state |
-| Physical slide/sample records | Slide/data store | Independent of current stage position |
+| Physical slide/sample state | Open in-memory domain aggregate | Loaded once by stable identity when activated; durable persistence is its backing store; independent of current stage position |
 | Workspace active selection and dock state | Workspace model | UI state, not physical device state |
 | Image source and overlays | Slide document | Source-pixel coordinate system |
 | Capture files and gallery listing | Capture store | Current PNG capture path is distinct from acquisition runs |
@@ -361,6 +361,26 @@ The current implementation persists microscope optical configuration and dock wi
 
 A persistence object owns file access and transaction/lifetime behavior. Domain objects own the meaning and validation of the data. UI views do not write microscope records directly.
 
+#### 7.6.1 In-memory object loading and residency
+
+Persistence is the durable backing store. It is not the live object-access path. Once a persistent object is loaded for use, application behavior operates on its in-memory object state; ordinary property access, navigation through an already loaded relationship, and each subsequent command must not trigger another persistence read.
+
+The lifecycle is:
+
+1. **Load on activation.** When a Sample, Slide, Tile, image document, acquisition record or other persistent aggregate is first opened or required by a workflow, the application loads and validates it by stable identity.
+2. **Materialize the required object graph.** Load the aggregate and the related metadata needed for the active use. Resolve required relationships in the same load/batch boundary where practical. Do not implement database-backed lazy properties or issue one query per relationship/property.
+3. **Reuse the active instance.** Within its active workspace/runtime scope, a stable persistent identity resolves to one in-memory instance. All consumers that need that object share the same instance/reference; they must not construct competing mutable copies of the same active aggregate.
+4. **Operate in memory.** Commands, calculations, navigation and edits use the loaded object. No per-command rereads, getter-triggered I/O, polling of persistence for current object state, or N+1 loading is permitted.
+5. **Persist at declared commit boundaries.** The owning object/application workflow marks changes dirty and commits them through a persistence transaction or defined checkpoint. A commit boundary may be an explicit save or a domain transition that requires durable recovery; it is not every read or every incidental property access.
+6. **Release after use.** Keep the object resident while it is open, selected for an active task, referenced by another active object or used by an in-flight workflow. Release it only after it is no longer in use and its dirty state has been committed or explicitly handled. A failed save must not cause the live dirty object to be discarded or silently reloaded over.
+7. **Reopen as a new active incarnation.** After a clean close/release, a later activation loads the latest durable revision once. If an external revision conflict is detected during commit, report/reconcile it explicitly; do not silently refresh an object while it is active.
+
+This is owner-scoped object residency, not a requirement for a generic global cache or an ORM identity-map framework. The existing workspace/document/runtime owner should retain the objects it has opened and share their references with consumers. Do not load every Sample, Slide, acquisition or image document at application startup merely to avoid later reads.
+
+Large immutable image payloads are a separate resource concern: keep their document/frame metadata as in-memory objects while active, but read or decode pixel data through file-backed storage or bounded tile/frame buffers as the image workflow requires. Do not duplicate an entire large image into general application state just to keep its document open.
+
+Persisted hardware coordinates are recovery/history data only. On application restart they do not prove the stage's current physical position and must not be restored as verified machine state.
+
 ## 8. Commands, operations and feedback
 
 ### 8.1 State-changing commands target existing objects
@@ -436,7 +456,7 @@ The stage owner and camera controller may run concurrently because they own diff
 
 1. The application delegate creates and retains the composition root.
 2. The composition creates the long-lived application models and subsystem owners once.
-3. Static equipment definition, user configuration and persisted workspace data are loaded and validated.
+3. Static equipment definitions, deployment bindings, user configuration and the minimal catalog/index metadata required by the startup UI are loaded and validated. Individual Sample, Slide, Tile, document and acquisition objects are materialized by stable identity when first opened or required by a workflow, then retained in memory while in use.
 4. Device controllers exist with a defined disconnected/closed state. Device handles are opened only through their capability lifecycle.
 5. The physical stage driver and stage runtime are bound once to the selected instrument; their owner thread and feedback ingress live for the runtime lifetime.
 6. The UI observes the existing objects and submits commands.
@@ -470,7 +490,7 @@ This section distinguishes repository facts from architecture targets.
 | Stage Core | C++17 XY working surface, slide geometry, machine XYZ state, axis reference and planners | Continue with stateful owner/runtime and hardware integration |
 | Stage Application | Generic navigation executor/runtime/queue code exists as an incomplete migration slice | Reconcile against this ownership model before further implementation; no physical stage adapter is currently integrated |
 | C++ platform | Core and Application libraries exist as separate CMake targets; the native app CMake target now links both | The Swift/Objective-C++ composition does not yet instantiate the stage runtime or call the C++ model; real stage specifications, a narrow bridge and the physical-stage adapter remain outstanding |
-| Persistence | UserDefaults for current configuration/layout preference and PNG files for gallery | Implement versioned microscope/slide/calibration/acquisition records and recoverability |
+| Persistence | UserDefaults for current configuration/layout preference and PNG files for gallery | Implement versioned records plus on-demand in-memory materialization, active-object residency and transactional commits; do not reread records during ordinary object use |
 | Processing | No complete processing subsystem | Add concrete image processing as pure operations over immutable source data when required |
 | Runtime verification | Test sources and CMake registrations exist | Compilation, test execution, hardware checks and UI acceptance remain separate evidence gates |
 

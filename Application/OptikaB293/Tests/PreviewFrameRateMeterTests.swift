@@ -71,15 +71,16 @@ struct PreviewFrameRateMeterTests {
     private static func testCounterMeterMeasuresCoalescedPullDeltas() {
         var meter = FrameRateCounterMeter()
         meter.record(0, at: 0.0)
-        meter.record(12, at: 0.48)
-        precondition(abs(meter.framesPerSecond - 25.0) < 0.000001)
+        // The meter's sampling window is 0.5 seconds; sample at that boundary.
+        meter.record(12, at: 0.5)
+        precondition(abs(meter.framesPerSecond - 24.0) < 0.000001)
     }
 
     private static func testCounterMeterResetsAfterCounterRestart() {
         var meter = FrameRateCounterMeter()
         meter.record(100, at: 1.0)
-        meter.record(112, at: 1.48)
-        precondition(abs(meter.framesPerSecond - 25.0) < 0.000001)
+        meter.record(112, at: 1.5)
+        precondition(abs(meter.framesPerSecond - 24.0) < 0.000001)
 
         meter.record(0, at: 1.6)
         precondition(meter.framesPerSecond == 0)
@@ -88,10 +89,10 @@ struct PreviewFrameRateMeterTests {
     private static func testCounterMeterResetsAfterNoProgress() {
         var meter = FrameRateCounterMeter()
         meter.record(0, at: 0.0)
-        meter.record(12, at: 0.48)
+        meter.record(12, at: 0.5)
         precondition(meter.framesPerSecond > 0)
 
-        meter.refresh(at: 1.49)
+        meter.refresh(at: 1.51)
         precondition(meter.framesPerSecond == 0)
     }
 

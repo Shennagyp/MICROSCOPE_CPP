@@ -1,6 +1,8 @@
 #include "microscope/application/persistence/DualSlideCarrierSqliteStore.h"
 #include "microscope/application/persistence/SampleSlideSqliteStore.h"
 
+#include <sqlite3.h>
+
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -180,6 +182,85 @@ void testCarrierStoreRequiresSlideWorkspaceSchema() {
     removeDatabaseFiles(path);
 }
 
+void testCarrierStoreRejectsUnsupportedSampleSlideSchemaVersion() {
+    const auto path = uniqueDatabasePath();
+    sqlite3* database = nullptr;
+    const int openResult = sqlite3_open(path.c_str(), &database);
+    check(openResult == SQLITE_OK && database != nullptr,
+          "opens raw SQLite database for schema-version rejection test");
+    if (openResult == SQLITE_OK && database != nullptr) {
+        char* errorMessage = nullptr;
+        const int created = sqlite3_exec(
+            database,
+            "CREATE TABLE sample_slide_store_schema ("
+            "id INTEGER PRIMARY KEY CHECK (id = 1), "
+            "schema_version INTEGER NOT NULL);"
+            "INSERT INTO sample_slide_store_schema (id, schema_version) "
+            "VALUES (1, 99);",
+            nullptr,
+            nullptr,
+            &errorMessage);
+        sqlite3_free(errorMessage);
+        check(created == SQLITE_OK,
+              "creates a deliberately unsupported SampleSlide schema marker");
+        sqlite3_close_v2(database);
+    } else if (database != nullptr) {
+        sqlite3_close_v2(database);
+    }
+
+    auto opened = DualSlideCarrierSqliteStore::open(path);
+    check(!opened &&
+          opened.error().code ==
+              DualSlideCarrierStoreErrorCode::UnsupportedSchemaVersion,
+          "refuses to attach carrier tables to an unsupported Slide persistence format");
+    removeDatabaseFiles(path);
+}
+
+void testEmptyPhysicalCarrierStateRoundTripsWithoutInventingSlides() {
+    const auto path = uniqueDatabasePath();
+    const auto microscopeId = makeId<MicroscopeId>("microscope-empty-carrier");
+    {
+        auto slideStoreResult = SampleSlideSqliteStore::open(path);
+        check(static_cast<bool>(slideStoreResult),
+              "opens SampleSlideSqliteStore for an empty carrier workspace");
+        if (!slideStoreResult) {
+            removeDatabaseFiles(path);
+            return;
+        }
+        auto slideStore = std::move(slideStoreResult).value();
+        auto carrierStoreResult = DualSlideCarrierSqliteStore::open(path);
+        check(static_cast<bool>(carrierStoreResult),
+              "opens carrier store with initialized but empty Slide tables");
+        if (!carrierStoreResult) {
+            removeDatabaseFiles(path);
+            return;
+        }
+        auto carrierStore = std::move(carrierStoreResult).value();
+        const auto specification = makeCarrierSpecification(makeStage());
+        const auto left = take(SlideSlotState::create(
+            DualSlideSlot::Left, std::nullopt));
+        const auto right = take(SlideSlotState::create(
+            DualSlideSlot::Right, std::nullopt));
+        const auto emptyState = take(DualSlideCarrierState::create(
+            specification, left, right));
+
+        check(carrierStore->saveCurrentState(
+                  microscopeId, 1, emptyState, {}, 0).isSuccess(),
+              "persists an installed empty two-slot carrier without fabricated Slide records");
+        const auto loaded = carrierStore->loadCurrentState(
+            microscopeId, 1, specification);
+        check(loaded && loaded.value() &&
+              loaded.value()->state.left().slot() == DualSlideSlot::Left &&
+              !loaded.value()->state.left().slideId() &&
+              !loaded.value()->state.left().registration() &&
+              loaded.value()->state.right().slot() == DualSlideSlot::Right &&
+              !loaded.value()->state.right().slideId() &&
+              !loaded.value()->state.right().registration(),
+              "restores both empty physical slots as empty, not as placeholder Slides or registrations");
+    }
+    removeDatabaseFiles(path);
+}
+
 void testFourCornerCarrierRegistrationRoundTripsWithExactSlideRevisions() {
     const auto path = uniqueDatabasePath();
     const auto microscopeId = makeId<MicroscopeId>("microscope-carrier-test");
@@ -330,6 +411,64 @@ void testFourCornerCarrierRegistrationRoundTripsWithExactSlideRevisions() {
                   registration->revision().value() == "left-registration-v1",
                   "historical carrier revision retains the exact earlier corner-registration identity");
         }
+
+        sqlite3* direct = nullptr;
+        const int directOpen = sqlite3_open(path.c_str(), &direct);
+        check(directOpen == SQLITE_OK && direct != nullptr,
+              "opens an independent raw SQLite connection to challenge carrier immutability");
+        if (directOpen == SQLITE_OK && direct != nullptr) {
+            const auto executeDirect = [direct](const char* sql) {
+                char* error = nullptr;
+                const int result = sqlite3_exec(direct, sql, nullptr, nullptr, &error);
+                sqlite3_free(error);
+                return result;
+            };
+            const int updateRevision = executeDirect(
+                "UPDATE dual_slide_carrier_revision SET payload = x'00' "
+                "WHERE microscope_id = 'microscope-carrier-test' "
+                "AND equipment_revision = 7 AND stage_component_id = 'stage-main' "
+                "AND revision = 1");
+            const int deleteRevision = executeDirect(
+                "DELETE FROM dual_slide_carrier_revision "
+                "WHERE microscope_id = 'microscope-carrier-test' "
+                "AND equipment_revision = 7 AND stage_component_id = 'stage-main' "
+                "AND revision = 1");
+            const int insertGap = executeDirect(
+                "INSERT INTO dual_slide_carrier_revision ("
+                "microscope_id, equipment_revision, stage_component_id, revision, "
+                "payload_format_version, payload) "
+                "VALUES ('microscope-carrier-test', 7, 'stage-main', 9, 1, x'01')");
+            const int rewindCurrent = executeDirect(
+                "UPDATE dual_slide_carrier_current SET revision = 1 "
+                "WHERE microscope_id = 'microscope-carrier-test' "
+                "AND equipment_revision = 7 AND stage_component_id = 'stage-main'");
+            const int deleteCurrent = executeDirect(
+                "DELETE FROM dual_slide_carrier_current "
+                "WHERE microscope_id = 'microscope-carrier-test' "
+                "AND equipment_revision = 7 AND stage_component_id = 'stage-main'");
+            check((updateRevision & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects direct carrier history UPDATE");
+            check((deleteRevision & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects direct carrier history DELETE");
+            check((insertGap & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects direct skipped carrier revision insertion");
+            check((rewindCurrent & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects rewinding the current carrier pointer");
+            check((deleteCurrent & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger protects the current carrier pointer from deletion");
+            sqlite3_close_v2(direct);
+        } else if (direct != nullptr) {
+            sqlite3_close_v2(direct);
+        }
+
+        const auto protectedHistory = carrierStore->loadRevision(
+            microscopeId, 7, specification, 1);
+        const auto protectedCurrent = carrierStore->loadCurrentState(
+            microscopeId, 7, specification);
+        check(protectedHistory && protectedHistory.value() &&
+              protectedCurrent && protectedCurrent.value() &&
+              protectedCurrent.value()->revision == 2,
+              "rejected raw SQL mutations leave historical calibration and current pointer intact");
     }
 
     removeDatabaseFiles(path);
@@ -414,6 +553,8 @@ void testCarrierStoreRejectsStaleWritersAndMismatchedSlideGeometry() {
 
 int main() {
     testCarrierStoreRequiresSlideWorkspaceSchema();
+    testCarrierStoreRejectsUnsupportedSampleSlideSchemaVersion();
+    testEmptyPhysicalCarrierStateRoundTripsWithoutInventingSlides();
     testFourCornerCarrierRegistrationRoundTripsWithExactSlideRevisions();
     testCarrierStoreRejectsStaleWritersAndMismatchedSlideGeometry();
 

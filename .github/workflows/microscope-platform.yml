@@ -47,6 +47,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install SQLite3 for Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install sqlite3:x64-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+          "VCPKG_TARGET_TRIPLET=x64-windows" >> $env:GITHUB_ENV
+
       - name: Configure Core standalone
         run: cmake -S Libraries/Microscope.Core -B build/core -DBUILD_TESTING=ON
         shell: bash
@@ -60,7 +69,15 @@ jobs:
         shell: bash
 
       - name: Configure Application standalone
-        run: cmake -S Libraries/Microscope.Application -B build/application -DBUILD_TESTING=ON
+        run: |
+          if [[ -n "${CMAKE_TOOLCHAIN_FILE:-}" ]]; then
+            cmake -S Libraries/Microscope.Application -B build/application \
+              -DBUILD_TESTING=ON \
+              -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" \
+              -DVCPKG_TARGET_TRIPLET="$VCPKG_TARGET_TRIPLET"
+          else
+            cmake -S Libraries/Microscope.Application -B build/application -DBUILD_TESTING=ON
+          fi
         shell: bash
 
       - name: Build Application standalone
@@ -73,10 +90,19 @@ jobs:
 
       - name: Configure root platform-only composition
         run: |
-          cmake -S . -B build/platform \
-            -DOPTIKA_BUILD_AMSCOPE=OFF \
-            -DOPTIKA_BUILD_NATIVE_APP=OFF \
-            -DBUILD_TESTING=ON
+          if [[ -n "${CMAKE_TOOLCHAIN_FILE:-}" ]]; then
+            cmake -S . -B build/platform \
+              -DOPTIKA_BUILD_AMSCOPE=OFF \
+              -DOPTIKA_BUILD_NATIVE_APP=OFF \
+              -DBUILD_TESTING=ON \
+              -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" \
+              -DVCPKG_TARGET_TRIPLET="$VCPKG_TARGET_TRIPLET"
+          else
+            cmake -S . -B build/platform \
+              -DOPTIKA_BUILD_AMSCOPE=OFF \
+              -DOPTIKA_BUILD_NATIVE_APP=OFF \
+              -DBUILD_TESTING=ON
+          fi
         shell: bash
 
       - name: Build root platform-only composition

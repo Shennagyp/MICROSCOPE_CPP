@@ -208,6 +208,58 @@ void testObjectiveSpecification() {
           "rejects unknown objective correction enum values");
 }
 
+void testOpticalFilterSpectralResponse() {
+    const auto componentId =
+        makeId<EquipmentComponentId>("fluorescence-excitation-filter");
+    const auto compatibilityId =
+        makeId<OpticalCompatibilityId>("fluorescence-filter-set-1");
+
+    const auto dichroic = OpticalFilterSpecification::create(
+        componentId,
+        OpticalFilterRole::Dichroic,
+        {{take(PositiveNanometers::create(400.0)), 0.05, 0.92},
+         {take(PositiveNanometers::create(450.0)), 0.10, 0.88},
+         {take(PositiveNanometers::create(500.0)), 0.90, 0.05}},
+        compatibilityId);
+    check(static_cast<bool>(dichroic),
+          "accepts a dichroic spectral response with transmission and reflection curves");
+    if (dichroic) {
+        check(dichroic.value().role() == OpticalFilterRole::Dichroic &&
+              dichroic.value().spectralResponse().size() == 3 &&
+              dichroic.value().compatibilityId() == compatibilityId,
+              "retains filter role, response data and filter-set compatibility identity");
+    }
+
+    const auto missingDichroicReflection = OpticalFilterSpecification::create(
+        componentId,
+        OpticalFilterRole::Dichroic,
+        {{take(PositiveNanometers::create(400.0)), 0.05, std::nullopt},
+         {take(PositiveNanometers::create(500.0)), 0.90, std::nullopt}});
+    check(!missingDichroicReflection &&
+          missingDichroicReflection.error() ==
+              OpticalFilterSpecificationError::DichroicRequiresTransmissionAndReflection,
+          "requires dichroic models to provide both transmission and reflection at each wavelength");
+
+    const auto impossibleEnergy = OpticalFilterSpecification::create(
+        componentId,
+        OpticalFilterRole::Dichroic,
+        {{take(PositiveNanometers::create(400.0)), 0.8, 0.5},
+         {take(PositiveNanometers::create(500.0)), 0.8, 0.5}});
+    check(!impossibleEnergy &&
+          impossibleEnergy.error() == OpticalFilterSpecificationError::InvalidReflection,
+          "rejects transmission plus reflection above unity");
+
+    const auto unsorted = OpticalFilterSpecification::create(
+        componentId,
+        OpticalFilterRole::Excitation,
+        {{take(PositiveNanometers::create(500.0)), 0.9, std::nullopt},
+         {take(PositiveNanometers::create(450.0)), 0.8, std::nullopt}});
+    check(!unsorted &&
+          unsorted.error() ==
+              OpticalFilterSpecificationError::WavelengthsNotIncreasing,
+          "requires ordered wavelength samples for deterministic interpolation");
+}
+
 void testCameraOutputMappingUsesSensorAndDeliveredDimensions() {
     const auto cameraId = makeId<EquipmentComponentId>("camera-main");
     const auto camera = cameraSpecification(cameraId);
@@ -500,6 +552,7 @@ void testEquipmentAggregateValidatesSpecializedComponentReferences() {
 int main() {
     testPositiveOpticalValuesAreFiniteAndTyped();
     testObjectiveSpecification();
+    testOpticalFilterSpectralResponse();
     testCameraOutputMappingUsesSensorAndDeliveredDimensions();
     testCameraModeAndSensorValidation();
     testEquipmentAggregateValidatesSpecializedComponentReferences();

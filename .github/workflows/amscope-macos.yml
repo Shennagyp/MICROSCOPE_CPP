@@ -14,6 +14,9 @@ on:
       - "Camera/QtWidgets/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
+      - "Application/OptikaB293/**"
+      - "Libraries/**"
+      - "CMakeLists.txt"
       - "scripts/run-amscope-native-probe.sh"
       - "scripts/run-amscope-vendor-wait-probe.sh"
       - ".github/workflows/amscope-macos.yml"
@@ -26,6 +29,9 @@ on:
       - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
+      - "Application/OptikaB293/**"
+      - "Libraries/**"
+      - "CMakeLists.txt"
       - "scripts/run-amscope-native-probe.sh"
       - "scripts/run-amscope-vendor-wait-probe.sh"
       - ".github/workflows/amscope-macos.yml"
@@ -180,3 +186,53 @@ jobs:
           lipo build/amscope-qt/amscope_hardware_rate_test -verify_arch "${{ matrix.architecture }}"
           otool -L build/amscope-qt/amscope_preview
           otool -L build/amscope-qt/libcamera_amscope_qt.a
+
+  dual-frontend:
+    name: SwiftUI and Qt frontends (Apple Silicon)
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcode-select -p
+          clang++ --version
+          swiftc --version
+          cmake --version
+          ninja --version
+
+      - name: Install Qt 6
+        run: |
+          brew install qt@6
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
+
+      - name: Configure both independent frontends
+        run: |
+          cmake -S . -B build/dual-frontend -G Ninja \
+            -DOPTIKA_BUILD_NATIVE_APP=ON \
+            -DOPTIKA_BUILD_AMSCOPE=ON \
+            -DOPTIKA_BUILD_GENTL=OFF \
+            -DAMSCOPE_BUILD_QT_ADAPTER=ON \
+            -DAMSCOPE_BUILD_PREVIEW_APP=ON \
+            -DAMSCOPE_VENDOR_MAC_ARCH=x64+arm64 \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build SwiftUI, Qt, and test targets
+        run: cmake --build build/dual-frontend --config Release --parallel
+
+      - name: Run combined configuration tests
+        run: ctest --test-dir build/dual-frontend -C Release --output-on-failure
+
+      - name: Verify both frontend deliverables
+        run: |
+          test -d build/dual-frontend/Application/OptikaB293/optika_b293_dualslide_app.app
+          test -x build/dual-frontend/Application/OptikaB293/optika_b293_dualslide_app.app/Contents/MacOS/optika_b293_dualslide_app
+          test -x build/dual-frontend/Camera/Amscope/amscope_preview
+          lipo build/dual-frontend/Camera/Amscope/amscope_preview -verify_arch arm64

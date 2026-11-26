@@ -1,4 +1,5 @@
 #include "microscope/core/equipment/OpticalTopology.h"
+#include "microscope/core/configuration/LightPathCameraResolver.h"
 
 #include <algorithm>
 #include <iostream>
@@ -858,6 +859,323 @@ void testPathAndPortFactoryValidation() {
 
 } // namespace
 
+struct ImagingLightPathFixture final {
+    std::vector<OpticalPath> imagingPaths;
+    LightPath lightPath;
+};
+
+ImagingLightPathFixture makeImagingLightPath(
+    const EquipmentFixture& fixture,
+    const char* lightPathId,
+    bool includeSecondCamera) {
+    auto pathA = take(OpticalPath::create(
+        fixture.paths[0].id(),
+        fixture.paths[0].steps(),
+        OpticalPathRole::Imaging));
+    auto pathB = take(OpticalPath::create(
+        fixture.paths[1].id(),
+        fixture.paths[1].steps(),
+        OpticalPathRole::Imaging));
+
+    std::vector<OpticalPath> paths{pathA};
+    std::vector<OpticalPathId> pathIds{pathA.id()};
+    if (includeSecondCamera) {
+        paths.push_back(pathB);
+        pathIds.push_back(pathB.id());
+    }
+
+    auto lightPath = take(LightPath::create(
+        makeId<LightPathId>(lightPathId),
+        "Test camera LightPath",
+        std::move(pathIds)));
+    return ImagingLightPathFixture{std::move(paths), std::move(lightPath)};
+}
+
+OperationMode makeCameraResolverMode(
+    const EquipmentFixture& fixture,
+    const LightPathId& lightPathId,
+    ContrastMethod contrastMethod,
+    const char* modeId = "camera-resolver-mode") {
+    const auto operationModeId = makeId<OperationModeId>(modeId);
+    auto setting = take(LightPathModeSetting::create(
+        fixture.microscopeId,
+        1,
+        operationModeId,
+        1,
+        lightPathId,
+        makeId<CalibrationRevisionId>("camera-resolver-calibration"),
+        fixture.sourceId,
+        makeId<IlluminationChannelId>("camera-resolver-channel"),
+        {fixture.objectiveAId},
+        6.0));
+    return take(OperationMode::create(
+        fixture.microscopeId,
+        operationModeId,
+        1,
+        "Camera resolver mode",
+        contrastMethod,
+        {std::move(setting)}));
+}
+
+CameraSpecification cameraSpecificationWithSensor(
+    const EquipmentComponentId& componentId,
+    const char* cameraModeId,
+    CameraShutterType shutterType,
+    double readNoise,
+    double qeAt550) {
+    const auto base = cameraSpecification(componentId, cameraModeId);
+    CameraSensorCharacteristics sensor;
+    sensor.technology = CameraSensorTechnology::ScientificCMOS;
+    sensor.shutterType = shutterType;
+    sensor.colorMode = CameraSensorColorMode::Monochrome;
+    sensor.readNoiseElectronsRms = readNoise;
+    sensor.darkCurrentElectronsPerPixelPerSecond = 0.02;
+    sensor.fullWellCapacityElectrons = 30000.0;
+    sensor.maximumFrameRateFramesPerSecond = 100.0;
+    sensor.quantumEfficiency = {
+        {500.0, 0.85},
+        {550.0, qeAt550},
+        {600.0, 0.80}};
+    sensor.provenance = CameraSpecificationProvenance::ManufacturerDatasheet;
+    sensor.provenanceReference = "test-camera-datasheet";
+
+    return take(CameraSpecification::create(
+        componentId,
+        base.activeSensorDimensions(),
+        micrometers(base.pixelPitchXMicrometers()),
+        micrometers(base.pixelPitchYMicrometers()),
+        base.outputModes(),
+        std::nullopt,
+        sensor));
+}
+
+FluorescenceCameraRequirements cameraResolverFluorescenceRequirements() {
+    return FluorescenceCameraRequirements{
+        take(SpectralBand::create(
+            take(PositiveNanometers::create(500.0)),
+            take(PositiveNanometers::create(600.0)))),
+        0.75,
+        2.0,
+        0.1,
+        20000.0,
+        30.0,
+        true,
+        true};
+}
+
+void testLightPathCameraResolverDerivesSingleConnectedEndpoint() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto imaging = makeImagingLightPath(
+        fixture, "camera-resolver-single-path", false);
+    const auto cameraCId =
+        makeId<EquipmentComponentId>("camera-outside-selected-light-path");
+    fixture.components.push_back(take(EquipmentComponent::create(
+        cameraCId,
+        EquipmentComponentKind::ImagingDevice,
+        {makePort("camera-outside-selected-path-input", OpticalPortDirection::Input)})));
+
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        imaging.imagingPaths,
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-resolver-mode-a"),
+         cameraSpecification(fixture.cameraBId, "camera-resolver-mode-b"),
+         cameraSpecification(cameraCId, "camera-resolver-mode-c")},
+        {}, {}, {}, {}, {imaging.lightPath}));
+
+    const auto mode = makeCameraResolverMode(
+        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+    const auto resolution = LightPathCameraResolver::resolve(
+        equipment, mode, imaging.lightPath.id());
+
+    check(resolution.status() == LightPathCameraResolutionStatus::Resolved,
+          "resolves the only camera endpoint on the selected LightPath");
+    check(resolution.selected() &&
+          resolution.selected()->cameraComponentId == fixture.cameraAId,
+          "derives the camera identity from the selected imaging route terminal");
+    check(resolution.selected() &&
+          resolution.selected()->cameraModeId ==
+              makeId<CameraModeId>("camera-resolver-mode-a"),
+          "auto-selects the camera's only available output mode");
+    check(resolution.candidates().size() == 1 &&
+          resolution.candidates().front().cameraComponentId != cameraCId,
+          "does not include an installed camera outside the selected LightPath");
+}
+
+void testManualConnectedCameraRemainsSelectedWithSuitabilityWarnings() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto imaging = makeImagingLightPath(
+        fixture, "camera-resolver-manual-path", false);
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        imaging.imagingPaths,
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-resolver-manual-mode")},
+        {}, {}, {}, {}, {imaging.lightPath}));
+
+    const auto mode = makeCameraResolverMode(
+        fixture, imaging.lightPath.id(), ContrastMethod::Fluorescence);
+    const auto resolution = LightPathCameraResolver::resolve(
+        equipment,
+        mode,
+        imaging.lightPath.id(),
+        fixture.cameraAId,
+        std::nullopt,
+        cameraResolverFluorescenceRequirements());
+
+    check(resolution.status() == LightPathCameraResolutionStatus::Resolved,
+          "keeps a manually selected connected camera executable when suitability data are unknown");
+    check(resolution.selected() &&
+          resolution.selected()->cameraComponentId == fixture.cameraAId,
+          "does not silently replace the user's camera selection");
+    check(!resolution.diagnostics().empty() &&
+          resolution.diagnostics().front().severity() == DiagnosticSeverity::Warning,
+          "reports unknown fluorescence characteristics as warnings");
+    check(resolution.selected() &&
+          resolution.selected()->cameraModeId ==
+              makeId<CameraModeId>("camera-resolver-manual-mode"),
+          "still resolves the connected camera's supported output mode");
+}
+
+void testManualCameraOutsideSelectedLightPathIsUnsupported() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto imaging = makeImagingLightPath(
+        fixture, "camera-resolver-reject-path", false);
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        imaging.imagingPaths,
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-resolver-reject-mode"),
+         cameraSpecification(fixture.cameraBId, "camera-resolver-other-mode")},
+        {}, {}, {}, {}, {imaging.lightPath}));
+
+    const auto mode = makeCameraResolverMode(
+        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+    const auto resolution = LightPathCameraResolver::resolve(
+        equipment,
+        mode,
+        imaging.lightPath.id(),
+        fixture.cameraBId);
+
+    check(resolution.status() == LightPathCameraResolutionStatus::Unsupported &&
+          !resolution.selected(),
+          "rejects a manual camera that is not an endpoint of the selected LightPath");
+    check(std::any_of(
+              resolution.diagnostics().begin(),
+              resolution.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "light_path_camera.manual_camera_not_on_path" &&
+                      diagnostic.severity() == DiagnosticSeverity::Error;
+              }),
+          "explains the physical LightPath connectivity mismatch");
+}
+
+void testMultipleConnectedCamerasRequireSelectionWhenNoUniqueRecommendationExists() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto imaging = makeImagingLightPath(
+        fixture, "camera-resolver-dual-path", true);
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        imaging.imagingPaths,
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-resolver-dual-mode-a"),
+         cameraSpecification(fixture.cameraBId, "camera-resolver-dual-mode-b")},
+        {}, {}, {}, {}, {imaging.lightPath}));
+
+    const auto mode = makeCameraResolverMode(
+        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+    const auto resolution = LightPathCameraResolver::resolve(
+        equipment, mode, imaging.lightPath.id());
+
+    check(resolution.status() ==
+              LightPathCameraResolutionStatus::SelectionRequired,
+          "asks the user to choose when two connected camera endpoints are equally unresolved");
+    check(resolution.candidates().size() == 2,
+          "returns exactly the cameras connected to the selected splitter-backed LightPath");
+    check(std::none_of(
+              resolution.candidates().begin(),
+              resolution.candidates().end(),
+              [](const LightPathCameraCandidate& candidate) {
+                  return candidate.recommended;
+              }),
+          "does not invent a recommendation when sensor evidence is unavailable");
+}
+
+void testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto imaging = makeImagingLightPath(
+        fixture, "camera-resolver-shutter-tie", true);
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        imaging.imagingPaths,
+        {},
+        {cameraSpecificationWithSensor(
+             fixture.cameraAId, "camera-resolver-global-mode",
+             CameraShutterType::Global, 1.2, 0.90),
+         cameraSpecificationWithSensor(
+             fixture.cameraBId, "camera-resolver-rolling-mode",
+             CameraShutterType::Rolling, 1.2, 0.90)},
+        {}, {}, {}, {}, {imaging.lightPath}));
+
+    const auto mode = makeCameraResolverMode(
+        fixture, imaging.lightPath.id(), ContrastMethod::Fluorescence);
+    const auto resolution = LightPathCameraResolver::resolve(
+        equipment,
+        mode,
+        imaging.lightPath.id(),
+        std::nullopt,
+        std::nullopt,
+        cameraResolverFluorescenceRequirements());
+
+    check(resolution.status() == LightPathCameraResolutionStatus::Resolved &&
+          resolution.selected() &&
+          resolution.selected()->cameraComponentId == fixture.cameraAId,
+          "recommends the global-shutter camera when the fluorescence suitability evidence is otherwise equal");
+    check(resolution.candidates().size() == 2 &&
+          std::count_if(
+              resolution.candidates().begin(),
+              resolution.candidates().end(),
+              [](const LightPathCameraCandidate& candidate) {
+                  return candidate.recommended;
+              }) == 1,
+          "marks exactly one recommended camera while retaining both connected alternatives");
+}
+
+void testOperationModeWithoutSelectedLightPathSettingIsUnsupported() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto imaging = makeImagingLightPath(
+        fixture, "camera-resolver-unconfigured-path", false);
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        imaging.imagingPaths,
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-resolver-unconfigured-mode")},
+        {}, {}, {}, {}, {imaging.lightPath}));
+
+    const auto otherLightPathId =
+        makeId<LightPathId>("camera-resolver-another-mode-path");
+    const auto mode = makeCameraResolverMode(
+        fixture, otherLightPathId, ContrastMethod::Brightfield);
+    const auto resolution = LightPathCameraResolver::resolve(
+        equipment, mode, imaging.lightPath.id());
+
+    check(resolution.status() == LightPathCameraResolutionStatus::Unsupported,
+          "requires the selected LightPath to be configured by the operation mode");
+}
+
 int main() {
     testStrongEquipmentIdentities();
     testSharedComponentsAndBranching();
@@ -867,6 +1185,12 @@ int main() {
     testLightPathMustContainAnImagingRoute();
     testMultipleCameraLightPathRequiresPhysicalSplitter();
     testLightPathFactoryRejectsDuplicateRoutes();
+    testLightPathCameraResolverDerivesSingleConnectedEndpoint();
+    testManualConnectedCameraRemainsSelectedWithSuitabilityWarnings();
+    testManualCameraOutsideSelectedLightPathIsUnsupported();
+    testMultipleConnectedCamerasRequireSelectionWhenNoUniqueRecommendationExists();
+    testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie();
+    testOperationModeWithoutSelectedLightPathSettingIsUnsupported();
     testSharedPhysicalConnectionSupportsOppositePathTraversal();
     testDuplicatePhysicalIdentitiesAreRejected();
     testUnknownConnectionPortIsRejected();

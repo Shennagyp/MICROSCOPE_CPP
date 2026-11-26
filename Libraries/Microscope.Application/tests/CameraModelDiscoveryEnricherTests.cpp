@@ -80,6 +80,8 @@ camera::CameraDeviceInfo makeDiscoveredDevice() {
 
     camera::CameraSensorCharacteristics runtimeSensor;
     runtimeSensor.technology = camera::CameraSensorTechnology::CMOS;
+    runtimeSensor.shutterType = camera::CameraShutterType::Unknown;
+    runtimeSensor.colorMode = camera::CameraColorMode::Unknown;
     runtimeSensor.provenance =
         camera::CameraSpecificationProvenance::VendorModelDescriptor;
     device.sensorCharacteristics = runtimeSensor;

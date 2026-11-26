@@ -398,3 +398,32 @@ Physical endstop datum evidence is represented separately from encoder and exter
 Core can now create a blank workspace from the user's origin and travel extents, then add, replace or remove slide rectangles through immutable snapshots. The rectangle's first endpoint remains a user-supplied slide stop-point coordinate; it is never inferred from the workspace origin.
 
 Interactive pointer-driven drawing/editing, incremental constraint solving while dragging, undo/redo, persisted layout revisions and a configurable positive clearance distance remain outstanding. Core validates that every solved rectangle fits inside the workspace, slide identities are unique, and distinct rectangles do not have positive-area overlap. Exact edge/corner contact is allowed; no arbitrary clearance is imposed.
+
+## Authoritative correction — empty XY canvas and variable slide count
+
+This section supersedes any earlier plan language that assumes a fixed ten-slide layout, two permanent slide slots, or an implicit slide rectangle. The active model is one stage with an initially empty XY canvas and a user-defined, variable number of slide rectangles.
+
+### Canvas and geometry
+
+- The user defines the workspace origin as a stage-coordinate `(x, y)` point and defines positive X and Y travel extents. The far workspace boundaries are origin plus the respective travel extents.
+- The new canvas contains zero slide rectangles. No slide geometry, count or slide-local origin is inferred.
+- Each slide is drawn independently. The user supplies that slide's mechanical stop-point endpoint, the initial opposite-corner handle, the length-axis assignment (StageX or StageY), and constrained length and width.
+- The Core model exposes all four constrained stage-coordinate corners. The slide's stop point is independent of the workspace origin.
+- A slide must fit wholly inside the workspace. Distinct rectangles may share exact edges/corners, but positive-area overlap is rejected. A positive clearance margin requires an explicit mechanical-holder rule and is not inferred.
+- Layout edits are immutable snapshots: add, replace and remove. This gives undo/redo a stable basis, but durable revision storage is still outstanding.
+
+### Generic navigation implementation
+
+Core now contains a revision-bound slide navigation target and a slot-independent planner. A target stores the slide identity, local XY point and slide registration revision. It is rejected if that registration is replaced before execution. A planned movement is an absolute two-axis X/Y command; focus Z remains a separate machine coordinate.
+
+The Application library now contains the generic executor, owner-thread runtime and bounded control queue. It preserves device/session/operation/step/command correlation, verifies exact home-reference axis sets, homes X/Y only for slide-plane navigation, restores the same slide-local target after verified homing, and supports bounded command estimates or fresh device position observations. XY operation failures invalidate XY only; true whole-device feedback loss invalidates X/Y/Z.
+
+The previous `DualSlideCarrierState`-based runtime and queue remain compiled for compatibility and regression coverage. They are legacy and must not be used for new navigation.
+
+### Verification status and remaining work
+
+Core and Application test executables have been added to their respective CMake test configurations. Source-level assertions cover empty-canvas construction, input validation, independent slide origins, four-corner geometry, overlap rules, arbitrary slide identities, revision invalidation, unit conversion, X/Y-only homing, independent focus Z, correlated feedback, malformed XY observations, off-target measured poses, adapter rejection and bounded queue behavior. **No build, test, debugger or CI execution has been performed here.** Do not describe these tests as passing.
+
+The generic C++ runtime is not yet wired into the SwiftUI composition or the physical stage-driver host. The next implementation boundary is the host adapter/composition that owns the C++ runtime, creates its real device correlation and operation identities, feeds hardware observations into its serialized feedback ingress, and exposes safe lifecycle control to the application.
+
+The Z full-range sweep still requires its Application execution state machine and correlated completion handling. The CAD editor, undo/redo, durable layout persistence, calibration workflow, holder-clearance specification and recovery UI also remain outstanding.

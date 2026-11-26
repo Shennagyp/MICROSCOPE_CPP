@@ -220,6 +220,7 @@ enum class ConfigurationRequestError {
 struct LightPathConfigurationBinding final {
     OperationModeId operationModeId;
     std::uint64_t operationModeRevision = 0;
+    std::uint64_t equipmentDefinitionRevision = 0;
     LightPathId lightPathId;
     EquipmentComponentId cameraComponentId;
     CameraModeId cameraModeId;

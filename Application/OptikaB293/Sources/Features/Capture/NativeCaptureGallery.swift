@@ -11,7 +11,7 @@ struct NativeCaptureItem: Identifiable, Equatable {
     let capturedAt: Date
     let pixelWidth: Int
     let pixelHeight: Int
-    let thumbnailData: Data
+    var thumbnailData: Data?
 
     var dimensionsText: String {
         "\(pixelWidth) × \(pixelHeight)"
@@ -23,10 +23,14 @@ final class NativeCaptureGalleryStore: ObservableObject {
     @Published private(set) var captures: [NativeCaptureItem] = []
     @Published private(set) var isCapturing = false
     @Published private(set) var captureErrorMessage: String?
+    @Published private(set) var isLoadingCaptures = false
 
     private let maximumVisibleCaptureCount = 80
     private let maximumConcurrentCaptures = 1
     private var pendingCaptureCount = 0
+    private var hasLoadedExistingCaptures = false
+    private var isLoadingExistingCaptures = false
+    private var thumbnailLoadsInProgress: Set<String> = []
 
     private let directoryURL: URL = {
         let pictures = FileManager.default.urls(
@@ -40,8 +44,39 @@ final class NativeCaptureGalleryStore: ObservableObject {
         )
     }()
 
-    init() {
+    init() {}
+
+    /// Materializes the gallery listing on first use. The store retains the
+    /// resulting items for the application lifetime; reopening the dock does
+    /// not rescan persistence.
+    func activate() {
+        guard !hasLoadedExistingCaptures && !isLoadingExistingCaptures else { return }
+        isLoadingExistingCaptures = true
+        isLoadingCaptures = true
         loadExistingCaptures()
+    }
+
+    /// Loads a thumbnail only when its row becomes visible. Once loaded, the
+    /// thumbnail remains part of the resident in-memory item.
+    func ensureThumbnailLoaded(for item: NativeCaptureItem) {
+        guard item.thumbnailData == nil,
+              !thumbnailLoadsInProgress.contains(item.id) else { return }
+
+        thumbnailLoadsInProgress.insert(item.id)
+        let fileURL = item.fileURL
+        let itemID = item.id
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let thumbnailData = NativeCaptureFileCodec.loadThumbnail(at: fileURL)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.thumbnailLoadsInProgress.remove(itemID)
+                guard let thumbnailData,
+                      let index = self.captures.firstIndex(where: { $0.id == itemID }),
+                      self.captures[index].thumbnailData == nil else { return }
+                self.captures[index].thumbnailData = thumbnailData
+            }
+        }
     }
 
     func capture(_ image: CGImage, for slide: NativeSlideID) {
@@ -57,6 +92,7 @@ final class NativeCaptureGalleryStore: ObservableObject {
         let outputDirectory = directoryURL
         let filename = "\(UUID().uuidString)-\(slide.rawValue).png"
         let outputURL = outputDirectory.appendingPathComponent(filename)
+        let captureDate = Date()
         let captureSource = NativeCaptureImageSource(image: image)
 
         // Only the explicit user capture references this source image. The
@@ -67,7 +103,8 @@ final class NativeCaptureGalleryStore: ObservableObject {
             let result = NativeCaptureFileCodec.writeCapture(
                 from: captureSource,
                 to: outputURL,
-                slide: slide
+                slide: slide,
+                capturedAt: captureDate
             )
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -128,6 +165,7 @@ final class NativeCaptureGalleryStore: ObservableObject {
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let loadedItems: [NativeCaptureItem]
+            let loadFailure: String?
             do {
                 try FileManager.default.createDirectory(
                     at: directory,
@@ -139,23 +177,31 @@ final class NativeCaptureGalleryStore: ObservableObject {
                     includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey],
                     options: [.skipsHiddenFiles]
                 )
-                let pngURLs = urls
-                    .filter { $0.pathExtension.lowercased() == "png" }
-                    .sorted {
-                        let left = (try? $0.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey]))
-                        let right = (try? $1.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey]))
-                        let leftDate = left?.creationDate ?? left?.contentModificationDate ?? .distantPast
-                        let rightDate = right?.creationDate ?? right?.contentModificationDate ?? .distantPast
-                        return leftDate > rightDate
-                    }
 
-                // Keep all capture files on disk. Only the most recent subset
-                // is loaded into the in-memory gallery thumbnail list.
-                loadedItems = pngURLs.prefix(maximumCount).compactMap {
-                    NativeCaptureFileCodec.loadCapture(at: $0)
+                // Read each file's date metadata once, then sort the in-memory
+                // tuples. The list load does not decode image pixels.
+                let datedPNGURLs = urls.compactMap { url -> (url: URL, date: Date)? in
+                    guard url.pathExtension.lowercased() == "png" else { return nil }
+                    let values = try? url.resourceValues(forKeys: [
+                        .creationDateKey,
+                        .contentModificationDateKey
+                    ])
+                    let date = values?.creationDate ?? values?.contentModificationDate ?? .distantPast
+                    return (url, date)
+                }.sorted { $0.date > $1.date }
+
+                // Keep all capture files on disk. Materialize metadata for the
+                // visible subset; thumbnails are decoded only as rows appear.
+                loadedItems = datedPNGURLs.prefix(maximumCount).compactMap {
+                    NativeCaptureFileCodec.loadCaptureMetadata(
+                        at: $0.url,
+                        capturedAt: $0.date
+                    )
                 }
+                loadFailure = nil
             } catch {
                 loadedItems = []
+                loadFailure = error.localizedDescription
             }
 
             DispatchQueue.main.async {
@@ -164,6 +210,14 @@ final class NativeCaptureGalleryStore: ObservableObject {
                 let merged = self.captures + loadedItems.filter { !currentIDs.contains($0.id) }
                 self.captures = merged.sorted { $0.capturedAt > $1.capturedAt }
                 self.trimGallery()
+                self.isLoadingExistingCaptures = false
+                self.isLoadingCaptures = false
+
+                if let loadFailure {
+                    self.captureErrorMessage = "Could not load captures: \(loadFailure)"
+                } else {
+                    self.hasLoadedExistingCaptures = true
+                }
             }
         }
     }
@@ -192,7 +246,8 @@ private enum NativeCaptureFileCodec {
     static func writeCapture(
         from source: NativeCaptureImageSource,
         to url: URL,
-        slide: NativeSlideID
+        slide: NativeSlideID,
+        capturedAt: Date
     ) -> Result<NativeCaptureItem, NSError> {
         var liveImage = source.takeImage()
         guard let independentImage = copyPixelsAndRelease(&liveImage) else {
@@ -202,7 +257,8 @@ private enum NativeCaptureFileCodec {
         return writeIndependentCapture(
             independentImage,
             to: url,
-            slide: slide
+            slide: slide,
+            capturedAt: capturedAt
         )
     }
 
@@ -216,7 +272,8 @@ private enum NativeCaptureFileCodec {
     private static func writeIndependentCapture(
         _ image: CGImage,
         to url: URL,
-        slide: NativeSlideID
+        slide: NativeSlideID,
+        capturedAt: Date
     ) -> Result<NativeCaptureItem, NSError> {
         do {
             try FileManager.default.createDirectory(
@@ -243,19 +300,29 @@ private enum NativeCaptureFileCodec {
             return .failure(makeError("The camera image could not be encoded as PNG."))
         }
 
-        guard let item = loadCapture(at: url, slideOverride: slide) else {
-            // PNG finalization already succeeded. A gallery-thumbnail failure
-            // must not delete the user's valid capture file.
+        // Build the gallery item from the image already in memory. Do not
+        // reopen the PNG that was just written merely to create its thumbnail.
+        guard let thumbnail = makeThumbnail(from: image),
+              let thumbnailData = encodeThumbnail(thumbnail) else {
             return .failure(makeError(
                 "The PNG was saved, but its gallery thumbnail could not be generated. The file remains in the capture folder."
             ))
         }
-        return .success(item)
+
+        return .success(NativeCaptureItem(
+            id: url.lastPathComponent,
+            fileURL: url,
+            slide: slide,
+            capturedAt: capturedAt,
+            pixelWidth: image.width,
+            pixelHeight: image.height,
+            thumbnailData: thumbnailData
+        ))
     }
 
-    static func loadCapture(
+    static func loadCaptureMetadata(
         at url: URL,
-        slideOverride: NativeSlideID? = nil
+        capturedAt: Date
     ) -> NativeCaptureItem? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(
@@ -263,6 +330,27 @@ private enum NativeCaptureFileCodec {
                 0,
                 nil
               ) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              width > 0,
+              height > 0 else {
+            return nil
+        }
+
+        let slide = url.lastPathComponent.hasSuffix("-slide2.png") ? .slide2 : .slide1
+        return NativeCaptureItem(
+            id: url.lastPathComponent,
+            fileURL: url,
+            slide: slide,
+            capturedAt: capturedAt,
+            pixelWidth: width,
+            pixelHeight: height,
+            thumbnailData: nil
+        )
+    }
+
+    static func loadThumbnail(at url: URL) -> Data? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let thumbnail = CGImageSourceCreateThumbnailAtIndex(
                 source,
                 0,
@@ -274,38 +362,51 @@ private enum NativeCaptureFileCodec {
               ) else {
             return nil
         }
+        return encodeThumbnail(thumbnail)
+    }
 
-        let width = properties[kCGImagePropertyPixelWidth] as? Int ?? thumbnail.width
-        let height = properties[kCGImagePropertyPixelHeight] as? Int ?? thumbnail.height
-        let slide = slideOverride ?? (
-            url.lastPathComponent.hasSuffix("-slide2.png") ? .slide2 : .slide1
+    private static func makeThumbnail(from image: CGImage) -> CGImage? {
+        let scale = min(
+            1,
+            320 / CGFloat(max(image.width, image.height))
         )
-        let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
-        let capturedAt = values?.creationDate ?? values?.contentModificationDate ?? Date()
+        let width = max(1, Int((CGFloat(image.width) * scale).rounded(.down)))
+        let height = max(1, Int((CGFloat(image.height) * scale).rounded(.down)))
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
 
-        let thumbnailData = NSMutableData()
-        guard let thumbnailDestination = CGImageDestinationCreateWithData(
-            thumbnailData,
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.interpolationQuality = .high
+        context.draw(
+            image,
+            in: CGRect(x: 0, y: 0, width: width, height: height)
+        )
+        return context.makeImage()
+    }
+
+    private static func encodeThumbnail(_ thumbnail: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data,
             "public.png" as CFString,
             1,
             nil
         ) else {
             return nil
         }
-        CGImageDestinationAddImage(thumbnailDestination, thumbnail, nil)
-        guard CGImageDestinationFinalize(thumbnailDestination) else {
-            return nil
-        }
-
-        return NativeCaptureItem(
-            id: url.lastPathComponent,
-            fileURL: url,
-            slide: slide,
-            capturedAt: capturedAt,
-            pixelWidth: width,
-            pixelHeight: height,
-            thumbnailData: thumbnailData as Data
-        )
+        CGImageDestinationAddImage(destination, thumbnail, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
     }
 
     private static func copyPixels(of image: CGImage) -> CGImage? {

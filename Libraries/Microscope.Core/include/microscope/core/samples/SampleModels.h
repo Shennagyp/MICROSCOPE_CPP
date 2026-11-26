@@ -281,6 +281,65 @@ private:
     std::optional<IlluminationMicroscopyRequirements> illumination_;
 };
 
+enum class SpecimenPreparationRequirementsError {
+    NoConstraint,
+    InvalidMethod,
+    DuplicateMethod,
+    InvalidFixationState,
+    DuplicateFixationState,
+    NonFiniteThickness,
+    InvalidSectionThicknessRange,
+    InvalidCoverglassThicknessRange,
+    InvalidLabelKind,
+    DuplicateLabelKind
+};
+
+// Constraints on the actual preparation record. SampleType stores the allowed
+// preparation envelope; SpecimenPreparation stores the observed preparation.
+class SpecimenPreparationRequirements final {
+public:
+    [[nodiscard]] static Result<
+        SpecimenPreparationRequirements,
+        SpecimenPreparationRequirementsError> create(
+            std::vector<SpecimenPreparationMethod> allowedMethods = {},
+            std::vector<SpecimenFixationState> allowedFixationStates = {},
+            std::optional<double> minimumSectionThicknessMicrometers = std::nullopt,
+            std::optional<double> maximumSectionThicknessMicrometers = std::nullopt,
+            std::optional<double> minimumCoverglassThicknessMicrometers = std::nullopt,
+            std::optional<double> maximumCoverglassThicknessMicrometers = std::nullopt,
+            bool requireMountingMedium = false,
+            std::vector<SpecimenLabelKind> requiredLabelKinds = {});
+
+    [[nodiscard]] const std::vector<SpecimenPreparationMethod>& allowedMethods() const noexcept;
+    [[nodiscard]] const std::vector<SpecimenFixationState>& allowedFixationStates() const noexcept;
+    [[nodiscard]] const std::optional<double>& minimumSectionThicknessMicrometers() const noexcept;
+    [[nodiscard]] const std::optional<double>& maximumSectionThicknessMicrometers() const noexcept;
+    [[nodiscard]] const std::optional<double>& minimumCoverglassThicknessMicrometers() const noexcept;
+    [[nodiscard]] const std::optional<double>& maximumCoverglassThicknessMicrometers() const noexcept;
+    [[nodiscard]] bool requireMountingMedium() const noexcept;
+    [[nodiscard]] const std::vector<SpecimenLabelKind>& requiredLabelKinds() const noexcept;
+
+private:
+    SpecimenPreparationRequirements(
+        std::vector<SpecimenPreparationMethod> allowedMethods,
+        std::vector<SpecimenFixationState> allowedFixationStates,
+        std::optional<double> minimumSectionThicknessMicrometers,
+        std::optional<double> maximumSectionThicknessMicrometers,
+        std::optional<double> minimumCoverglassThicknessMicrometers,
+        std::optional<double> maximumCoverglassThicknessMicrometers,
+        bool requireMountingMedium,
+        std::vector<SpecimenLabelKind> requiredLabelKinds);
+
+    std::vector<SpecimenPreparationMethod> allowedMethods_;
+    std::vector<SpecimenFixationState> allowedFixationStates_;
+    std::optional<double> minimumSectionThicknessMicrometers_;
+    std::optional<double> maximumSectionThicknessMicrometers_;
+    std::optional<double> minimumCoverglassThicknessMicrometers_;
+    std::optional<double> maximumCoverglassThicknessMicrometers_;
+    bool requireMountingMedium_ = false;
+    std::vector<SpecimenLabelKind> requiredLabelKinds_;
+};
+
 enum class SampleTypeError {
     EmptyName,
     InvalidName,
@@ -298,7 +357,9 @@ public:
         std::string name,
         SampleMaterialClass materialClass,
         MicroscopyRequirements microscopyRequirements,
-        std::optional<std::string> description = std::nullopt);
+        std::optional<std::string> description = std::nullopt,
+        std::optional<SpecimenPreparationRequirements> preparationRequirements =
+            std::nullopt);
 
     [[nodiscard]] const SampleTypeId& id() const noexcept;
     [[nodiscard]] std::uint64_t revision() const noexcept;
@@ -306,6 +367,8 @@ public:
     [[nodiscard]] SampleMaterialClass materialClass() const noexcept;
     [[nodiscard]] const MicroscopyRequirements& microscopyRequirements() const noexcept;
     [[nodiscard]] const std::optional<std::string>& description() const noexcept;
+    [[nodiscard]] const std::optional<SpecimenPreparationRequirements>&
+    preparationRequirements() const noexcept;
 
 private:
     SampleType(
@@ -314,7 +377,8 @@ private:
         std::string name,
         SampleMaterialClass materialClass,
         MicroscopyRequirements microscopyRequirements,
-        std::optional<std::string> description);
+        std::optional<std::string> description,
+        std::optional<SpecimenPreparationRequirements> preparationRequirements);
 
     SampleTypeId id_;
     std::uint64_t revision_;
@@ -322,6 +386,7 @@ private:
     SampleMaterialClass materialClass_;
     MicroscopyRequirements microscopyRequirements_;
     std::optional<std::string> description_;
+    std::optional<SpecimenPreparationRequirements> preparationRequirements_;
 };
 
 enum class SampleTypeCatalogError {

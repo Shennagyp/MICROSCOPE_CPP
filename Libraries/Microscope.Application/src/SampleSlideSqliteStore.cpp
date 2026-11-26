@@ -199,8 +199,28 @@ public:
     }
 
     void string(const std::string& value) {
+        if (value.size() > kMaximumStringBytes ||
+            value.size() > std::numeric_limits<std::uint32_t>::max() ||
+            value.find('\0') != std::string::npos) {
+            valid_ = false;
+            return;
+        }
         u32(static_cast<std::uint32_t>(value.size()));
         bytes_.insert(bytes_.end(), value.begin(), value.end());
+    }
+
+    [[nodiscard]] bool count(std::size_t value) {
+        if (value > kMaximumCollectionCount ||
+            value > std::numeric_limits<std::uint32_t>::max()) {
+            valid_ = false;
+            return false;
+        }
+        u32(static_cast<std::uint32_t>(value));
+        return true;
+    }
+
+    [[nodiscard]] bool valid() const noexcept {
+        return valid_;
     }
 
     void optionalString(const std::optional<std::string>& value) {
@@ -236,6 +256,7 @@ public:
 
 private:
     std::vector<std::uint8_t> bytes_;
+    bool valid_ = true;
 };
 
 class BinaryReader final {
@@ -403,27 +424,6 @@ void writeOptionalBand(
     }
 }
 
-[[nodiscard]] bool readBand(BinaryReader& reader, SpectralBand& band) {
-    double minimum = 0.0;
-    double maximum = 0.0;
-    if (!reader.real(minimum) || !reader.real(maximum)) {
-        return false;
-    }
-    auto minimumValue = PositiveNanometers::create(minimum);
-    auto maximumValue = PositiveNanometers::create(maximum);
-    if (!minimumValue || !maximumValue) {
-        return false;
-    }
-    auto result = SpectralBand::create(
-        std::move(minimumValue).value(),
-        std::move(maximumValue).value());
-    if (!result) {
-        return false;
-    }
-    band = std::move(result).value();
-    return true;
-}
-
 [[nodiscard]] bool readOptionalBand(
     BinaryReader& reader, std::optional<SpectralBand>& band) {
     bool present = false;
@@ -434,35 +434,28 @@ void writeOptionalBand(
         band.reset();
         return true;
     }
-    SpectralBand decoded = SpectralBand::create(
-        PositiveNanometers::create(400.0).value(),
-        PositiveNanometers::create(700.0).value()).value();
-    if (!readBand(reader, decoded)) {
+
+    double minimum = 0.0;
+    double maximum = 0.0;
+    if (!reader.real(minimum) || !reader.real(maximum)) {
         return false;
     }
-    band = std::move(decoded);
+    auto minimumValue = PositiveNanometers::create(minimum);
+    auto maximumValue = PositiveNanometers::create(maximum);
+    if (!minimumValue || !maximumValue) {
+        return false;
+    }
+    auto decoded = SpectralBand::create(
+        std::move(minimumValue).value(),
+        std::move(maximumValue).value());
+    if (!decoded) {
+        return false;
+    }
+    band = std::move(decoded).value();
     return true;
 }
 
-[[nodiscard]] bool readStringId(
-    BinaryReader& reader, std::optional<OpticalCompatibilityId>& id) {
-    std::optional<std::string> raw;
-    if (!reader.optionalString(raw)) {
-        return false;
-    }
-    if (!raw) {
-        id.reset();
-        return true;
-    }
-    auto created = OpticalCompatibilityId::create(*raw);
-    if (!created) {
-        return false;
-    }
-    id = std::move(created).value();
-    return true;
-}
-
-void encodeSampleTypePayload(
+[[nodiscard]] bool encodeSampleTypePayload(
     const SampleType& sampleType,
     std::vector<std::uint8_t>& payload) {
     BinaryWriter writer;
@@ -471,7 +464,7 @@ void encodeSampleTypePayload(
     writer.optionalString(sampleType.description());
 
     const auto& requirements = sampleType.microscopyRequirements();
-    writer.u32(static_cast<std::uint32_t>(requirements.techniques().size()));
+    writer.count(requirements.techniques().size());
     for (const auto& technique : requirements.techniques()) {
         writer.enumeration(technique.method);
         writer.enumeration(technique.kind);
@@ -533,7 +526,12 @@ void encodeSampleTypePayload(
         writer.boolean(preparation.requireMountingMedium());
         writer.enumerations(preparation.requiredLabelKinds());
     }
+    if (!writer.valid() ||
+        writer.bytes().size() > 64U * 1024U * 1024U) {
+        return false;
+    }
     payload = writer.bytes();
+    return true;
 }
 
 [[nodiscard]] std::optional<SampleType> decodeSampleTypePayload(
@@ -751,7 +749,8 @@ void encodeSampleTypePayload(
     return std::move(result).value();
 }
 
-void encodeSlidePayload(const Slide& slide, std::vector<std::uint8_t>& payload) {
+[[nodiscard]] bool encodeSlidePayload(
+    const Slide& slide, std::vector<std::uint8_t>& payload) {
     BinaryWriter writer;
     writer.string(slide.name());
     writer.boolean(slide.originLabId().has_value());
@@ -769,7 +768,7 @@ void encodeSlidePayload(const Slide& slide, std::vector<std::uint8_t>& payload) 
     writer.optionalString(preparation.mountingMediumName());
     writer.optionalReal(preparation.mountingMediumRefractiveIndex());
 
-    writer.u32(static_cast<std::uint32_t>(preparation.labels().size()));
+    writer.count(preparation.labels().size());
     for (const auto& label : preparation.labels()) {
         writer.string(label.name());
         writer.enumeration(label.kind());
@@ -779,7 +778,7 @@ void encodeSlidePayload(const Slide& slide, std::vector<std::uint8_t>& payload) 
         writer.boolean(label.emissionSpectrum().has_value());
         if (label.emissionSpectrum()) {
             const auto& samples = label.emissionSpectrum()->samples();
-            writer.u32(static_cast<std::uint32_t>(samples.size()));
+            writer.count(samples.size());
             for (const auto& sample : samples) {
                 writer.real(sample.wavelengthNanometers);
                 writer.real(sample.relativePower);
@@ -791,7 +790,12 @@ void encodeSlidePayload(const Slide& slide, std::vector<std::uint8_t>& payload) 
             writer.string(label.filterSetCompatibilityId()->value());
         }
     }
+    if (!writer.valid() ||
+        writer.bytes().size() > 64U * 1024U * 1024U) {
+        return false;
+    }
     payload = writer.bytes();
+    return true;
 }
 
 [[nodiscard]] std::optional<Slide> decodeSlidePayload(
@@ -1213,7 +1217,12 @@ SampleSlideSqliteStore::saveSampleTypeRevision(
     }
 
     std::vector<std::uint8_t> payload;
-    encodeSampleTypePayload(sampleType, payload);
+    if (!encodeSampleTypePayload(sampleType, payload)) {
+        return failureStatus(makeError(
+            StoreErrorCode::PayloadTooLarge,
+            database_,
+            "SampleType payload exceeds the persistence codec limits."));
+    }
     Statement insert(
         database_,
         "INSERT INTO sample_type_revision "
@@ -1362,6 +1371,7 @@ SampleSlideSqliteStore::saveSlideRevision(
     std::uint64_t expectedCurrentRevision) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!revisionFitsSqlite(slide.revision()) ||
+        !revisionFitsSqlite(slide.sampleTypeRevision()) ||
         expectedCurrentRevision > kMaximumSqliteInteger ||
         expectedCurrentRevision == kMaximumSqliteInteger ||
         slide.revision() != expectedCurrentRevision + 1) {
@@ -1408,7 +1418,12 @@ SampleSlideSqliteStore::saveSlideRevision(
     }
 
     std::vector<std::uint8_t> payload;
-    encodeSlidePayload(slide, payload);
+    if (!encodeSlidePayload(slide, payload)) {
+        return failureStatus(makeError(
+            StoreErrorCode::PayloadTooLarge,
+            database_,
+            "Slide payload exceeds the persistence codec limits."));
+    }
     Statement insert(
         database_,
         "INSERT INTO slide_revision "

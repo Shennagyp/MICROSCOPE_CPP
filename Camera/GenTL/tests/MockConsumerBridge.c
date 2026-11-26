@@ -313,6 +313,7 @@ int32_t gentl_consumer_invoke(
             if (command_poll_count > 0)
                 memset(register_memory + 0x1002, 0, 2);
             ++command_poll_count;
+            memcpy(bytes, register_memory + (size_t)arguments[1], *size);
 #endif
         }
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
@@ -421,7 +422,7 @@ int32_t gentl_consumer_invoke(
         if (index < 0) return GC_ERR_INVALID_PARAMETER;
         const char* value = 0;
         switch ((DEVICE_INFO_CMD)arguments[2]) {
-        case DEVICE_INFO_DISPLAYNAME: value = index == 0 ? "Mock Camera 0" : "Mock Camera 1"; break;
+        case DEVICE_INFO_DISPLAYNAME: value = index == 0 ? "Mock Camera" : "Mock Camera 1"; break;
         case DEVICE_INFO_VENDOR: value = "Mock Vendor"; break;
         case DEVICE_INFO_MODEL: value = "Mock Model"; break;
         case DEVICE_INFO_SERIAL_NUMBER: value = index == 0 ? "MOCK-0001" : "MOCK-0002"; break;

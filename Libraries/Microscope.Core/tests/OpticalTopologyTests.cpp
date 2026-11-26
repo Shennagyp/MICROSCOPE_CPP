@@ -1,5 +1,6 @@
 #include "microscope/core/equipment/OpticalTopology.h"
 #include "microscope/core/configuration/LightPathCameraResolver.h"
+#include "microscope/core/configuration/LightPathConfigurationRequestFactory.h"
 
 #include <algorithm>
 #include <iostream>
@@ -1152,6 +1153,81 @@ void testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie() {
           "marks exactly one recommended camera while retaining both connected alternatives");
 }
 
+void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto imaging = makeImagingLightPath(
+        fixture, "camera-request-factory-path", true);
+    const auto cameraModeA =
+        makeId<CameraModeId>("camera-request-factory-mode-a");
+    const auto cameraModeB =
+        makeId<CameraModeId>("camera-request-factory-mode-b");
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        imaging.imagingPaths,
+        {},
+        {cameraSpecification(fixture.cameraAId, "camera-request-factory-mode-a"),
+         cameraSpecification(fixture.cameraBId, "camera-request-factory-mode-b")},
+        {}, {}, {}, {}, {imaging.lightPath}));
+
+    const auto mode = makeCameraResolverMode(
+        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+    const auto cameraResolution = LightPathCameraResolver::resolve(
+        equipment,
+        mode,
+        imaging.lightPath.id(),
+        fixture.cameraBId,
+        cameraModeB);
+    check(cameraResolution.isResolved(),
+          "resolves a manual camera endpoint before creating a configuration request");
+
+    const auto request = LightPathConfigurationRequestFactory::create(
+        equipment,
+        mode,
+        imaging.lightPath.id(),
+        cameraResolution,
+        makeId<ConfigurationProfileId>("camera-request-factory-profile"),
+        fixture.objectiveAId,
+        fixture.condenserId,
+        fixture.sourceId,
+        makeId<IlluminationChannelId>("camera-request-factory-channel"),
+        ExposurePolicy::Automatic);
+    check(static_cast<bool>(request),
+          "creates the legacy request only from a resolved LightPath camera choice");
+    if (request) {
+        check(request.value().opticalPathIds() ==
+                  imaging.lightPath.opticalPathIds(),
+              "derives every selected optical route ID from the LightPath rather than caller input");
+        check(request.value().cameraComponentId() == fixture.cameraBId,
+              "uses only the resolved camera endpoint identity");
+        check(request.value().cameraModeId() == cameraModeB,
+              "uses only the resolved camera output mode");
+        check(request.value().contrastMethod() == mode.contrastMethod(),
+              "uses the operation mode contrast semantics");
+    }
+
+    const auto otherPathId = makeId<LightPathId>("different-light-path");
+    const auto wrongPathMode = makeCameraResolverMode(
+        fixture, otherPathId, ContrastMethod::Brightfield,
+        "camera-request-factory-wrong-path-mode");
+    const auto mismatch = LightPathConfigurationRequestFactory::create(
+        equipment,
+        wrongPathMode,
+        imaging.lightPath.id(),
+        cameraResolution,
+        makeId<ConfigurationProfileId>("camera-request-factory-profile-2"),
+        fixture.objectiveAId,
+        fixture.condenserId,
+        fixture.sourceId,
+        makeId<IlluminationChannelId>("camera-request-factory-channel"),
+        ExposurePolicy::Automatic);
+    check(!mismatch &&
+          mismatch.error() ==
+              LightPathConfigurationRequestFactoryError::OperationModeDoesNotContainLightPath,
+          "rejects a mode that does not configure the selected LightPath");
+}
+
 void testOperationModeWithoutSelectedLightPathSettingIsUnsupported() {
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
@@ -1190,6 +1266,7 @@ int main() {
     testManualCameraOutsideSelectedLightPathIsUnsupported();
     testMultipleConnectedCamerasRequireSelectionWhenNoUniqueRecommendationExists();
     testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie();
+    testLightPathRequestFactoryDerivesCameraAndAllRouteIds();
     testOperationModeWithoutSelectedLightPathSettingIsUnsupported();
     testSharedPhysicalConnectionSupportsOppositePathTraversal();
     testDuplicatePhysicalIdentitiesAreRejected();

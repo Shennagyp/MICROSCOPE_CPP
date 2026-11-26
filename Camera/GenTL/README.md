@@ -110,6 +110,52 @@ auto done = genApi.commands().isCommandDone("AcquisitionStart");
 
 Use the combined owner when both surfaces are required. Do not open a second device session merely to separate feature and command access.
 
+## Vendor CTI / simulator smoke (opt-in)
+
+The test build now includes a **test-only** native C ABI shim backed by the
+existing `GenTLProducerLibrary` direct CTI loader, plus
+`camera_gentl_simulator_smoke`. This routes a real vendor CTI through the
+existing `ConsumerBridge` and `Producer` APIs without changing the
+production bridge selection or AmScope provider.
+
+Configure with an approved simulator/vendor CTI path:
+
+```sh
+cmake -S Camera/GenTL -B build/gentl-simulator \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=ON \
+  -DCAMERA_GENTL_SIMULATOR_CTI=/absolute/path/to/vendor-or-simulator.cti
+cmake --build build/gentl-simulator --parallel
+ctest --test-dir build/gentl-simulator \
+  -R camera_gentl_simulator_smoke --output-on-failure
+```
+
+The opt-in smoke selects the first discovered device and first data stream. It
+checks CTI loading, TL/interface/device discovery, device open, non-empty
+GenApi XML retrieval, stream start, five complete non-empty image buffers,
+stream stop and device close. It prints the device identity and available
+frame metadata. It does not assume a particular vendor's feature names or
+pixel format.
+
+The test bridge and smoke executable are test-only; neither is installed or
+exported by the Camera package. Normal CTest/package runs do not require a
+vendor CTI. To register the smoke with CTest, set
+`CAMERA_GENTL_SIMULATOR_CTI` at configure time. A missing or incompatible
+GenTL symbol is reported as a CTI-load failure.
+
+**License and evidence constraints:** use only a simulator/Producer whose
+license permits this test use. Vimba X's published terms contain restrictions
+that may conflict with using it to test generic third-party camera-control
+software; do not use it until that scope is confirmed. The Imaging Source
+Virtual Camera Producer's third-party consumer compatibility and applicable
+license scope must be confirmed before selecting it. Aravis
+`arv-fake-gv-camera` is a GigE Vision network simulator, not a CTI file, so it
+cannot be passed directly to this smoke executable.
+
+A passing simulator run is GenTL software-integration evidence only. It does
+not qualify a physical camera, physical transport, hardware timing, firmware,
+AmScope SDK behavior, or the installed physical-device workflow.
+
 ## Current implementation and evidence
 
 Implemented:

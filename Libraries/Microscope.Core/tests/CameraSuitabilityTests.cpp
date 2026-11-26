@@ -150,6 +150,83 @@ void testUnknownQuantumEfficiencyProducesWarningNotFailure() {
           "warns when the emission band is not characterized");
 }
 
+void testFluorescenceQeIsWeightedByEmissionAndDetectionFilters() {
+    const auto camera = makeCamera(
+        "camera-weighted-qe",
+        CameraShutterType::Rolling,
+        0.85, 0.90, 0.78,
+        1.2, 0.02, 30000.0);
+
+    auto request = requirements();
+    request.emissionSpectrum = take(FluorescenceEmissionSpectrum::create({
+        {take(PositiveNanometers::create(500.0)), 0.1},
+        {take(PositiveNanometers::create(550.0)), 1.0},
+        {take(PositiveNanometers::create(600.0)), 0.2}}));
+
+    request.dichroic = take(OpticalFilterSpecification::create(
+        makeId<EquipmentComponentId>("weighted-qe-dichroic"),
+        OpticalFilterRole::Dichroic,
+        {{take(PositiveNanometers::create(500.0)), 0.90, 0.05},
+         {take(PositiveNanometers::create(550.0)), 0.95, 0.03},
+         {take(PositiveNanometers::create(600.0)), 0.80, 0.15}}));
+
+    request.emissionFilter = take(OpticalFilterSpecification::create(
+        makeId<EquipmentComponentId>("weighted-qe-emission-filter"),
+        OpticalFilterRole::Emission,
+        {{take(PositiveNanometers::create(500.0)), 0.05, std::nullopt},
+         {take(PositiveNanometers::create(550.0)), 0.80, std::nullopt},
+         {take(PositiveNanometers::create(600.0)), 0.90, std::nullopt}}));
+
+    const auto report =
+        CameraSuitabilityAssessor::assessFluorescence(camera, request);
+
+    check(report.completeSpectralWeighting,
+          "marks QE complete only when emission, dichroic, emission-filter and sensor curves cover the requested band");
+    check(report.meanQuantumEfficiencyInEmissionBand.has_value(),
+          "calculates the detected-spectrum weighted QE");
+    check(report.meanQuantumEfficiencyInEmissionBand &&
+          *report.meanQuantumEfficiencyInEmissionBand > 0.89,
+          "weights QE toward wavelengths where the fluorophore emits and the detection path transmits");
+    check(!hasDiagnosticCode(
+              report,
+              "camera.fluorescence.qe_unweighted_band_fallback"),
+          "does not report the coarse unweighted fallback when full spectral inputs are supplied");
+}
+
+void testIncompleteDetectionSpectraRemainUnknown() {
+    const auto camera = makeCamera(
+        "camera-incomplete-spectral-coverage",
+        CameraShutterType::Rolling,
+        0.85, 0.90, 0.78,
+        1.2, 0.02, 30000.0);
+
+    auto request = requirements();
+    request.emissionSpectrum = take(FluorescenceEmissionSpectrum::create({
+        {take(PositiveNanometers::create(520.0)), 0.2},
+        {take(PositiveNanometers::create(580.0)), 1.0}}));
+    request.dichroic = take(OpticalFilterSpecification::create(
+        makeId<EquipmentComponentId>("partial-dichroic"),
+        OpticalFilterRole::Dichroic,
+        {{take(PositiveNanometers::create(520.0)), 0.9, 0.05},
+         {take(PositiveNanometers::create(580.0)), 0.9, 0.05}}));
+    request.emissionFilter = take(OpticalFilterSpecification::create(
+        makeId<EquipmentComponentId>("partial-emission-filter"),
+        OpticalFilterRole::Emission,
+        {{take(PositiveNanometers::create(520.0)), 0.8, std::nullopt},
+         {take(PositiveNanometers::create(580.0)), 0.8, std::nullopt}}));
+
+    const auto report =
+        CameraSuitabilityAssessor::assessFluorescence(camera, request);
+    check(!report.completeSpectralWeighting,
+          "does not claim a complete weighted QE estimate when the curves miss band edges");
+    check(report.unknownPreferenceData > 0,
+          "records incomplete spectral coverage as unknown evidence");
+    check(hasDiagnosticCode(
+              report,
+              "camera.fluorescence.weighted_qe_coverage_incomplete"),
+          "explains which spectral coverage evidence is missing");
+}
+
 void testGlobalShutterIsOnlyTheFinalTieBreaker() {
     const auto rolling = makeCamera(
         "camera-rolling",
@@ -190,6 +267,8 @@ void testGlobalShutterIsOnlyTheFinalTieBreaker() {
 int main() {
     testFluorescenceSuitabilityReturnsWarningsWithoutRejectingCamera();
     testUnknownQuantumEfficiencyProducesWarningNotFailure();
+    testFluorescenceQeIsWeightedByEmissionAndDetectionFilters();
+    testIncompleteDetectionSpectraRemainUnknown();
     testGlobalShutterIsOnlyTheFinalTieBreaker();
 
     if (failures != 0) {

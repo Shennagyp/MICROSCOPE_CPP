@@ -15,6 +15,7 @@ add_library(microscope_core STATIC
     src/LightPathCalibration.cpp
     src/OperationMode.cpp
     src/CameraSuitability.cpp
+    src/LightPathCameraResolver.cpp
     src/OpticalSpecifications.cpp
     src/IlluminationSpecifications.cpp
     src/StageSpecifications.cpp

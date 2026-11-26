@@ -44,4 +44,13 @@ AmScope consumers do not acquire Qt unless they request a Qt component.
 
 External-consumer fixtures under tests/consumers configure against an
 installed, relocated prefix. They do not use source-tree include paths or
-open a physical camera.
+open a physical camera. CI runs them to verify linking and runtime loading.
+They are not the complete Phase 7 acceptance test: the original roadmap also
+requires installed-artifact physical smoke with an AmScope camera (non-Qt and
+Qt consumers) and a GenTL CTI camera. Vendor SDK redistribution requirements
+must be documented before publishing; full provider/model qualification is
+retained for Phase 8.
+
+The initial supported platform scope remains macOS Intel x86_64 and Apple
+Silicon arm64. Do not infer Windows/Linux support from the platform-neutral
+GenTL source or the presence of unrelated vendor binaries.

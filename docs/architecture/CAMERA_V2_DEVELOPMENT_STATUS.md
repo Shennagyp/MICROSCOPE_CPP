@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `643319ad6e017748e5973254bf8919e64c115d21` — package superbuild, exported target sets, relocatable package config/version, component-aware dependency loading and clean consumer fixtures; package CI pending.  
+**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `58f379045a51d1cb12768e673a8d70b7ab6e57b0` — external consumers now instantiate the AmScope/GenTL/Qt APIs, and CI runs the relocated executables plus inspects installed runtime link paths. Package CI pending.  
 **Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64 (10/10 bridge tests and 11/11 official GenApi tests per architecture).  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 remains open but blocked at the frozen AmScope provider-test boundary; Phase 7 is active by explicit owner authorization on 26 November 2026.  
@@ -92,7 +92,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 4 | Extract reusable Qt camera UI library | **SOURCE AND OFFSCREEN CHECKS COMPLETE; OWNER ACCEPTANCE PENDING/POSTPONED.** Camera::QtWidgets contains FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel. The AmScope preview uses the feature editor, telemetry strip and selected-model capability panel. The command panel is for no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned. Workflow #45749181949 built amscope_preview and passed 24/24 Qt CTest tests on both architectures, including an application-level offscreen composition and dock-state restore test. Human visual/workspace inspection and physical MU503 UI smoke remain pending; the owner has postponed the physical test. This pending acceptance does not block the owner-directed Phase 6 software work. |
 | 5 | Integrate existing GenTL/GenApi implementation | **COMPLETE — owner-confirmed implementation milestone.** The GenTL Producer/device/stream lifecycle, buffer acquisition, frame metadata projection, remote-port access, XML retrieval and GenApi 3.5.1 feature/command integration are implemented and covered by cross-architecture CI. Do not reopen or reimplement Phase 5. Vendor CTI/device and physical-camera qualification are external integration/release evidence and must be tracked separately; they do not authorize restarting the completed implementation milestone. |
 | 6 | Complete capability, feature, command and model coverage | **OPEN; BLOCKED AT THE AMSCOPE PROVIDER-TEST BOUNDARY.** Provider-neutral GenTL/GenApi coverage and discovery/vector decisions are complete for the current public contract. AmScope provider-level feature/command/model tests remain unaddressed because AmScope is frozen by owner instruction. The owner has explicitly authorized Phase 7 to proceed without changing that freeze. Do not mark Phase 6 complete. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
-| 7 | Release packaging and external-consumer integration | **ACTIVE BY OWNER DIRECTION (26 November 2026).** Commit `643319a` adds the `Camera/` package entry point, namespaced target exports, relocatable config/version files, optional component dependency loading and clean external-consumer fixtures. The two-architecture package workflow is running; acceptance is pending. |
+| 7 | Release packaging and external-consumer integration | **ACTIVE BY OWNER DIRECTION (26 November 2026).** Commit `643319a` adds the `Camera/` package entry point, namespaced target exports, relocatable config/version files, optional component dependency loading and clean external-consumer fixtures. The two-architecture package workflow includes build-tree tests, installation, prefix relocation, clean external consumers and runtime-loading checks. Installed-artifact physical AmScope and GenTL camera smoke tests remain required by the original Phase 7 plan; CI does not replace them. |
 | 8 | Final hardware qualification and release | **Open.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer deployment, vendor SDK redistribution review, release CI and owner acceptance. |
 
 Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Current execution is owner-directed: Phase 3 is accepted; Phase 4 source/offscreen work is complete while visual/workspace and physical MU503 acceptance remain pending (physical test postponed); Phase 5 is complete by owner direction; Phase 6 remains open but is blocked by the explicit AmScope freeze; Phase 7 is now active by explicit owner authorization despite that blocked Phase 6 provider-specific test gap. This does not waive or complete Phase 6. Vendor CTI/device qualification remains separate Phase 8 evidence; do not restart Phase 5.
@@ -118,9 +118,15 @@ a CTI Producer or the separate C ABI bridge runtime.
 
 Acceptance requires clean consumer projects for Common, GenTL, AmScope and
 optional Qt to run `find_package(CameraModule CONFIG)` against an installed
-and relocated prefix, then compile and link without source-tree include
-paths. The new package workflow tests Intel x86_64 and Apple Silicon arm64.
-The run is pending; do not report package acceptance until both jobs pass.
+and relocated prefix, then compile, link and run without source-tree include
+paths. The package workflow tests Intel x86_64 and Apple Silicon arm64, and
+inspects installed dylib dependencies. CI is software/package evidence only.
+The original Phase 7 plan additionally requires an installed non-Qt AmScope
+consumer to enumerate/open/read a setting/start/receive frames/stop/close, an
+installed Qt consumer to show physical frames and descriptor-driven controls,
+and an installed GenTL consumer tested with a physical CTI camera. These
+hardware checks remain pending. Phase 7 also requires the vendor SDK
+redistribution requirements to be documented before publication.
 
 Usage and component options are documented in [Camera/README.md](../../Camera/README.md).
 

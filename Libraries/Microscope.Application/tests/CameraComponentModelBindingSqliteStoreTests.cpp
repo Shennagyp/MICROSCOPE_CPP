@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -28,6 +29,14 @@ TValue take(microscope::core::Result<TValue, TError> result) {
         throw std::runtime_error("A camera component model binding fixture failed.");
     }
     return std::move(result).value();
+}
+
+template <typename TValue>
+TValue take(std::optional<TValue> result) {
+    if (!result) {
+        throw std::runtime_error("An optional camera test fixture was empty.");
+    }
+    return std::move(*result);
 }
 
 template <typename TId>

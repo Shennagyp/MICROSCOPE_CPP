@@ -36,5 +36,23 @@ int main(int argc, char** argv) {
             camera::gentl::Operation::tlOpen, nullptr, 1) !=
         GenTL::GC_ERR_INVALID_PARAMETER) return 7;
 
+    // The Consumer must keep the loaded CTI alive independently of the
+    // caller's GenTLProducerLibrary shared_ptr.
+    auto retainedLibrary =
+        camera::gentl::GenTLProducerLibrary::load(argv[1]);
+    auto consumer = retainedLibrary->createConsumer();
+    retainedLibrary.reset();
+    if (!consumer) return 8;
+    if (consumer.invoke(camera::gentl::Operation::gcInitLib) !=
+        GenTL::GC_ERR_SUCCESS) return 9;
+    GenTL::TL_HANDLE retainedSystem = nullptr;
+    if (consumer.invoke(camera::gentl::Operation::tlOpen, &retainedSystem) !=
+            GenTL::GC_ERR_SUCCESS ||
+        !retainedSystem) return 10;
+    if (consumer.invoke(camera::gentl::Operation::tlClose, retainedSystem) !=
+        GenTL::GC_ERR_SUCCESS) return 11;
+    if (consumer.invoke(camera::gentl::Operation::gcCloseLib) !=
+        GenTL::GC_ERR_SUCCESS) return 12;
+
     return 0;
 }

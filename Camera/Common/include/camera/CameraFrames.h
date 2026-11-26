@@ -81,7 +81,11 @@ struct Frame {
 
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    // strideBytes includes per-row padding; trailing padding follows the last row.
     std::uint32_t strideBytes = 0;
+    std::size_t imageOffsetBytes = 0;
+    std::size_t rowPaddingBytes = 0;
+    std::size_t trailingPaddingBytes = 0;
     PixelFormat pixelFormat = PixelFormat::Unknown;
     PixelByteOrder pixelByteOrder = PixelByteOrder::Unknown;
     PixelColorFilterArray pixelColorFilterArray =
@@ -100,8 +104,15 @@ struct Frame {
 
     std::vector<std::uint8_t> pixels;
 
+    // data()/byteSize() retain payload-base and complete-payload semantics.
+    // imageData() points at the first image byte without creating a new buffer.
     [[nodiscard]] const std::uint8_t* data() const noexcept {
         return pixels.empty() ? nullptr : pixels.data();
+    }
+
+    [[nodiscard]] const std::uint8_t* imageData() const noexcept {
+        return pixels.empty() || imageOffsetBytes > pixels.size()
+            ? nullptr : pixels.data() + imageOffsetBytes;
     }
 
     [[nodiscard]] std::size_t byteSize() const noexcept {

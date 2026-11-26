@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Reviewed provider checkpoint:** `a4559796cbc5c0fa99bfad85e7c259f4b6bdf78b`  
+**Reviewed provider checkpoint:** `5080256d777a9cf416f1dde71a3411846dc0fdf4`  
 **Current Qt/UI checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
 **Review date:** 26 November 2026  
 **Status:** Phase 6 remains open and is the active software workstream by owner direction. Phase 4 visual/physical acceptance remains pending; the owner postponed the physical MU503 test and explicitly directed continued Phase 6 work.
@@ -49,8 +49,8 @@ added and passed official GenApi 3.5.1 integration CI on both architectures:
 malformed XML rejection/recovery, unsupported public IRegister handling,
 feature read/write failure recovery, command execution failure recovery and
 command-completion polling failure recovery.
-The exact green checkpoint is `a4559796cbc5c0fa99bfad85e7c259f4b6bdf78b`,
-workflow [#45768851121](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45768851121).
+The exact green checkpoint is `5080256d777a9cf416f1dde71a3411846dc0fdf4`,
+workflow [#45769387254](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45768851121).
 
 Phase 6 remains open. AmScope provider-level feature/command behavior remains
 a known gap but is blocked by the explicit AmScope freeze. The GenTL discovery
@@ -188,7 +188,7 @@ passed 24/24 tests on each architecture.
 | P1 | AmScope feature behavior has no direct provider tests | The complete non-Qt AmScope test directory has no tests for `featureDescriptors`, `readFeature` or `writeFeature`; Qt tests only check queued error paths while Closed | Design the smallest private test boundary for descriptor/probe/write semantics. Prefer extracting pure descriptor policy/mapping logic where possible; introduce per-instance SDK dispatch only for calls that genuinely need injection. Preserve one handle, SDK serialization and the public ABI. |
 | P1 | AmScope command/accessory behavior has no direct provider tests | Public API includes trigger, I/O, light, filter-wheel, ST4, focuser, lens and still-capture operations; current tests do not exercise their provider-side preconditions, rollback, readback or asynchronous completion | Build a separate command-family test matrix. Do not merge settings, telemetry and actions. Start with one deterministic, low-risk command family after its SDK semantics are traced. |
 | P2 | GenApi vendor/device behavior remains unverified | Synthetic XML and mock-port tests now cover malformed XML rejection/recovery, unsupported public IRegister classification, feature read/write failure recovery and command execution failure recovery. No vendor CTI or physical GenTL camera is part of this evidence. | Keep vendor XML/CTI/device qualification in Phase 8. Do not treat mock/XML CI as hardware evidence. |
-| P2 | GenTL discovery-to-Common projection decision | `Producer::discover` returns provider-specific `DeviceDescriptor`; `CameraDeviceInfo` is a data model, not a required cross-provider discovery API. The GenTL descriptor carries Producer path, interface ID and device ID required for routing. `Producer::openDevice` validates Producer path and retained interface ID; the tests reject foreign-Producer and stale-interface descriptors. | **Decision: retain provider-specific `DeviceDescriptor`; do not add a Common projection without a concrete multi-provider consumer.** A future projection must preserve the routing descriptor separately and define a collision-safe opaque identity. No source/API change is justified now. |
+| P2 | GenTL discovery-to-Common projection decision | `Producer::discover` returns provider-specific `DeviceDescriptor`; `CameraDeviceInfo` is a data model, not a required cross-provider discovery API. The GenTL descriptor carries Producer path, interface ID and device ID required for routing. `Producer::openDevice` validates Producer path and retained interface ID; the tests reject foreign-Producer and stale-interface descriptors with distinct failure codes. | **Decision: retain provider-specific `DeviceDescriptor`; do not add a Common projection without a concrete multi-provider consumer.** A future projection must preserve the routing descriptor separately and define a collision-safe opaque identity. No source/API change is justified now. |
 | P2 | Vector descriptors expose cardinality but not per-element semantics | `CameraFeatureEditor` uses `elementCount` for vector cardinality guidance; `validateFeatureWrite` rejects a vector whose length differs from the descriptor. Provider code retains semantic checks for each field (e.g. ROI geometry and sharpening parameters). No consumer currently requires per-element labels/ranges. | **Decision: defer contract expansion.** Existing cardinality is sufficient for current consumers; keep provider validation authoritative. Revisit only when a concrete generic consumer needs per-element labels/ranges or independent per-element bounds. |
 | P3 | Hardware/model evidence remains narrow | Existing MU503 short runs are useful regression observations, not evidence for every supported model/feature/accessory or GenTL CTI camera | Carry the exact supported model/backend matrix and records into Phase 8. Do not claim hardware support from SDK flags, mocks or XML alone. |
 
@@ -217,7 +217,7 @@ supported or hardware-qualified.
    AmScope source, tests, public contracts or behavior.
 3. GenApi malformed XML, unsupported public IRegister, feature read/write
    failure recovery and command execution failure recovery tests are complete
-   at `a455979`; workflow #45768851121 passed Intel x86_64 and Apple Silicon
+   at `a455979`; workflow #45769387254 passed Intel x86_64 and Apple Silicon
    arm64 with the official GenApi 3.5.1 integration.
 4. Retain provider-specific GenTL `DeviceDescriptor` for now. It carries the
    Producer/interface/device routing identity needed by `openDevice`; the

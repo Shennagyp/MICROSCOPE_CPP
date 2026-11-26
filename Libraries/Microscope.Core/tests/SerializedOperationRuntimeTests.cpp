@@ -65,11 +65,11 @@ FeedbackEnvelope<StageMotionFeedbackPayload> actionCompleted(
 
 FeedbackEnvelope<StageMotionFeedbackPayload> observedState(
     const RuntimeDeviceCorrelation& device,
-    const OperationId& operation,const StepId& step) {
+    const OperationId& operation,const StepId& step,const CommandId& command) {
     const auto payload=take(AxisMotionStateObservation::create(
         id<StageAxisId>("x"),StageAxisMotionState::Idle));
     const auto metadata=take(FeedbackMetadata::create(
-        FeedbackCorrelation{device,OperationCorrelation{operation,step,std::nullopt}},
+        FeedbackCorrelation{device,OperationCorrelation{operation,step,command}},
         FeedbackKind::DeviceStateObserved,ObservationSource::HardwareReadback));
     return FeedbackEnvelope<StageMotionFeedbackPayload>::create(
         metadata,StageMotionFeedbackPayload{payload});
@@ -177,7 +177,7 @@ int main() {
     check(completionResult&&completionResult->stepStatus==StepStatus::AwaitingObservation,
           "action completion moves the step to AwaitingObservation, not Verified");
 
-    auto observation=observedState(session,operation,step);
+    auto observation=observedState(session,operation,step,command);
     check(runtime->feedbackIngress().submit(std::move(observation))==FeedbackSubmitStatus::Enqueued,
           "device state observation is accepted for the active operation step");
     auto observationResult=take(runtime->processNextFeedback());

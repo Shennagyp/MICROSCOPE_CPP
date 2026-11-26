@@ -13,6 +13,7 @@ add_library(microscope_core STATIC
     src/Identity.cpp
     src/OpticalTopology.cpp
     src/LightPathCalibration.cpp
+    src/OperationMode.cpp
     src/CameraSuitability.cpp
     src/OpticalSpecifications.cpp
     src/IlluminationSpecifications.cpp
@@ -93,6 +94,18 @@ if(BUILD_TESTING)
     add_test(
         NAME microscope_core_camera_suitability_tests
         COMMAND microscope_core_camera_suitability_tests)
+
+    add_executable(microscope_core_operation_mode_tests
+        tests/OperationModeTests.cpp)
+    target_link_libraries(microscope_core_operation_mode_tests
+        PRIVATE Microscope::Core)
+    set_target_properties(microscope_core_operation_mode_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_core_operation_mode_tests
+        COMMAND microscope_core_operation_mode_tests)
 
     add_executable(microscope_core_light_path_calibration_tests
         tests/LightPathCalibrationTests.cpp)

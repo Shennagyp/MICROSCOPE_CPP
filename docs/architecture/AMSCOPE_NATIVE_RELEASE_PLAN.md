@@ -15,7 +15,8 @@
 > Current Camera v2.0 status and continuation instructions are in
 > [`CAMERA_V2_DEVELOPMENT_STATUS.md`](CAMERA_V2_DEVELOPMENT_STATUS.md).
 
-**Revision date:** 24 November 2026  
+**Revision date:** 26 November 2026
+**Current implementation branch:** `camera-v.2.0`  
 **Target branch:** `amscope-native-driver-0.7`  
 **Revision baseline:** `03417b3a0dbd3b846500bed7fc2417f0a7082057` (accepted v0.6 head from which v0.7 was branched)  
 **Language/runtime:** C++17, Qt 6, macOS  
@@ -263,24 +264,49 @@ Use `AMSCOPE_IMPLEMENTATION_INVENTORY.md` and `Camera/Amscope/README.md` as the 
 
 ### Phase 6 — CMake package and external consumers
 
-**Status: INITIAL INSTALL RULES EXIST; EXPORTED PACKAGE NOT COMPLETE**
+**Status: ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026).** The package entry
+point, namespaced exports, component-aware config/version files, and clean
+Common/GenTL/GenApi/AmScope/Qt consumer fixtures are committed in
+`camera-v.2.0`. Cross-architecture package CI is pending. See
+[Camera/README.md](../../Camera/README.md) and the canonical
+[Camera v2.0 status ledger](CAMERA_V2_DEVELOPMENT_STATUS.md).
 
-1. Define stable namespaced public CMake targets.
-2. Export targets and generate package config/version files.
-3. Install public headers and preserve correct PUBLIC/PRIVATE dependency visibility.
-4. Keep Qt optional for non-Qt consumers.
-5. Verify runtime library loading, install names, and RPATHs.
-6. Document required Qt components, bundled Amcam SDK selection, supported macOS architectures, and build options.
-7. Establish the AmScope SDK redistribution decision and preserve vendor notices. Do not redistribute a large SDK/sample bundle without checking its terms.
-8. Build a clean non-Qt consumer using `find_package`, with no repository-relative include/library paths.
-9. Build a clean Qt consumer using only the exported Qt target and its declared dependencies.
+1. Define stable namespaced targets: `Camera::Common`,
+   `Camera::GenTLConsumerBridge`, optional `Camera::GenTLGenApi`,
+   `Amscope::Driver`, optional `Amscope::Qt`, `Camera::Qt` and
+   `Camera::QtWidgets`.
+2. Export targets and generate relocatable `CameraModuleConfig.cmake` and
+   version files, with component-aware dependency loading.
+3. Install public headers and preserve correct PUBLIC/PRIVATE dependency
+   visibility. GenApi package exports require imported targets from the
+   official GenApi 3.5.1 CMake package.
+4. Keep Qt optional for Common, GenTL and native AmScope consumers. CI
+   explicitly disables Qt discovery in those clean consumer configurations.
+5. Verify runtime library loading, install names, RPATHs and architecture of
+   the installed artifacts. The package workflow relocates the prefix, builds
+   and runs clean consumers, and inspects dylib dependencies.
+6. Document required Qt components, bundled Amcam runtime selection,
+   supported macOS architectures and build options.
+7. Establish the AmScope SDK redistribution decision and preserve vendor
+   notices. Do not redistribute a large SDK/sample bundle without checking
+   its terms.
+8. Build clean Common, GenTL, GenApi, AmScope and Qt consumers using
+   `find_package`, with no repository-relative include/library paths.
+9. Verify that GenTL base consumers do not require GenApi and non-Qt
+   consumers do not require Qt.
 
 **Exit criteria**
 
-- Both external consumer configurations build from an install prefix.
+- Common, GenTL, GenApi, native AmScope and optional Qt external consumers
+  configure, compile, link and run from an installed, relocated prefix.
 - Runtime dependencies resolve outside the repository build tree.
-- Non-Qt consumers do not inherit Qt dependencies.
+- Common/GenTL/native AmScope consumers do not inherit Qt; GenTL base does not
+  inherit GenApi.
+- Installed artifacts pass architecture and runtime-link checks on Intel
+  x86_64 and Apple Silicon arm64.
 - Vendor redistribution and platform scope are documented.
+- Original Camera Module Phase 7 hardware acceptance also passes: installed
+  AmScope non-Qt/Qt physical smoke and installed GenTL CTI-camera smoke.
 
 ### Phase 7 — Integrated AmScope release qualification
 
@@ -317,20 +343,20 @@ Do not repeat the standalone FPS comparison probes. They are diagnostic tools an
 - Known limitations and unverified model claims are published.
 - A release tag identifies the tested commit.
 
-## 5. Separate follow-on track — GenTL/GenApi
+## 5. Separate GenTL/GenApi track — implementation complete, hardware pending
 
-This is not a phase blocking the AmScope-native release.
+The pre-integration dependency assessment in this subordinate AmScope plan is
+superseded by the implementation on `camera-v.2.0`. The canonical Camera
+Module Phase 5 GenTL/GenApi integration is complete by owner direction:
+the GenTL 1.6 C ABI bridge, Producer/device/session layer and optional official
+GenApi 3.5.1 adapter are implemented. The current GenTL/GenApi build and
+integration workflow passed both Intel x86_64 and Apple Silicon arm64 at
+`49cc11e` (workflow #45777372439).
 
-Before implementation can begin, the project needs:
-
-1. A target CTI camera and its vendor Producer package, version, license, and macOS architecture support.
-2. A decision on the existing GenTL Consumer integration: a supported C ABI over the existing Swift Consumer, an existing external C++ Consumer, or an explicitly approved C++ port. Do not silently choose a reimplementation.
-3. The official GenTL ABI header and GenApi runtime package with verified dependencies, architectures, and redistribution conditions.
-4. Evidence that the CTI camera/Producer exposes GenApi XML and usable port access.
-
-Only then implement the CTI backend against the common contracts. Preserve Producer/interface/device/stream ownership and backend identity. Keep AmScope on its native SDK path; do not create a synthetic AmScope CTI Producer.
-
-The GenTL track requires a real CTI camera for physical acceptance. Until then its status is **BLOCKED BY EXTERNAL DEPENDENCIES**, not silently omitted or marked complete.
+Do not restart the integration or invent a CTI Producer. A physical CTI camera
+is still required for installed-package hardware acceptance in original
+Camera Module Phase 7 and broader provider qualification in Phase 8. This
+hardware gate is separate from the AmScope-native release path.
 
 ## 6. Revised status ledger
 
@@ -339,22 +365,30 @@ The GenTL track requires a real CTI camera for physical acceptance. Until then i
 | 0 | Baseline and scope freeze | ACCEPTED BY OWNER |
 | 1 | Native AmScope session/acquisition | ACCEPTED BY OWNER; v0.5 probes built and physically run |
 | 2 | Common camera contract closure | ACCEPTED TO PROCEED; RGB24 common-frame contract verified; RAW live common-frame hardware qualification explicitly bypassed by owner |
-| 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; local Release build and 12/12 CTest passed, including concurrent mailbox test; physical Qt-to-MU503 frame-delivery smoke check confirmed valid |
-| 4 | Reusable Qt camera UI | IN PROGRESS; document-centric workspace built at owner-reported `040e381`, `amscope_preview` linked and 15/15 CTest passed; application visual smoke and physical MU503 workspace/live-edit smoke pending; generic feature-editor extraction remains |
-| 5 | AmScope feature/model claim reconciliation | OPEN |
-| 6 | Exported CMake package and external consumers | OPEN |
-| 7 | Integrated AmScope release qualification | OPEN |
-| GT | GenTL/GenApi second backend | BLOCKED FOLLOW-ON TRACK; not an AmScope release blocker |
+| 3 | Native control / Qt streaming boundaries | ACCEPTED BY OWNER; preserve the current implementation and existing preview |
+| 4 | Reusable Qt camera UI | SOURCE/OFFSCREEN WORK COMPLETE; human visual/workspace acceptance and physical MU503 UI smoke remain pending; generic feature editor, capability panel and command panel are implemented |
+| 5 | AmScope feature/model claim reconciliation | OPEN; provider-level tests remain blocked by the explicit AmScope freeze |
+| 6 | Exported CMake package and external consumers | ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026); package implementation committed, two-architecture installed-consumer CI pending |
+| 7 | Integrated AmScope release qualification | OPEN; requires installed-artifact physical AmScope smoke and full release regression |
+| GT | GenTL/GenApi second backend | IMPLEMENTATION COMPLETE BY OWNER DIRECTION; physical CTI installed-consumer qualification pending |
 
 ## 7. Dependency order and work discipline
 
-The critical path is:
+The subordinate AmScope-native sequence remains:
 
 `Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7`
 
-Phase 5 inventory reconciliation may run alongside Phase 3/4 after the public interfaces are stable. Avoid unrelated diagnostics and broad refactors.
+The owner explicitly authorized subordinate Phase 6 package work to proceed
+while Phase 5 AmScope provider-test reconciliation remains open and frozen.
+This is a sequencing exception, not a declaration that Phase 5 is complete.
+Keep the AmScope source/tests/contracts/runtime freeze intact.
 
-Work one phase at a time. Each phase has one explicit implementation result and one focused verification gate. Do not proceed to the next phase while the current phase has a known regression. Run the full integrated hardware regression once at Phase 7; phase-specific hardware checks should be limited to behavior changed by that phase.
+The canonical Camera Module roadmap remains authoritative: original Phase 7
+includes installed-package physical smoke for AmScope and GenTL; original
+Phase 8 expands to the declared provider/model qualification matrix and
+release acceptance. Avoid unrelated diagnostics and broad refactors. Run
+the integrated AmScope release regression once at subordinate Phase 7;
+phase-specific software verification should remain focused.
 
 A phase is complete only when its stated exit criteria pass. If a required physical device, Producer, or accessory is unavailable, record that precise limitation rather than simulating success.
 

@@ -2,11 +2,15 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest implementation checkpoint:** `b1d0a61de841736f76cf4ec005f807e60310d71b` — extends GenApi integration tests to write/read floating-point and string features, and verifies floating-point increment rejection.  
-**Latest fully CI-validated checkpoint:** `b1d0a61de841736f76cf4ec005f807e60310d71b` — GenTL/GenApi workflow [#45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447) passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and XML-backed runtime tests.  
-**CI:** GenTL/GenApi workflow [#45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447) passed both architectures. Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45681878032) passed its four jobs; Qt/UI is now excluded from active scope.  
-**Library source branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Review date:** 25 November 2026
+**Current branch HEAD:** `808779f8f67d81ed99e66a2aff0b5b9f1cde1321` — `fix(gentl): use global GenTL bool8_t ABI type`.  
+**Latest CI-validated checkpoint:** `808779f8f67d81ed99e66a2aff0b5b9f1cde1321` — GenTL/GenApi workflow [#45733875474](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45733875474) passed Intel x86_64 and Apple Silicon arm64, including the C++ GenTL suite and official GenApi 3.5.1 build/tests.  
+**Review date:** 26 November 2026.  
+**Next implementation milestone:** Phase 6 — capability, feature, command and model coverage. Phase 5 is owner-confirmed complete; do not restart it.  
+**Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
+
+## 0. Immediate continuation instruction
+
+The next AI must read [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md) before touching source. The project owner has confirmed Phase 5 as complete and identified Phase 6 as the next implementation milestone. Do not restart GenTL/GenApi integration, replace the Consumer architecture, or revive retired repositories as an assumed dependency. Start Phase 6 with a read-only source-to-test capability audit; implement only concrete, evidenced gaps.
 
 ## 1. Branch provenance
 
@@ -91,12 +95,12 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 2 | Finalize backend-neutral camera models | **Partially implemented.** Slice 2.1 discovery/capability models and 2.2 frame/layout models exist with automated tests and prior cross-architecture CI. The 2.3 semantic ownership audit is documented: common feature-access errors remain common, while AmScope lifecycle/command errors remain provider-specific. Physical common-frame/RAW validation remains open, so Phase 2 is not accepted. |
 | 3 | Separate driver, programmatic control and Qt streaming libraries | **Excluded from active scope by owner decision.** The non-Qt `AmcamCamera` control/session API remains the active boundary. Existing Qt code is retained as legacy source but is not to be extended or qualified for this roadmap. |
 | 4 | Extract reusable Qt camera UI library | **Excluded from active scope by owner decision.** No reusable Qt UI, camera preview or UI-consumer work is required. Optika presentation remains application-owned. |
-| 5 | Integrate existing GenTL/GenApi implementation | **In progress.** C++ bridge, producer/device/stream lifecycle, buffer acquisition/requeue, metadata projection, remote-port access and `LOCAL`/`FILE` XML retrieval exist. Official GenApi 3.5.1 SDK compilation and XML-backed runtime feature/command tests pass on both architectures. Real Swift C ABI, vendor CTI and physical-camera qualification remain open. |
+| 5 | Integrate existing GenTL/GenApi implementation | **COMPLETE — owner-confirmed implementation milestone.** The GenTL Producer/device/stream lifecycle, buffer acquisition, frame metadata projection, remote-port access, XML retrieval and GenApi 3.5.1 feature/command integration are implemented and covered by cross-architecture CI. Do not reopen or reimplement Phase 5. Vendor CTI/device and physical-camera qualification are external integration/release evidence and must be tracked separately; they do not authorize restarting the completed implementation milestone. |
 | 6 | Complete capability, feature, command and model coverage | **Open.** Broad AmScope implementation exists. Reconcile every exposed claim to provider/model support, units, preconditions, readback, asynchronous completion and physical evidence. |
 | 7 | Release packaging and external-consumer integration | **Open.** Initial install rules exist and native public headers install/compile. An exported CMake package/config/version flow and clean native/GenTL external consumers remain; Qt/UI consumers are excluded. |
 | 8 | Final hardware qualification and release | **Not started/accepted.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer tests, release CI and owner acceptance. |
 
-Active dependency order: 0 → 1 → 2 → 5 → 6 → 7 → 8. Original Phases 3 and 4 are excluded and do not gate active delivery. Phase 5 acceptance requires a functioning Consumer/C ABI, a vendor CTI Producer and physical CTI hardware.
+Active continuation order: 0 → 1 → 2 → 5 → **6 (next implementation milestone)** → 7 → 8. Original Phases 3 and 4 are excluded and do not gate active delivery. Phase 5 is complete by owner direction; do not treat outstanding vendor-CTI/physical-camera qualification as permission to restart Phase 5. Track such evidence under Phase 8 and preserve the distinction between mock CI and real hardware qualification.
 
 ## 5. Changes made on camera-v.2.0
 

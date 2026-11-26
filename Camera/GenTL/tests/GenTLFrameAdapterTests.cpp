@@ -399,8 +399,12 @@ void testImageOffsetAndPaddingArePreservedWithoutCopying() {
             "Image offset beyond payload must be rejected.");
     source = validMono8Frame();
     source.xPadding = 1;
-    require(!camera::gentl::makeCommonFrame(source),
-            "Inconsistent row padding must be rejected.");
+    const auto opaqueRowPadded = camera::gentl::makeCommonFrame(source);
+    require(opaqueRowPadded.has_value() &&
+                (*opaqueRowPadded)->pixelFormat == camera::PixelFormat::Unknown &&
+                (*opaqueRowPadded)->strideBytes == 0 &&
+                (*opaqueRowPadded)->rowPaddingBytes == 1,
+            "Inconsistent row padding must remain opaque, not be misinterpreted.");
     source = validMono8Frame();
     source.yPadding = 7;
     require(!camera::gentl::makeCommonFrame(source),

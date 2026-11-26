@@ -42,7 +42,9 @@ static_assert(static_cast<std::int32_t>(SpecimenFixationState::Unknown) == 4);
 static_assert(static_cast<std::int32_t>(SpecimenLabelKind::Fluorescent) == 0);
 static_assert(static_cast<std::int32_t>(SpecimenLabelKind::Other) == 3);
 
-constexpr std::uint32_t kPayloadFormatVersion = 1;
+constexpr std::uint32_t kSampleTypePayloadFormatVersion = 1;
+constexpr std::uint32_t kLegacySlidePayloadFormatVersion = 1;
+constexpr std::uint32_t kSlidePayloadFormatVersion = 2;
 constexpr std::uint32_t kMaximumCollectionCount = 100000;
 constexpr std::uint32_t kMaximumStringBytes = 1024 * 1024;
 constexpr std::uint64_t kMaximumSqliteInteger =
@@ -777,7 +779,12 @@ void writeOptionalBand(
 
 [[nodiscard]] bool encodeSlidePayload(
     const Slide& slide, std::vector<std::uint8_t>& payload) {
+    if (!slide.code()) {
+        return false;
+    }
+
     BinaryWriter writer;
+    writer.string(*slide.code());
     writer.string(slide.name());
     writer.boolean(slide.originLabId().has_value());
     if (slide.originLabId()) {
@@ -820,6 +827,27 @@ void writeOptionalBand(
             writer.string(label.filterSetCompatibilityId()->value());
         }
     }
+
+    if (!writer.count(slide.stains().size())) {
+        return false;
+    }
+    for (const auto& stain : slide.stains()) {
+        writer.string(stain.id().value());
+        writer.string(stain.name());
+        writer.optionalString(stain.description());
+        writer.boolean(stain.microscopySuitability().has_value());
+        if (stain.microscopySuitability()) {
+            const auto& methods =
+                stain.microscopySuitability()->recommendedContrastMethods();
+            if (!writer.count(methods.size())) {
+                return false;
+            }
+            for (const auto method : methods) {
+                writer.enumeration(method);
+            }
+        }
+    }
+
     if (!writer.valid() ||
         writer.bytes().size() > 64U * 1024U * 1024U) {
         return false;
@@ -833,9 +861,16 @@ void writeOptionalBand(
     std::uint64_t revision,
     const SampleTypeId& sampleTypeId,
     std::uint64_t sampleTypeRevision,
+    std::uint32_t formatVersion,
     const void* data,
     std::size_t size) {
+    if (formatVersion != kLegacySlidePayloadFormatVersion &&
+        formatVersion != kSlidePayloadFormatVersion) {
+        return std::nullopt;
+    }
+
     BinaryReader reader(data, size);
+    std::optional<std::string> code;
     std::string name;
     bool hasOriginLabId = false;
     std::optional<OriginLabId> originLabId;
@@ -847,6 +882,14 @@ void writeOptionalBand(
     std::optional<double> coverglassThickness;
     std::optional<std::string> mountingMedium;
     std::optional<double> refractiveIndex;
+
+    if (formatVersion == kSlidePayloadFormatVersion) {
+        std::string rawCode;
+        if (!reader.string(rawCode)) {
+            return std::nullopt;
+        }
+        code = std::move(rawCode);
+    }
     if (!reader.string(name) || !reader.boolean(hasOriginLabId)) {
         return std::nullopt;
     }
@@ -954,9 +997,71 @@ void writeOptionalBand(
         labels.push_back(std::move(label).value());
     }
 
+    std::vector<Stain> stains;
+    if (formatVersion == kSlidePayloadFormatVersion) {
+        std::uint32_t stainCount = 0;
+        if (!reader.u32(stainCount) || stainCount > kMaximumCollectionCount) {
+            return std::nullopt;
+        }
+        stains.reserve(stainCount);
+        for (std::uint32_t index = 0; index < stainCount; ++index) {
+            std::string rawStainId;
+            std::string stainName;
+            std::optional<std::string> description;
+            bool hasSuitability = false;
+            if (!reader.string(rawStainId) ||
+                !reader.string(stainName) ||
+                !reader.optionalString(description) ||
+                !reader.boolean(hasSuitability)) {
+                return std::nullopt;
+            }
+
+            std::optional<StainMicroscopySuitability> suitability;
+            if (hasSuitability) {
+                std::uint32_t methodCount = 0;
+                if (!reader.u32(methodCount) ||
+                    methodCount > kMaximumCollectionCount) {
+                    return std::nullopt;
+                }
+                std::vector<ContrastMethod> methods;
+                methods.reserve(methodCount);
+                for (std::uint32_t methodIndex = 0;
+                     methodIndex < methodCount;
+                     ++methodIndex) {
+                    ContrastMethod method = ContrastMethod::Unknown;
+                    if (!reader.enumeration(method)) {
+                        return std::nullopt;
+                    }
+                    methods.push_back(method);
+                }
+                auto createdSuitability =
+                    StainMicroscopySuitability::create(std::move(methods));
+                if (!createdSuitability) {
+                    return std::nullopt;
+                }
+                suitability = std::move(createdSuitability).value();
+            }
+
+            auto stainId = StainId::create(rawStainId);
+            if (!stainId) {
+                return std::nullopt;
+            }
+            auto stain = Stain::create(
+                std::move(stainId).value(),
+                std::move(stainName),
+                std::move(description),
+                std::move(suitability));
+            if (!stain) {
+                return std::nullopt;
+            }
+            stains.push_back(std::move(stain).value());
+        }
+    }
+
     if (!reader.finished()) {
         return std::nullopt;
     }
+
     auto geometry = SlideGeometry::create(width, height);
     if (!geometry) {
         return std::nullopt;
@@ -972,15 +1077,28 @@ void writeOptionalBand(
     if (!preparation) {
         return std::nullopt;
     }
-    auto slide = Slide::create(
-        id,
-        revision,
-        sampleTypeId,
-        sampleTypeRevision,
-        std::move(name),
-        std::move(geometry).value(),
-        std::move(preparation).value(),
-        std::move(originLabId));
+
+    auto slide = formatVersion == kSlidePayloadFormatVersion
+        ? Slide::create(
+              id,
+              revision,
+              sampleTypeId,
+              sampleTypeRevision,
+              std::move(*code),
+              std::move(name),
+              std::move(geometry).value(),
+              std::move(preparation).value(),
+              std::move(stains),
+              std::move(originLabId))
+        : Slide::restoreLegacy(
+              id,
+              revision,
+              sampleTypeId,
+              sampleTypeRevision,
+              std::move(name),
+              std::move(geometry).value(),
+              std::move(preparation).value(),
+              std::move(originLabId));
     if (!slide) {
         return std::nullopt;
     }
@@ -1326,7 +1444,7 @@ SampleSlideSqliteStore::saveSampleTypeRevision(
     if (!insert.prepared() ||
         !insert.bindText(1, sampleType.id().value()) ||
         !insert.bindInt64(2, sampleType.revision()) ||
-        !insert.bindInt(3, static_cast<int>(kPayloadFormatVersion)) ||
+        !insert.bindInt(3, static_cast<int>(kSampleTypePayloadFormatVersion)) ||
         !insert.bindBlob(4, payload)) {
         return failureStatus(makeError(
             StoreErrorCode::SqliteOperationFailed, database_));
@@ -1452,7 +1570,7 @@ SampleSlideSqliteStore::loadSampleTypeRevisionUnlocked(
     const int formatVersion = sqlite3_column_int(statement.get(), 0);
     const auto* payload = sqlite3_column_blob(statement.get(), 1);
     const int payloadBytes = sqlite3_column_bytes(statement.get(), 1);
-    if (formatVersion != static_cast<int>(kPayloadFormatVersion) ||
+    if (formatVersion != static_cast<int>(kSampleTypePayloadFormatVersion) ||
         payload == nullptr || payloadBytes <= 0 ||
         payloadBytes > 64 * 1024 * 1024) {
         return core::Result<
@@ -1553,6 +1671,12 @@ SampleSlideSqliteStore::saveSlideRevision(
     const core::Slide& slide,
     std::uint64_t expectedCurrentRevision) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (!slide.code()) {
+        return failureStatus(makeError(
+            StoreErrorCode::SlideCodeRequired,
+            database_,
+            "A new Slide revision requires an explicit Slide code."));
+    }
     if (!revisionFitsSqlite(slide.revision()) ||
         !revisionFitsSqlite(slide.sampleTypeRevision()) ||
         expectedCurrentRevision > kMaximumSqliteInteger ||
@@ -1627,7 +1751,7 @@ SampleSlideSqliteStore::saveSlideRevision(
         !insert.bindInt64(2, slide.revision()) ||
         !insert.bindText(3, slide.sampleTypeId().value()) ||
         !insert.bindInt64(4, slide.sampleTypeRevision()) ||
-        !insert.bindInt(5, static_cast<int>(kPayloadFormatVersion)) ||
+        !insert.bindInt(5, static_cast<int>(kSlidePayloadFormatVersion)) ||
         !insert.bindBlob(6, payload)) {
         return failureStatus(makeError(
             StoreErrorCode::SqliteOperationFailed, database_));
@@ -1904,7 +2028,8 @@ SampleSlideSqliteStore::loadSlideRevisionUnlocked(
     const int payloadBytes = sqlite3_column_bytes(statement.get(), 3);
     if (sampleTypeText == nullptr || sampleTypeTextBytes <= 0 ||
         sampleTypeRevisionRaw <= 0 ||
-        formatVersion != static_cast<int>(kPayloadFormatVersion) ||
+        (formatVersion != static_cast<int>(kLegacySlidePayloadFormatVersion) &&
+         formatVersion != static_cast<int>(kSlidePayloadFormatVersion)) ||
         payload == nullptr || payloadBytes <= 0 ||
         payloadBytes > 64 * 1024 * 1024) {
         return core::Result<
@@ -1931,6 +2056,7 @@ SampleSlideSqliteStore::loadSlideRevisionUnlocked(
         revision,
         std::move(sampleTypeId).value(),
         static_cast<std::uint64_t>(sampleTypeRevisionRaw),
+        static_cast<std::uint32_t>(formatVersion),
         payload,
         static_cast<std::size_t>(payloadBytes));
     if (!decoded) {

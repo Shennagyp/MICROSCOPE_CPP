@@ -27,6 +27,7 @@ enum class SampleSlideStoreErrorCode {
     DuplicateSlideRevision,
     SlideRevisionNotFound,
     SlideSampleTypeRevisionNotFound,
+    SlideCodeRequired,
     InvalidPersistedRecord,
     SqliteOperationFailed
 };

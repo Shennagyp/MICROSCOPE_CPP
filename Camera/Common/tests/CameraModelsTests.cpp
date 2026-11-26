@@ -176,6 +176,7 @@ void testPersistableCameraModelCatalog() {
 }
 
 void testBackendNeutralDiscoveryModel() {
+    using namespace camera;
     using camera::CameraDeviceInfo;
     using camera::ImageResolution;
 

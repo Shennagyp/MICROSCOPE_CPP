@@ -7,6 +7,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -26,6 +27,11 @@ void check(bool condition, const char* message) {
 template <typename TValue, typename TError>
 TValue take(microscope::core::Result<TValue, TError> result) {
     if (!result) {
+        if constexpr (std::is_enum_v<TError>) {
+            throw std::runtime_error(
+                "A camera component model binding fixture failed with Result error code " +
+                std::to_string(static_cast<int>(result.error())));
+        }
         throw std::runtime_error("A camera component model binding fixture failed.");
     }
     return std::move(result).value();

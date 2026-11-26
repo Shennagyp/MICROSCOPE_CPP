@@ -1291,6 +1291,7 @@ void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
     const auto objectiveId = makeId<EquipmentComponentId>("magnification-objective-10x");
     const auto relayId = makeId<EquipmentComponentId>("magnification-camera-reducer");
     const auto cameraId = makeId<EquipmentComponentId>("magnification-camera");
+    const auto unselectedRelayId = makeId<EquipmentComponentId>("magnification-unselected-relay");
 
     const auto objectiveOutput = makeId<OpticalPortId>("magnification-objective-output");
     const auto relayInput = makeId<OpticalPortId>("magnification-relay-input");
@@ -1312,6 +1313,11 @@ void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
         cameraId,
         EquipmentComponentKind::ImagingDevice,
         {makePort("magnification-camera-input", OpticalPortDirection::Input)}));
+    const auto unselectedRelayComponent = take(EquipmentComponent::create(
+        unselectedRelayId,
+        EquipmentComponentKind::OpticalElement,
+        {makePort("magnification-unselected-relay-input", OpticalPortDirection::Input),
+         makePort("magnification-unselected-relay-output", OpticalPortDirection::Output)}));
 
     const auto objective = take(ObjectiveSpecification::create(
         objectiveId,
@@ -1323,6 +1329,8 @@ void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
         ObjectiveImmersionMedium::Air));
     const auto reducer = take(OpticalRelaySpecification::create(
         relayId, OpticalRelayRole::CameraAdapter, 0.5));
+    const auto unselectedRelay = take(OpticalRelaySpecification::create(
+        unselectedRelayId, OpticalRelayRole::IntermediateRelay, 4.0));
 
     const auto path = take(OpticalPath::create(
         imagingPathId,
@@ -1333,14 +1341,19 @@ void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
     const auto connections = std::vector<OpticalConnection>{
         makeConnection("magnification-objective-to-relay", objectiveOutput, relayInput),
         makeConnection("magnification-relay-to-camera", relayOutput, cameraInput)};
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        microscopeId,
-        {objectiveComponent, relayComponent, cameraComponent},
-        connections,
-        {path},
-        {objective},
-        {cameraSpecification(cameraId, "magnification-mono8")},
-        {}, {}, {}, {}, {}, {}, 1, {reducer}));
+    const auto components = std::vector<EquipmentComponent>{
+        objectiveComponent, relayComponent, cameraComponent, unselectedRelayComponent};
+    const auto makeEquipment = [&](std::vector<OpticalRelaySpecification> relaySpecs) {
+        return MicroscopeEquipmentDefinition::create(
+            microscopeId,
+            components,
+            connections,
+            {path},
+            {objective},
+            {cameraSpecification(cameraId, "magnification-mono8")},
+            {}, {}, {}, {}, {}, {}, 1, std::move(relaySpecs));
+    };
+    const auto equipment = take(makeEquipment({reducer, unselectedRelay}));
 
     const auto resolved = OpticalMagnificationResolver::resolve(
         equipment, imagingPathId, objectiveId);
@@ -1350,6 +1363,7 @@ void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
         check(resolved.value().objectiveNominalMagnification == 10.0,
               "keeps objective-rated magnification separate from relay magnification");
         check(resolved.value().relayContributions.size() == 1 &&
+              resolved.value().relayContributions.front().componentId == relayId &&
               resolved.value().relayContributions.front().role == OpticalRelayRole::CameraAdapter &&
               resolved.value().relayContributions.front().magnificationFactor ==
                   std::optional<double>(0.5),
@@ -1360,20 +1374,51 @@ void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
 
     const auto unknownReducer = take(OpticalRelaySpecification::create(
         relayId, OpticalRelayRole::CameraAdapter, std::nullopt));
-    const auto unknownEquipment = take(MicroscopeEquipmentDefinition::create(
-        microscopeId,
-        {objectiveComponent, relayComponent, cameraComponent},
-        connections,
-        {path},
-        {objective},
-        {cameraSpecification(cameraId, "magnification-mono8-unknown")},
-        {}, {}, {}, {}, {}, {}, 1, {unknownReducer}));
+    const auto unknownEquipment = take(makeEquipment({unknownReducer, unselectedRelay}));
     const auto unknownResult = OpticalMagnificationResolver::resolve(
         unknownEquipment, imagingPathId, objectiveId);
     check(unknownResult && !unknownResult.value().totalMagnification &&
           unknownResult.value().relayContributions.size() == 1 &&
           !unknownResult.value().relayContributions.front().magnificationFactor,
           "represents an unknown relay factor as unknown rather than assuming 1x");
+
+    const auto duplicateRelaySpecification = makeEquipment({reducer, reducer});
+    check(!duplicateRelaySpecification &&
+          duplicateRelaySpecification.error() ==
+              EquipmentDefinitionError::DuplicateOpticalRelaySpecification,
+          "rejects multiple relay specifications for one installed component");
+
+    const auto unknownRelaySpecification = take(OpticalRelaySpecification::create(
+        makeId<EquipmentComponentId>("magnification-uninstalled-relay"),
+        OpticalRelayRole::CameraAdapter,
+        0.5));
+    const auto unknownRelayDefinition = makeEquipment({unknownRelaySpecification});
+    check(!unknownRelayDefinition &&
+          unknownRelayDefinition.error() ==
+              EquipmentDefinitionError::OpticalRelayReferencesUnknownComponent,
+          "rejects relay specifications with no installed physical component");
+
+    const auto relayOnCamera = take(OpticalRelaySpecification::create(
+        cameraId, OpticalRelayRole::CameraAdapter, 0.5));
+    const auto wrongKindDefinition = makeEquipment({relayOnCamera});
+    check(!wrongKindDefinition &&
+          wrongKindDefinition.error() ==
+              EquipmentDefinitionError::OpticalRelayComponentWrongKind,
+          "requires optical relay specifications to reference optical elements");
+
+    const auto relayOnObjective = take(OpticalRelaySpecification::create(
+        objectiveId, OpticalRelayRole::CameraAdapter, 0.5));
+    const auto conflictingDefinition = makeEquipment({relayOnObjective});
+    check(!conflictingDefinition &&
+          conflictingDefinition.error() ==
+              EquipmentDefinitionError::OpticalRelayConflictsWithObjectiveSpecification,
+          "prevents the objective's nominal magnification from being counted again as a relay factor");
+
+    const auto invalidRole = OpticalRelaySpecification::create(
+        relayId, static_cast<OpticalRelayRole>(255), 0.5);
+    check(!invalidRole &&
+          invalidRole.error() == OpticalRelaySpecificationError::InvalidRole,
+          "rejects unknown optical relay roles");
 
     const auto invalidFactor = OpticalRelaySpecification::create(
         relayId, OpticalRelayRole::CameraAdapter, 0.0);

@@ -202,6 +202,10 @@ static uint64_t stream_timestamps_ns[16];
 static uint64_t next_simulator_frame_ids[2] = {1, 1};
 static atomic_int event_wait_entered = 0;
 static atomic_int event_unregistered = 0;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+static atomic_int simulator_event_unregistered[2];
+static int simulator_stream_acquiring[2];
+#endif
 
 int gentl_mock_event_wait_entered(void) {
     return atomic_load_explicit(&event_wait_entered, memory_order_acquire);
@@ -506,6 +510,9 @@ int32_t gentl_consumer_invoke(
         if (index < 0) return GC_ERR_INVALID_HANDLE;
         atomic_store_explicit(&event_wait_entered, 0, memory_order_release);
         atomic_store_explicit(&event_unregistered, 0, memory_order_release);
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        atomic_store_explicit(&simulator_event_unregistered[index], 0, memory_order_release);
+#endif
         *(EVENT_HANDLE*)pointer(arguments[2]) = (EVENT_HANDLE)(uintptr_t)(0x6666 + index);
         return GC_ERR_SUCCESS;
     }
@@ -517,6 +524,10 @@ int32_t gentl_consumer_invoke(
         if (getenv("MOCK_GENTL_FAIL_EVENT_UNREGISTER"))
             return GC_ERR_INVALID_PARAMETER;
         atomic_store_explicit(&event_unregistered, 1, memory_order_release);
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        const int index = stream_index((DS_HANDLE)pointer(arguments[0]));
+        atomic_store_explicit(&simulator_event_unregistered[index], 1, memory_order_release);
+#endif
         return GC_ERR_SUCCESS;
     }
     case 10: { // EventGetData
@@ -544,6 +555,10 @@ int32_t gentl_consumer_invoke(
                 stream_owners[bufferIndex] == owner) break;
             ++queuedIndex;
         }
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        if (atomic_load_explicit(&simulator_event_unregistered[event], memory_order_acquire) ||
+            !simulator_stream_acquiring[event]) return GC_ERR_TIMEOUT;
+#endif
         if (queuedIndex == queued_buffer_count) return GC_ERR_TIMEOUT;
         if (*size < sizeof(EVENT_NEW_BUFFER_DATA)) {
             *size = sizeof(EVENT_NEW_BUFFER_DATA);
@@ -574,10 +589,15 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     }
     case 14: // EventKill
-        if (argument_count != 1 ||
-            event_index((EVENT_HANDLE)pointer(arguments[0])) < 0)
-            return GC_ERR_INVALID_HANDLE;
-        atomic_store_explicit(&event_unregistered, 1, memory_order_release);
+        if (argument_count != 1) return GC_ERR_INVALID_PARAMETER;
+        {
+            const int event = event_index((EVENT_HANDLE)pointer(arguments[0]));
+            if (event < 0) return GC_ERR_INVALID_HANDLE;
+            atomic_store_explicit(&event_unregistered, 1, memory_order_release);
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            atomic_store_explicit(&simulator_event_unregistered[event], 1, memory_order_release);
+#endif
+        }
         return GC_ERR_SUCCESS;
     case 33: { // DevOpenDataStream
         if (argument_count != 3 ||
@@ -615,12 +635,24 @@ int32_t gentl_consumer_invoke(
         queued_buffer_count = writeIndex;
         return GC_ERR_SUCCESS;
     }
-    case 39: // DSStartAcquisition
-        return argument_count == 3 && stream_index((DS_HANDLE)pointer(arguments[0])) >= 0
-            ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
-    case 40: // DSStopAcquisition
-        return argument_count == 2 && stream_index((DS_HANDLE)pointer(arguments[0])) >= 0
-            ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
+    case 39: { // DSStartAcquisition
+        if (argument_count != 3) return GC_ERR_INVALID_PARAMETER;
+        const int index = stream_index((DS_HANDLE)pointer(arguments[0]));
+        if (index < 0) return GC_ERR_INVALID_HANDLE;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        simulator_stream_acquiring[index] = 1;
+#endif
+        return GC_ERR_SUCCESS;
+    }
+    case 40: { // DSStopAcquisition
+        if (argument_count != 2) return GC_ERR_INVALID_PARAMETER;
+        const int index = stream_index((DS_HANDLE)pointer(arguments[0]));
+        if (index < 0) return GC_ERR_INVALID_HANDLE;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        simulator_stream_acquiring[index] = 0;
+#endif
+        return GC_ERR_SUCCESS;
+    }
     case 41: { // DSGetInfo
         if (argument_count != 5 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_HANDLE;

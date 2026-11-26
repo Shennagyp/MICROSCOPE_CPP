@@ -71,7 +71,7 @@ CAMERA_GENTL_BRIDGE_EXPORT std::int32_t gentl_consumer_invoke(
     void* opaqueContext, std::uint32_t operation,
     const std::uint64_t* arguments, std::uint32_t argumentCount) noexcept {
     auto* context = static_cast<NativeConsumerContext*>(opaqueContext);
-    if (!context || !context->producer) return GC_ERR_INVALID_HANDLE;
+    if (!context || !context->producer) return GenTL::GC_ERR_INVALID_HANDLE;
     return context->producer->invokeRaw(
         static_cast<camera::gentl::Operation>(operation),
         arguments, argumentCount);

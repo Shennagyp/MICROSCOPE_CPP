@@ -3,6 +3,7 @@
 #include "camera/gentl/ConsumerBridge.h"
 #include "camera/gentl/GenTL_v1_6.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>

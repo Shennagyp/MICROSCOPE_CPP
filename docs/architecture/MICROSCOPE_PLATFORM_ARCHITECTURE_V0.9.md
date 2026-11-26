@@ -279,17 +279,17 @@ Examples of declarative function requirements:
 - DIC: selected optical elements expose a compatible polarizer, analyzer and required number of DIC prisms, with matching compatibility identity.
 - Fluorescence: a profile can require excitation filter, emission filter and dichroic mirror functions with one shared compatibility identity.
 
-A request explicitly selects additional optical component identities required by its profile. The resolver verifies their installed optical-element kind, path membership and match to at least one profile requirement. It then checks each required function/count across the selected objective, condenser and additional optical component set.
+A request may name exact installed components when the user wants manual control, but those selections are optional constraints rather than mandatory inputs. When identities are omitted, the resolver discovers candidates from the installed equipment and the optical routes. Technique requirements are evaluated over the components actually traversed by the candidate route set. A candidate phase arrangement, for example, must include a compatible phase plate and phase annulus in their required optical positions; DIC must include its compatible polarizer, analyzer and required prisms. A component being installed somewhere in the microscope is not sufficient: it must belong to the candidate route that realizes the requested technique.
 
 ### 6.2 Independent configuration dimensions
 
-Objective, contrast method, light path and camera are independent request dimensions. The final operating configuration is resolved from their relationships.
+Objective requirements, selected techniques, optical routes and detector output are related inputs to one configuration-resolution problem. The camera is derived from the selected imaging route: an installed camera is eligible only when that route terminates at, or otherwise explicitly traverses, the camera's imaging endpoint. The request does not independently select an unrelated camera identity. Where the selected route set exposes more than one valid camera endpoint, the resolver returns complete alternatives or a selection-required result.
 
 Examples:
-- Selecting 4× can resolve the corresponding brightfield illumination and camera preset.
-- Selecting phase contrast resolves the compatible phase components, condenser arrangement and illumination.
-- Selecting DIC resolves its actual compatible polarization/prism/analyzer arrangement described by the instrument definition.
-- Selecting another camera or output path changes the available optical route and may change the applicable optical calibration.
+- Selecting a 4× brightfield requirement resolves a compatible objective, illumination route, and the camera connected to the selected imaging route.
+- Selecting phase contrast resolves the compatible phase plate/annulus arrangement and condenser path; a missing or mismatched pair makes that candidate invalid.
+- Selecting phase contrast and polarization together is valid when their combined route and installed components satisfy both technique definitions and no declared constraint conflicts.
+- Changing the selected imaging route can change the available camera and output modes, the total optical magnification, and the applicable optical calibration.
 
 The implementation must not assume a universal hardcoded filter sequence for every microscope.
 
@@ -337,6 +337,61 @@ The DAG is a dependency description, not an execution concurrency directive. A s
 
 These nodes remain desired-state facts, not commands. The plan does not assume selectors are motorized, does not define vendor operations, retries or execution state, and does not claim any step has completed. Those concerns belong to Phase 4. The detailed Core contract is specified in section 15.7 of MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md.
 
+
+### 6.4 Editable operation modes, candidate resolution and objective sampling
+
+An operation mode is a named, editable, revisioned data definition, not a C++ subclass for each combination such as 20× phase contrast. It describes the intended objective constraints, a set of selected techniques, optional equipment preferences, and supported operating targets. A mode may compose more than one technique. Each technique contributes declarative requirements, compatibility identities, exclusions, and optional settings. The resolver combines these contributions and rejects contradictions instead of applying last-write-wins behavior.
+
+The user retains both workflows:
+
+- Manual selection: the request can specify an exact objective, path, condenser, optical element, illumination channel or camera output mode. Every explicit identity is validated against the equipment constitution and route. An explicit selection is a constraint; it is never silently replaced by a different component.
+- Automatic qualification: omitted identities are discovered from the installed constitution and the selected mode/technique requirements. The user may save preferred or required component identities in a microscope-specific mode binding.
+
+A microscope-specific binding distinguishes a required component from a preferred component. A required identity is a hard constraint. A preferred identity ranks otherwise valid candidates but does not make an invalid route valid. This allows an operation mode to be portable across microscope models while still letting the user pin, for example, the preferred 20× objective on one particular microscope. If a saved required identity is no longer installed, resolution fails with a specific diagnostic. If a preferred identity is unavailable, the resolver may consider other valid candidates and must disclose that the preference could not be honored.
+
+Resolution is candidate-based, not first-match-based:
+
+1. Resolve the requested microscope equipment-constitution revision and operation-mode revision supplied in memory by Application.
+2. Merge the mode's objective constraints and technique contributions with optional specimen/task imaging requirements and explicit user selections.
+3. Enumerate complete route/component combinations. Validate that every required optical function is present, correctly positioned and compatibility-matched on the candidate paths.
+4. Derive the camera from the imaging path endpoint. Enumerate only that camera's supported output modes. An unrelated camera elsewhere in the microscope is not eligible.
+5. Reject candidates that violate hard constraints. Rank the remaining candidates only by declared preferences, such as a microscope-specific preferred objective or a specimen/task imaging profile.
+6. Return the selected configuration together with the valid alternatives and the reasons/ranking used. If there is no valid candidate, return unsupported diagnostics. If multiple candidates remain equally preferred, return SelectionRequired; do not choose the first item in a vector or rely on component insertion order.
+
+A specimen/task imaging profile may contribute optical preferences without hard-coding sample-specific branches into the resolver. For example, an H&E histopathology profile may recommend a 0.75 NA objective over a 0.4 NA objective when both satisfy the hard request. That recommendation is data-driven and may be overridden by an explicit user choice or a microscope-specific mode binding. It is not a universal rule that every H&E workflow must use the same objective.
+
+#### Objective constraints and sampling adequacy
+
+The objective requirement combines a minimum numerical aperture with an optional requested nominal magnification. If magnification is specified, it constrains the candidate magnification. If it is omitted, the resolver may choose the lowest magnification among objectives that satisfy the required NA and the camera-sampling condition. It must not choose low magnification merely because the objective fits mechanically or its NA is sufficient.
+
+For the stated 2.3-pixel Rayleigh sampling policy, let:
+
+- NA be the selected objective's numerical aperture.
+- lambda be the declared reference wavelength in the image-forming optical path.
+- d_R = 0.61 lambda / NA be the object-space Rayleigh separation under the declared criterion.
+- P_x, P_y be camera sensor pixel pitches.
+- s_x, s_y be the selected camera output mode's physical sensor-pixels-per-delivered-pixel ratios.
+- M_eff be total image-forming magnification, including the objective and any magnification-affecting relay optics in the selected imaging path.
+
+The delivered object-space pixel pitches are:
+
+p_x = (P_x s_x) / M_eff and p_y = (P_y s_y) / M_eff.
+
+The candidate satisfies the sampling policy only when both axes meet:
+
+d_R / p_x >= 2.3 and d_R / p_y >= 2.3.
+
+This is a sampling condition, not a statement that the camera's total width/height pixel count alone establishes resolution. Pixel pitch, selected readout/ROI/binning/resampling mode, total optical magnification, NA and wavelength all matter. The existing CameraOutputMode sensor-to-delivered-pixel mapping is therefore part of objective qualification, and the camera must first be identified from the imaging route. If required wavelength or relay-magnification data are absent, the resolver must report that sampling adequacy is unknown rather than manufacture a pass.
+
+The 2.3 factor is an explicit system policy that may be configured by an imaging requirement; it is not to be confused with the Rayleigh formula itself. Where illumination is broadband, the mode/technique data must define the reference-wavelength policy (for example, a conservative wavelength selected from the declared band). The resolver must not silently treat an entire broadband spectrum as one exact wavelength.
+
+#### Persistence and revision semantics
+
+Microscope constitution and operation modes are durable, editable application data. The equipment constitution records the actual installed component identities, specifications, ports, connections and optical paths. Operation-mode records contain named technique compositions, objective constraints, declared preferences, and settings. A microscope-specific mode binding may add required/preferred component identities without changing the shared technique definitions.
+
+Application loads the selected equipment and mode revisions into their owner-retained in-memory objects. Core resolution receives those typed values and remains free of persistence I/O. Editing a mode creates a new durable revision at an explicit save boundary. Editing the equipment constitution likewise creates a new revision; a historical acquisition/configuration snapshot keeps the revisions it used. A saved mode edit must not mutate an already-running resolution or silently rewrite historical acquisition configuration.
+
+Persisted mode definitions are not proof of effective hardware state. A resolved desired configuration remains separate from the observations required to verify that the microscope physically reached it.
 
 ## 7. Operations, actions, feedback and completion
 

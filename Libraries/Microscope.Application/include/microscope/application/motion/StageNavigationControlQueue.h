@@ -1,5 +1,11 @@
 #pragma once
 
+// LEGACY COMPATIBILITY PATH.
+// This bounded queue carries fixed-slot StageNavigationRuntime requests.
+// New workflows must use StageWorkingSurfaceNavigationControlQueue and
+// StageWorkingSurfaceNavigationRuntime, whose request identity is a SlideId
+// in the variable-count XY working surface rather than a Left/Right slot.
+
 #include "microscope/application/motion/StageNavigationRuntime.h"
 #include "microscope/application/runtime/RuntimeWakeSignal.h"
 

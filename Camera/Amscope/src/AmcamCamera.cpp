@@ -2301,6 +2301,37 @@ std::vector<CameraInfo> AmcamCamera::enumerate(CameraError* error) {
                              (flags & AMCAM_FLAG_HIGH_FULLWELL) != 0);
             capabilities.set(camera::CameraCapability::HDRConversionGain,
                              (flags & AMCAM_FLAG_CGHDR) != 0);
+            capabilities.set(camera::CameraCapability::GlobalShutter,
+                             (flags & AMCAM_FLAG_GLOBALSHUTTER) != 0);
+            capabilities.set(camera::CameraCapability::MonochromeSensor,
+                             (flags & AMCAM_FLAG_MONO) != 0);
+            capabilities.set(camera::CameraCapability::SensorCCDProgressive,
+                             (flags & AMCAM_FLAG_CCD_PROGRESSIVE) != 0);
+            capabilities.set(camera::CameraCapability::SensorCCDInterlaced,
+                             (flags & AMCAM_FLAG_CCD_INTERLACED) != 0);
+
+            // Populate only facts advertised by the vendor model descriptor.
+            // Pixel pitch, read noise, dark current, full well and QE are not
+            // inferred from frame dimensions or capability flags; they may be
+            // enriched from the persisted camera-model profile by Application.
+            camera::CameraSensorCharacteristics sensor;
+            if ((flags & AMCAM_FLAG_CMOS) != 0) {
+                sensor.technology = camera::CameraSensorTechnology::CMOS;
+            } else if ((flags & (AMCAM_FLAG_CCD_PROGRESSIVE |
+                                 AMCAM_FLAG_CCD_INTERLACED)) != 0) {
+                sensor.technology = camera::CameraSensorTechnology::CCD;
+            }
+            if ((flags & AMCAM_FLAG_GLOBALSHUTTER) != 0) {
+                sensor.shutterType = camera::CameraShutterType::Global;
+            }
+            if ((flags & AMCAM_FLAG_MONO) != 0) {
+                sensor.colorMode = camera::CameraColorMode::Monochrome;
+            }
+            if (sensor.technology || sensor.shutterType || sensor.colorMode) {
+                sensor.provenance =
+                    camera::CameraSpecificationProvenance::VendorModelDescriptor;
+                info.sensorCharacteristics = std::move(sensor);
+            }
 
             info.maximumSpeedLevel = device.model->maxspeed;
             if ((device.model->flag & AMCAM_FLAG_FAN) != 0)

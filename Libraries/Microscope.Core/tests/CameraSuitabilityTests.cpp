@@ -174,20 +174,24 @@ void testFluorescenceQeIsWeightedByEmissionAndDetectionFilters() {
         {take(PositiveNanometers::create(500.0)), 0.1},
         {take(PositiveNanometers::create(550.0)), 1.0},
         {take(PositiveNanometers::create(600.0)), 0.2}}));
+    const auto matchingFilterSet =
+        makeId<OpticalCompatibilityId>("fluorescence-cube-matched");
 
     request.dichroic = take(OpticalFilterSpecification::create(
         makeId<EquipmentComponentId>("weighted-qe-dichroic"),
         OpticalFilterRole::Dichroic,
         {{take(PositiveNanometers::create(500.0)), 0.90, 0.05},
          {take(PositiveNanometers::create(550.0)), 0.95, 0.03},
-         {take(PositiveNanometers::create(600.0)), 0.80, 0.15}}));
+         {take(PositiveNanometers::create(600.0)), 0.80, 0.15}},
+        matchingFilterSet));
 
     request.emissionFilter = take(OpticalFilterSpecification::create(
         makeId<EquipmentComponentId>("weighted-qe-emission-filter"),
         OpticalFilterRole::Emission,
         {{take(PositiveNanometers::create(500.0)), 0.05, std::nullopt},
          {take(PositiveNanometers::create(550.0)), 0.80, std::nullopt},
-         {take(PositiveNanometers::create(600.0)), 0.90, std::nullopt}}));
+         {take(PositiveNanometers::create(600.0)), 0.90, std::nullopt}},
+        matchingFilterSet));
 
     const auto report =
         CameraSuitabilityAssessor::assessFluorescence(camera, request);
@@ -203,6 +207,22 @@ void testFluorescenceQeIsWeightedByEmissionAndDetectionFilters() {
               report,
               "camera.fluorescence.qe_unweighted_band_fallback"),
           "does not report the coarse unweighted fallback when full spectral inputs are supplied");
+
+    auto mismatchedSetRequest = request;
+    mismatchedSetRequest.emissionFilter = take(OpticalFilterSpecification::create(
+        makeId<EquipmentComponentId>("wrong-cube-emission-filter"),
+        OpticalFilterRole::Emission,
+        {{take(PositiveNanometers::create(500.0)), 0.05, std::nullopt},
+         {take(PositiveNanometers::create(550.0)), 0.80, std::nullopt},
+         {take(PositiveNanometers::create(600.0)), 0.90, std::nullopt}},
+        makeId<OpticalCompatibilityId>("different-fluorescence-cube")));
+    const auto mismatchedSetReport =
+        CameraSuitabilityAssessor::assessFluorescence(camera, mismatchedSetRequest);
+    check(!mismatchedSetReport.completeSpectralWeighting &&
+          hasDiagnosticCode(
+              mismatchedSetReport,
+              "camera.fluorescence.detection_filter_set_mismatch"),
+          "does not combine dichroic and emission filters from different compatibility sets");
 }
 
 void testIncompleteDetectionSpectraRemainUnknown() {

@@ -93,7 +93,7 @@ enum class CondenserRequirementsError {
     DuplicateImmersionMedium
 };
 
-// Sample-side condenser requirements use optical performance and capability,
+// SampleType-level condenser requirements use optical performance and capability,
 // not a microscope-specific condenser component identity.
 class CondenserMicroscopyRequirements final {
 public:

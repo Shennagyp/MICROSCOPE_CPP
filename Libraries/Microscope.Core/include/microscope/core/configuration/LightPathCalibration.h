@@ -50,6 +50,8 @@ public:
     [[nodiscard]] const CalibrationRevisionId& revisionId() const noexcept;
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] std::uint64_t equipmentDefinitionRevision() const noexcept;
+    [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
+    [[nodiscard]] std::uint64_t equipmentDefinitionRevision() const noexcept;
     [[nodiscard]] const OperationModeId& operationModeId() const noexcept;
     [[nodiscard]] std::uint64_t operationModeRevision() const noexcept;
     [[nodiscard]] const LightPathId& lightPathId() const noexcept;
@@ -82,6 +84,8 @@ private:
     CalibrationRevisionId revisionId_;
     MicroscopeId microscopeId_;
     std::uint64_t equipmentDefinitionRevision_;
+    MicroscopeId microscopeId_;
+    std::uint64_t equipmentDefinitionRevision_;
     OperationModeId operationModeId_;
     std::uint64_t operationModeRevision_;
     LightPathId lightPathId_;
@@ -93,6 +97,7 @@ private:
 };
 
 enum class LightPathModeSettingError {
+    ZeroEquipmentRevision,
     ZeroOperationModeRevision,
     InvalidTargetIrradiance,
     DuplicateOpticalComponent
@@ -130,6 +135,8 @@ public:
 
 private:
     LightPathModeSetting(
+        MicroscopeId microscopeId,
+        std::uint64_t equipmentDefinitionRevision,
         OperationModeId operationModeId,
         std::uint64_t operationModeRevision,
         LightPathId lightPathId,

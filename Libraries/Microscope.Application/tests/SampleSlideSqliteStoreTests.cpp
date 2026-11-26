@@ -408,6 +408,25 @@ void testConcurrentStoreHandlesRejectStaleRevisionWriters() {
         const auto current = first->loadCurrentSampleType(typeId);
         check(current && current.value() && current.value()->revision() == 2,
               "stale writer leaves the committed current revision unchanged");
+
+        const auto slideId = makeId<SlideId>("slide-concurrent");
+        const auto slideRevision1 = makeSlide(slideId, 1, revision1);
+        const auto slideRevision2 = makeSlide(slideId, 2, revision1);
+        check(first->saveSlideRevision(slideRevision1, 0).isSuccess(),
+              "first connection commits the initial Slide revision");
+        check(second->saveSlideRevision(slideRevision2, 1).isSuccess(),
+              "second connection appends the next Slide revision");
+        const auto staleSlide = first->saveSlideRevision(slideRevision2, 1);
+        check(!staleSlide.isSuccess() &&
+              staleSlide.error().code == SampleSlideStoreErrorCode::RevisionConflict,
+              "stale Slide writer cannot move the current pointer backward or overwrite a revision");
+        const auto historicalSlide = first->loadSlideRevision(slideId, 1);
+        const auto currentSlide = first->loadCurrentSlide(slideId);
+        check(historicalSlide && historicalSlide.value() &&
+              currentSlide && currentSlide.value() &&
+              historicalSlide.value()->revision() == 1 &&
+              currentSlide.value()->revision() == 2,
+              "preserves immutable Slide history and the latest Slide pointer after a stale writer");
     }
     removeDatabaseFiles(path);
 }

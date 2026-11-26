@@ -109,10 +109,10 @@ SlidePreparation makeSlidePreparation() {
         SpecimenLabelKind::Fluorescent,
         makeBand(470.0, 495.0),
         makeBand(500.0, 550.0),
-        take(SpectralPowerDistribution::create({
-            {500.0, 0.15},
-            {515.0, 1.0},
-            {540.0, 0.12}})),
+        take(FluorescenceEmissionSpectrum::create({
+            {take(PositiveNanometers::create(500.0)), 0.15},
+            {take(PositiveNanometers::create(515.0)), 1.0},
+            {take(PositiveNanometers::create(540.0)), 0.12}})),
         makeId<OpticalCompatibilityId>("green-filter-set-r2")));
     return take(SlidePreparation::create(
         SpecimenPreparationMethod::TissueSection,

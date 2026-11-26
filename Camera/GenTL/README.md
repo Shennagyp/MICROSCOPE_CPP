@@ -130,13 +130,18 @@ ctest --test-dir build/gentl-simulator \
   -R camera_gentl_simulator_smoke --output-on-failure
 ```
 
-The opt-in smoke selects the first discovered device and first data stream. It
-checks CTI loading, TL/interface/device discovery, device open, non-empty
-GenApi XML retrieval, stream start, five complete non-empty image buffers,
+The opt-in smoke selects device index 0 by default and accepts an optional
+non-negative device index for manual runs, allowing a specific simulated
+model to be selected when a Producer exposes several devices. It uses the
+first data stream on that device. It checks CTI loading, TL/interface/device
+discovery, device open, non-empty GenApi XML retrieval, stream start, five
+complete non-empty image buffers,
 invocation of the Common frame projection adapter, stream stop and device
 close. It prints the device identity, projection outcome and available frame
 metadata. Unsupported layouts remain opaque rather than failing the CTI smoke.
-It does not assume a particular vendor's feature names or pixel format.
+It does not assume a particular vendor's feature names or pixel format. The
+CTest registration uses device index 0; invoke the executable directly with
+`[device-index]` to select another discovered device.
 
 The test bridge and smoke executable are test-only; neither is installed or
 exported by the Camera package. Normal CTest/package runs do not require a

@@ -664,6 +664,101 @@ void testQueuedTargetIsRejectedAfterSlideRegistrationChanges() {
         "a stale queued target creates no operation identity and dispatches no physical command");
 }
 
+void testOwnerRejectsConcurrentNavigationAndLayoutReplacement() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto originalSurface = workingSurface(stage);
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        originalSurface, referencedPosition(originalSurface, stage), homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    const auto first = take(navigation.beginRequest(
+        navigationTarget(originalSurface, "slide-a", {20000.0, 10000.0})));
+    check(first.disposition ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched &&
+          navigation.navigationActive() && port.moveToCalls == 1,
+          "the owner retains one active navigation after accepting a target");
+
+    const auto second = navigation.beginRequest(
+        navigationTarget(originalSurface, "slide-b", {10000.0, 10000.0}));
+    check(!second &&
+          second.error().code ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::NavigationAlreadyActive &&
+          port.moveToCalls == 1,
+          "a second request is rejected while the first physical movement remains active");
+
+    const auto revisedSlide = take(core::SlideRectangleDefinition2D::create(
+        id<core::SlideId>("slide-a"),
+        id<core::CalibrationRevisionId>("slide-a-v2"),
+        {15000.0, 20000.0}, {90000.0, 45000.0},
+        core::SlideRectangleLengthAxis::StageX, 75000.0, 25000.0));
+    const auto revisedSurface = take(originalSurface.replacingSlideRectangle(revisedSlide));
+    const auto replacementDuringMove = navigation.replaceWorkingSurface(revisedSurface);
+    check(!replacementDuringMove &&
+          replacementDuringMove.error().code ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::
+                  SurfaceReplacementDuringNavigation,
+          "the physical coordinate map cannot be replaced during an active move");
+
+    const auto completion = fixture.process(
+        actionCompleted(fixture.device, lastOperation(port)));
+    const auto finished = take(navigation.processFeedback(completion));
+    check(finished.disposition ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::
+                  NavigationCompleted &&
+          !navigation.navigationActive(),
+          "terminal verified feedback releases the stage owner for the next request");
+
+    const auto replacementAfterMove = navigation.replaceWorkingSurface(revisedSurface);
+    check(bool(replacementAfterMove) && replacementAfterMove.value(),
+          "a revised slide registration can be installed after movement terminates");
+}
+
+void testStaleCommandFeedbackCannotCompleteCurrentMove() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, referencedPosition(surface, stage), homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    take(navigation.beginRequest(
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    auto staleCorrelation = lastOperation(port);
+    staleCorrelation.commandId = id<core::CommandId>("stale-command");
+
+    const auto staleFeedback = fixture.process(
+        actionCompleted(fixture.device, staleCorrelation));
+    check(staleFeedback.disposition == core::FeedbackProcessingDisposition::StaleCommand,
+          "the Core runtime classifies completion from an obsolete command as StaleCommand");
+
+    const auto ignored = take(navigation.processFeedback(staleFeedback));
+    check(ignored.disposition ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::
+                  AwaitingPositionFeedback &&
+          navigation.navigationActive(),
+          "the stage owner ignores stale completion and retains the active physical move");
+    const auto inFlight = take(fixture.runtime->operationSnapshot(lastOperation(port).operationId));
+    check(inFlight.status() == core::OperationStatus::Running,
+          "stale command feedback cannot terminalize the current operation");
+
+    const auto currentFeedback = fixture.process(
+        actionCompleted(fixture.device, lastOperation(port)));
+    const auto completed = take(navigation.processFeedback(currentFeedback));
+    check(completed.disposition ==
+              application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::
+                  NavigationCompleted &&
+          completed.operation &&
+          completed.operation->status() == core::OperationStatus::Succeeded,
+          "only completion correlated to the active command verifies the move");
+}
+
 void testBoundedControlQueueDispatchesOnTheOwnerThread() {
     RuntimeFixture fixture;
     const auto stage = stageSpecification();
@@ -713,6 +808,8 @@ int main() {
     testPreDispatchRejectionClosesOperationAndCanRetry();
     testRestoredMoveAdapterRejectionClosesHomedOperation();
     testQueuedTargetIsRejectedAfterSlideRegistrationChanges();
+    testOwnerRejectsConcurrentNavigationAndLayoutReplacement();
+    testStaleCommandFeedbackCannotCompleteCurrentMove();
     testBoundedControlQueueDispatchesOnTheOwnerThread();
     if (failures != 0) {
         std::cerr << failures << " working-surface navigation runtime test(s) failed\n";

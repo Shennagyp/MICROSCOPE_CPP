@@ -136,3 +136,31 @@ Not yet integrated or implemented:
 - A stage-specific calibration workflow and recovery UI remain outstanding.
 
 Do not claim that the C++ runtime is physically connected to the microscope merely because the library type and test target exist.
+
+## Stateful application ownership — authoritative model
+
+OPTIKA B293 is a long-lived, stateful native desktop application. Its runtime is not a stateless REST service and must not be reconstructed for each UI action.
+
+The application composition is the lifetime root. It owns the long-lived microscope/session model and retains the capability subsystems and their device adapters for the lifetime of the active runtime. For the existing camera path, `OptikaB293Composition` already retains the camera model, optical configuration model, resolution coordinator, exposure coordinator, workspace model and gallery store.
+
+The stage subsystem follows the same object-lifetime rule:
+- One `StageWorkingSurfaceNavigationRuntime` instance is retained for one active microscope runtime incarnation. It owns the current canvas, current XYZ position, homing and verification policies, active navigation state and its monotonic navigation-identity sequence.
+- One `SerializedOperationRuntime<StageMotionFeedbackPayload>` is retained beside it. It owns device-session bindings, accepted operations, step states, command correlation and feedback processing state.
+- One `StageWorkingSurfaceNavigationControlQueue` is retained for the session. UI/model producers enqueue immutable `SlideNavigationTarget2D` values captured from a particular layout revision.
+- One `IStageMotionPort` adapter remains alive for the runtime's use. The adapter is an injected long-lived dependency, not created per movement.
+- One dedicated owner thread serializes stage commands, feedback reduction, operation transitions and changes to the mutable stage subsystem. The host composition owns that thread's lifecycle.
+
+A user action is an in-process command against an existing subsystem. It does not create a new microscope session, stage runtime, feedback store or device adapter. The stage runtime allocates its own operation, step and command IDs when it accepts a queued target. Callers supply the target and the device/session context; they do not build a per-action operation envelope.
+
+### OOP and functional-core boundary
+
+Object-oriented state ownership and functional programming are complementary here:
+
+- Stateful objects own identity, resource lifetime, device handles, current stage/canvas/position state, operation history, queues and lifecycle.
+- Pure Core functions calculate CAD geometry, transforms, bounds, overlap, navigation plans and state-reduction candidates.
+- Application orchestration applies accepted reduction results to the owning objects on the owner thread, advances operation lifecycles and publishes immutable snapshots to UI consumers.
+- SwiftUI views observe application models/snapshots and submit commands. They do not own the physical device state or call state reducers concurrently.
+
+The current C++ `StageWorkingSurfaceNavigationRuntime` and `SerializedOperationRuntime` are stateful objects. `SerializedRuntimeWorker::run` is an execution-loop utility used by the host-owned, long-lived worker thread; it is not the application's persistence or session model.
+
+The generic C++ stage runtime is not yet instantiated by the SwiftUI composition because this repository does not yet provide the concrete `IStageMotionPort` adapter for the manufactured stage. That is an outstanding hardware-host integration boundary, not a reason to redesign the application as stateless. The eventual composition must create and retain the stage objects once per runtime incarnation, then shut them down through an explicit device-safe lifecycle.

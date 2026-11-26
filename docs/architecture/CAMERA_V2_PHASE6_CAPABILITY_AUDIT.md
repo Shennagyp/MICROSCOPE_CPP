@@ -50,7 +50,7 @@ malformed XML rejection/recovery, unsupported public IRegister handling,
 feature read/write failure recovery, command execution failure recovery and
 command-completion polling failure recovery.
 The exact green checkpoint is `5080256d777a9cf416f1dde71a3411846dc0fdf4`,
-workflow [#45769387254](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45768851121).
+workflow [#45769387254](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45769387254).
 
 Phase 6 remains open. AmScope provider-level feature/command behavior remains
 a known gap but is blocked by the explicit AmScope freeze. The GenTL discovery

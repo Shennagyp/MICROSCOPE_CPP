@@ -88,6 +88,14 @@ LightPathConfigurationRequestFactory::create(
     }
 
     const auto& selected = *cameraResolution.selected();
+    if (selected.operationModeId != operationMode.id() ||
+        selected.operationModeRevision != operationMode.revision()) {
+        return Result<
+            ConfigurationRequest,
+            LightPathConfigurationRequestFactoryError>::failure(
+                LightPathConfigurationRequestFactoryError::CameraResolutionNotResolved);
+    }
+
     if (selected.lightPathId != lightPathId) {
         return Result<
             ConfigurationRequest,

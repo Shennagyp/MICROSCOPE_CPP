@@ -91,6 +91,38 @@ if(BUILD_TESTING)
         PRIVATE Camera::GenTLConsumerBridge)
     add_test(NAME camera_gentl_frame_adapter_tests
         COMMAND camera_gentl_frame_adapter_tests)
+
+    # Test-only bridge backed by the in-repository direct CTI loader. This
+    # exercises the real Producer/device/stream path without requiring the
+    # separately packaged Swift Consumer bridge.
+    add_library(gentl_native_consumer_bridge_fixture SHARED
+        tests/NativeConsumerBridge.cpp)
+    target_link_libraries(gentl_native_consumer_bridge_fixture
+        PRIVATE Camera::GenTLConsumerBridge)
+    target_compile_features(gentl_native_consumer_bridge_fixture PRIVATE cxx_std_17)
+    set_target_properties(gentl_native_consumer_bridge_fixture PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF
+        POSITION_INDEPENDENT_CODE ON
+        PREFIX "lib"
+        OUTPUT_NAME "gentl_native_consumer_bridge_fixture")
+
+    add_executable(camera_gentl_simulator_smoke
+        tests/SimulatorSmoke.cpp)
+    target_compile_features(camera_gentl_simulator_smoke PRIVATE cxx_std_17)
+    target_link_libraries(camera_gentl_simulator_smoke
+        PRIVATE Camera::GenTLConsumerBridge)
+
+    set(CAMERA_GENTL_SIMULATOR_CTI "" CACHE FILEPATH
+        "Optional vendor/simulator GenTL CTI path for the opt-in integration smoke")
+    if(CAMERA_GENTL_SIMULATOR_CTI)
+        add_test(NAME camera_gentl_simulator_smoke
+            COMMAND camera_gentl_simulator_smoke
+                "$<TARGET_FILE:gentl_native_consumer_bridge_fixture>"
+                "${CAMERA_GENTL_SIMULATOR_CTI}")
+        set_tests_properties(camera_gentl_simulator_smoke PROPERTIES TIMEOUT 120)
+    endif()
 endif()
 
 option(CAMERA_GENTL_ENABLE_GENAPI

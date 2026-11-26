@@ -309,6 +309,224 @@ void assessCameraPerformance(
         "full-well capacity");
 }
 
+[[nodiscard]] const OpticalPath* findOpticalPath(
+    const MicroscopeEquipmentDefinition& equipment,
+    const OpticalPathId& pathId) {
+    const auto& paths = equipment.opticalPaths();
+    const auto found = std::find_if(
+        paths.begin(), paths.end(),
+        [&pathId](const OpticalPath& path) {
+            return path.id() == pathId;
+        });
+    return found == paths.end() ? nullptr : &*found;
+}
+
+[[nodiscard]] bool componentOccursOnSelectedRoute(
+    const MicroscopeEquipmentDefinition& equipment,
+    const ConfigurationRequest& request,
+    OpticalPathRole role,
+    const EquipmentComponentId& componentId) {
+    for (const auto& pathId : request.opticalPathIds()) {
+        const auto* path = findOpticalPath(equipment, pathId);
+        if (path == nullptr || path->role() != role) {
+            continue;
+        }
+        const bool found = std::any_of(
+            path->steps().begin(), path->steps().end(),
+            [&componentId](const OpticalPathStep& step) {
+                return step.componentId() == componentId;
+            });
+        if (found) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] const OpticalFilterSpecification* findSelectedFilter(
+    const MicroscopeEquipmentDefinition& equipment,
+    const ConfigurationRequest& request,
+    const OpticalCompatibilityId& compatibilityId,
+    OpticalFilterRole role,
+    Diagnostics& diagnostics,
+    const SpecimenLabel& label) {
+    const OpticalFilterSpecification* selected = nullptr;
+    for (const auto& filter : equipment.filterSpecifications()) {
+        if (filter.role() != role ||
+            filter.compatibilityId() !=
+                std::optional<OpticalCompatibilityId>{compatibilityId} ||
+            std::find(
+                request.selectedAdditionalOpticalComponentIds().begin(),
+                request.selectedAdditionalOpticalComponentIds().end(),
+                filter.componentId()) ==
+                request.selectedAdditionalOpticalComponentIds().end()) {
+            continue;
+        }
+
+        if (selected != nullptr) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.fluorescence_filter_set_ambiguous",
+                "More than one selected filter satisfies the same role and compatibility identity for this fluorescent label.",
+                "SpecimenLabel",
+                label.name());
+            return nullptr;
+        }
+        selected = &filter;
+    }
+
+    if (selected == nullptr) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.fluorescence_filter_missing",
+            "The selected configuration does not include an installed filter with the required fluorescence filter-set role and compatibility identity.",
+            "SpecimenLabel",
+            label.name());
+    }
+    return selected;
+}
+
+void assessFluorescenceFilterSet(
+    Diagnostics& diagnostics,
+    const MicroscopeEquipmentDefinition& equipment,
+    const ConfigurationRequest& request,
+    const SpecimenLabel& label) {
+    if (!label.filterSetCompatibilityId()) {
+        return;
+    }
+
+    const auto* excitationFilter = findSelectedFilter(
+        equipment,
+        request,
+        *label.filterSetCompatibilityId(),
+        OpticalFilterRole::Excitation,
+        diagnostics,
+        label);
+    const auto* emissionFilter = findSelectedFilter(
+        equipment,
+        request,
+        *label.filterSetCompatibilityId(),
+        OpticalFilterRole::Emission,
+        diagnostics,
+        label);
+    const auto* dichroic = findSelectedFilter(
+        equipment,
+        request,
+        *label.filterSetCompatibilityId(),
+        OpticalFilterRole::Dichroic,
+        diagnostics,
+        label);
+
+    if (excitationFilter != nullptr &&
+        !componentOccursOnSelectedRoute(
+            equipment,
+            request,
+            OpticalPathRole::Illumination,
+            excitationFilter->componentId())) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.excitation_filter_wrong_route",
+            "The matched excitation filter is not on a selected illumination route.",
+            "EquipmentComponent",
+            excitationFilter->componentId().value());
+    }
+
+    if (emissionFilter != nullptr &&
+        !componentOccursOnSelectedRoute(
+            equipment,
+            request,
+            OpticalPathRole::Imaging,
+            emissionFilter->componentId())) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.emission_filter_wrong_route",
+            "The matched emission filter is not on a selected imaging route.",
+            "EquipmentComponent",
+            emissionFilter->componentId().value());
+    }
+
+    if (dichroic != nullptr) {
+        const bool onIllumination = componentOccursOnSelectedRoute(
+            equipment, request, OpticalPathRole::Illumination,
+            dichroic->componentId());
+        const bool onImaging = componentOccursOnSelectedRoute(
+            equipment, request, OpticalPathRole::Imaging,
+            dichroic->componentId());
+        if (!onIllumination || !onImaging) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.dichroic_not_shared_by_excitation_and_detection",
+                "The matched dichroic must participate in both selected illumination and imaging routes.",
+                "EquipmentComponent",
+                dichroic->componentId().value());
+        }
+    }
+
+    const auto bandCovered = [](const OpticalFilterSpecification& filter,
+                                const SpectralBand& band,
+                                bool reflection) {
+        const auto evaluate = [&](double wavelength) {
+            return reflection
+                ? filter.reflectionAt(wavelength)
+                : filter.transmissionAt(wavelength);
+        };
+        return evaluate(band.minimumWavelengthNanometers()).has_value() &&
+               evaluate(band.maximumWavelengthNanometers()).has_value();
+    };
+
+    if (label.excitationBand()) {
+        if (excitationFilter != nullptr &&
+            !bandCovered(
+                *excitationFilter, *label.excitationBand(), false)) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.excitation_filter_spectral_coverage_incomplete",
+                "The selected excitation filter does not characterize the complete excitation band declared by the specimen label.",
+                "EquipmentComponent",
+                excitationFilter->componentId().value());
+        }
+        if (dichroic != nullptr &&
+            !bandCovered(*dichroic, *label.excitationBand(), true)) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.dichroic_excitation_coverage_incomplete",
+                "The selected dichroic reflection curve does not characterize the complete declared excitation band.",
+                "EquipmentComponent",
+                dichroic->componentId().value());
+        }
+    }
+
+    if (label.emissionBand()) {
+        if (emissionFilter != nullptr &&
+            !bandCovered(*emissionFilter, *label.emissionBand(), false)) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.emission_filter_spectral_coverage_incomplete",
+                "The selected emission filter does not characterize the complete emission band declared by the specimen label.",
+                "EquipmentComponent",
+                emissionFilter->componentId().value());
+        }
+        if (dichroic != nullptr &&
+            !bandCovered(*dichroic, *label.emissionBand(), false)) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.dichroic_emission_coverage_incomplete",
+                "The selected dichroic transmission curve does not characterize the complete declared emission band.",
+                "EquipmentComponent",
+                dichroic->componentId().value());
+        }
+    }
+}
+
 void assessFluorescenceLabels(
     Diagnostics& diagnostics,
     const MicroscopyRequirements& requirements,
@@ -488,6 +706,16 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
         requirements,
         specimen.preparation(),
         request.contrastMethod());
+
+    if (request.contrastMethod() == ContrastMethod::Fluorescence) {
+        for (const auto& label : specimen.preparation().labels()) {
+            if (label.kind() == SpecimenLabelKind::Fluorescent &&
+                label.filterSetCompatibilityId()) {
+                assessFluorescenceFilterSet(
+                    diagnostics, equipment, request, label);
+            }
+        }
+    }
 
     return SampleMicroscopyAssessment(std::move(diagnostics));
 }

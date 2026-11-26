@@ -241,8 +241,17 @@ void emptyCanvasSupportsImmutableSlideRectangleEdits() {
 
     const auto withSecond = take(oneSlide.withSlideRectangle(
         rectangle("slide-2", 150'000, 10'000)));
+    const auto overlappingReplacementDefinition = take(
+        SlideRectangleDefinition2D::create(
+            id<SlideId>("slide-1"),
+            id<CalibrationRevisionId>("slide-1-v2"),
+            {100'000, 15'000},
+            {100'001, 15'001},
+            SlideRectangleLengthAxis::StageX,
+            75'000,
+            25'000));
     auto overlappingReplacement = withSecond.replacingSlideRectangle(
-        rectangle("slide-1", 100'000, 15'000));
+        overlappingReplacementDefinition);
     check(!overlappingReplacement &&
         overlappingReplacement.error() == StageWorkingSurface2DError::SlideRectanglesOverlap,
         "rejects replacing a slide with a footprint overlapping another slide");

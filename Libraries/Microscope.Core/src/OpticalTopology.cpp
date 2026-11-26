@@ -40,6 +40,78 @@ namespace {
            direction == OpticalPortDirection::Bidirectional;
 }
 
+[[nodiscard]] bool isKnownOpticalPathRole(OpticalPathRole role) noexcept {
+    switch (role) {
+    case OpticalPathRole::Imaging:
+    case OpticalPathRole::Illumination:
+    case OpticalPathRole::Other:
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool hasOpticalFunction(
+    const EquipmentComponent& component,
+    OpticalElementFunction function) {
+    for (const auto& capability : component.opticalFunctions()) {
+        if (capability.function() == function) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] bool imagingRoutesShareDistinctBeamSplitterOutputs(
+    const std::vector<const OpticalPath*>& imagingPaths,
+    const std::map<EquipmentComponentId, const EquipmentComponent*>& componentIndex) {
+    if (imagingPaths.size() < 2) {
+        return false;
+    }
+
+    for (const auto& candidateStep : imagingPaths.front()->steps()) {
+        const auto component = componentIndex.find(candidateStep.componentId());
+        if (component == componentIndex.end() ||
+            component->second->kind() != EquipmentComponentKind::OpticalElement ||
+            !hasOpticalFunction(
+                *component->second, OpticalElementFunction::BeamSplitter) ||
+            !candidateStep.entryPortId() ||
+            !candidateStep.exitPortId()) {
+            continue;
+        }
+
+        const auto commonInput = *candidateStep.entryPortId();
+        std::set<OpticalPortId> branchOutputs{*candidateStep.exitPortId()};
+        bool sharedBranch = true;
+
+        for (std::size_t pathIndex = 1;
+             pathIndex < imagingPaths.size();
+             ++pathIndex) {
+            const OpticalPathStep* matchingStep = nullptr;
+            for (const auto& step : imagingPaths[pathIndex]->steps()) {
+                if (step.componentId() == candidateStep.componentId()) {
+                    matchingStep = &step;
+                    break;
+                }
+            }
+
+            if (matchingStep == nullptr ||
+                !matchingStep->entryPortId() ||
+                !matchingStep->exitPortId() ||
+                *matchingStep->entryPortId() != commonInput ||
+                !branchOutputs.insert(*matchingStep->exitPortId()).second) {
+                sharedBranch = false;
+                break;
+            }
+        }
+
+        if (sharedBranch) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 struct PortOwner final {
     EquipmentComponentId componentId;
     OpticalPortDirection direction;
@@ -59,6 +131,7 @@ Result<
         OpticalElementFunction function,
         std::optional<OpticalCompatibilityId> compatibilityId) {
     switch (function) {
+    case OpticalElementFunction::BeamSplitter:
     case OpticalElementFunction::PhasePlate:
     case OpticalElementFunction::PhaseAnnulus:
     case OpticalElementFunction::Polarizer:
@@ -294,28 +367,88 @@ const std::optional<OpticalPortId>& OpticalPathStep::exitPortId() const noexcept
 
 OpticalPath::OpticalPath(
     OpticalPathId id,
-    std::vector<OpticalPathStep> steps)
+    std::vector<OpticalPathStep> steps,
+    OpticalPathRole role)
     : id_(std::move(id)),
-      steps_(std::move(steps)) {}
+      steps_(std::move(steps)),
+      role_(role) {}
 
 Result<OpticalPath, OpticalPathError> OpticalPath::create(
     OpticalPathId id,
-    std::vector<OpticalPathStep> steps) {
+    std::vector<OpticalPathStep> steps,
+    OpticalPathRole role) {
     if (steps.size() < 2) {
         return Result<OpticalPath, OpticalPathError>::failure(
             OpticalPathError::TooFewSteps);
     }
+    if (!isKnownOpticalPathRole(role)) {
+        return Result<OpticalPath, OpticalPathError>::failure(
+            OpticalPathError::InvalidRole);
+    }
 
     return Result<OpticalPath, OpticalPathError>::success(
-        OpticalPath(std::move(id), std::move(steps)));
+        OpticalPath(std::move(id), std::move(steps), role));
 }
 
 const OpticalPathId& OpticalPath::id() const noexcept {
     return id_;
 }
 
+OpticalPathRole OpticalPath::role() const noexcept {
+    return role_;
+}
+
 const std::vector<OpticalPathStep>& OpticalPath::steps() const noexcept {
     return steps_;
+}
+
+LightPath::LightPath(
+    LightPathId id,
+    std::string name,
+    std::vector<OpticalPathId> opticalPathIds)
+    : id_(std::move(id)),
+      name_(std::move(name)),
+      opticalPathIds_(std::move(opticalPathIds)) {}
+
+Result<LightPath, LightPathError> LightPath::create(
+    LightPathId id,
+    std::string name,
+    std::vector<OpticalPathId> opticalPathIds) {
+    if (name.empty()) {
+        return Result<LightPath, LightPathError>::failure(
+            LightPathError::EmptyName);
+    }
+    if (opticalPathIds.empty()) {
+        return Result<LightPath, LightPathError>::failure(
+            LightPathError::EmptyOpticalPathSet);
+    }
+
+    std::set<OpticalPathId> uniquePathIds;
+    for (const auto& pathId : opticalPathIds) {
+        if (!uniquePathIds.insert(pathId).second) {
+            return Result<LightPath, LightPathError>::failure(
+                LightPathError::DuplicateOpticalPath);
+        }
+    }
+
+    return Result<LightPath, LightPathError>::success(
+        LightPath(
+            std::move(id),
+            std::move(name),
+            std::move(opticalPathIds)));
+}
+
+const LightPathId& LightPath::id() const noexcept {
+    return id_;
+}
+
+const std::string& LightPath::name() const noexcept {
+    return name_;
+}
+
+const std::vector<OpticalPathId>&
+LightPath::opticalPathIds() const noexcept {
+    return opticalPathIds_;
 }
 
 MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
@@ -328,11 +461,13 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     std::vector<CondenserSpecification> condenserSpecifications,
     std::vector<IlluminationSpecification> illuminationSpecifications,
     std::vector<StageSpecification> stageSpecifications,
-    std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications)
+    std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
+    std::vector<LightPath> lightPaths)
     : microscopeId_(std::move(microscopeId)),
       components_(std::move(components)),
       connections_(std::move(connections)),
       opticalPaths_(std::move(opticalPaths)),
+      lightPaths_(std::move(lightPaths)),
       objectiveSpecifications_(std::move(objectiveSpecifications)),
       cameraSpecifications_(std::move(cameraSpecifications)),
       condenserSpecifications_(std::move(condenserSpecifications)),
@@ -601,6 +736,19 @@ Result<
             const bool isFirst = index == 0;
             const bool isLast = index + 1 == steps.size();
 
+            if (isFirst && step.entryPortId()) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::UnexpectedPathEntryPortAtSource);
+            }
+            if (isLast && step.exitPortId()) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::UnexpectedPathExitPortAtTerminal);
+            }
+
             if (!isFirst && !step.entryPortId()) {
                 return Result<
                     MicroscopeEquipmentDefinition,
@@ -688,6 +836,77 @@ Result<
                         EquipmentDefinitionError::MissingRouteConnection);
             }
         }
+
+        if (path.role() == OpticalPathRole::Imaging) {
+            const auto& terminalComponentId = steps.back().componentId();
+            const auto terminalComponent = componentIndex.find(terminalComponentId);
+            if (terminalComponent == componentIndex.end() ||
+                terminalComponent->second->kind() !=
+                    EquipmentComponentKind::ImagingDevice) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::ImagingPathDoesNotTerminateAtCamera);
+            }
+            if (cameraComponentIds.find(terminalComponentId) ==
+                cameraComponentIds.end()) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::ImagingPathCameraSpecificationMissing);
+            }
+        }
+    }
+
+    std::set<LightPathId> lightPathIds;
+    for (const auto& lightPath : lightPaths) {
+        if (!lightPathIds.insert(lightPath.id()).second) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::DuplicateLightPathId);
+        }
+
+        std::vector<const OpticalPath*> imagingPaths;
+        std::set<EquipmentComponentId> cameraEndpointIds;
+        for (const auto& opticalPathId : lightPath.opticalPathIds()) {
+            const OpticalPath* referencedPath = nullptr;
+            for (const auto& candidatePath : opticalPaths) {
+                if (candidatePath.id() == opticalPathId) {
+                    referencedPath = &candidatePath;
+                    break;
+                }
+            }
+
+            if (referencedPath == nullptr) {
+                return Result<
+                    MicroscopeEquipmentDefinition,
+                    EquipmentDefinitionError>::failure(
+                        EquipmentDefinitionError::UnknownLightPathOpticalPath);
+            }
+
+            if (referencedPath->role() == OpticalPathRole::Imaging) {
+                imagingPaths.push_back(referencedPath);
+                cameraEndpointIds.insert(
+                    referencedPath->steps().back().componentId());
+            }
+        }
+
+        if (imagingPaths.empty()) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::LightPathHasNoImagingRoute);
+        }
+
+        if (cameraEndpointIds.size() > 1 &&
+            !imagingRoutesShareDistinctBeamSplitterOutputs(
+                imagingPaths, componentIndex)) {
+            return Result<
+                MicroscopeEquipmentDefinition,
+                EquipmentDefinitionError>::failure(
+                    EquipmentDefinitionError::LightPathMultipleCamerasRequireSplitter);
+        }
     }
 
     return Result<
@@ -703,7 +922,8 @@ Result<
                 std::move(condenserSpecifications),
                 std::move(illuminationSpecifications),
                 std::move(stageSpecifications),
-                std::move(dualSlideCarrierSpecifications)));
+                std::move(dualSlideCarrierSpecifications),
+                std::move(lightPaths)));
 }
 
 const MicroscopeId& MicroscopeEquipmentDefinition::microscopeId() const noexcept {
@@ -723,6 +943,52 @@ MicroscopeEquipmentDefinition::connections() const noexcept {
 const std::vector<OpticalPath>&
 MicroscopeEquipmentDefinition::opticalPaths() const noexcept {
     return opticalPaths_;
+}
+
+const std::vector<LightPath>&
+MicroscopeEquipmentDefinition::lightPaths() const noexcept {
+    return lightPaths_;
+}
+
+std::vector<EquipmentComponentId>
+MicroscopeEquipmentDefinition::cameraEndpointIds(
+    const LightPathId& lightPathId) const {
+    std::vector<EquipmentComponentId> cameraIds;
+
+    const LightPath* selectedLightPath = nullptr;
+    for (const auto& candidate : lightPaths_) {
+        if (candidate.id() == lightPathId) {
+            selectedLightPath = &candidate;
+            break;
+        }
+    }
+    if (selectedLightPath == nullptr) {
+        return cameraIds;
+    }
+
+    for (const auto& opticalPathId : selectedLightPath->opticalPathIds()) {
+        for (const auto& path : opticalPaths_) {
+            if (path.id() != opticalPathId ||
+                path.role() != OpticalPathRole::Imaging) {
+                continue;
+            }
+
+            const auto& cameraId = path.steps().back().componentId();
+            bool alreadyPresent = false;
+            for (const auto& existing : cameraIds) {
+                if (existing == cameraId) {
+                    alreadyPresent = true;
+                    break;
+                }
+            }
+            if (!alreadyPresent) {
+                cameraIds.push_back(cameraId);
+            }
+            break;
+        }
+    }
+
+    return cameraIds;
 }
 
 

@@ -1,5 +1,6 @@
 #include "microscope/core/equipment/OpticalTopology.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <set>

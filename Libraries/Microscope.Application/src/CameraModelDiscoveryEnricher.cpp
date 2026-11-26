@@ -620,6 +620,16 @@ CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
                     std::nullopt});
     }
 
+    if (enrichment.equipmentComponentId &&
+        *enrichment.equipmentComponentId != installedSpecification.componentId()) {
+        return core::Result<
+            CameraSpecificationProjectionResult,
+            CameraSpecificationProjectionError>::failure(
+                CameraSpecificationProjectionError{
+                    CameraSpecificationProjectionErrorCode::EquipmentComponentMismatch,
+                    std::nullopt});
+    }
+
     const auto& enrichedDevice = enrichment.deviceInfo;
     std::vector<CameraModelEnrichmentWarning> warnings =
         enrichment.warnings;

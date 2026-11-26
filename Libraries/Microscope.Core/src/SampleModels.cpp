@@ -12,12 +12,6 @@ namespace {
     return value.find_first_not_of(" \t\n\r\f\v") != std::string::npos;
 }
 
-[[nodiscard]] bool validOptionalText(
-    const std::optional<std::string>& value) noexcept {
-    return !value ||
-           (value->find('\0') == std::string::npos && hasText(*value));
-}
-
 [[nodiscard]] bool isKnownSampleMaterialClass(
     SampleMaterialClass value) noexcept {
     switch (value) {
@@ -883,13 +877,15 @@ SampleType::SampleType(
     std::string name,
     SampleMaterialClass materialClass,
     MicroscopyRequirements microscopyRequirements,
-    std::optional<std::string> description)
+    std::optional<std::string> description,
+    std::optional<SlidePreparationRequirements> preparationRequirements)
     : id_(std::move(id)),
       revision_(revision),
       name_(std::move(name)),
       materialClass_(materialClass),
       microscopyRequirements_(std::move(microscopyRequirements)),
-      description_(std::move(description)) {}
+      description_(std::move(description)),
+      preparationRequirements_(std::move(preparationRequirements)) {}
 
 Result<SampleType, SampleTypeError> SampleType::create(
     SampleTypeId id,
@@ -897,7 +893,8 @@ Result<SampleType, SampleTypeError> SampleType::create(
     std::string name,
     SampleMaterialClass materialClass,
     MicroscopyRequirements microscopyRequirements,
-    std::optional<std::string> description) {
+    std::optional<std::string> description,
+    std::optional<SlidePreparationRequirements> preparationRequirements) {
     if (revision == 0) {
         return Result<SampleType, SampleTypeError>::failure(
             SampleTypeError::ZeroRevision);
@@ -930,7 +927,8 @@ Result<SampleType, SampleTypeError> SampleType::create(
             std::move(name),
             materialClass,
             std::move(microscopyRequirements),
-            std::move(description)));
+            std::move(description),
+            std::move(preparationRequirements)));
 }
 
 const SampleTypeId& SampleType::id() const noexcept {
@@ -955,6 +953,11 @@ const MicroscopyRequirements& SampleType::microscopyRequirements() const noexcep
 
 const std::optional<std::string>& SampleType::description() const noexcept {
     return description_;
+}
+
+const std::optional<SlidePreparationRequirements>&
+SampleType::preparationRequirements() const noexcept {
+    return preparationRequirements_;
 }
 
 SampleTypeCatalog::SampleTypeCatalog(
@@ -1002,119 +1005,6 @@ const SampleType* SampleTypeCatalog::find(const SampleTypeId& id) const noexcept
             return sampleType.id() == id;
         });
     return found == sampleTypes_.end() ? nullptr : &*found;
-}
-
-Sample::Sample(
-    SampleId id,
-    std::uint64_t revision,
-    SampleTypeId sampleTypeId,
-    std::uint64_t sampleTypeRevision,
-    std::string name,
-    std::string materialDescription,
-    std::optional<std::string> organismScientificName,
-    std::optional<std::string> externalAccession,
-    std::optional<std::string> description)
-    : id_(std::move(id)),
-      revision_(revision),
-      sampleTypeId_(std::move(sampleTypeId)),
-      sampleTypeRevision_(sampleTypeRevision),
-      name_(std::move(name)),
-      materialDescription_(std::move(materialDescription)),
-      organismScientificName_(std::move(organismScientificName)),
-      externalAccession_(std::move(externalAccession)),
-      description_(std::move(description)) {}
-
-Result<Sample, SampleError> Sample::create(
-    SampleId id,
-    std::uint64_t revision,
-    SampleTypeId sampleTypeId,
-    std::uint64_t sampleTypeRevision,
-    std::string name,
-    std::string materialDescription,
-    std::optional<std::string> organismScientificName,
-    std::optional<std::string> externalAccession,
-    std::optional<std::string> description) {
-    if (revision == 0) {
-        return Result<Sample, SampleError>::failure(SampleError::ZeroRevision);
-    }
-    if (sampleTypeRevision == 0) {
-        return Result<Sample, SampleError>::failure(
-            SampleError::ZeroSampleTypeRevision);
-    }
-    if (name.find('\0') != std::string::npos) {
-        return Result<Sample, SampleError>::failure(SampleError::InvalidName);
-    }
-    if (!hasText(name)) {
-        return Result<Sample, SampleError>::failure(SampleError::EmptyName);
-    }
-    if (materialDescription.find('\0') != std::string::npos) {
-        return Result<Sample, SampleError>::failure(
-            SampleError::InvalidMaterialDescription);
-    }
-    if (!hasText(materialDescription)) {
-        return Result<Sample, SampleError>::failure(
-            SampleError::EmptyMaterialDescription);
-    }
-    if (!validOptionalText(organismScientificName)) {
-        return Result<Sample, SampleError>::failure(
-            SampleError::InvalidOrganismScientificName);
-    }
-    if (!validOptionalText(externalAccession)) {
-        return Result<Sample, SampleError>::failure(
-            SampleError::InvalidExternalAccession);
-    }
-    if (!validOptionalText(description)) {
-        return Result<Sample, SampleError>::failure(
-            SampleError::InvalidDescription);
-    }
-
-    return Result<Sample, SampleError>::success(
-        Sample(
-            std::move(id),
-            revision,
-            std::move(sampleTypeId),
-            sampleTypeRevision,
-            std::move(name),
-            std::move(materialDescription),
-            std::move(organismScientificName),
-            std::move(externalAccession),
-            std::move(description)));
-}
-
-const SampleId& Sample::id() const noexcept {
-    return id_;
-}
-
-std::uint64_t Sample::revision() const noexcept {
-    return revision_;
-}
-
-const SampleTypeId& Sample::sampleTypeId() const noexcept {
-    return sampleTypeId_;
-}
-
-std::uint64_t Sample::sampleTypeRevision() const noexcept {
-    return sampleTypeRevision_;
-}
-
-const std::string& Sample::name() const noexcept {
-    return name_;
-}
-
-const std::string& Sample::materialDescription() const noexcept {
-    return materialDescription_;
-}
-
-const std::optional<std::string>& Sample::organismScientificName() const noexcept {
-    return organismScientificName_;
-}
-
-const std::optional<std::string>& Sample::externalAccession() const noexcept {
-    return externalAccession_;
-}
-
-const std::optional<std::string>& Sample::description() const noexcept {
-    return description_;
 }
 
 SpecimenLabel::SpecimenLabel(
@@ -1209,7 +1099,7 @@ SlidePreparation::SlidePreparation(
       mountingMediumRefractiveIndex_(mountingMediumRefractiveIndex),
       labels_(std::move(labels)) {}
 
-Result<SpecimenPreparation, SlidePreparationError>
+Result<SlidePreparation, SlidePreparationError>
 SlidePreparation::create(
     SpecimenPreparationMethod method,
     SpecimenFixationState fixationState,
@@ -1219,47 +1109,47 @@ SlidePreparation::create(
     std::optional<double> mountingMediumRefractiveIndex,
     std::vector<SpecimenLabel> labels) {
     if (!isKnownPreparationMethod(method)) {
-        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+        return Result<SlidePreparation, SlidePreparationError>::failure(
             SlidePreparationError::InvalidMethod);
     }
     if (!isKnownFixationState(fixationState)) {
-        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+        return Result<SlidePreparation, SlidePreparationError>::failure(
             SlidePreparationError::InvalidFixationState);
     }
     if (sectionThicknessMicrometers &&
         (!std::isfinite(*sectionThicknessMicrometers) ||
          *sectionThicknessMicrometers <= 0.0)) {
-        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+        return Result<SlidePreparation, SlidePreparationError>::failure(
             SlidePreparationError::InvalidSectionThickness);
     }
     if (coverglassThicknessMicrometers &&
         (!std::isfinite(*coverglassThicknessMicrometers) ||
          *coverglassThicknessMicrometers <= 0.0)) {
-        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+        return Result<SlidePreparation, SlidePreparationError>::failure(
             SlidePreparationError::InvalidCoverglassThickness);
     }
     if (mountingMediumName &&
         (mountingMediumName->find('\0') != std::string::npos ||
          !hasText(*mountingMediumName))) {
-        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+        return Result<SlidePreparation, SlidePreparationError>::failure(
             SlidePreparationError::InvalidMountingMediumName);
     }
     if (mountingMediumRefractiveIndex &&
         (!std::isfinite(*mountingMediumRefractiveIndex) ||
          *mountingMediumRefractiveIndex <= 0.0)) {
-        return Result<SpecimenPreparation, SlidePreparationError>::failure(
+        return Result<SlidePreparation, SlidePreparationError>::failure(
             SlidePreparationError::InvalidMountingMediumRefractiveIndex);
     }
 
     std::set<std::pair<std::string, SpecimenLabelKind>> labelKeys;
     for (const auto& label : labels) {
         if (!labelKeys.insert({label.name(), label.kind()}).second) {
-            return Result<SpecimenPreparation, SlidePreparationError>::failure(
+            return Result<SlidePreparation, SlidePreparationError>::failure(
                 SlidePreparationError::DuplicateLabel);
         }
     }
 
-    return Result<SpecimenPreparation, SlidePreparationError>::success(
+    return Result<SlidePreparation, SlidePreparationError>::success(
         SlidePreparation(
             method,
             fixationState,
@@ -1302,170 +1192,42 @@ const std::vector<SpecimenLabel>& SlidePreparation::labels() const noexcept {
     return labels_;
 }
 
-SlideType::SlideType(
-    SlideTypeId id,
-    std::uint64_t revision,
-    std::string name,
-    SlidePreparationRequirements preparationRequirements,
-    std::optional<std::string> description,
-    std::optional<SlideGeometry> nominalGeometry)
-    : id_(std::move(id)),
-      revision_(revision),
-      name_(std::move(name)),
-      preparationRequirements_(std::move(preparationRequirements)),
-      description_(std::move(description)),
-      nominalGeometry_(std::move(nominalGeometry)) {}
-
-Result<SlideType, SlideTypeError> SlideType::create(
-    SlideTypeId id,
-    std::uint64_t revision,
-    std::string name,
-    SlidePreparationRequirements preparationRequirements,
-    std::optional<std::string> description,
-    std::optional<SlideGeometry> nominalGeometry) {
-    if (revision == 0) {
-        return Result<SlideType, SlideTypeError>::failure(
-            SlideTypeError::ZeroRevision);
-    }
-    if (name.find('\\0') != std::string::npos) {
-        return Result<SlideType, SlideTypeError>::failure(
-            SlideTypeError::InvalidName);
-    }
-    if (!hasText(name)) {
-        return Result<SlideType, SlideTypeError>::failure(
-            SlideTypeError::EmptyName);
-    }
-    if (description && description->find('\\0') != std::string::npos) {
-        return Result<SlideType, SlideTypeError>::failure(
-            SlideTypeError::InvalidDescription);
-    }
-    if (description && !hasText(*description)) {
-        return Result<SlideType, SlideTypeError>::failure(
-            SlideTypeError::InvalidDescription);
-    }
-
-    return Result<SlideType, SlideTypeError>::success(
-        SlideType(
-            std::move(id),
-            revision,
-            std::move(name),
-            std::move(preparationRequirements),
-            std::move(description),
-            std::move(nominalGeometry)));
-}
-
-const SlideTypeId& SlideType::id() const noexcept {
-    return id_;
-}
-
-std::uint64_t SlideType::revision() const noexcept {
-    return revision_;
-}
-
-const std::string& SlideType::name() const noexcept {
-    return name_;
-}
-
-const SlidePreparationRequirements&
-SlideType::preparationRequirements() const noexcept {
-    return preparationRequirements_;
-}
-
-const std::optional<std::string>& SlideType::description() const noexcept {
-    return description_;
-}
-
-const std::optional<SlideGeometry>& SlideType::nominalGeometry() const noexcept {
-    return nominalGeometry_;
-}
-
-SlideTypeCatalog::SlideTypeCatalog(
-    std::uint64_t revision,
-    std::vector<SlideType> slideTypes)
-    : revision_(revision),
-      slideTypes_(std::move(slideTypes)) {}
-
-Result<SlideTypeCatalog, SlideTypeCatalogError> SlideTypeCatalog::create(
-    std::uint64_t revision,
-    std::vector<SlideType> slideTypes) {
-    if (revision == 0) {
-        return Result<SlideTypeCatalog, SlideTypeCatalogError>::failure(
-            SlideTypeCatalogError::ZeroRevision);
-    }
-    if (slideTypes.empty()) {
-        return Result<SlideTypeCatalog, SlideTypeCatalogError>::failure(
-            SlideTypeCatalogError::EmptyCatalog);
-    }
-
-    std::set<SlideTypeId> ids;
-    for (const auto& slideType : slideTypes) {
-        if (!ids.insert(slideType.id()).second) {
-            return Result<SlideTypeCatalog, SlideTypeCatalogError>::failure(
-                SlideTypeCatalogError::DuplicateSlideTypeId);
-        }
-    }
-
-    return Result<SlideTypeCatalog, SlideTypeCatalogError>::success(
-        SlideTypeCatalog(revision, std::move(slideTypes)));
-}
-
-std::uint64_t SlideTypeCatalog::revision() const noexcept {
-    return revision_;
-}
-
-const std::vector<SlideType>& SlideTypeCatalog::slideTypes() const noexcept {
-    return slideTypes_;
-}
-
-const SlideType* SlideTypeCatalog::find(const SlideTypeId& id) const noexcept {
-    const auto found = std::find_if(
-        slideTypes_.begin(), slideTypes_.end(),
-        [&id](const SlideType& slideType) {
-            return slideType.id() == id;
-        });
-    return found == slideTypes_.end() ? nullptr : &*found;
-}
 
 Slide::Slide(
     SlideId id,
     std::uint64_t revision,
-    SampleId sampleId,
-    std::uint64_t sampleRevision,
-    SlideTypeId slideTypeId,
-    std::uint64_t slideTypeRevision,
+    SampleTypeId sampleTypeId,
+    std::uint64_t sampleTypeRevision,
     std::string name,
     SlideGeometry geometry,
-    SlidePreparation preparation)
+    SlidePreparation preparation,
+    std::optional<OriginLabId> originLabId)
     : id_(std::move(id)),
       revision_(revision),
-      sampleId_(std::move(sampleId)),
-      sampleRevision_(sampleRevision),
-      slideTypeId_(std::move(slideTypeId)),
-      slideTypeRevision_(slideTypeRevision),
+      sampleTypeId_(std::move(sampleTypeId)),
+      sampleTypeRevision_(sampleTypeRevision),
       name_(std::move(name)),
       geometry_(std::move(geometry)),
-      preparation_(std::move(preparation)) {}
+      preparation_(std::move(preparation)),
+      originLabId_(std::move(originLabId)) {}
 
 Result<Slide, SlideError> Slide::create(
     SlideId id,
     std::uint64_t revision,
-    SampleId sampleId,
-    std::uint64_t sampleRevision,
-    SlideTypeId slideTypeId,
-    std::uint64_t slideTypeRevision,
+    SampleTypeId sampleTypeId,
+    std::uint64_t sampleTypeRevision,
     std::string name,
     SlideGeometry geometry,
-    SlidePreparation preparation) {
+    SlidePreparation preparation,
+    std::optional<OriginLabId> originLabId) {
     if (revision == 0) {
         return Result<Slide, SlideError>::failure(SlideError::ZeroRevision);
     }
-    if (sampleRevision == 0) {
-        return Result<Slide, SlideError>::failure(SlideError::ZeroSampleRevision);
+    if (sampleTypeRevision == 0) {
+        return Result<Slide, SlideError>::failure(
+            SlideError::ZeroSampleTypeRevision);
     }
-    if (slideTypeRevision == 0) {
-        return Result<Slide, SlideError>::failure(SlideError::ZeroSlideTypeRevision);
-    }
-    if (name.find('\\0') != std::string::npos) {
+    if (name.find(char{}) != std::string::npos) {
         return Result<Slide, SlideError>::failure(SlideError::InvalidName);
     }
     if (!hasText(name)) {
@@ -1476,49 +1238,21 @@ Result<Slide, SlideError> Slide::create(
         Slide(
             std::move(id),
             revision,
-            std::move(sampleId),
-            sampleRevision,
-            std::move(slideTypeId),
-            slideTypeRevision,
+            std::move(sampleTypeId),
+            sampleTypeRevision,
             std::move(name),
             std::move(geometry),
-            std::move(preparation)));
+            std::move(preparation),
+            std::move(originLabId)));
 }
 
-const SlideId& Slide::id() const noexcept {
-    return id_;
-}
-
-std::uint64_t Slide::revision() const noexcept {
-    return revision_;
-}
-
-const SampleId& Slide::sampleId() const noexcept {
-    return sampleId_;
-}
-
-std::uint64_t Slide::sampleRevision() const noexcept {
-    return sampleRevision_;
-}
-
-const SlideTypeId& Slide::slideTypeId() const noexcept {
-    return slideTypeId_;
-}
-
-std::uint64_t Slide::slideTypeRevision() const noexcept {
-    return slideTypeRevision_;
-}
-
-const std::string& Slide::name() const noexcept {
-    return name_;
-}
-
-const SlideGeometry& Slide::geometry() const noexcept {
-    return geometry_;
-}
-
-const SlidePreparation& Slide::preparation() const noexcept {
-    return preparation_;
-}
+const SlideId& Slide::id() const noexcept { return id_; }
+std::uint64_t Slide::revision() const noexcept { return revision_; }
+const SampleTypeId& Slide::sampleTypeId() const noexcept { return sampleTypeId_; }
+std::uint64_t Slide::sampleTypeRevision() const noexcept { return sampleTypeRevision_; }
+const std::string& Slide::name() const noexcept { return name_; }
+const SlideGeometry& Slide::geometry() const noexcept { return geometry_; }
+const SlidePreparation& Slide::preparation() const noexcept { return preparation_; }
+const std::optional<OriginLabId>& Slide::originLabId() const noexcept { return originLabId_; }
 
 } // namespace microscope::core

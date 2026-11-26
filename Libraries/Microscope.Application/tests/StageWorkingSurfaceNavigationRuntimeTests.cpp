@@ -501,10 +501,10 @@ void testRestoredMoveAdapterRejectionClosesHomedOperation() {
     auto home = fixture.process(homeReference(fixture.device, homeCorrelation));
     auto rejectedRestore = take(navigation.processFeedback(home));
     check(rejectedRestore.disposition ==
-        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed &&
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationPartiallyCompleted &&
         rejectedRestore.operation &&
-        rejectedRestore.operation->status() == core::OperationStatus::Failed,
-        "a rejected restored move fails the existing home-and-move operation exactly once");
+        rejectedRestore.operation->status() == core::OperationStatus::PartiallyCompleted,
+        "a rejected restored move records the verified home step and reports partial completion");
     check(port.homeCalls == 1 && port.moveToCalls == 1 && !navigation.navigationActive(),
         "restored adapter rejection clears active navigation without another adapter call");
     check(navigation.position().x().positionIsUsable() &&
@@ -514,8 +514,8 @@ void testRestoredMoveAdapterRejectionClosesHomedOperation() {
 
     const auto failedSnapshot = take(fixture.runtime->operationSnapshot(
         *rejectedRestore.operationId));
-    check(failedSnapshot.status() == core::OperationStatus::Failed,
-        "the operation runtime retains one terminal failure for the rejected restored step");
+    check(failedSnapshot.status() == core::OperationStatus::PartiallyCompleted,
+        "the operation runtime retains partial completion after the verified home step");
 
     auto retry = take(navigation.beginRequest(
         navigationTarget(surface, "slide-a", {20000.0, 10000.0})));

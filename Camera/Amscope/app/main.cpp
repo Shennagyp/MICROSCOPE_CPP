@@ -67,6 +67,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -77,21 +78,6 @@ namespace {
 std::string utf8String(const QString& value) {
     const QByteArray bytes = value.toUtf8();
     return std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
-}
-
-QString featureGroupText(camera::CameraFeatureGroup group) {
-    switch (group) {
-    case camera::CameraFeatureGroup::General: return QStringLiteral("General");
-    case camera::CameraFeatureGroup::Exposure: return QStringLiteral("Exposure");
-    case camera::CameraFeatureGroup::ImageFormat: return QStringLiteral("Image Format");
-    case camera::CameraFeatureGroup::ImageProcessing: return QStringLiteral("Image Processing");
-    case camera::CameraFeatureGroup::Color: return QStringLiteral("Color");
-    case camera::CameraFeatureGroup::Trigger: return QStringLiteral("Trigger");
-    case camera::CameraFeatureGroup::Sensor: return QStringLiteral("Sensor");
-    case camera::CameraFeatureGroup::Transport: return QStringLiteral("Transport");
-    case camera::CameraFeatureGroup::Hardware: return QStringLiteral("Hardware");
-    }
-    return QStringLiteral("Other");
 }
 
 QString featureNameText(const camera::CameraFeatureDescriptor& descriptor) {

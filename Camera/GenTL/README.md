@@ -1,20 +1,24 @@
 # GenTL Provider Adapter
 
-This directory implements the Camera Module's optional GenTL provider path. It is a second backend alongside the native AmScope provider; it does not replace or wrap the AmScope SDK.
+This module implements the GenTL 1.6 camera backend for the Camera Module. It is independent of the native AmScope backend; both project their frames and features into the backend-neutral `Camera.Common` contracts.
 
-## Runtime boundary
+## Runtime architecture
 
-`ConsumerBridge` loads the separately built `libGenTLConsumerCAPI.dylib`. It validates:
-- bridge ABI version 1;
-- GenTL header version 1.6.
+The default production path is a native C++ GenTL Consumer:
 
-The C++ adapter does not load CTI files itself and does not implement a second GenTL function table. The existing Swift Consumer owns CTI loading and GenTL function dispatch. The C++ adapter calls that Consumer through the versioned C ABI.
+`Producer::open(ctiPath)` -> `GenTLProducerLibrary` -> vendor CTI exports -> `Producer` -> device / data-stream sessions -> `Camera.Common`.
 
-The current Swift C ABI source is in the private `Shennagyp/AMSCOPE_DRIVER` repository, branch `gentl-c-api-v.1.0` at `70d69d1c93327dfcd62eb7aa6e279af9407bc6f1` (the pending-wait test itself is in `0edf2d7580553111665b283656b07ced949c6025`). Its packages declare macOS 13.0 as the minimum deployment target. Source tests cover typed pointer/buffer marshalling, event registration/read/unregister, buffer-info forwarding, invalid invocation-shape rejection and a deterministic blocked-`EventGetData` cancellation test. The GenTL Consumer's `GCUnregisterEvent` calls `EventKill`, waits for active reads to drain, then unregisters the event. The universal macOS workflow [#45703282802](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45703282802) also failed before any job steps (after switching to the Intel macOS 15 runner) and has no logs, so these Swift tests remain unexecuted. The real dylib and C++ interoperability remain unvalidated; C++ CI currently uses a mock C ABI bridge.
+`GenTLProducerLibrary` loads the vendor CTI with the platform dynamic loader, resolves the required GenTL 1.6 C exports, and dispatches typed operations through a checked function table. It is part of this repository and is the default production route. It does not require a separately deployed Swift runtime or `libGenTLConsumerCAPI.dylib`.
 
-## Build
+The `Consumer` object owns the dispatch boundary and retains the underlying implementation for the complete lifetime of producer, device and stream sessions. It supports two backends:
+- **Native CTI backend (default):** in-process C++ dispatch to the CTI's GenTL exports.
+- **Versioned C ABI bridge (optional):** `ConsumerBridge` can load a separately built consumer implementation when an application explicitly injects one. It is not required by `Producer::open(ctiPath)`.
 
-Build the C++ adapter and mock tests independently of the AmScope target:
+AmScope remains a separate native backend. Neither backend leaks vendor-specific SDK calls through `Camera.Common`.
+
+## Build and test
+
+Build the GenTL module and its deterministic tests independently of the AmScope application:
 
 ```sh
 cmake -S Camera/GenTL -B build/gentl -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
@@ -22,7 +26,14 @@ cmake --build build/gentl --parallel
 ctest --test-dir build/gentl --output-on-failure
 ```
 
-To enable the optional GenApi 3.5.1 integration, install the official GenApi SDK and set its root:
+The ordinary GenTL suite includes:
+- C ABI bridge compatibility and Consumer/Producer lifecycle tests;
+- direct CTI symbol loading and dispatch tests;
+- frame metadata and PFNC projection tests;
+- a loadable in-repository `.cti` simulator exercised through the **same native C++ path used by production**;
+- two-device isolation, concurrent streaming, monotonic frame IDs/timestamps, payload progression, and independent stream shutdown.
+
+To build the optional GenApi 3.5.1 integration, install the official GenApi SDK and set its root:
 
 ```sh
 cmake -S Camera/GenTL -B build/gentl-genapi \
@@ -30,25 +41,25 @@ cmake -S Camera/GenTL -B build/gentl-genapi \
   -DBUILD_TESTING=ON \
   -DCAMERA_GENTL_ENABLE_GENAPI=ON \
   -DGENAPI_ROOT=/path/to/GenApi-3.5.1-Mac64_Universal
+cmake --build build/gentl-genapi --parallel
+ctest --test-dir build/gentl-genapi --output-on-failure
 ```
 
-The GenApi target is off by default. It requires GenApi and GCBase headers/libraries. The official EMVA GenICam Package 2026.07 (GenApi 3.5.1) SDK and runtime are downloaded, hash-verified and compiled in the macOS CI workflow for both Intel x86_64 and Apple Silicon arm64. XML-backed runtime tests use the official GenApi implementation and a mock GenTL port to exercise recursive Root-category traversal (including nested categories), internal-register rejection, dynamic availability, Boolean/Integer/Float/String/Enumeration reads and writes, floating-point increment validation, nested command enumeration/execution, command completion transitions, and GenTL read-only access semantics. Workflow [#45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447) passed on both architectures. This does not validate behavior against a vendor CTI Producer or physical camera.
+GenApi is optional at build time because it depends on the official GenICam SDK. The macOS CI workflow downloads and hash-verifies the official EMVA GenICam Package, builds GenApi 3.5.1 for Intel x86_64 and Apple Silicon arm64, then runs XML-backed tests through the native CTI Consumer and the in-repository simulated Producer. Those tests exercise Root/nested-category traversal, dynamic availability, access modes, Boolean/Integer/Float/String/Enumeration features, numeric validation, commands, register-node rejection and failure/recovery behavior.
 
-## Current C++ API
+## Production C++ API
+
+No separate Consumer library is necessary:
 
 ```cpp
 #include "camera/gentl/Producer.h"
+#include "camera/gentl/GenTLFrameAdapter.h"
 #include "camera/gentl/GenApiDeviceAccess.h"
 
 #include <utility>
 
-auto bridge = camera::gentl::ConsumerBridge::load(
-    "/path/to/libGenTLConsumerCAPI.dylib");
-
-auto producer = camera::gentl::Producer::open(
-    bridge, "/path/to/vendor.cti");
-
-const auto devices = producer.discover(); // timeout argument is milliseconds
+auto producer = camera::gentl::Producer::open("/path/to/vendor.cti");
+const auto devices = producer.discover(); // public timeout is milliseconds
 auto device = producer.openDevice(devices.at(0));
 
 const auto streamIds = device.dataStreamIds();
@@ -56,9 +67,9 @@ auto stream = device.openDataStream(streamIds.at(0), 4);
 stream.start();
 
 if (auto frame = stream.nextFrame(1000)) {
-    // frame->payload is an independent copy; the GenTL buffer is requeued.
-    // Optional metadata remains optional when the Producer does not report it.
-    if (auto common = camera::gentl::makeCommonFrame(*frame)) {
+    // frame->payload is independent of the requeued GenTL buffer.
+    // Optional metadata remains optional when the Producer omits it.
+    if (auto common = camera::gentl::makeCommonFrame(std::move(*frame))) {
         camera::FramePtr commonFrame = *common;
         // Common consumers receive the immutable backend-neutral frame.
     }
@@ -68,19 +79,33 @@ stream.stop();
 device.close();
 ```
 
-`discover()` returns provider-specific `DeviceDescriptor` values. Preserve the descriptor returned by discovery and pass it to `openDevice`; its `producerPath`, `interfaceId` and `deviceId` are routing identity, not display metadata. `openDevice` rejects descriptors from a different Producer, descriptors whose interface is no longer retained, and unknown device IDs returned by the Producer. Do not reduce a descriptor to `deviceId` or reconstruct it from `CameraDeviceInfo` fields.
+For a GenApi-capable device:
 
-Ownership and lifecycle:
+```cpp
+auto genApi = camera::gentl::GenApiDeviceAccess(std::move(device));
+auto featureList = genApi.features().featureDescriptors();
+auto commandList = genApi.commands().commandDescriptors();
+
+auto issued = genApi.commands().executeCommand("AcquisitionStart");
+auto done = genApi.commands().isCommandDone("AcquisitionStart");
+```
+
+Use the combined GenApi owner when both feature and command access are required. It retains one device session and shares one node map, remote port and serialization boundary; do not open a second session for the command adapter.
+
+`discover()` returns provider-specific `DeviceDescriptor` values. Preserve the descriptor returned by discovery and pass it to `openDevice`; `producerPath`, `interfaceId` and `deviceId` are routing identity, not display metadata. `openDevice` rejects descriptors from a different Producer, descriptors whose interface is no longer retained, and unknown device IDs. Do not reduce a descriptor to `deviceId` or reconstruct it from `CameraDeviceInfo` fields.
+
+## Ownership, acquisition and teardown
+
 - `Producer` owns shared TL/Consumer state.
 - `DeviceSession` retains its device handle and remote port; it can outlive the `Producer` wrapper.
-- `DataStreamSession` retains the device state; it can outlive the `DeviceSession` wrapper.
+- `DataStreamSession` retains device state; it can outlive the `DeviceSession` wrapper.
 - Each stream has a bounded announced-buffer set (1–64; the Producer's minimum is enforced).
 - Acquisition uses `EVENT_NEW_BUFFER`, `EventGetData`, typed buffer metadata queries and explicit requeue.
-- `nextFrame(timeoutMilliseconds)` permits one waiter per stream. It returns `nullopt` on timeout. `GCUnregisterEvent` terminates pending `EventGetData` waits with `GC_ERR_ABORT`; stream shutdown uses this specified cancellation path before waiting for active calls to drain. If unregistration wins the race before `EventGetData` enters the Consumer, `GC_ERR_INVALID_HANDLE` is also treated as cancellation, but only after the stream has entered its stopping state. A deterministic regression holds `EventGetData` pending while another thread closes the stream.
-- Payload bytes are copied before the announced buffer is requeued. This avoids exposing a pointer whose contents the Producer may overwrite on the next acquisition.
-- GenTL timeout arguments are nanoseconds; the public discovery and frame-wait APIs accept milliseconds and convert with overflow checks.
-- Cleanup stops acquisition, unregisters the event (which aborts pending event waits), waits for active calls to drain, flushes the queue, revokes buffers and closes the stream. If event unregistration fails, `EventKill` is attempted as a fallback for the single permitted waiter; the native context is quarantined because normal teardown did not complete. The GenTL 1.6 contract only aborts one pending waiter per `EventKill` call.
-- If cleanup fails, the native context and C ABI bridge are retained for process lifetime. They are not unloaded while CTI handles may still exist.
+- `nextFrame(timeoutMilliseconds)` permits one waiter per stream. It returns `nullopt` on timeout. `GCUnregisterEvent` terminates pending `EventGetData` waits with `GC_ERR_ABORT`; stream shutdown uses this cancellation path before waiting for active calls to drain. If unregistration wins the race before `EventGetData` enters the Consumer, `GC_ERR_INVALID_HANDLE` is also treated as cancellation, but only after the stream has entered its stopping state.
+- Payload bytes are copied before the announced buffer is requeued. The returned frame therefore does not expose a pointer that the Producer may overwrite during the next acquisition.
+- GenTL timeout arguments are nanoseconds; public discovery and frame-wait APIs accept milliseconds and convert with overflow checks.
+- Cleanup stops acquisition, unregisters the event, waits for active calls to drain, flushes the queue, revokes buffers and closes the stream. If event unregistration fails, `EventKill` is attempted as a fallback for the single permitted waiter; the native context is quarantined because normal teardown did not complete. GenTL 1.6 only aborts one pending waiter per `EventKill` call.
+- If cleanup fails, the Consumer backend and CTI library are retained for process lifetime. They are not unloaded while CTI handles or callbacks may still exist.
 
 `DataStreamFrame` preserves payload bytes, frame ID, nanosecond timestamp, pixel-format identifier and namespace, pixel endianness, dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps only complete image payloads with explicit zero offset/padding, no chunk data and exact payload-size/stride checks into `camera::Frame`. Verified PFNC mappings are Mono8, unpacked Mono10/12/14/16 and RGB8. Multi-byte mappings require reported byte order; packed, Bayer, planar, multipart, compressed and padded layouts remain opaque and are not assigned a fabricated stride.
 
@@ -92,55 +117,19 @@ The adapter exposes remote-port read/write and retrieves GenApi XML using:
 
 HTTP and vendor-specific URL schemes are not implemented. XML retrieval is not equivalent to parsing the XML or validating the register map.
 
-`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. `GenApiFeatureAccess` maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. `GenApiCommandAccess` maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations. `GenApiDeviceAccess` is the preferred combined owner: it retains one DeviceSession and shares one GenApi node map, remote port and serialization boundary across feature and command access. Both descriptor enumeration and direct feature/command lookup recursively traverse nodes reachable from the GenApi `Root` category, including nested categories, while deduplicating node references; implementation nodes such as `IntReg` and `Port` are not public features. A public GenApi `Register`/`IRegister` node reachable from `Root` is not projected as a scalar feature; direct feature read/write return `Unsupported`. The standalone feature/command adapters are also available when only one surface is needed. IntegerVector and IRegister nodes are not yet exposed. The official GenApi 3.5.1 SDK and XML-backed integration tests pass on both macOS architectures in CI. Real CTI/physical-device validation remains outstanding.
+`GenApiPort`, `GenApiNodeMap`, `GenApiFeatureAccess`, `GenApiCommandAccess` and `GenApiDeviceAccess` are optional source integrations. Feature access maps Boolean, Integer, Float, String and Enumeration nodes to `ICameraFeatureAccess`, including availability/readability/writability, numeric range/unit and currently available enumeration symbols. Command access maps `ICommand` nodes to the separate `ICameraCommandAccess` contract: issuing a command and polling its completion are distinct operations.
 
+Descriptor enumeration and direct feature/command lookup recursively traverse nodes reachable from the GenApi `Root` category, including nested categories, while deduplicating node references. Implementation nodes such as `IntReg` and `Port` are not public features. A public GenApi `Register`/`IRegister` node reachable from `Root` is not projected as a scalar feature; direct feature read/write return `Unsupported`. IntegerVector and IRegister values are not yet exposed. The official GenApi 3.5.1 SDK and simulator-backed XML integration tests run in CI; vendor-provided XML remains an external interoperability test.
 
+## In-repository simulator smoke (CI)
 
-For a GenApi-capable device, construct the combined adapter after opening the device:
+With `BUILD_TESTING=ON`, CMake builds the deterministic mock GenTL Producer as a loadable `.cti` shared library in simulator mode. The smoke test invokes:
 
-```cpp
-auto genApi = camera::gentl::GenApiDeviceAccess(std::move(device));
-auto featureList = genApi.features().featureDescriptors();
-auto commandList = genApi.commands().commandDescriptors();
+`GenTLProducerLibrary` -> `Consumer` -> `Producer` -> device/stream -> `Camera.Common` frame projection.
 
-// Command issue is distinct from completion polling.
-auto issued = genApi.commands().executeCommand("AcquisitionStart");
-auto done = genApi.commands().isCommandDone("AcquisitionStart");
-```
+There is no intermediary test shim: this exercises `Producer::open(ctiPath)`, which is also the production entry point.
 
-Use the combined owner when both surfaces are required. Do not open a second device session merely to separate feature and command access.
-
-## In-repository GenTL simulator smoke (CI)
-
-When `BUILD_TESTING=ON`, CMake builds the existing deterministic mock
-GenTL Producer a second time as a loadable `.cti` shared library in a
-simulator-specific mode. It is registered as
-`camera_gentl_inrepo_simulator_smoke` and runs through:
-
-`GenTLProducerLibrary` -> test-only native C ABI shim -> `ConsumerBridge`
--> `Producer` -> device/stream -> Common frame projection.
-
-The simulator fixture exposes two deterministic mock cameras on one
-interface. Each camera has a distinct device ID, display name, serial number,
-remote-port handle/register space, data-stream handle, event handle, buffer
-ownership and frame-sequence counter. The two-device smoke opens both devices
-and both streams concurrently, writes different values to the same register
-address on each remote port, then interleaves frame retrieval and verifies
-that each stream independently starts at frame ID 1 with its own increasing
-timestamps and sequence-varying Mono8 payload. The smoke then stops the first stream while the second remains active and verifies that the second stream continues delivering frames. The ordinary single-device smoke assertions continue after this isolation check. The simulator compile
-definition only relaxes the mock's fixed discovery-timeout check and
-long-wait cancellation behavior; the normal mock bridge used by the existing
-unit tests retains its original cancellation semantics. The fixture is
-test-only and is not installed or exported.
-
-This is real dynamic loading of a CTI-shaped GenTL Producer and integration
-coverage of the project's native C++ loader/consumer path. When the official
-GenApi SDK is enabled, `camera_gentl_genapi_tests` also uses this same simulated
-CTI through the native shim and exercises feature enumeration, availability,
-read/write validation, enumeration values, command execution, port failures,
-read-only access and malformed-XML recovery. It is **not** proof of
-interoperability with an independent vendor Producer, a real transport layer,
-or physical camera hardware. It does not replace the vendor CTI smoke below.
+The simulator exposes two deterministic cameras on one interface. Each has a distinct device ID, display name, serial number, remote-port/register space, data-stream handle, event handle, buffer ownership and frame-sequence counter. The smoke opens both devices and both streams concurrently, writes different values to the same register address on each remote port, and interleaves frame retrieval. It verifies that each stream independently starts at frame ID 1, timestamps increase, and Mono8 payload bytes advance with the frame sequence. It then stops one stream while the peer remains active and verifies that the peer continues delivering frames. The ordinary smoke also verifies discovery, device open, GenApi XML retrieval, stream start, complete image buffers, Common frame projection, stream stop and device close.
 
 Run it with the ordinary test build:
 
@@ -150,15 +139,11 @@ cmake --build build/gentl --parallel
 ctest --test-dir build/gentl -R camera_gentl_inrepo_simulator_smoke --output-on-failure
 ```
 
-## Vendor CTI / simulator smoke (opt-in)
+This is dynamic loading of a CTI-shaped GenTL Producer and software integration coverage of the native Consumer path. It is not proof of interoperability with an independent vendor Producer, a real transport layer, or physical camera hardware.
 
-The test build now includes a **test-only** native C ABI shim backed by the
-existing `GenTLProducerLibrary` direct CTI loader, plus
-`camera_gentl_simulator_smoke`. This routes a real vendor CTI through the
-existing `ConsumerBridge` and `Producer` APIs without changing the
-production bridge selection or AmScope provider.
+## Vendor CTI / independent simulator smoke (opt-in)
 
-Configure with an approved simulator/vendor CTI path:
+The same smoke executable can test an independently supplied vendor or virtual-camera CTI directly, with no test bridge:
 
 ```sh
 cmake -S Camera/GenTL -B build/gentl-simulator \
@@ -170,61 +155,34 @@ ctest --test-dir build/gentl-simulator \
   -R camera_gentl_simulator_smoke --output-on-failure
 ```
 
-The opt-in smoke selects device index 0 by default and accepts an optional
-non-negative device index for manual runs, allowing a specific simulated
-model to be selected when a Producer exposes several devices. It uses the
-first data stream on that device. It checks CTI loading, TL/interface/device
-discovery, device open, non-empty GenApi XML retrieval, stream start, five
-complete non-empty image buffers,
-invocation of the Common frame projection adapter, stream stop and device
-close. It prints the device identity, projection outcome and available frame
-metadata. Unsupported layouts remain opaque rather than failing the CTI smoke.
-It does not assume a particular vendor's feature names or pixel format. The
-CTest registration uses device index 0; invoke the executable directly with
-`[device-index]` to select another discovered device.
+The smoke selects device index 0 by default and accepts an optional non-negative device index when the Producer exposes several devices. It uses the first data stream on that device. It checks CTI loading, TL/interface/device discovery, device open, GenApi XML retrieval, stream start, five complete image buffers, Common frame projection, stream stop and device close. It prints device identity, projection outcome and available frame metadata. Unsupported layouts remain opaque rather than failing the smoke; it does not assume vendor-specific feature names or pixel formats.
 
-The test bridge and smoke executable are test-only; neither is installed or
-exported by the Camera package. Normal CTest/package runs do not require a
-vendor CTI. To register the smoke with CTest, set
-`CAMERA_GENTL_SIMULATOR_CTI` at configure time. A missing or incompatible
-GenTL symbol is reported as a CTI-load failure.
+The vendor CTI is supplied externally and is not downloaded or redistributed by this project. Use only a Producer whose license permits generic third-party camera-control software to load and operate it. A passing simulator test is software-interoperability evidence, not physical camera qualification.
 
-**License and evidence constraints:** use only a simulator/Producer whose
-license permits this test use. Vimba X's published terms contain restrictions
-that may conflict with using it to test generic third-party camera-control
-software; do not use it until that scope is confirmed. The Imaging Source
-Virtual Camera Producer's third-party consumer compatibility and applicable
-license scope must be confirmed before selecting it. Aravis
-`arv-fake-gv-camera` is a GigE Vision network simulator, not a CTI file, so it
-cannot be passed directly to this smoke executable.
+## Implementation and validation boundaries
 
-A passing simulator run is GenTL software-integration evidence only. It does
-not qualify a physical camera, physical transport, hardware timing, firmware,
-AmScope SDK behavior, or the installed physical-device workflow.
-
-## Current implementation and evidence
-
-Implemented:
-- version-checked dynamic C ABI bridge;
-- CTI initialization and TL/interface/device discovery;
+Implemented in this module:
+- native C++ GenTL 1.6 CTI loading and function dispatch;
+- optional version-checked C ABI Consumer injection;
+- TL initialization and interface/device discovery;
 - retained interface/device lifetime and device opening;
-- stream ID discovery and stream acquisition lifecycle;
-- bounded buffer announcement/queue/requeue/drain;
-- frame payload copying and basic GenTL buffer metadata;
-- safe backend-neutral frame projection for verified PFNC Mono8, unpacked Mono10/12/14/16 and RGB8 layouts, with explicit byte-order and payload-size checks;
-- backend-neutral command contract and separate GenApi `ICommand` adapter source;
+- data-stream discovery, acquisition lifecycle and bounded buffer management;
+- buffer queue/requeue/drain and frame metadata extraction;
+- frame payload ownership and backend-neutral projection for verified PFNC layouts;
 - remote-port read/write and `LOCAL`/`FILE` GenApi XML retrieval;
-- process-lifetime retention after cleanup failure.
+- optional GenApi 3.5.1 feature and command access;
+- stream shutdown cancellation, failed-cleanup quarantine and process-lifetime retention;
+- deterministic single- and multi-device CTI simulator integration tests.
 
-GenTL/GenApi baseline CI: [workflow #45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447), code commit `b1d0a61de841736f76cf4ec005f807e60310d71b`. Both Intel x86_64 and Apple Silicon arm64 passed the C++ bridge suite, official GenApi 3.5.1 build, XML-backed GenApi integration tests and architecture checks. Latest Phase 6 negative-path CI: [workflow #45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248), commit `85dd6af1fc71434d16452e4c62ceae6933b2a713`, passed both architectures including 10/10 GenTL bridge tests and 11/11 official GenApi tests per architecture. The frame adapter accepts `DataStreamFrame` by value and moves its owned payload into the Common frame; pass `std::move(frame)` to avoid a second full-frame copy. The tests cover the mock bridge, discovery, device/stream ownership, pending-wait cancellation, unregister-failure `EventKill` fallback/quarantine, buffer lifecycle, frame payload/metadata, timeout conversion, PFNC layout projection, pixel byte order, Root and nested-category feature enumeration/lookup, internal register rejection, dynamic availability, Boolean/Integer/Float/String/Enumeration access, nested command issue/completion and read-only access semantics. The latest GenApi slice additionally covers malformed XML rejection followed by successful node-map recovery, unsupported public `IRegister` omission and `Unsupported` read/write classification, injected feature-read failure and recovery, failed feature-write no-side-effect verification, command-execution failure followed by successful execution, and command-completion polling failure mapped to `BackendFailure` followed by successful completion polling.
+What simulator/CI can establish:
+- C++ compilation and ABI/function-table dispatch on x86_64 and arm64;
+- CTI dynamic loading and standard GenTL call sequencing against the in-repository Producer;
+- discovery, concurrent device/stream isolation, port IO, buffer/acquisition lifecycle, frame metadata and Common frame projection;
+- official GenApi 3.5.1 parsing and XML-backed feature/command semantics against the controlled fixture.
 
-Not yet validated:
-- actual frame acquisition and metadata behavior with a vendor CTI Producer/device;
-- the real universal Swift `libGenTLConsumerCAPI.dylib` (latest workflow [#45695610813](https://github.com/Shennagyp/AMSCOPE_DRIVER/actions/runs/45695610813) failed before any job steps and produced no job logs);
-- a vendor CTI Producer;
-- a physical GenTL camera;
-- actual GenTL payload/metadata behavior under acquisition;
-- GenApi behavior with vendor-provided XML and a real device;
-- external consumer packaging and deployment of the C ABI dylib/Swift runtime.
+What still requires independent external qualification:
+- interoperability with a separately produced vendor CTI;
+- vendor transport-layer behavior, vendor XML quirks and optional GenTL features;
+- physical link negotiation, camera firmware behavior, hardware timing and sustained acquisition performance.
 
-A passing mock workflow is software evidence only. It is not a real CTI or hardware qualification.
+A physical camera is **not required** to complete the software implementation or run the in-repository simulator/CI. Hardware qualification is a separate acceptance stage once a device is available.

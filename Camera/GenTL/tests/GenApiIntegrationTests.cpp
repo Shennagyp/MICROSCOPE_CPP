@@ -171,6 +171,24 @@ int main(int argc, char** argv) {
             require(initialGain && *initialGain == 0,
                     "GenApi Gain initial register value was not zero.");
 
+            setenv("MOCK_GENTL_FAIL_PORT_READ_ADDRESS", "0x1000", 1);
+            auto failedGainRead = access.features().readFeature("Gain");
+            unsetenv("MOCK_GENTL_FAIL_PORT_READ_ADDRESS");
+            auto* failedGainReadError =
+                std::get_if<camera::CameraFeatureAccessError>(&failedGainRead);
+            require(failedGainReadError &&
+                        failedGainReadError->code ==
+                            camera::CameraFeatureAccessError::Code::BackendFailure,
+                    "GenApi register read failure was not reported as BackendFailure.");
+
+            auto recoveredGainRead = access.features().readFeature("Gain");
+            auto* recoveredGainValue =
+                std::get_if<camera::CameraFeatureValue>(&recoveredGainRead);
+            require(recoveredGainValue &&
+                        std::get_if<std::int64_t>(recoveredGainValue) &&
+                        *std::get_if<std::int64_t>(recoveredGainValue) == 0,
+                    "GenApi feature read did not recover after a transient port failure.");
+
             const camera::CameraFeatureValue requestedGain{std::int64_t{42}};
             auto writeResult = access.features().writeFeature("Gain", requestedGain);
             require(std::holds_alternative<std::monostate>(writeResult),
@@ -262,6 +280,26 @@ int main(int argc, char** argv) {
             require(enumReadBackSymbol && enumReadBackSymbol->symbol == "On",
                     "TriggerMode enum write/readback did not preserve the symbol.");
 
+            setenv("MOCK_GENTL_FAIL_PORT_WRITE_ADDRESS", "0x1000", 1);
+            const camera::CameraFeatureValue rejectedGain{std::int64_t{43}};
+            auto failedGainWrite =
+                access.features().writeFeature("Gain", rejectedGain);
+            unsetenv("MOCK_GENTL_FAIL_PORT_WRITE_ADDRESS");
+            auto* failedGainWriteError =
+                std::get_if<camera::CameraFeatureAccessError>(&failedGainWrite);
+            require(failedGainWriteError &&
+                        failedGainWriteError->code ==
+                            camera::CameraFeatureAccessError::Code::BackendFailure,
+                    "GenApi register write failure was not reported as BackendFailure.");
+
+            auto preservedGainRead = access.features().readFeature("Gain");
+            auto* preservedGainValue =
+                std::get_if<camera::CameraFeatureValue>(&preservedGainRead);
+            require(preservedGainValue &&
+                        std::get_if<std::int64_t>(preservedGainValue) &&
+                        *std::get_if<std::int64_t>(preservedGainValue) == 42,
+                    "Failed GenApi feature write changed the register value.");
+
             auto commandResult = access.commands().commandDescriptors();
             auto* commands =
                 std::get_if<std::vector<camera::CameraCommandDescriptor>>(&commandResult);
@@ -280,6 +318,17 @@ int main(int argc, char** argv) {
                         hiddenCommandError->code ==
                             camera::CameraCommandAccessError::Code::CommandNotFound,
                     "Internal GenApi register was directly executable as a command.");
+
+            setenv("MOCK_GENTL_FAIL_PORT_WRITE_ADDRESS", "0x1002", 1);
+            auto failedExecute =
+                access.commands().executeCommand("AcquisitionStart");
+            unsetenv("MOCK_GENTL_FAIL_PORT_WRITE_ADDRESS");
+            auto* failedExecuteError =
+                std::get_if<camera::CameraCommandAccessError>(&failedExecute);
+            require(failedExecuteError &&
+                        failedExecuteError->code ==
+                            camera::CameraCommandAccessError::Code::BackendFailure,
+                    "GenApi command execution failure was not reported as BackendFailure.");
 
             auto executeResult =
                 access.commands().executeCommand("AcquisitionStart");

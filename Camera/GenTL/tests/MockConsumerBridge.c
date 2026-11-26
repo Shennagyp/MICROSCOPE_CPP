@@ -9,6 +9,14 @@
 static int context_token;
 static uint8_t register_memory[0x10000];
 static size_t command_poll_count = 0;
+static int fails_at_address(const char* variable, uint64_t address) {
+    const char* configured = getenv(variable);
+    if (!configured || !*configured) return 0;
+    char* end = 0;
+    const unsigned long long parsed = strtoull(configured, &end, 0);
+    return end != configured && *end == '\0' && parsed == address;
+}
+
 static const char mock_xml[] =
     "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
     "<RegisterDescription\n" \
@@ -237,6 +245,8 @@ int32_t gentl_consumer_invoke(
             memcpy(bytes, mock_xml, *size);
             return GC_ERR_SUCCESS;
         }
+        if (fails_at_address("MOCK_GENTL_FAIL_PORT_READ_ADDRESS", arguments[1]))
+            return GC_ERR_IO;
         if (arguments[1] == 0x1002 && *size == 2) {
             if (command_poll_count > 0)
                 memset(register_memory + 0x1002, 0, 2);
@@ -257,6 +267,8 @@ int32_t gentl_consumer_invoke(
         const uint8_t* bytes = (const uint8_t*)pointer(arguments[2]);
         const size_t* size = (const size_t*)pointer(arguments[3]);
         if (!size || (!bytes && *size != 0)) return GC_ERR_INVALID_PARAMETER;
+        if (fails_at_address("MOCK_GENTL_FAIL_PORT_WRITE_ADDRESS", address))
+            return GC_ERR_IO;
         if (address == 0x1002 && *size == 2) command_poll_count = 0;
         if (address <= sizeof(register_memory) &&
             *size <= sizeof(register_memory) - (size_t)address) {

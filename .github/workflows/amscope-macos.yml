@@ -12,7 +12,6 @@ on:
       - "Camera/Common/**"
       - "Camera/Qt/**"
       - "Camera/QtWidgets/**"
-      - "docs/architecture/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
       - "scripts/run-amscope-native-probe.sh"

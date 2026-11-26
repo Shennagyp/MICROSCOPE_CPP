@@ -446,3 +446,12 @@ provides first-party integration evidence only, not third-party vendor
 interoperability. Source changes are awaiting GitHub CI. No local build, test,
 or debugger was run. External vendor CTI testing remains a separate gate and
 requires written license/compatibility clearance.
+
+
+### CTI frame sequence and GenApi integration — 26 November 2026
+
+The GenApi integration executable now accepts a native C ABI shim path and a CTI path. CMake supplies the in-repository `gentl_test_simulator.cti`, so the existing feature/command integration suite exercises the direct `GenTLProducerLibrary` dynamic loader and `Producer` path. Coverage includes descriptor enumeration, availability, typed feature reads/writes, increment/range validation, enumeration values, command execution, read-only access, backend errors and malformed XML recovery.
+
+The simulator now generates monotonic frame IDs and timestamps and a sequence-varying Mono8 payload. The smoke test asserts five consecutive frame IDs, increasing timestamps, exact deterministic payload length and changing first-byte values. The normal mock fixture retains its original fixed frame metadata and cancellation behavior.
+
+Source commit `fc3132a62d59ca11aeb52026acaac70d3c85ddd5` passed GenTL bridge workflow #45795223360 on Intel x86_64 and Apple Silicon arm64, including CTest and official GenApi integration tests. Package/external-consumer workflow #45795223288 remained queued at the time of this documentation update. No local build/test/debug run was performed. These results establish first-party integration only, not vendor or physical camera qualification.

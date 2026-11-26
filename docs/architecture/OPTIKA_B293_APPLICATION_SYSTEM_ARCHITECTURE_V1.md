@@ -349,9 +349,11 @@ The initial application does not require whole-slide scanning, stitching or an i
 
 Persistence is divided by the type of state being saved:
 
-- **Equipment definition/deployment:** relatively static microscope configuration and adapter binding. The domain model consumes typed values; Core does not parse JSON.
-- **User preferences:** layout, selected options and similar user-level settings.
-- **Microscope configuration:** selected optical configuration and objective-specific profiles.
+- **Microscope constitution:** the revisioned equipment definition: installed component identities, specifications, optical ports/connections/paths, stage and illumination capabilities. It describes what is physically installed, not what is currently selected.
+- **Deployment definition:** host/device adapter bindings for the equipment constitution. It is separate from the physical constitution and is not a substitute for installed capability data.
+- **Operation-mode definitions:** named, user-editable and revisioned mode data, including technique composition, objective constraints, settings and optional per-microscope required/preferred component bindings.
+- **User preferences:** layout and non-domain presentation preferences. Domain-relevant optical preferences belong to the operation-mode or imaging-intent records so that resolution is reproducible.
+- **Resolved/effective configuration records:** a desired configuration may be stored as an acquisition snapshot with its source revisions; observed/verified effective state remains separate evidence.
 - **Calibration records:** immutable versioned optical/motion calibration and its observations.
 - **Workspace and slide data:** stable Sample/Slide/Tile identities, slide registration revisions, source metadata and document relationships.
 - **Image/capture payloads:** original PNG/frame payloads and derived artifacts with integrity/provenance metadata.
@@ -360,6 +362,12 @@ Persistence is divided by the type of state being saved:
 The current implementation persists microscope optical configuration and dock width through `UserDefaults`, and saves preview PNGs to the user's Pictures folder. It does not yet provide the complete sample/slide/acquisition package store. Do not silently treat these transitional stores as the final data architecture.
 
 A persistence object owns file access and transaction/lifetime behavior. Domain objects own the meaning and validation of the data. UI views do not write microscope records directly.
+
+The user may edit and save both the microscope constitution and its operation modes. These are separate aggregates with separate revision lifecycles. A constitution edit changes the declared physical inventory/topology and must be validated as a new revision; it must not silently rewrite an active runtime's loaded equipment object. An operation-mode edit changes desired selection rules or preferences; it does not modify the physical constitution or imply a hardware change.
+
+An operation mode may be shared as a general technique/objective intent, while a microscope-specific binding optionally identifies a required or preferred installed component. This is how the same high-level workflow can be used across a multi-microscope installation without assuming that component identities are portable. An explicit required binding is enforced; a preferred binding affects ranking only. If no binding exists, the resolver discovers candidates for the target microscope and may ask the caller to choose among alternatives.
+
+The Application owner loads the selected constitution and mode revisions once and retains the typed objects while active. Core receives those in-memory values for pure resolution; neither a resolver call nor ordinary mode editing performs hidden per-property persistence reads. A save commits a new durable revision, and acquisition/history records retain the exact revisions used.
 
 #### 7.6.1 In-memory object loading and residency
 

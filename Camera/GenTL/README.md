@@ -134,6 +134,18 @@ Use the combined GenApi owner when both feature and command access are required.
 
 `DataStreamFrame` preserves payload bytes, frame ID, nanosecond timestamp, pixel-format identifier and namespace, pixel endianness, dimensions, image-present/chunk/incomplete state, image offset and X/Y padding. `GenTLFrameAdapter` maps complete non-composite image payloads with explicit image offset and padding metadata into `camera::Frame`. The complete filled payload is retained byte-for-byte; `Frame::imageData()` addresses the first image byte, `strideBytes` includes per-row X padding, and trailing Y padding is represented separately. A known PFNC layout is projected only when image offset, row pitch, height and trailing padding account for the complete filled payload exactly. Verified PFNC mappings include Mono8, unpacked Mono10/12/14/16, packed Mono10p/Mono12p, RGB8, and Bayer GR/RG/GB/BG in 8-bit, unpacked 10/12/14/16-bit, and packed 10p/12p forms. Packed Mono and Bayer payloads remain byte-for-byte unchanged; `PixelPacking` identifies the packing convention and `strideBytes` describes the byte-aligned row size. The adapter does not unpack these samples. Bayer mosaic identity is stored separately from the RAW8/RAW16 sample container; no demosaicing or sample-value transformation occurs in this backend. Multi-byte mappings require reported byte order. Planar, multipart and compressed layouts remain opaque. Padded layouts are projected only when their byte layout is known and validated; padding is never stripped or rearranged.
 
+### WSI acquisition integrity telemetry
+
+DataStreamSession::statistics() provides a point-in-time view of the current stream. producerDeliveredBuffers, producerBufferUnderruns, producerFramesStarted, announcedBuffers, queuedBuffers, and buffersAwaitingDelivery are optional because a GenTL Producer may not implement every information command. Their meanings follow the GenTL stream-information contract; they are not inferred from host-side frame counts.
+
+The integrity member is the protocol-neutral accounting view: observed buffers, complete images, incomplete buffers, non-image payloads, empty payloads, host wait timeouts, buffers without frame IDs, sequence gaps and missing-frame count, duplicates, out-of-order IDs, ambiguous backwards transitions, counter wraps, and provider-reported buffer-starvation events.
+
+A nextFrame() wait timeout is counted separately from a producer-reported underrun. An underrun is accumulated from the GenTL STREAM_INFO_NUM_UNDERRUN counter when statistics() is queried; the snapshot uses counter deltas and tolerates a provider counter reset. Therefore call statistics() at the points where acquisition telemetry is required. It does not add a polling thread or change the frame-delivery path.
+
+Sequence continuity is conservative. A monotonically increasing counter with no known wrap rule can prove forward gaps, but a backwards transition is reported as ambiguous rather than guessed to be a wrap or a loss. The GenTL TLTYPE GEV model uses the GenTL-defined one-based 16-bit GigE Vision frame ID rule; no wrap width is assumed for other transport types. Sequence accounting is per DataStreamSession and resets at each start().
+
+These counters are evidence for acquisition diagnosis and WSI capture validation; they do not decide tile acceptance, retry capture, or make storage lossless. The application remains responsible for a durable tile-write path and for deciding how to respond to detected gaps or incomplete frames.
+
 ## Device port and GenApi XML
 
 The adapter exposes remote-port read/write and retrieves GenApi XML using:

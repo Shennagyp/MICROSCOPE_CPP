@@ -13,6 +13,7 @@ add_library(microscope_core STATIC
     src/Identity.cpp
     src/OpticalTopology.cpp
     src/LightPathCalibration.cpp
+    src/CameraSuitability.cpp
     src/OpticalSpecifications.cpp
     src/IlluminationSpecifications.cpp
     src/StageSpecifications.cpp
@@ -80,6 +81,18 @@ if(BUILD_TESTING)
     add_test(
         NAME microscope_core_equipment_tests
         COMMAND microscope_core_equipment_tests)
+
+    add_executable(microscope_core_camera_suitability_tests
+        tests/CameraSuitabilityTests.cpp)
+    target_link_libraries(microscope_core_camera_suitability_tests
+        PRIVATE Microscope::Core)
+    set_target_properties(microscope_core_camera_suitability_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_core_camera_suitability_tests
+        COMMAND microscope_core_camera_suitability_tests)
 
     add_executable(microscope_core_light_path_calibration_tests
         tests/LightPathCalibrationTests.cpp)

@@ -473,6 +473,26 @@ void testImmutableRevisionRowsRejectDirectSqlMutation() {
             const int deleteSlide = execute(
                 "DELETE FROM slide_revision "
                 "WHERE slide_id = 'slide-immutable' AND revision = 1");
+            const int insertTypeGap = execute(
+                "INSERT INTO sample_type_revision "
+                "(sample_type_id, revision, payload_format_version, payload) "
+                "VALUES ('sample-type-immutable', 9, 1, x'01')");
+            const int insertSlideGap = execute(
+                "INSERT INTO slide_revision "
+                "(slide_id, revision, sample_type_id, sample_type_revision, "
+                "payload_format_version, payload) "
+                "VALUES ('slide-immutable', 9, 'sample-type-immutable', 1, 1, x'01')");
+            const int rewindTypeCurrent = execute(
+                "UPDATE sample_type_current SET revision = 1 "
+                "WHERE sample_type_id = 'sample-type-immutable'");
+            const int rewindSlideCurrent = execute(
+                "UPDATE slide_current SET revision = 1 "
+                "WHERE slide_id = 'slide-immutable'");
+            const int deleteTypeCurrent = execute(
+                "DELETE FROM sample_type_current "
+                "WHERE sample_type_id = 'sample-type-immutable'");
+            const int deleteSlideCurrent = execute(
+                "DELETE FROM slide_current WHERE slide_id = 'slide-immutable'");
             check((updateType & 0xff) == SQLITE_CONSTRAINT,
                   "database trigger rejects direct mutation of immutable SampleType revisions");
             check((deleteType & 0xff) == SQLITE_CONSTRAINT,
@@ -481,6 +501,18 @@ void testImmutableRevisionRowsRejectDirectSqlMutation() {
                   "database trigger rejects direct mutation of immutable Slide revisions");
             check((deleteSlide & 0xff) == SQLITE_CONSTRAINT,
                   "database trigger rejects direct deletion of immutable Slide revisions");
+            check((insertTypeGap & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects skipped SampleType revision insertion");
+            check((insertSlideGap & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects skipped Slide revision insertion");
+            check((rewindTypeCurrent & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects rewinding the current SampleType revision");
+            check((rewindSlideCurrent & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger rejects rewinding the current Slide revision");
+            check((deleteTypeCurrent & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger protects the SampleType current pointer from deletion");
+            check((deleteSlideCurrent & 0xff) == SQLITE_CONSTRAINT,
+                  "database trigger protects the Slide current pointer from deletion");
             sqlite3_close_v2(direct);
         } else if (direct != nullptr) {
             sqlite3_close_v2(direct);

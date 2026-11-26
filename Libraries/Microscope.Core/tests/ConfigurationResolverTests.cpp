@@ -1677,16 +1677,10 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
     const auto fixture = makeConfigurationFixture();
     const auto objectiveRequirements = take(
         ObjectiveMicroscopyRequirements::create(
-            10.0,
-            40.0,
-            0.25,
-            {ObjectiveImmersionMedium::Air}));
+            10.0, 40.0, 0.25, {ObjectiveImmersionMedium::Air}));
     const auto cameraRequirements = take(
         CameraPerformanceRequirements::create(
-            30.0,
-            1.0,
-            std::nullopt,
-            15000.0));
+            30.0, 1.0, std::nullopt, 15000.0));
     const auto microscopyRequirements = take(MicroscopyRequirements::create(
         {{ContrastMethod::Brightfield,
           MicroscopyTechniqueConstraintKind::Required},
@@ -1700,26 +1694,20 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
         "Peripheral blood film",
         SampleMaterialClass::Biological,
         microscopyRequirements));
-    const auto sample = take(Sample::create(
-        makeId<SampleId>("sample-blood-film-001"),
-        4,
-        sampleType.id(),
-        sampleType.revision(),
-        "Blood film accession 001",
-        "Peripheral blood smear",
-        "Homo sapiens"));
-    const auto preparation = take(SpecimenPreparation::create(
+    const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
+    const auto preparation = take(SlidePreparation::create(
         SpecimenPreparationMethod::Smear,
         SpecimenFixationState::Fixed,
         std::nullopt,
         170.0,
         "Synthetic mounting medium"));
-    const auto specimen = take(Specimen::create(
-        makeId<SpecimenId>("specimen-blood-film-001"),
+    const auto slide = take(Slide::create(
+        makeId<SlideId>("slide-blood-film-001"),
         1,
-        sample.id(),
-        sample.revision(),
+        sampleType.id(),
+        sampleType.revision(),
         "Fixed stained smear",
+        geometry,
         preparation));
 
     const auto request = makeRequest(
@@ -1730,7 +1718,7 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
     const auto configuration = ConfigurationResolver::resolve(
         fixture.equipment, fixture.profiles, request);
     check(configuration.isResolved(),
-          "builds a valid equipment configuration before sample requirement assessment");
+          "builds a valid equipment configuration before Slide requirement assessment");
     if (!configuration.resolvedConfiguration()) {
         return;
     }
@@ -1738,22 +1726,18 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
     const auto assessment = SampleMicroscopyRequirementAssessor::assess(
         fixture.equipment,
         sampleType,
-        sample,
-        specimen,
+        slide,
         *configuration.resolvedConfiguration());
     check(assessment.isCompatible(),
-          "accepts a resolved Brightfield configuration satisfying sample technique and objective requirements");
+          "accepts a resolved Brightfield configuration satisfying SampleType technique and objective requirements");
     check(assessment.hasWarnings(),
           "reports unknown camera performance data without blocking the manually selected operable camera");
     check(hasDiagnosticCode(configuration, "configuration.profile.not_found") == false,
-          "keeps sample type requirements independent of the microscope's equipment-specific profile catalog");
+          "keeps SampleType requirements independent of the microscope equipment-specific profile catalog");
 
     const auto strictObjectiveRequirements = take(
         ObjectiveMicroscopyRequirements::create(
-            10.0,
-            40.0,
-            0.90,
-            {ObjectiveImmersionMedium::Air}));
+            10.0, 40.0, 0.90, {ObjectiveImmersionMedium::Air}));
     const auto strictRequirements = take(MicroscopyRequirements::create(
         {{ContrastMethod::Brightfield,
           MicroscopyTechniqueConstraintKind::Required}},
@@ -1764,25 +1748,18 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
         "High-NA fluorescence cell detail",
         SampleMaterialClass::Biological,
         strictRequirements));
-    const auto strictSample = take(Sample::create(
-        makeId<SampleId>("sample-blood-film-high-na"),
+    const auto strictSlide = take(Slide::create(
+        makeId<SlideId>("slide-blood-film-high-na"),
         1,
         strictSampleType.id(),
         strictSampleType.revision(),
-        "High-NA sample",
-        "Thin cellular specimen"));
-    const auto strictSpecimen = take(Specimen::create(
-        makeId<SpecimenId>("specimen-blood-film-high-na"),
-        1,
-        strictSample.id(),
-        strictSample.revision(),
         "High-NA preparation",
+        geometry,
         preparation));
     const auto strictAssessment = SampleMicroscopyRequirementAssessor::assess(
         fixture.equipment,
         strictSampleType,
-        strictSample,
-        strictSpecimen,
+        strictSlide,
         *configuration.resolvedConfiguration());
     check(!strictAssessment.isCompatible() &&
           std::any_of(
@@ -1792,33 +1769,33 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
                   return diagnostic.code() ==
                       "sample.microscopy.objective_na_below_minimum";
               }),
-          "rejects an objective that fails a hard sample-type numerical-aperture requirement");
+          "rejects an objective that fails a hard SampleType numerical-aperture requirement");
 
-    const auto wrongTypeSample = take(Sample::create(
-        makeId<SampleId>("sample-blood-film-wrong-type-revision"),
+    const auto staleRevisionSlide = take(Slide::create(
+        makeId<SlideId>("slide-blood-film-stale-type"),
         1,
         sampleType.id(),
         sampleType.revision() - 1,
-        "Old type revision",
-        "Peripheral blood smear"));
-    const auto wrongTypeAssessment = SampleMicroscopyRequirementAssessor::assess(
+        "Slide pinned to an older SampleType revision",
+        geometry,
+        preparation));
+    const auto staleRevisionAssessment = SampleMicroscopyRequirementAssessor::assess(
         fixture.equipment,
         sampleType,
-        wrongTypeSample,
-        specimen,
+        staleRevisionSlide,
         *configuration.resolvedConfiguration());
-    check(!wrongTypeAssessment.isCompatible() &&
+    check(!staleRevisionAssessment.isCompatible() &&
           std::any_of(
-              wrongTypeAssessment.diagnostics().begin(),
-              wrongTypeAssessment.diagnostics().end(),
+              staleRevisionAssessment.diagnostics().begin(),
+              staleRevisionAssessment.diagnostics().end(),
               [](const Diagnostic& diagnostic) {
                   return diagnostic.code() ==
-                      "sample.microscopy.sample_type_revision_mismatch";
+                      "sample.microscopy.slide_sample_type_revision_mismatch";
               }),
-          "rejects evaluation when the Sample was created against another SampleType revision");
+          "rejects assessment when Slide pins a different SampleType revision");
 }
 
-void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
+void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
     const auto fixture = makeConfigurationFixture();
     const auto lightPathId =
         makeId<LightPathId>("sample-assessment-brightfield-light-path");
@@ -1842,17 +1819,21 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
         fixture.equipment.filterSpecifications(),
         fixture.equipment.revision()));
 
+    const auto calibration = makeLightPathCalibration(
+        fixture.microscopeId,
+        equipment.revision(),
+        lightPathId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId);
     const auto operationModeId =
         makeId<OperationModeId>("sample-assessment-brightfield-mode");
-    const auto calibrationId =
-        makeId<CalibrationRevisionId>("sample-assessment-brightfield-cal-r1");
     const auto modeSetting = take(LightPathModeSetting::create(
         fixture.microscopeId,
         equipment.revision(),
         operationModeId,
         1,
         lightPathId,
-        calibrationId,
+        calibration.revision(),
         fixture.illuminationId,
         fixture.illuminationChannelId,
         {fixture.objectiveId, fixture.condenserId},
@@ -1898,14 +1879,9 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
 
     const auto condenserRequirements =
         take(CondenserMicroscopyRequirements::create(
-            0.70,
-            0.90,
-            {CondenserDesign::Abbe},
-            {CondenserImmersionMedium::Air}));
+            0.70, 0.90, {CondenserDesign::Abbe}, {CondenserImmersionMedium::Air}));
     const auto illuminationRequirements =
-        take(IlluminationMicroscopyRequirements::create(
-            80.0,
-            120.0));
+        take(IlluminationMicroscopyRequirements::create(80.0, 120.0));
     const auto compatibleRequirements = take(MicroscopyRequirements::create(
         {{ContrastMethod::Brightfield,
           MicroscopyTechniqueConstraintKind::Required}},
@@ -1915,7 +1891,7 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
         condenserRequirements,
         illuminationRequirements));
     const auto preparationRequirements =
-        take(SpecimenPreparationRequirements::create(
+        take(SlidePreparationRequirements::create(
             {SpecimenPreparationMethod::Smear},
             {SpecimenFixationState::Fixed},
             std::nullopt,
@@ -1930,35 +1906,29 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
         compatibleRequirements,
         std::nullopt,
         preparationRequirements));
-    const auto sample = take(Sample::create(
-        makeId<SampleId>("sample-calibrated-blood-film"),
-        1,
-        sampleType.id(),
-        sampleType.revision(),
-        "Blood film 001",
-        "Fixed peripheral blood smear"));
-    const auto preparation = take(SpecimenPreparation::create(
+    const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
+    const auto preparation = take(SlidePreparation::create(
         SpecimenPreparationMethod::Smear,
         SpecimenFixationState::Fixed,
         std::nullopt,
         170.0));
-    const auto specimen = take(Specimen::create(
-        makeId<SpecimenId>("specimen-calibrated-blood-film"),
+    const auto slide = take(Slide::create(
+        makeId<SlideId>("slide-calibrated-blood-film"),
         1,
-        sample.id(),
-        sample.revision(),
+        sampleType.id(),
+        sampleType.revision(),
         "Stained smear on glass",
+        geometry,
         preparation));
 
     const auto compatible = SampleMicroscopyRequirementAssessor::assess(
         equipment,
         sampleType,
-        sample,
-        specimen,
+        slide,
         *configuration.resolvedConfiguration(),
         &operationMode);
     check(compatible.isCompatible(),
-          "accepts condenser capability and the mode's 100 µW/mm² specimen-plane target inside the sample range");
+          "accepts condenser capability and the mode's 100 µW/mm² specimen-plane target inside the SampleType range");
 
     const auto strictIlluminationRequirements =
         take(IlluminationMicroscopyRequirements::create(120.0, 180.0));
@@ -1976,25 +1946,18 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
         "High irradiance specimen",
         SampleMaterialClass::Biological,
         strictRequirements));
-    const auto strictSample = take(Sample::create(
-        makeId<SampleId>("sample-high-irradiance"),
+    const auto strictSlide = take(Slide::create(
+        makeId<SlideId>("slide-high-irradiance"),
         1,
         strictSampleType.id(),
         strictSampleType.revision(),
-        "High irradiance sample",
-        "Light-sensitive prepared material"));
-    const auto strictSpecimen = take(Specimen::create(
-        makeId<SpecimenId>("specimen-high-irradiance"),
-        1,
-        strictSample.id(),
-        strictSample.revision(),
         "High irradiance preparation",
+        geometry,
         preparation));
     const auto incompatible = SampleMicroscopyRequirementAssessor::assess(
         equipment,
         strictSampleType,
-        strictSample,
-        strictSpecimen,
+        strictSlide,
         *configuration.resolvedConfiguration(),
         &operationMode);
     check(!incompatible.isCompatible() &&
@@ -2005,10 +1968,10 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
                   return diagnostic.code() ==
                       "sample.microscopy.specimen_irradiance_below_minimum";
               }),
-          "rejects a mode whose calibrated specimen-plane irradiance falls below the sample requirement");
+          "rejects a mode whose calibrated specimen-plane irradiance falls below the SampleType requirement");
 
     const auto incompatiblePreparationRequirements =
-        take(SpecimenPreparationRequirements::create(
+        take(SlidePreparationRequirements::create(
             {SpecimenPreparationMethod::TissueSection},
             {SpecimenFixationState::Fixed}));
     const auto incompatiblePreparationType = take(SampleType::create(
@@ -2019,26 +1982,19 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
         compatibleRequirements,
         std::nullopt,
         incompatiblePreparationRequirements));
-    const auto incompatiblePreparationSample = take(Sample::create(
-        makeId<SampleId>("sample-type-tissue-section-only"),
+    const auto incompatiblePreparationSlide = take(Slide::create(
+        makeId<SlideId>("slide-type-tissue-section-only"),
         1,
         incompatiblePreparationType.id(),
         incompatiblePreparationType.revision(),
         "Smear used as section",
-        "Peripheral blood smear"));
-    const auto incompatiblePreparationSpecimen = take(Specimen::create(
-        makeId<SpecimenId>("specimen-type-tissue-section-only"),
-        1,
-        incompatiblePreparationSample.id(),
-        incompatiblePreparationSample.revision(),
-        "Smear specimen",
+        geometry,
         preparation));
     const auto preparationMismatch =
         SampleMicroscopyRequirementAssessor::assess(
             equipment,
             incompatiblePreparationType,
-            incompatiblePreparationSample,
-            incompatiblePreparationSpecimen,
+            incompatiblePreparationSlide,
             *configuration.resolvedConfiguration(),
             &operationMode);
     check(!preparationMismatch.isCompatible() &&
@@ -2049,13 +2005,12 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
                   return diagnostic.code() ==
                       "sample.preparation.method_not_allowed";
               }),
-          "rejects an actual specimen preparation method outside its SampleType envelope");
+          "rejects an actual Slide preparation method outside its SampleType envelope");
 
     const auto missingMode = SampleMicroscopyRequirementAssessor::assess(
         equipment,
         sampleType,
-        sample,
-        specimen,
+        slide,
         *configuration.resolvedConfiguration());
     check(!missingMode.isCompatible() &&
           std::any_of(
@@ -2065,7 +2020,7 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
                   return diagnostic.code() ==
                       "sample.microscopy.operation_mode_missing";
               }),
-          "does not infer specimen irradiance when its authoritative OperationMode is unavailable");
+          "does not infer calibrated specimen-plane irradiance when authoritative OperationMode is unavailable");
 }
 
 void testProfileRequiredComponentMustBeOnSelectedPaths() {
@@ -2122,7 +2077,7 @@ int main() {
     testResolverRejectsCameraNotConnectedToSelectedImagingPath();
     testLightPathCameraDiagnosticsSurviveConfigurationResolution();
     testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarnings();
-    testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance();
+    testSampleRequirementsUseModeBoundSlidePlaneIrradiance();
     testProfileRequiredComponentMustBeOnSelectedPaths();
 
     if (failures != 0) {

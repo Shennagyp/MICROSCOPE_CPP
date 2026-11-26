@@ -292,6 +292,77 @@ void testCameraOutputMappingUsesSensorAndDeliveredDimensions() {
           "preserves sensor ROI origin");
 }
 
+void testCameraSensorCharacteristicsValidation() {
+    const auto componentId =
+        makeId<EquipmentComponentId>("fluorescence-camera");
+    const auto cameraMode = outputMode(
+        "fluorescence-camera-mode",
+        roi(0, 0, 640, 480),
+        binning(1, 1),
+        dimensions(640, 480));
+
+    CameraSensorCharacteristics sensor;
+    sensor.technology = CameraSensorTechnology::ScientificCMOS;
+    sensor.shutterType = CameraShutterType::Global;
+    sensor.colorMode = CameraSensorColorMode::Monochrome;
+    sensor.readNoiseElectronsRms = 1.2;
+    sensor.darkCurrentElectronsPerPixelPerSecond = 0.01;
+    sensor.fullWellCapacityElectrons = 30000.0;
+    sensor.maximumFrameRateFramesPerSecond = 100.0;
+    sensor.quantumEfficiency = {
+        {450.0, 0.82}, {550.0, 0.91}, {650.0, 0.74}};
+    sensor.provenance = CameraSpecificationProvenance::ManufacturerDatasheet;
+    sensor.provenanceReference = "manufacturer-datasheet:camera-model-X";
+
+    const auto camera = CameraSpecification::create(
+        componentId,
+        dimensions(640, 480),
+        micrometers(6.5),
+        micrometers(6.5),
+        {cameraMode},
+        std::nullopt,
+        sensor);
+    check(static_cast<bool>(camera),
+          "accepts wavelength-dependent sensor QE and fluorescence noise characteristics");
+    if (camera) {
+        check(camera.value().sensorCharacteristics().has_value() &&
+              camera.value().sensorCharacteristics()->shutterType ==
+                  CameraShutterType::Global,
+              "retains shutter type as model data for camera recommendation");
+        check(camera.value().sensorCharacteristics()->quantumEfficiency.size() == 3,
+              "retains the sensor quantum-efficiency curve");
+    }
+
+    auto impossibleQe = sensor;
+    impossibleQe.quantumEfficiency = {
+        {550.0, 0.7}, {600.0, 1.1}};
+    const auto invalid = CameraSpecification::create(
+        componentId,
+        dimensions(640, 480),
+        micrometers(6.5),
+        micrometers(6.5),
+        {cameraMode},
+        std::nullopt,
+        impossibleQe);
+    check(!invalid &&
+          invalid.error() == CameraSpecificationError::InvalidSensorCharacteristics,
+          "rejects invalid QE values rather than persisting physically impossible data");
+
+    auto unsortedQe = sensor;
+    unsortedQe.quantumEfficiency = {{600.0, 0.7}, {550.0, 0.8}};
+    const auto unsorted = CameraSpecification::create(
+        componentId,
+        dimensions(640, 480),
+        micrometers(6.5),
+        micrometers(6.5),
+        {cameraMode},
+        std::nullopt,
+        unsortedQe);
+    check(!unsorted &&
+          unsorted.error() == CameraSpecificationError::InvalidSensorCharacteristics,
+          "requires sensor QE data to be wavelength ordered");
+}
+
 void testCameraModeAndSensorValidation() {
     auto zeroWidth = PixelDimensions::create(0, 100);
     check(!zeroWidth &&
@@ -554,6 +625,7 @@ int main() {
     testObjectiveSpecification();
     testOpticalFilterSpectralResponse();
     testCameraOutputMappingUsesSensorAndDeliveredDimensions();
+    testCameraSensorCharacteristicsValidation();
     testCameraModeAndSensorValidation();
     testEquipmentAggregateValidatesSpecializedComponentReferences();
 

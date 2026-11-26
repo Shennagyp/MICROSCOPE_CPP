@@ -477,6 +477,54 @@ void testAdapterRejectionClosesOperationWithoutLeavingPendingStep() {
         "the failed operation releases the runtime for the next valid request");
 }
 
+void testRestoredMoveAdapterRejectionClosesHomedOperation() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    auto unknown = take(core::StagePosition3D::unknown(
+        surface, stage, id<core::StageAxisId>("focus-z")));
+    RecordingStagePort port;
+    port.rejectNextMove = true;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, unknown, homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    auto started = take(navigation.beginRequest(
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    check(started.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::HomingDispatched,
+        "the operation starts with the required XY home step");
+
+    const auto homeCorrelation = lastOperation(port);
+    auto home = fixture.process(homeReference(fixture.device, homeCorrelation));
+    auto rejectedRestore = take(navigation.processFeedback(home));
+    check(rejectedRestore.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed &&
+        rejectedRestore.operation &&
+        rejectedRestore.operation->status() == core::OperationStatus::Failed,
+        "a rejected restored move fails the existing home-and-move operation exactly once");
+    check(port.homeCalls == 1 && port.moveToCalls == 1 && !navigation.navigationActive(),
+        "restored adapter rejection clears active navigation without another adapter call");
+    check(navigation.position().x().positionIsUsable() &&
+        navigation.position().y().positionIsUsable() &&
+        !navigation.position().z().positionIsUsable(),
+        "successful XY homing evidence remains valid after the later move is rejected");
+
+    const auto failedSnapshot = take(fixture.runtime->operationSnapshot(
+        *rejectedRestore.operationId));
+    check(failedSnapshot.status() == core::OperationStatus::Failed,
+        "the operation runtime retains one terminal failure for the rejected restored step");
+
+    auto retry = take(navigation.beginRequest(
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    check(retry.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched &&
+        port.moveToCalls == 2,
+        "a new request uses the already referenced XY axes and does not home them again");
+}
+
 void testPreDispatchRejectionClosesOperationAndCanRetry() {
     RuntimeFixture fixture(false);
     const auto stage = stageSpecification();
@@ -593,6 +641,7 @@ int main() {
     testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation();
     testAdapterRejectionClosesOperationWithoutLeavingPendingStep();
     testPreDispatchRejectionClosesOperationAndCanRetry();
+    testRestoredMoveAdapterRejectionClosesHomedOperation();
     testQueuedTargetIsRejectedAfterSlideRegistrationChanges();
     testBoundedControlQueueDispatchesOnTheOwnerThread();
     if (failures != 0) {

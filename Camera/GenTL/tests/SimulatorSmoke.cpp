@@ -7,26 +7,112 @@
 #include <string>
 #include <stdexcept>
 
+namespace {
+
+void verifyTwoDeviceIsolation(
+    const camera::gentl::Producer& producer,
+    const std::vector<camera::gentl::DeviceDescriptor>& devices) {
+    if (devices.size() < 2) {
+        throw std::runtime_error(
+            "The two-device simulator mode requires two discovered devices.");
+    }
+    if (devices[0].deviceId == devices[1].deviceId ||
+        devices[0].serialNumber == devices[1].serialNumber) {
+        throw std::runtime_error(
+            "The simulator returned duplicate identities for its two devices.");
+    }
+
+    auto firstDevice = producer.openDevice(devices[0]);
+    auto secondDevice = producer.openDevice(devices[1]);
+
+    const std::vector<std::uint8_t> firstRegister{0x31, 0x41};
+    const std::vector<std::uint8_t> secondRegister{0x52, 0x62};
+    firstDevice.writePort(0x1000, firstRegister);
+    secondDevice.writePort(0x1000, secondRegister);
+    if (firstDevice.readPort(0x1000, 2) != firstRegister ||
+        secondDevice.readPort(0x1000, 2) != secondRegister) {
+        throw std::runtime_error(
+            "Device register state leaked between the two device ports.");
+    }
+
+    const auto firstStreamIds = firstDevice.dataStreamIds();
+    const auto secondStreamIds = secondDevice.dataStreamIds();
+    if (firstStreamIds.empty() || secondStreamIds.empty()) {
+        throw std::runtime_error("One simulated device has no data stream.");
+    }
+    auto firstStream = firstDevice.openDataStream(firstStreamIds.front(), 3);
+    auto secondStream = secondDevice.openDataStream(secondStreamIds.front(), 3);
+    firstStream.start();
+    secondStream.start();
+
+    std::uint64_t firstTimestamp = 0;
+    std::uint64_t secondTimestamp = 0;
+    for (std::size_t frameIndex = 0; frameIndex < 3; ++frameIndex) {
+        const auto first = firstStream.nextFrame(5000);
+        const auto second = secondStream.nextFrame(5000);
+        if (!first || !second || first->incomplete || second->incomplete) {
+            throw std::runtime_error(
+                "One of the independent simulated streams failed to deliver a complete frame.");
+        }
+        const auto expectedId = static_cast<std::uint64_t>(frameIndex + 1);
+        const auto expectedByte = static_cast<std::uint8_t>(0x30 + frameIndex);
+        if (first->frameId != expectedId || second->frameId != expectedId ||
+            first->payload.empty() || second->payload.empty() ||
+            first->payload.front() != expectedByte ||
+            second->payload.front() != expectedByte ||
+            !first->timestampNanoseconds || !second->timestampNanoseconds ||
+            (frameIndex > 0 &&
+             (*first->timestampNanoseconds <= firstTimestamp ||
+              *second->timestampNanoseconds <= secondTimestamp))) {
+            throw std::runtime_error(
+                "The two streams did not maintain independent frame sequences and timestamps.");
+        }
+        firstTimestamp = *first->timestampNanoseconds;
+        secondTimestamp = *second->timestampNanoseconds;
+    }
+
+    firstStream.stop();
+    secondStream.stop();
+    firstDevice.close();
+    secondDevice.close();
+    std::cout << "Two-device isolation passed: distinct identities, independent "
+                 "port registers, separate stream events/buffer queues, and "
+                 "interleaved frame sequences.\n";
+}
+
+} // namespace
+
 int main(int argc, char** argv) {
-    if (argc != 3 && argc != 4) {
+    if (argc < 3 || argc > 5) {
         std::cerr
             << "Usage: camera_gentl_simulator_smoke "
             << "<native-test-bridge-library> <vendor-producer.cti> "
-            << "[device-index]\n";
+            << "[device-index] [--verify-two-device-isolation]\n";
         return 64;
     }
 
     std::size_t selectedDeviceIndex = 0;
-    if (argc == 4) {
-        const std::string indexText = argv[3];
-        const auto result = std::from_chars(
-            indexText.data(), indexText.data() + indexText.size(),
-            selectedDeviceIndex);
-        if (result.ec != std::errc{} ||
-            result.ptr != indexText.data() + indexText.size()) {
-            std::cerr << "The device index must be a non-negative integer.\n";
-            return 65;
+    bool verifyMultiDeviceIsolation = false;
+    if (argc >= 4) {
+        const std::string option = argv[3];
+        if (option == "--verify-two-device-isolation") {
+            verifyMultiDeviceIsolation = true;
+        } else {
+            const auto result = std::from_chars(
+                option.data(), option.data() + option.size(), selectedDeviceIndex);
+            if (result.ec != std::errc{} ||
+                result.ptr != option.data() + option.size()) {
+                std::cerr << "The device index must be a non-negative integer.\n";
+                return 65;
+            }
         }
+    }
+    if (argc == 5) {
+        if (std::string(argv[4]) != "--verify-two-device-isolation") {
+            std::cerr << "Unknown simulator smoke option.\n";
+            return 67;
+        }
+        verifyMultiDeviceIsolation = true;
     }
 
     try {
@@ -39,6 +125,9 @@ int main(int argc, char** argv) {
         if (devices.empty()) {
             std::cerr << "The CTI Producer discovered no devices.\n";
             return 2;
+        }
+        if (verifyMultiDeviceIsolation) {
+            verifyTwoDeviceIsolation(producer, devices);
         }
         if (selectedDeviceIndex >= devices.size()) {
             std::cerr << "Requested device index " << selectedDeviceIndex

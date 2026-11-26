@@ -4,7 +4,6 @@
 #include <cctype>
 #include <cstdlib>
 #include <exception>
-#include <iterator>
 #include <set>
 #include <system_error>
 
@@ -91,10 +90,8 @@ ProducerCatalogReport ProducerCatalog::discoverDevices(
         try {
             auto producer = Producer::open(path);
             auto devices = producer.discover(timeoutMilliseconds);
-            report.devices.insert(
-                report.devices.end(),
-                std::make_move_iterator(devices.begin()),
-                std::make_move_iterator(devices.end()));
+            report.producers.push_back({
+                std::move(producer), std::move(devices)});
         } catch (const std::exception& exception) {
             report.failures.push_back({path, exception.what()});
         } catch (...) {

@@ -52,6 +52,7 @@ namespace {
     case OpticalElementFunction::ExcitationFilter:
     case OpticalElementFunction::EmissionFilter:
     case OpticalElementFunction::DichroicMirror:
+    case OpticalElementFunction::NeutralDensityFilter:
     case OpticalElementFunction::DarkfieldStop:
     case OpticalElementFunction::Other:
         return true;

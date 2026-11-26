@@ -105,6 +105,14 @@ application::motion::StageMotionErrorBudget errorBudget() {
     return take(application::motion::StageMotionErrorBudget::create({x, y}));
 }
 
+application::motion::StageMotionErrorBudget unboundedErrorBudget() {
+    const auto x = take(application::motion::StageAxisMotionErrorContribution::create(
+        id<core::StageAxisId>("x"), core::AxisCoordinateUnit::Micrometers, std::nullopt));
+    const auto y = take(application::motion::StageAxisMotionErrorContribution::create(
+        id<core::StageAxisId>("y"), core::AxisCoordinateUnit::Micrometers, std::nullopt));
+    return take(application::motion::StageMotionErrorBudget::create({x, y}));
+}
+
 core::StageXYHomingPolicy homingPolicy() {
     return take(core::StageXYHomingPolicy::create(5.0, 5.0));
 }
@@ -348,6 +356,15 @@ void testDeviceReadbackVerifiesBothAxesAndNotOne() {
     const auto stage = stageSpecification();
     const auto surface = workingSurface(stage);
     RecordingStagePort port;
+
+    auto missingBound = application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, referencedPosition(surface, stage), homingPolicy(), unboundedErrorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::DevicePositionObservations),
+        fixture.device, port, *fixture.runtime);
+    check(!missingBound &&
+        missingBound.error().code ==
+            application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::ErrorBudgetMismatch,
+        "device-readback mode still requires calibrated fallback bounds for the command-derived position candidate");
     auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
         surface, referencedPosition(surface, stage), homingPolicy(), errorBudget(),
         verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::DevicePositionObservations),

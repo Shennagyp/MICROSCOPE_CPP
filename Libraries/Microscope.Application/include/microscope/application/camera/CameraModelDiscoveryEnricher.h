@@ -45,6 +45,7 @@ struct CameraSpecificationProjectionResult {
 
 enum class CameraSpecificationProjectionErrorCode {
     ModelProfileNotResolved,
+    EquipmentComponentMismatch,
     CoreSpecificationRejected
 };
 

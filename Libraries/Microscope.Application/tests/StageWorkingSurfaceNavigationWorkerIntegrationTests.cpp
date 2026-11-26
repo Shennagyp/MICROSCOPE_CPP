@@ -172,16 +172,14 @@ public:
             metadata,
             core::StageMotionFeedbackPayload{completed});
 
+        auto* ingress = pendingIngress;
         pendingContext.reset();
         pendingIngress = nullptr;
-        return pendingIngressForCompletion_->submit(std::move(envelope));
+        if (ingress == nullptr) {
+            throw std::runtime_error(\"the accepted stage command lost its feedback ingress\");
+        }
+        return ingress->submit(std::move(envelope));
     }
-
-private:
-    // Kept only by the test harness so a controller callback can enqueue
-    // completion after command acceptance, rather than completing synchronously
-    // inside moveAxesTo().
-    core::IFeedbackIngress<core::StageMotionFeedbackPayload>* pendingIngressForCompletion_{nullptr};
 };
 } // namespace
 

@@ -2237,6 +2237,7 @@ std::vector<CameraInfo> AmcamCamera::enumerate(CameraError* error) {
                 info.modelCode = info.modelName;
             }
             info.modelFlags = device.model->flag;
+            info.identity.manufacturer = "AmScope";
             info.identity.model = info.modelName;
 
             // These are model-descriptor hardware facts, not promises that a

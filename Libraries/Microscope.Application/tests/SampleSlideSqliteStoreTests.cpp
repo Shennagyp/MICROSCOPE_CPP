@@ -326,7 +326,7 @@ void testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation() {
                       "round-trips excitation and emission spectral bands");
                 check(label.emissionSpectrum() &&
                       label.emissionSpectrum()->samples().size() == 3 &&
-                      label.emissionSpectrum()->samples()[1].relativePower == 1.0,
+                      label.emissionSpectrum()->samples()[1].relativeIntensity == 1.0,
                       "round-trips the full relative emission-power distribution");
                 check(label.filterSetCompatibilityId() &&
                       label.filterSetCompatibilityId()->value() == "green-filter-set-r2",

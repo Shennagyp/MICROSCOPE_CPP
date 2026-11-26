@@ -9,6 +9,22 @@ namespace microscope::core {
 struct StagePoint2D final { double xMicrometers; double yMicrometers; };
 struct SlidePoint2D final { double xMicrometers; double yMicrometers; };
 
+enum class StageTravelRange2DError { NonFiniteRange, NonPositiveRange };
+
+// Positive X/Y extents measured from the user-defined working-area origin.
+// Values are expressed in micrometers and are not motor command distances.
+class StageTravelRange2D final {
+public:
+    static Result<StageTravelRange2D, StageTravelRange2DError> create(
+        double xMicrometers, double yMicrometers);
+    double xMicrometers() const noexcept;
+    double yMicrometers() const noexcept;
+private:
+    StageTravelRange2D(double, double) noexcept;
+    double x_;
+    double y_;
+};
+
 enum class SlideRectangleLengthAxis { StageX, StageY };
 
 enum class SlideGeometry2DError { NonFiniteDimension, NonPositiveDimension };
@@ -107,9 +123,10 @@ private:
 };
 
 enum class StageWorkingSurface2DError {
-    NonFiniteBoundary, InvalidBoundary, DuplicateSlideIdentity,
-    SlideOutsideWorkingSurface, DuplicateStageAxis, MissingStageAxis,
-    NonLinearStageAxis, UnsupportedStageAxisUnit, WorkingSurfaceOutsideAxisRange
+    NonFiniteBoundary, InvalidBoundary, NonFiniteOrigin, TravelRangeNotRepresentable,
+    DuplicateSlideIdentity, SlideNotFound, SlideOutsideWorkingSurface,
+    DuplicateStageAxis, MissingStageAxis, NonLinearStageAxis,
+    UnsupportedStageAxisUnit, WorkingSurfaceOutsideAxisRange
 };
 
 struct SlidePosition2D final {
@@ -126,16 +143,35 @@ class StageWorkingSurface2D final {
 public:
     using SlideRectangles = std::vector<SlideRectangleDefinition2D>;
 
+    // Creates the initial blank CAD canvas. The origin is the user-defined
+    // lower-left machine-coordinate point; positive travel extents define the
+    // +X/+Y canvas boundaries. No slide rectangle is created implicitly.
+    static Result<StageWorkingSurface2D, StageWorkingSurface2DError> createEmpty(
+        const StageSpecification&, StageAxisId xAxisId, StageAxisId yAxisId,
+        StagePoint2D origin, StageTravelRange2D travelRange);
+
+    // Validated full-state factory for loading an existing layout or building
+    // a complete immutable snapshot.
     static Result<StageWorkingSurface2D, StageWorkingSurface2DError> create(
         const StageSpecification&, StageAxisId xAxisId, StageAxisId yAxisId,
         StagePoint2D minimumBoundary, StagePoint2D maximumBoundary,
         SlideRectangles rectangles);
+
+    // Immutable CAD edits. The original surface remains unchanged.
+    Result<StageWorkingSurface2D, StageWorkingSurface2DError> withSlideRectangle(
+        const SlideRectangleDefinition2D&) const;
+    Result<StageWorkingSurface2D, StageWorkingSurface2DError> replacingSlideRectangle(
+        const SlideRectangleDefinition2D&) const;
+    Result<StageWorkingSurface2D, StageWorkingSurface2DError> withoutSlideRectangle(
+        const SlideId&) const;
 
     const EquipmentComponentId& stageComponentId() const noexcept;
     const StageAxisId& xAxisId() const noexcept;
     const StageAxisId& yAxisId() const noexcept;
     AxisCoordinateUnit xAxisUnit() const noexcept;
     AxisCoordinateUnit yAxisUnit() const noexcept;
+    const StagePoint2D& origin() const noexcept;
+    const StageTravelRange2D& travelRange() const noexcept;
     const StagePoint2D& minimumBoundary() const noexcept;
     const StagePoint2D& maximumBoundary() const noexcept;
     const SlideRectangles& slideRectangles() const noexcept;
@@ -151,7 +187,7 @@ public:
 private:
     StageWorkingSurface2D(EquipmentComponentId, StageAxisId, StageAxisId,
         AxisCoordinateUnit, AxisCoordinateUnit, StagePoint2D, StagePoint2D,
-        SlideRectangles) noexcept;
+        StageTravelRange2D, SlideRectangles) noexcept;
     EquipmentComponentId stageComponentId_;
     StageAxisId xAxisId_;
     StageAxisId yAxisId_;
@@ -159,6 +195,7 @@ private:
     AxisCoordinateUnit yUnit_;
     StagePoint2D minimumBoundary_;
     StagePoint2D maximumBoundary_;
+    StageTravelRange2D travelRange_;
     SlideRectangles rectangles_;
 };
 

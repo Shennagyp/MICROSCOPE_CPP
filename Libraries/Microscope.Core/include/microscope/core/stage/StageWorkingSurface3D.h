@@ -50,13 +50,14 @@ private:
 enum class SlideRectangleLengthAxis{StageX,StageY};
 enum class SlideRectangleDefinitionError{
     NonFiniteEndpoint,DegenerateRectangle,InvalidConstraintTolerance,
-    InvalidDimensionConstraint,DimensionConstraintMismatch,InvalidZDatum,
+    InvalidDimensionConstraint,InvalidZDatum,
     InvalidStopPointUncertainty,InvalidAxisAssignment,GeometryRejected,PlacementRejected
 };
 
-// CAD-authored, axis-aligned rectangle. Both original endpoints and explicit
-// dimension constraints are retained as authoritative layout data. The first
-// endpoint is the physical stop point and local origin; the second is opposite.
+// CAD-authored, axis-aligned rectangle. The stop-point endpoint is anchored;
+// the second point is an initial opposite-corner handle that selects a quadrant.
+// Length/width constraints solve the final opposite corner. Both points and the
+// explicit constraints remain in the editable source definition.
 class SlideRectangleDefinition2D final{
 public:
     static Result<SlideRectangleDefinition2D,SlideRectangleDefinitionError> create(

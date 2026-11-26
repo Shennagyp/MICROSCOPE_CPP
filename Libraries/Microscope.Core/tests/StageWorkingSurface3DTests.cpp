@@ -73,8 +73,9 @@ void cadRectangleConstraints(){
         75000,25000,300,1000,0.01,0.4));
     check(rectangle.stopPointEndpoint().xMicrometers==1000&&
         rectangle.stopPointEndpoint().yMicrometers==2000&&
-        rectangle.oppositeEndpoint().xMicrometers==76000,
-        "retains original CAD endpoints with the first endpoint as stop datum");
+        rectangle.drawnOppositeEndpoint().xMicrometers==76000&&
+        rectangle.oppositeEndpoint().xMicrometers==76000&&rectangle.oppositeEndpoint().yMicrometers==27000,
+        "retains the original CAD handle and the constrained opposite corner with the first endpoint as stop datum");
     check(rectangle.constrainedLengthMicrometers()==75000&&
         rectangle.constrainedWidthMicrometers()==25000,
         "retains explicit parametric length and width constraints");
@@ -87,8 +88,8 @@ void cadRectangleConstraints(){
         id<SlideId>("bad-cad"),id<CalibrationRevisionId>("bad-v1"),
         {1000,2000},{76000,27000},SlideRectangleLengthAxis::StageX,
         74000,25000,300,1000,0.01);
-    check(!mismatch&&mismatch.error()==SlideRectangleDefinitionError::DimensionConstraintMismatch,
-        "rejects dimension constraints inconsistent with the two drawn endpoints");
+    check(mismatch&&std::abs(mismatch.value().oppositeEndpoint().xMicrometers-75000)<1e-9,
+        "solves the opposite corner from the fixed stop datum and constrained dimensions rather than locking the cursor point");
     auto lengthOnY=take(SlideRectangleDefinition2D::create(
         id<SlideId>("vertical-cad"),id<CalibrationRevisionId>("vertical-v1"),
         {10000,10000},{20000,85000},SlideRectangleLengthAxis::StageY,

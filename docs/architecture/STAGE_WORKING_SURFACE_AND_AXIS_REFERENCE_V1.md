@@ -7,7 +7,7 @@
 
 The stage is one physical 3D working volume. It is not an automatically discovered collection of hardware slots; the user authors and edits the saved CAD layout. The slide map is a user-authored CAD drawing containing a variable number of slide rectangles. It is not limited to ten slides and is not an automatically discovered set of hardware slots.
 
-Each placement retains its original stop-point and opposite XY endpoints, explicit length/width dimensional constraints, drawing tolerance, Z datum and thickness. The resulting 3D placement derives a right-handed orthonormal local X/Y/Z frame from the CAD rectangle. The working volume is explicitly bound to three distinct installed linear StageAxisIds; its micrometer bounds are checked against the corresponding configured axis travel (including unit conversion).
+Each placement retains the stop-point endpoint, original opposite-corner handle, solved opposite endpoint, explicit length/width dimensional constraints, drawing tolerance, Z datum and thickness. The resulting 3D placement derives a right-handed orthonormal local X/Y/Z frame from the solved CAD rectangle. The working volume is explicitly bound to three distinct installed linear StageAxisIds; its micrometer bounds are checked against the corresponding configured axis travel (including unit conversion).
 
 A stage coordinate is projected through the selected slide's inverse rigid transform. Projection remains defined when the stage is between slides or outside a slide footprint. The returned inside-slide and inside-working-volume flags are separate facts.
 
@@ -57,19 +57,21 @@ Physical limit-switch reference is now a distinct StagePositionEvidence value. I
 
 ## CAD rectangle authoring
 
-`StageWorkingSurface3D::SlidePlacements` is a variable-size collection of
+`StageWorkingSurface3D::SlideRectangles` is a variable-size collection of
 `SlideRectangleDefinition2D` values. A working surface may have no rectangles
 initially; the user adds as many as required in the saved CAD drawing.
 
 Each rectangle retains:
-- The first XY endpoint, which is the mechanical stop-point datum and local origin.
-- The opposite XY endpoint.
+- The first XY endpoint, which is fixed as the mechanical stop-point datum and local origin.
+- The initial opposite-corner handle, which selects the rectangle quadrant.
+- The solved opposite endpoint, derived from the dimensional constraints.
 - Whether slide length follows stage X or stage Y.
 - Explicit length and width constraints.
 - Z datum, slide thickness, dimensional tolerance and stop-point uncertainty.
 
-The endpoint spans must satisfy the dimensional constraints within the drawing
-tolerance. The 3D pose is derived from the rectangle but the original CAD
-parameters remain stored and inspectable. This milestone does not yet implement
-interactive dragging, constraint solving during edits, undo/redo, persistence,
+The initial handle supplies direction signs; the length and width constraints
+solve the final opposite corner while keeping the first endpoint fixed. Both the
+initial handle and solved corner are retained. The 3D pose is derived from the
+solved rectangle while the complete CAD definition remains stored and inspectable. This milestone does not yet implement
+interactive dragging with incremental constraint re-solving, undo/redo, persistence,
 or overlap/clearance checks.

@@ -427,6 +427,6 @@ Physical endstop datum evidence is represented separately from encoder and exter
 
 ### Stage layout correction — parametric CAD slide rectangles
 
-The earlier fixed-ten slide array is superseded. A stage working surface now owns a variable-size collection of user-authored `SlideRectangleDefinition2D` values. Each definition retains the two original XY endpoints, the first endpoint's stop-point datum, explicit length/width constraints, length-axis assignment, Z datum, thickness and constraint tolerance. The 3D slide placement is derived from those retained parameters.
+The earlier fixed-ten slide array is superseded. A stage working surface now owns a variable-size collection of user-authored `SlideRectangleDefinition2D` values. Each definition retains the fixed stop-point endpoint, initial opposite-corner handle, solved opposite endpoint, explicit length/width constraints, length-axis assignment, Z datum, thickness and constraint tolerance. The constraints solve the final opposite endpoint while the first endpoint stays anchored; the 3D slide placement is derived from that solved rectangle.
 
-This is an editable layout definition, not automatic hardware discovery or a fixed slot count. Interactive CAD input, constraint solving during dragging, undo/redo, persistence and overlap/clearance rules remain outstanding.
+This is an editable layout definition, not automatic hardware discovery or a fixed slot count. Interactive pointer-driven drawing/editing, incremental constraint re-solving while dragging, undo/redo, persistence and overlap/clearance rules remain outstanding. The Core definition already solves the initial two-point rectangle from its dimensional constraints.

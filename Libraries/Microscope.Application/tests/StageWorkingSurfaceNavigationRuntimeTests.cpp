@@ -154,6 +154,22 @@ core::FeedbackEnvelope<core::StageMotionFeedbackPayload> positionFeedback(
         metadata, core::StageMotionFeedbackPayload{observation(axisId, value, 0.2)});
 }
 
+core::FeedbackEnvelope<core::StageMotionFeedbackPayload> invalidUnitPositionFeedback(
+    const core::RuntimeDeviceCorrelation& device,
+    const core::OperationId& operation, const core::StepId& step,
+    const core::CommandId& command) {
+    auto invalidObservation = take(core::AxisPositionObservation::create(
+        take(core::AxisPosition::create(
+            id<core::StageAxisId>("x"), 30.0, core::AxisCoordinateUnit::Millimeters)),
+        0.01, core::StagePositionEvidence::EncoderMeasured));
+    auto metadata = take(core::FeedbackMetadata::create(
+        core::FeedbackCorrelation{device, core::OperationCorrelation{operation, step, command}},
+        core::FeedbackKind::DeviceStateObserved,
+        core::ObservationSource::HardwareReadback));
+    return core::FeedbackEnvelope<core::StageMotionFeedbackPayload>::create(
+        metadata, core::StageMotionFeedbackPayload{std::move(invalidObservation)});
+}
+
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> homeReference(
     const core::RuntimeDeviceCorrelation& device,
     const core::OperationId& operation, const core::StepId& step,
@@ -369,6 +385,88 @@ void testDeviceReadbackVerifiesBothAxesAndNotOne() {
         "the runtime retains measured X/Y feedback rather than relabeling it as command-derived");
 }
 
+void testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    auto initial = referencedPosition(surface, stage);
+    initial = take(initial.afterCalibratedReference(
+        id<core::StageAxisId>("focus-z"), 5000.0, 1.0));
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, initial, homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::DevicePositionObservations),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    take(navigation.beginRequest(
+        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
+        navigationIds("bad-feedback-op", "bad-feedback-step", "bad-feedback-cmd",
+            "bad-feedback-home-step", "bad-feedback-home-cmd")));
+
+    auto invalid = fixture.process(invalidUnitPositionFeedback(
+        fixture.device, id<core::OperationId>("bad-feedback-op"),
+        id<core::StepId>("bad-feedback-step"), id<core::CommandId>("bad-feedback-cmd")));
+    auto rejected = navigation.processFeedback(invalid);
+    check(!rejected &&
+        rejected.error().code ==
+            application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
+        "a correlated XY observation with the wrong axis unit is rejected");
+
+    const auto snapshot = take(fixture.runtime->operationSnapshot(
+        id<core::OperationId>("bad-feedback-op")));
+    check(snapshot.status() == core::OperationStatus::Failed,
+        "invalid correlated XY feedback fails the active navigation operation");
+    check(!navigation.position().x().positionIsUsable() &&
+        !navigation.position().y().positionIsUsable(),
+        "invalid correlated XY feedback invalidates both in-plane position references");
+    check(navigation.position().z().positionIsUsable() &&
+        navigation.position().z().position() &&
+        navigation.position().z().position()->value() == 5000.0,
+        "invalid XY feedback preserves the independent focus-Z reference");
+}
+
+void testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, referencedPosition(surface, stage), homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::DevicePositionObservations),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    take(navigation.beginRequest(
+        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
+        navigationIds("off-target-op", "off-target-step", "off-target-cmd",
+            "off-target-home-step", "off-target-home-cmd")));
+    auto completed = fixture.process(actionCompleted(
+        fixture.device, id<core::OperationId>("off-target-op"),
+        id<core::StepId>("off-target-step"), id<core::CommandId>("off-target-cmd")));
+    auto awaiting = take(navigation.processFeedback(completed));
+    check(awaiting.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::AwaitingPositionFeedback,
+        "the measured policy waits for readback before evaluating the achieved pose");
+
+    auto x = fixture.process(positionFeedback(
+        fixture.device, id<core::OperationId>("off-target-op"),
+        id<core::StepId>("off-target-step"), id<core::CommandId>("off-target-cmd"), "x", 40000.0));
+    take(navigation.processFeedback(x));
+    auto y = fixture.process(positionFeedback(
+        fixture.device, id<core::OperationId>("off-target-op"),
+        id<core::StepId>("off-target-step"), id<core::CommandId>("off-target-cmd"), "y", 30000.0));
+    auto rejected = take(navigation.processFeedback(y));
+    check(rejected.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
+        "a valid but off-target measured pose fails the navigation operation");
+    check(navigation.position().x().positionIsUsable() &&
+        navigation.position().x().evidence() == core::StagePositionEvidence::EncoderMeasured &&
+        navigation.position().x().position() &&
+        std::abs(navigation.position().x().position()->value() - 40000.0) < 1e-9,
+        "the runtime preserves valid measured evidence for physical recovery");
+}
+
 void testBoundedControlQueueDispatchesOnTheOwnerThread() {
     RuntimeFixture fixture;
     const auto stage = stageSpecification();
@@ -408,6 +506,8 @@ int main() {
     testDirectNavigationSupportsAnArbitrarySlideIdentity();
     testHomeReferencesOnlyXYThenRestoresTheSlideTarget();
     testDeviceReadbackVerifiesBothAxesAndNotOne();
+    testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ();
+    testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation();
     testBoundedControlQueueDispatchesOnTheOwnerThread();
     if (failures != 0) {
         std::cerr << failures << " working-surface navigation runtime test(s) failed\n";

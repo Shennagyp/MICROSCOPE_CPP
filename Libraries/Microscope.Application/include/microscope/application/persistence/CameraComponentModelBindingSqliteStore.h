@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -21,6 +22,8 @@ struct CameraComponentModelBinding {
 };
 
 struct PersistedCameraComponentModelBindings {
+    std::optional<core::MicroscopeId> microscopeId;
+    std::uint64_t equipmentDefinitionRevision = 0;
     std::uint64_t bindingRevision = 0;
     std::vector<CameraComponentModelBinding> bindings;
 };

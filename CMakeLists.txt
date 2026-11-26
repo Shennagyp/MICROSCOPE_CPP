@@ -24,6 +24,10 @@ if(OPTIKA_BUILD_NATIVE_APP)
     enable_language(OBJCXX)
 endif()
 
+# Shared camera discovery/model contracts are backend-neutral and are used by
+# Application even when no vendor camera backend is enabled.
+add_subdirectory(Camera/Common)
+
 # The microscope platform libraries are backend-neutral. They are added
 # independently from the existing AmScope camera capability.
 add_subdirectory(Libraries/Microscope.Core)

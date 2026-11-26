@@ -313,8 +313,11 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     case 22:
     case 27:
-        if (argument_count != 3 || arguments[2] != UINT64_C(2000000000))
+        if (argument_count != 3) return GC_ERR_INVALID_PARAMETER;
+#if !defined(CAMERA_GENTL_SIMULATOR_MODE)
+        if (arguments[2] != UINT64_C(2000000000))
             return GC_ERR_INVALID_PARAMETER;
+#endif
         *(bool8_t*)pointer(arguments[1]) = 1;
         return GC_ERR_SUCCESS;
     case 24:
@@ -416,6 +419,7 @@ int32_t gentl_consumer_invoke(
             return GC_ERR_INVALID_HANDLE;
         size_t* size = (size_t*)pointer(arguments[2]);
         if (!size || !pointer(arguments[1])) return GC_ERR_INVALID_PARAMETER;
+#if !defined(CAMERA_GENTL_SIMULATOR_MODE)
         if (arguments[3] > UINT64_C(1000000000)) {
             atomic_store_explicit(&event_wait_entered, 1, memory_order_release);
             while (!atomic_load_explicit(&event_unregistered, memory_order_acquire)) {
@@ -423,6 +427,7 @@ int32_t gentl_consumer_invoke(
             }
             return GC_ERR_ABORT;
         }
+#endif
         if (queued_buffer_count == 0) return GC_ERR_TIMEOUT;
         if (*size < sizeof(EVENT_NEW_BUFFER_DATA)) {
             *size = sizeof(EVENT_NEW_BUFFER_DATA);

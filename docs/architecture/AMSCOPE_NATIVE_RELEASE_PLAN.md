@@ -210,7 +210,7 @@ Next acceptance gate:
 6. Confirm stopped-only image-processing/format settings remain non-editable while Streaming and become available only after Stop when their descriptors permit it. Stop and Close the camera cleanly.
 7. No FPS benchmark or new feature-capability qualification is implied by this UI work.
 
-Phase 4 remains open after these checks until the remaining reusable feature-editor, command, telemetry, and capability presentation slices are completed and the phase-wide exit criteria are met.
+Phase 4 remains open after these checks until the reusable command and capability presentation slices and the phase-wide exit criteria are completed. The generic feature-editor and telemetry-strip slices are now implemented; the preview's status-bar edit dialog remains host-owned.
 
 Extract only the components needed to turn the preview into a reusable library:
 

@@ -32,7 +32,7 @@ If older documents conflict with this owner direction or the current status ledg
 | 1 — Native AmScope driver | Historically accepted; hardening evidence remains | Do not rewrite. Reopen only for a reproduced defect or a specific Phase 6 gap. |
 | 2 — Common camera contracts | Implemented substantially; residual hardware evidence remains | Reuse existing contracts. Change only for a demonstrated semantic defect. |
 | 3 — Qt streaming separation | **Accepted by owner** | Preserve the one-session adapter and backend-neutral frame-stream boundary. |
-| 4 — Reusable Qt UI | **IN PROGRESS** | Reusable widgets and preview app exist. CameraFeatureEditor is now integrated into feature tabs. Complete visual/workspace and physical MU503 UI smoke before accepting Phase 4. |
+| 4 — Reusable Qt UI | **IN PROGRESS** | Reusable widgets and preview app exist. CameraFeatureEditor and ImageInfoBar cover feature editing and telemetry. Complete reusable command/capability presentation, visual/workspace and physical MU503 UI smoke before accepting Phase 4. |
 | 5 — GenTL/GenApi integration | **Complete by owner direction** | Do not restart, duplicate, or replace the integration. External device qualification is separate Phase 8 evidence. |
 | 6 — Capability, feature, command and model coverage | **OPEN; preliminary work exists** | Two AmScope corrections and the initial audit are recorded. Continue after Phase 4 acceptance from CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md. |
 | 7 — Packaging and external consumers | Open | Do not jump ahead of Phase 6. |
@@ -72,11 +72,13 @@ The separate Optika application owns presentation, UI, workspace, microscope sta
 
 ## 5. Phase 4 current work and Phase 6 follow-on
 
-Phase 4 source now includes the reusable CameraFeatureEditor, integrated
-into the AmScope preview feature tabs. The current Qt CI checkpoint builds
-amscope_preview and passes 21/21 CTest tests on both architectures. The
-remaining Phase 4 gate is application visual/workspace inspection and the
-current-revision physical MU503 UI smoke; CI is not a substitute.
+Phase 4 source now includes CameraFeatureEditor integrated into the AmScope
+preview feature tabs, and ImageInfoBar as the status-bar telemetry strip. The
+current Qt CI checkpoint builds amscope_preview and passes 21/21 CTest tests
+on both architectures. Remaining implementation work includes reusable
+command and capability presentation. The application visual/workspace
+inspection and current-revision physical MU503 UI smoke are also pending; CI
+is not a substitute.
 
 After Phase 4 acceptance, continue Phase 6 from
 [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
@@ -163,10 +165,13 @@ Phase 8 remains responsible for exact-commit hardware records, supported provide
 
 ## 9. Immediate next action
 
-Complete the Phase 4 acceptance gate for the existing amscope_preview:
-inspect the document-centric workspace, dock move/tabify/float/close/restore,
-layout persistence, Output pane and status-bar information strip; then run the
-physical MU503 discover/open/preview/live-feature-readback/stop/close smoke.
-Do not mark Phase 4 complete from CI alone. After that, continue Phase 6 from
-the recorded audit. Do not add a public SDK interface, change session ownership,
-or modify the completed GenTL integration.
+Continue Phase 4 with a reusable command presentation component based on
+ICameraCommandAccess, preserving issue/request-pending/executing/completed and
+failure states. The host must own command execution and completion polling;
+the widget must never infer device completion from a click. Then add tri-state
+capability presentation for Unknown, Unsupported and Supported without
+collapsing unknown into false. Keep parameterized AmScope actions in the host.
+After those slices, complete visual/workspace and physical MU503 UI smoke.
+Do not mark Phase 4 complete from CI alone. Then continue Phase 6 from the
+audit. Do not add a public SDK interface, change session ownership, or modify
+the completed GenTL integration.

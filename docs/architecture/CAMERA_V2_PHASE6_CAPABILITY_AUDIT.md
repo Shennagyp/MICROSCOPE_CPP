@@ -45,7 +45,7 @@ feature/command behavior is not adequately tested, GenApi negative/failure
 coverage is incomplete, and the common discovery/capability relationship
 between GenTL and AmScope still needs an explicit API decision. Phase 4 remains
 the current critical-path phase until the preview application's visual and
-physical UI acceptance checks are completed.
+physical UI acceptance checks and the remaining reusable command/capability presentation slices are completed.
 
 ## 3. Coverage matrix
 

@@ -245,6 +245,22 @@ int main(int argc, char** argv) {
             }
 
             const auto statistics = stream.statistics();
+            std::cout << "Statistics diagnostic: tltype="
+                      << statistics.transportType.value_or("<absent>")
+                      << " delivered=" << statistics.producerDeliveredBuffers.value_or(UINT64_MAX)
+                      << " underruns=" << statistics.producerBufferUnderruns.value_or(UINT64_MAX)
+                      << " started=" << statistics.producerFramesStarted.value_or(UINT64_MAX)
+                      << " announced=" << statistics.announcedBuffers.value_or(SIZE_MAX)
+                      << " queued=" << statistics.queuedBuffers.value_or(SIZE_MAX)
+                      << " awaiting=" << statistics.buffersAwaitingDelivery.value_or(SIZE_MAX)
+                      << " observed=" << statistics.integrity.observedBuffers
+                      << " complete=" << statistics.integrity.completeImages
+                      << " incomplete=" << statistics.integrity.incompleteBuffers
+                      << " gaps=" << statistics.integrity.sequenceGaps
+                      << " missing=" << statistics.integrity.missingFrames
+                      << " timeouts=" << statistics.integrity.frameWaitTimeouts
+                      << " starvation=" << statistics.integrity.bufferStarvationEvents
+                      << '\n';
             if (statistics.transportType != std::optional<std::string>("MockGenTL") ||
                 statistics.producerDeliveredBuffers != requiredFrames ||
                 statistics.producerBufferUnderruns != 2 ||

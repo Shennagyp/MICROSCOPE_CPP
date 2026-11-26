@@ -656,7 +656,7 @@ int32_t gentl_consumer_invoke(
             if (injected && *injected) {
                 char* end = 0;
                 const unsigned long long value = strtoull(injected, &end, 10);
-                if (end != injected && *end == '\\0')
+                if (end != injected && *end == '\0')
                     simulator_buffer_underruns[index] = (uint64_t)value;
             }
         }

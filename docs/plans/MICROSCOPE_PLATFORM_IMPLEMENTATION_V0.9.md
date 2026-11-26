@@ -423,6 +423,9 @@ The earlier 3A–3E implementation established useful typed equipment, optical-f
 - Retain SampleType as a versioned reusable requirement profile. It contains microscopy requirements and optional slide-preparation requirements, with no patient, individual Sample or accession identity.
 - Remove the Sample instance model, SampleId and all Sample-parent ownership semantics. Do not introduce a Sample table/package or a reverse Sample-to-Slide collection.
 - Remove SlideType as a separate taxonomy. Reusable allowed-preparation requirements belong to SampleType; actual preparation facts belong to each Slide.
+- Extend SampleType to own both `MicroscopyRequirements` and the optional reusable `SlidePreparationRequirements` envelope. Keep SampleType revisioned; Slides pin an exact revision.
+- Replace `SampleMicroscopyRequirementAssessor::assess(equipment, sampleType, sample, specimen, configuration, mode)` with a slide-oriented assessor contract such as `SlideMicroscopyRequirementAssessor::assess(equipment, sampleType, slide, configuration, mode)`. Read actual preparation facts from Slide; do not accept Sample, Specimen-parent or Patient objects.
+- Remove Sample/SampleId and SlideType/SlideTypeId strong identities and APIs. Preserve SlideId because it is also the mechanical identity used by stage registration/navigation.
 - Define Slide with a stable SlideId/revision, required SampleTypeId and exact SampleTypeRevision, display label, physical SlideGeometry and actual preparation/details snapshot.
 - Add optional OriginLabId as an opaque external reference on Slide. If IDs are only unique within a source system, persist its namespace/issuer with the value. Do not create a Lab entity or perform lab lookups.
 - Persist each Slide's independent stage registration and four corner correspondences, fit residuals, provenance and calibration revision. Registration remains mechanical and independent of SampleType.

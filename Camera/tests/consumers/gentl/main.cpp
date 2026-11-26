@@ -1,8 +1,11 @@
 #include <camera/gentl/GenTLFrameAdapter.h>
-#include <camera/gentl/Producer.h>
+#include <camera/gentl/ProducerCatalog.h>
 
+#include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -12,29 +15,59 @@ int main(int argc, char** argv) {
         return 64;
     }
 
+    const auto temporaryDirectory =
+        std::filesystem::temp_directory_path() /
+        "camera-module-relocated-gentl-consumer";
+    std::filesystem::remove_all(temporaryDirectory);
+
+    const char* previousSearchPath = std::getenv("GENICAM_GENTL64_PATH");
+    const std::optional<std::string> savedSearchPath = previousSearchPath
+        ? std::optional<std::string>{previousSearchPath}
+        : std::nullopt;
+
     try {
-        // This executable is built against the installed and relocated
-        // CameraModule package, not the source-tree target.
-        auto producer = camera::gentl::Producer::open(argv[1]);
-        const auto devices = producer.discover(5000);
-        if (devices.size() < 2) {
-            std::cerr << "Expected both simulated GenTL devices to be discovered.\n";
-            return 2;
+        std::filesystem::create_directories(temporaryDirectory);
+        const auto simulatorPath = temporaryDirectory / "external-simulator.cti";
+        std::filesystem::copy_file(
+            std::filesystem::canonical(argv[1]), simulatorPath);
+
+        if (setenv("GENICAM_GENTL64_PATH",
+                   temporaryDirectory.c_str(), 1) != 0) {
+            throw std::runtime_error(
+                "Could not configure the GenTL Producer search path.");
         }
 
-        auto device = producer.openDevice(devices.front());
+        // This executable is built against the installed and relocated
+        // CameraModule package, not the source-tree target.
+        auto catalog = camera::gentl::ProducerCatalog::discoverDevices(5000);
+        if (catalog.producerPaths.size() != 1 ||
+            catalog.producers.size() != 1 ||
+            !catalog.failures.empty()) {
+            throw std::runtime_error(
+                "The relocated ProducerCatalog did not load exactly one CTI.");
+        }
+
+        auto& entry = catalog.producers.front();
+        if (entry.producer.ctiPath() !=
+                std::filesystem::canonical(simulatorPath).string() ||
+            entry.devices.size() < 2) {
+            throw std::runtime_error(
+                "The relocated catalog did not discover both simulated cameras.");
+        }
+
+        auto device = entry.producer.openDevice(entry.devices.front());
         const auto streamIds = device.dataStreamIds();
         if (streamIds.empty()) {
-            std::cerr << "The installed consumer found no data stream.\n";
-            return 3;
+            throw std::runtime_error(
+                "The installed consumer found no data stream.");
         }
 
         auto stream = device.openDataStream(streamIds.front(), 3);
         stream.start();
         const auto frame = stream.nextFrame(5000);
         if (!frame || frame->incomplete || frame->payload.empty()) {
-            std::cerr << "The installed consumer did not receive a complete frame.\n";
-            return 4;
+            throw std::runtime_error(
+                "The installed consumer did not receive a complete frame.");
         }
 
         auto commonFrame =
@@ -42,19 +75,32 @@ int main(int argc, char** argv) {
         if (!commonFrame || !*commonFrame ||
             (*commonFrame)->width == 0 || (*commonFrame)->height == 0 ||
             (*commonFrame)->pixels.empty()) {
-            std::cerr << "The installed consumer could not project the frame into Camera.Common.\n";
-            return 5;
+            throw std::runtime_error(
+                "The installed consumer could not project the frame into Camera.Common.");
         }
 
         stream.stop();
         device.close();
         std::cout << "Relocated CameraModule GenTL consumer passed: "
-                  << devices.size() << " devices discovered; native CTI opened; "
+                  << catalog.producerPaths.size() << " CTI discovered; "
+                  << entry.devices.size() << " devices enumerated; "
                   << (*commonFrame)->width << 'x' << (*commonFrame)->height
                   << " frame delivered and projected.\n";
+
+        if (savedSearchPath)
+            setenv("GENICAM_GENTL64_PATH", savedSearchPath->c_str(), 1);
+        else
+            unsetenv("GENICAM_GENTL64_PATH");
+        std::filesystem::remove_all(temporaryDirectory);
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "CameraModule GenTL consumer failed: " << error.what() << '\n';
+        if (savedSearchPath)
+            setenv("GENICAM_GENTL64_PATH", savedSearchPath->c_str(), 1);
+        else
+            unsetenv("GENICAM_GENTL64_PATH");
+        std::filesystem::remove_all(temporaryDirectory);
+        std::cerr << "CameraModule GenTL consumer failed: "
+                  << error.what() << '\n';
         return 1;
     }
 }

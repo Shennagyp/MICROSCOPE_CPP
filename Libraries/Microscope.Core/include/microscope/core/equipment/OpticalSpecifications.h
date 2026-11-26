@@ -484,9 +484,9 @@ struct FluorescenceEmissionSample {
     double relativeIntensity = 0.0;
 };
 
-// Relative emitted photon distribution for a fluorophore or task-specific
-// emission profile. The samples describe spectral shape; absolute emitted
-// power is not inferred from them.
+// Relative spectral photon-flux density (per wavelength interval) for a
+// fluorophore or task-specific emission profile. The samples describe spectral
+// shape; absolute emitted power is not inferred from them.
 class FluorescenceEmissionSpectrum final {
 public:
     [[nodiscard]] static Result<

@@ -4,6 +4,7 @@
 #include "microscope/core/configuration/OperationMode.h"
 #include "microscope/core/equipment/OpticalTopology.h"
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -24,6 +25,8 @@ struct LightPathCameraCandidate {
 };
 
 struct ResolvedLightPathCamera {
+    OperationModeId operationModeId;
+    std::uint64_t operationModeRevision = 0;
     LightPathId lightPathId;
     EquipmentComponentId cameraComponentId;
     CameraModeId cameraModeId;

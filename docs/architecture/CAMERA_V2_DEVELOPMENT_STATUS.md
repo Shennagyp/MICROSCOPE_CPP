@@ -2,15 +2,15 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b` — AmScope RAW bit-depth descriptor now supplies an explicit disabled reason when the active model profile blocks pixel-format selection.  
-**Latest CI-validated checkpoint:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b` — workflow [#45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032) passed non-Qt and Qt builds/tests on Intel x86_64 and Apple Silicon arm64; amscope_preview built and 24/24 Qt CTest tests passed on each architecture.  
+**Latest reviewed implementation checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37` — GenApi negative-path coverage now includes malformed XML rejection/recovery, unsupported public generic-node classification, and injected feature/command failure recovery.  
+**Latest CI-validated checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37` — workflow [#45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
 **Review date:** 26 November 2026.  
-**Phase status:** Phase 3 accepted; Phase 4 source implementation and offscreen composition checks are complete, pending visual and physical UI acceptance; Phase 5 GenTL/GenApi implementation is owner-confirmed complete; Phase 6 follows Phase 4.  
+**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction while Phase 4 acceptance remains pending.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
 
 ## 0. Immediate continuation instruction
 
-The next AI must read [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md), this ledger, and the Phase 6 audit before touching source. Qt streaming and reusable UI are original Phase 3/4 deliverables, not excluded historical code. Phase 3 is accepted; Phase 4 is the current critical-path phase. The Qt preview application exists in Camera/Amscope/app/main.cpp and must be preserved. Phase 5 GenTL/GenApi is complete by owner direction. Do not restart Phase 5 or revive retired repositories.
+The next AI must read [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md), this ledger, and the Phase 6 audit before touching source. Qt streaming and reusable UI are original Phase 3/4 deliverables, not excluded historical code. Phase 3 is accepted. Phase 4 source/offscreen work is complete, but human visual inspection and physical MU503 UI acceptance remain pending; the owner postponed the physical test and explicitly directed continued Phase 6 work, so Phase 4 acceptance does not block Phase 6 software work. Preserve the existing preview. Phase 5 GenTL/GenApi is complete by owner direction. **Do not modify AmScope source, tests, public contracts or behavior; do not write to `OPTIKA-B293-DUALSLIDE-APP-v.0.9`.** Continue only on `camera-v.2.0`. Do not run local build/test/debug runs. Do not restart Phase 5 or revive retired repositories.
 
 ## 1. Branch provenance
 
@@ -89,13 +89,13 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 1 | Stabilize and qualify native AmScope driver | **Accepted by owner historically; post-acceptance hardening remains.** Single-session ownership, callback/queue/worker/pull path, frame pool and lifecycle primitives exist. Full injected SDK lifecycle tests and proof of callback quiescence around terminal Close remain open. |
 | 2 | Finalize backend-neutral camera models | **Partially implemented.** Slice 2.1 discovery/capability models and 2.2 frame/layout models exist with automated tests and prior cross-architecture CI. The 2.3 semantic ownership audit is documented: common feature-access errors remain common, while AmScope lifecycle/command errors remain provider-specific. Physical common-frame/RAW validation remains open, so Phase 2 is not accepted. |
 | 3 | Separate driver, programmatic control and Qt streaming libraries | **ACCEPTED BY OWNER.** AmcamCamera remains the single native session owner; Amscope::Qt composes it for QObject request scheduling and frame delivery. Camera::Qt provides the extracted frame-stream boundary. Owner-confirmed physical Qt-to-MU503 streaming smoke evidence is recorded in the subordinate release plan. Qt remains optional to non-Qt consumers. |
-| 4 | Extract reusable Qt camera UI library | **IN PROGRESS — SOURCE AND OFFSCREEN CHECKS COMPLETE.** Camera::QtWidgets contains FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel. The AmScope preview uses the feature editor, telemetry strip and selected-model capability panel. The command panel is for no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned. Workflow #45749181949 built amscope_preview and passed 24/24 Qt CTest tests on both architectures, including an application-level offscreen composition and dock-state restore test. Remaining gates are human visual/workspace inspection and current-revision physical MU503 UI smoke. |
+| 4 | Extract reusable Qt camera UI library | **SOURCE AND OFFSCREEN CHECKS COMPLETE; OWNER ACCEPTANCE PENDING/POSTPONED.** Camera::QtWidgets contains FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel. The AmScope preview uses the feature editor, telemetry strip and selected-model capability panel. The command panel is for no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned. Workflow #45749181949 built amscope_preview and passed 24/24 Qt CTest tests on both architectures, including an application-level offscreen composition and dock-state restore test. Human visual/workspace inspection and physical MU503 UI smoke remain pending; the owner has postponed the physical test. This pending acceptance does not block the owner-directed Phase 6 software work. |
 | 5 | Integrate existing GenTL/GenApi implementation | **COMPLETE — owner-confirmed implementation milestone.** The GenTL Producer/device/stream lifecycle, buffer acquisition, frame metadata projection, remote-port access, XML retrieval and GenApi 3.5.1 feature/command integration are implemented and covered by cross-architecture CI. Do not reopen or reimplement Phase 5. Vendor CTI/device and physical-camera qualification are external integration/release evidence and must be tracked separately; they do not authorize restarting the completed implementation milestone. |
-| 6 | Complete capability, feature, command and model coverage | **OPEN — preliminary work committed ahead of the phase sequence.** The initial provider source-to-test audit is recorded; RAW bit-depth SDK error classification and PixelFormatSelection profile enforcement are corrected. Full AmScope provider-level feature/command tests, GenApi negative/failure tests and GenTL common-discovery mapping decision remain. Start this phase after Phase 4 acceptance. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
+| 6 | Complete capability, feature, command and model coverage | **ACTIVE BY OWNER DIRECTION — OPEN.** The initial audit and three AmScope corrections are recorded. GenApi malformed-XML rejection/recovery, unsupported public generic-node handling, and injected feature-read, feature-write and command-execution failure/recovery are now covered by official GenApi CI on both architectures. AmScope provider-level feature/command tests remain unaddressed because AmScope is frozen by owner instruction. Continue with provider-neutral discovery/API and vector-descriptor decisions; do not modify AmScope. Phase 4 acceptance remains pending but does not block this work. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
 | 7 | Release packaging and external-consumer integration | **Open.** Initial install rules exist and native public headers install/compile. An exported CMake package/config/version flow and clean native/GenTL external consumers remain. Qt consumers must be included as an optional exported target, not excluded. |
 | 8 | Final hardware qualification and release | **Not started/accepted.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer tests, release CI and owner acceptance. |
 
-Active continuation order: 0 → 1 → 2 → 3 → **4 (current phase)** → 5 → 6 → 7 → 8. Phase 3 is accepted; Phase 4's reusable UI components are implemented and cross-architecture CI-verified, but application visual/workspace and current-revision physical MU503 UI smoke checks remain. Phase 5 is complete by owner direction. Phase 6 has three preliminary AmScope corrections but follows Phase 4 acceptance in the governing sequence. Vendor CTI/device qualification remains separate hardware/release evidence; do not restart Phase 5.
+Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Current execution is owner-directed: Phase 3 is accepted; Phase 4 source/offscreen work is complete while visual/workspace and physical MU503 acceptance remain pending (physical test postponed); Phase 5 is complete by owner direction; Phase 6 is the active software workstream and must continue now without claiming Phase 4 acceptance. Phase 7 packaging follows Phase 6. Vendor CTI/device qualification remains separate hardware/release evidence; do not restart Phase 5.
 
 ## 5. Changes made on camera-v.2.0
 
@@ -187,13 +187,15 @@ No local build or physical-camera test is claimed in this status update. The Gen
 
 ## 6. Phase 6 audit checkpoint — 26 November 2026
 
-The preliminary source-to-test audit is recorded in
+The source-to-test audit is recorded in
 [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
 It covers Common contracts, AmScope discovery/features/commands/model policy,
 and GenTL/GenApi discovery/features/commands. The audit is not a Phase 6
-completion claim. Phase 6 follows original Phase 4 in the governing sequence;
-the three AmScope corrections below were useful preparatory fixes, not grounds
-to skip the outstanding Qt UI acceptance gate.
+completion claim. Owner direction on 26 November 2026 explicitly postponed
+the physical MU503 test and instructed continued Phase 6 development. Phase 4
+remains pending owner acceptance, but it is not a blocker for Phase 6 software
+work. AmScope implementation is frozen: do not modify its source, tests,
+contracts or behavior.
 
 The first three confirmed AmScope gaps were corrected:
 - `a1be35d`: preserve `E_NOTIMPL` as model-level unavailability and map
@@ -216,11 +218,31 @@ CI evidence:
   `a4fc39b`; the feature-validation test passed on both architectures.
 
 No local build/test/debug run or new physical-camera test was performed.
-Phase 6 remains open. The next bounded task is to establish deterministic
-provider-level AmScope feature coverage without introducing a public SDK
-abstraction or changing the one-session/one-handle lifecycle. The existing
-Phase 1 SDK seam design is lifecycle-focused; extend it only for a specific
-Phase 6 test requirement, and do not reopen Phase 1 wholesale.
+AmScope source and tests were not modified. The latest GenTL/GenApi-only
+increment is commit `a07c8a2cfc56d639b7c761512fb640cf079cfd37`; workflow
+[#45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996)
+passed the GenTL suite and official GenApi 3.5.1 build/integration tests on
+Intel x86_64 and Apple Silicon arm64.
+
+That increment covers:
+- malformed GenApi XML is rejected and a subsequent valid node map recovers;
+- a public generic GenApi `Node` reachable from `Root` is omitted from
+  scalar feature descriptors and direct read/write return `Unsupported`;
+- injected remote-port failures map feature read, feature write and command
+  execution to `BackendFailure`, with subsequent recovery / no-side-effect
+  assertions.
+
+Next Phase 6 actions:
+1. Record the GenTL discovery-to-Common decision: retain provider-specific
+   `DeviceDescriptor` for now because it carries producer/interface/device
+   routing identity; do not synthesize a lossy common discovery record without
+   a real multi-provider consumer requirement.
+2. Decide whether per-element vector constraints have a concrete generic
+   consumer. Do not expand `CameraFeatureDescriptor` absent that requirement.
+3. Keep AmScope provider-level feature/command coverage as a known gap blocked
+   by the explicit AmScope freeze. Do not alter AmScope to close it.
+4. Continue with the next provider-neutral Phase 6 gap; keep physical MU503,
+   vendor CTI and real-device GenApi evidence pending for Phase 8.
 
 ## 7. Highest-priority unresolved risks
 
@@ -240,11 +262,12 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 8. Next development sequence
 
-1. Complete human visual inspection of amscope_preview: inspect the workspace; exercise dock move/tabify/float/close/restore and persisted layout; verify the status-bar information strip, Model Capabilities panel and Output pane. The offscreen CTest already checks composition and save/restore mechanics, but not visual quality or interactive persistence.
-2. Run the current-revision MU503 UI smoke: discover/select, Open/Start, verify changing frames, test supported live Exposure/Color edits with backend readback, verify stopped-only controls remain disabled while Streaming, then Stop and Close.
-3. After Phase 4 acceptance, continue Phase 6 from CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md: AmScope provider-level feature/command tests, GenApi negative/failure tests and the GenTL discovery-to-Common projection decision.
-4. Export native, GenTL and optional Qt CMake packages and verify clean external consumers under Phase 7.
-5. Complete Phase 8 physical qualification for every declared provider/model combination and verify vendor SDK redistribution terms.
+1. Continue Phase 6 now on `camera-v.2.0`: finalize the provider-specific GenTL discovery decision and vector-descriptor requirement assessment, then select the next provider-neutral coverage gap.
+2. Keep the GenApi negative/failure test slice at commit `a07c8a2` as CI-verified. Do not restart Phase 5.
+3. Keep AmScope provider-level feature/command coverage explicitly blocked by the AmScope freeze; do not change AmScope source/tests/contracts to address it.
+4. Keep Phase 4 visual/workspace acceptance pending and the physical MU503 test postponed; neither blocks the current Phase 6 software work. Do not claim Phase 4 accepted.
+5. After Phase 6, export native, GenTL and optional Qt CMake packages and verify clean external consumers under Phase 7.
+6. Complete Phase 8 physical qualification for every declared provider/model combination and verify vendor SDK redistribution terms.
 
 ## 9. Continuation rules
 

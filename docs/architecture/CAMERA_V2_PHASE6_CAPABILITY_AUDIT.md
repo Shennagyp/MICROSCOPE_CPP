@@ -2,10 +2,10 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Reviewed provider checkpoint:** `a4fc39b3d876ba301a2f1c8a916216c94186cd3b`  
+**Reviewed provider checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37`  
 **Current Qt/UI checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
 **Review date:** 26 November 2026  
-**Status:** Preliminary Phase 6 source-to-test audit complete; Phase 6 remains open and follows Phase 4 in the governing sequence.
+**Status:** Phase 6 remains open and is the active software workstream by owner direction. Phase 4 visual/physical acceptance remains pending; the owner postponed the physical MU503 test and explicitly directed continued Phase 6 work.
 
 ## 1. Authority and scope
 
@@ -14,8 +14,12 @@ The current owner-directed phase ledger is
 operational rules are in [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
 Phase 5 GenTL/GenApi integration is complete by owner direction. This audit
 does not reopen it. Original Phases 3 and 4 remain in scope: Phase 3 is accepted,
-and Phase 4 reusable Qt UI is still in progress. The preliminary Phase 6 work
-below does not authorize skipping Phase 4 acceptance.
+and Phase 4 reusable Qt UI source/offscreen work is complete with visual and
+physical owner acceptance still pending. On 26 November 2026 the owner
+postponed the physical MU503 test and directed continued Phase 6 development.
+This is a sequencing instruction, not a claim that Phase 4 has been accepted.
+Phase 4 acceptance remains pending and does not block Phase 6 software work.
+AmScope source/tests/contracts/behavior are frozen and must not be modified.
 
 Older AmScope-only plans use different phase numbering. Their phase labels do
 not override the current owner-directed Phase 0–8 ledger. In particular,
@@ -39,14 +43,20 @@ Three concrete AmScope gaps were corrected:
 2. The RAW significant-bit-depth selector could bypass the model's
    `PixelFormatSelection` allow-list policy.
 
-Both corrections have cross-architecture CI evidence. No physical hardware
-verification was added. Phase 6 remains open because provider-level AmScope
-feature/command behavior is not adequately tested, GenApi negative/failure
-coverage is incomplete, and the common discovery/capability relationship
-between GenTL and AmScope still needs an explicit API decision. Phase 4 remains
-the current critical-path phase until the preview application's visual and
-physical UI acceptance checks are completed. Reusable command and capability
-presentation are now implemented.
+Both AmScope corrections have cross-architecture CI evidence. No physical
+hardware verification was added. GenApi negative-path coverage has since been
+added and passed official GenApi 3.5.1 integration CI on both architectures:
+malformed XML rejection/recovery, unsupported public generic-node handling,
+feature read/write failure recovery, and command execution failure recovery.
+The exact green checkpoint is `a07c8a2cfc56d639b7c761512fb640cf079cfd37`,
+workflow [#45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996).
+
+Phase 6 remains open. AmScope provider-level feature/command behavior remains
+a known gap but is blocked by the explicit AmScope freeze. The GenTL discovery
+model decision and vector descriptor consumer requirement are the next
+provider-neutral audit decisions. Phase 4 visual/physical acceptance remains
+pending; its physical MU503 test is postponed and does not block Phase 6.
+Reusable command and capability presentation are implemented.
 
 ## 3. Coverage matrix
 
@@ -176,9 +186,9 @@ passed 24/24 tests on each architecture.
 |---|---|---|---|
 | P1 | AmScope feature behavior has no direct provider tests | The complete non-Qt AmScope test directory has no tests for `featureDescriptors`, `readFeature` or `writeFeature`; Qt tests only check queued error paths while Closed | Design the smallest private test boundary for descriptor/probe/write semantics. Prefer extracting pure descriptor policy/mapping logic where possible; introduce per-instance SDK dispatch only for calls that genuinely need injection. Preserve one handle, SDK serialization and the public ABI. |
 | P1 | AmScope command/accessory behavior has no direct provider tests | Public API includes trigger, I/O, light, filter-wheel, ST4, focuser, lens and still-capture operations; current tests do not exercise their provider-side preconditions, rollback, readback or asynchronous completion | Build a separate command-family test matrix. Do not merge settings, telemetry and actions. Start with one deterministic, low-risk command family after its SDK semantics are traced. |
-| P2 | GenApi malformed/unsupported/failure paths are not covered | Current XML integration suite is primarily positive-path; no malformed XML, unsupported public node type, injected feature read/write failure or command execution failure/recovery case was found | Add synthetic XML/fault-port tests at the GenApi adapter boundary. Do not change Producer/Consumer architecture. |
-| P2 | GenTL discovery has no explicit Common projection | `Producer::discover` returns `DeviceDescriptor`; `CameraDeviceInfo` is used by AmScope but not by the GenTL public discovery result | Decide whether the application consumes provider-specific discovery or requires a common projection. If adding a projection, preserve Producer/interface/device routing identity outside the lossy common fields. This is a Phase 6 model/API alignment task, not Phase 5 reimplementation. |
-| P2 | Vector descriptors expose cardinality but not per-element semantics | Common descriptor has `elementCount`; AmScope ROI and sharpening writes enforce element-specific constraints in provider code, but the descriptor cannot express per-element labels/ranges | Decide whether generic non-UI consumers require structured per-element constraints. Do not expand the public contract without a concrete consumer requirement. |
+| P2 | GenApi vendor/device behavior remains unverified | Synthetic XML and mock-port tests now cover malformed XML rejection/recovery, unsupported public generic-node classification, feature read/write failure recovery and command execution failure recovery. No vendor CTI or physical GenTL camera is part of this evidence. | Keep vendor XML/CTI/device qualification in Phase 8. Do not treat mock/XML CI as hardware evidence. |
+| P2 | GenTL discovery-to-Common projection decision | `Producer::discover` returns provider-specific `DeviceDescriptor`; `CameraDeviceInfo` is a data model, not a required cross-provider discovery API. The GenTL descriptor carries Producer path, interface ID and device ID required for routing. | **Decision: retain provider-specific `DeviceDescriptor`; do not add a Common projection without a concrete multi-provider consumer.** A future projection must preserve the routing descriptor separately and define a collision-safe opaque identity. No source/API change is justified now. |
+| P2 | Vector descriptors expose cardinality but not per-element semantics | Common descriptor has `elementCount`; AmScope ROI/sharpening writes enforce element-specific constraints in provider code. No concrete generic consumer requiring per-element labels/ranges has been established. | **Decision: defer contract expansion.** Revisit only when a generic consumer needs to render or validate per-element constraints. Keep provider validation authoritative. |
 | P3 | Hardware/model evidence remains narrow | Existing MU503 short runs are useful regression observations, not evidence for every supported model/feature/accessory or GenTL CTI camera | Carry the exact supported model/backend matrix and records into Phase 8. Do not claim hardware support from SDK flags, mocks or XML alone. |
 
 ## 6. Explicitly deferred or unsupported behavior
@@ -198,23 +208,26 @@ supported or hardware-qualified.
 
 ## 7. Next work package
 
-1. Preserve the current Phase 5 completion boundary and complete Phase 4
-   visual/physical UI acceptance before treating Phase 6 as the active
-   critical-path milestone.
-2. After Phase 4, design a narrow Phase 6 testability layer for AmScope feature
-   descriptor construction and provider operations. The existing Phase 1 seam document
-   covers lifecycle calls and explicitly excludes feature/accessory calls from
-   its initial increment; do not turn it into a universal SDK interface.
-3. Add provider tests by semantic family: scalar numeric, enum, Boolean,
-   vector, read-only telemetry, profile-denied feature, state-gated write,
-   readback mismatch, and native HRESULT failure.
-4. Test command families separately: accepted vs completed, preconditions,
-   timeout/quarantine, rollback and read-state confirmation.
-5. Add GenApi malformed XML, unsupported node and failure/recovery tests.
-6. Resolve the GenTL discovery-to-Common projection requirement without
-   altering the completed Producer/Consumer integration.
-7. Keep physical model qualification and vendor CTI testing as Phase 8
-   evidence. No Phase 6 source/CI result substitutes for hardware records.
+1. Continue Phase 6 software work now, as explicitly directed by the owner.
+   Phase 4 visual/workspace acceptance remains pending and physical MU503
+   testing is postponed; neither blocks Phase 6. Do not mark Phase 4 accepted.
+2. Preserve the AmScope freeze. The known provider-level AmScope feature and
+   command test gaps remain documented but must not be addressed by modifying
+   AmScope source, tests, public contracts or behavior.
+3. GenApi malformed XML, unsupported public generic-node, feature read/write
+   failure recovery and command execution failure recovery tests are complete
+   at `a07c8a2`; workflow #45767256996 passed Intel x86_64 and Apple Silicon
+   arm64 with the official GenApi 3.5.1 integration.
+4. Retain provider-specific GenTL `DeviceDescriptor` for now. It carries the
+   Producer/interface/device routing identity needed by `openDevice`; there
+   is no established generic multi-provider discovery consumer that justifies
+   a lossy Common projection. Revisit only when such a consumer exists.
+5. Defer per-element vector descriptor expansion until a concrete generic
+   consumer requires per-element metadata. Provider-side validation remains
+   authoritative.
+6. Continue the next provider-neutral Phase 6 coverage gap. Keep vendor CTI,
+   vendor GenApi XML and physical camera qualification as Phase 8 evidence;
+   mock/XML CI is not hardware verification.
 
 **No local build/test/debug run or physical-camera test was performed for this
 audit.** The CI results above are the exact remote workflow evidence.

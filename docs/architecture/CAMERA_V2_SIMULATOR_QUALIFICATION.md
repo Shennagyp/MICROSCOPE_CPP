@@ -195,7 +195,8 @@ The in-repository simulator CTest invokes the smoke executable with `--verify-tw
 3. Writes different byte sequences to the same register address through each remote port and verifies no cross-device register leakage.
 4. Opens and starts one data stream on each device.
 5. Interleaves frame retrieval and verifies independent frame IDs, timestamps and changing payload bytes.
-6. Stops both streams and closes both device sessions.
-7. Continues the original five-frame single-device smoke with the expected continued frame sequence.
+6. Stops the first stream while the second is still active and verifies that the second stream continues with its next frame.
+7. Stops the second stream and closes both device sessions.
+8. Continues the original five-frame single-device smoke with the expected continued frame sequence.
 
 This is still a first-party fixture. It validates the project's handling of concurrent device sessions and stream ownership; it is not vendor interoperability evidence. The normal mock target is built without CAMERA_GENTL_SIMULATOR_MODE; its single-device fixture and pending-wait cancellation semantics must remain unchanged. CI must pass on both supported architectures before this increment is marked verified.

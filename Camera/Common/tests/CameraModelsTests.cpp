@@ -145,6 +145,10 @@ void testPersistableCameraModelCatalog() {
     require(multiVariantCatalog->findExact(ambiguousIdentity) == nullptr,
             "does not silently choose an exact profile when its variant is unknown");
 
+    ambiguousIdentity.modelVariant = "";
+    require(multiVariantCatalog->findExact(ambiguousIdentity) == nullptr,
+            "treats an empty variant field as unknown rather than an exact generic variant");
+
     auto genericProfile = CameraModelProfile::create(
         CameraModelKey{"Example Imaging", "SCMOS-2048", std::nullopt},
         capabilities,

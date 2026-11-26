@@ -153,4 +153,16 @@ if(BUILD_TESTING)
     add_test(
         NAME microscope_application_stage_navigation_runtime_tests
         COMMAND microscope_application_stage_navigation_runtime_tests)
+
+    add_executable(microscope_application_working_surface_navigation_runtime_tests
+        tests/StageWorkingSurfaceNavigationRuntimeTests.cpp)
+    target_link_libraries(microscope_application_working_surface_navigation_runtime_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_working_surface_navigation_runtime_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_working_surface_navigation_runtime_tests
+        COMMAND microscope_application_working_surface_navigation_runtime_tests)
 endif()

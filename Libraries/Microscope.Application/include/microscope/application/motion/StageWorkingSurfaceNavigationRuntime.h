@@ -157,6 +157,7 @@ enum class StageWorkingSurfaceNavigationRuntimeErrorCode {
     HomeReferenceRejected,
     StepVerificationRejected,
     OperationCompletionRejected,
+    PositionProjectionRejected,
     NavigationIdentityExhausted,
     NavigationIdentityCreationFailed,
     SurfaceReplacementDuringNavigation
@@ -593,32 +594,59 @@ public:
         return core::Result<bool, StageWorkingSurfaceNavigationRuntimeError>::success(true);
     }
 
-    // Read this value on the serialized owner thread. Front ends should consume
-    // immutable Application snapshots rather than retain this reference.
-    [[nodiscard]] const core::StagePosition3D& position() const noexcept {
-        return position_;
+    // Snapshot reads are owner-thread-only. A host that publishes state to the
+    // UI copies these values in its owner-thread callback; no mutable references
+    // into the stage subsystem cross the thread boundary.
+    [[nodiscard]] core::Result<
+        core::StagePosition3D,
+        StageWorkingSurfaceNavigationRuntimeError> positionSnapshot() const {
+        auto owner = requireOwnerThread();
+        if (!owner) {
+            return core::Result<core::StagePosition3D,
+                StageWorkingSurfaceNavigationRuntimeError>::failure(owner.error());
+        }
+        return core::Result<core::StagePosition3D,
+            StageWorkingSurfaceNavigationRuntimeError>::success(position_);
     }
 
-    [[nodiscard]] const core::StageWorkingSurface2D& surface() const noexcept {
-        return surface_;
+    [[nodiscard]] core::Result<
+        core::StageWorkingSurface2D,
+        StageWorkingSurfaceNavigationRuntimeError> workingSurfaceSnapshot() const {
+        auto owner = requireOwnerThread();
+        if (!owner) {
+            return core::Result<core::StageWorkingSurface2D,
+                StageWorkingSurfaceNavigationRuntimeError>::failure(owner.error());
+        }
+        return core::Result<core::StageWorkingSurface2D,
+            StageWorkingSurfaceNavigationRuntimeError>::success(surface_);
     }
 
-    // Returns the selected physical slide's current local coordinates through
-    // its own registration. Unknown position/error or an out-of-slide mapping
-    // remains an explicit error.
+    // Returns slide-local XY derived from the authoritative machine position.
+    // The projection is evaluated on the stage owner thread.
     [[nodiscard]] core::Result<
         core::SlidePositionEstimate2D,
-        core::StagePosition3DError> currentSlidePosition(
+        StageWorkingSurfaceNavigationRuntimeError> currentSlidePosition(
             const core::SlideId& slideId) const {
-        return position_.positionOnSlide(surface_, slideId);
+        auto owner = requireOwnerThread();
+        if (!owner) {
+            return core::Result<core::SlidePositionEstimate2D,
+                StageWorkingSurfaceNavigationRuntimeError>::failure(owner.error());
+        }
+        auto projected = position_.positionOnSlide(surface_, slideId);
+        if (!projected) {
+            auto error = makeError(
+                StageWorkingSurfaceNavigationRuntimeErrorCode::PositionProjectionRejected);
+            error.positionError = projected.error();
+            return core::Result<core::SlidePositionEstimate2D,
+                StageWorkingSurfaceNavigationRuntimeError>::failure(std::move(error));
+        }
+        return core::Result<core::SlidePositionEstimate2D,
+            StageWorkingSurfaceNavigationRuntimeError>::success(std::move(projected).value());
     }
 
+    // Owner-thread-only query used by the serialized control queue.
     [[nodiscard]] bool navigationActive() const noexcept {
         return active_.has_value();
-    }
-
-    [[nodiscard]] const core::OperationId* activeOperationId() const noexcept {
-        return active_ ? &active_->identities.operationId : nullptr;
     }
 
 private:
@@ -747,7 +775,7 @@ private:
     }
 
     [[nodiscard]] core::Result<bool, StageWorkingSurfaceNavigationRuntimeError>
-    requireOwnerThread() {
+    requireOwnerThread() const {
         const auto current = std::this_thread::get_id();
         if (!ownerThreadBound_) {
             return core::Result<bool, StageWorkingSurfaceNavigationRuntimeError>::failure(

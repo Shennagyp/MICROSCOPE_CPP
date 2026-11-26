@@ -54,6 +54,58 @@ void testMono8Projection() {
 }
 
 
+void testPackedMono10pAndMono12pPreserveByteLayout() {
+    struct FormatCase {
+        std::uint64_t format;
+        std::uint8_t bits;
+        camera::PixelPacking packing;
+        std::uint32_t expectedStride;
+    };
+    const FormatCase cases[] = {
+        {UINT64_C(0x010A0046), 10, camera::PixelPacking::PFNC10p, 4},
+        {UINT64_C(0x010C0047), 12, camera::PixelPacking::PFNC12p, 5}
+    };
+    for (const auto& test : cases) {
+        auto source = validMono8Frame();
+        source.width = 3;
+        source.height = 2;
+        source.deliveredImageHeight = 2;
+        source.pixelFormat = test.format;
+        source.pixelEndianness = GenTL::PIXELENDIANNESS_UNKNOWN;
+        source.payload = {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08};
+        if (test.bits == 12)
+            source.payload.insert(source.payload.end(), {0x09,0x0A});
+        const auto original = source.payload;
+        const auto result = camera::gentl::makeCommonFrame(std::move(source));
+        require(result.has_value(), "Packed monochrome image was rejected.");
+        const auto& frame = **result;
+        require(frame.pixelPacking == test.packing,
+                "Packed PFNC layout identity was not preserved.");
+        require(frame.pixelFormat == camera::PixelFormat::Raw8,
+                "Packed byte payload was not represented as raw bytes.");
+        require(frame.pixelByteOrder == camera::PixelByteOrder::NotApplicable,
+                "Packed samples must not claim byte endianness.");
+        require(frame.significantBitsPerPixel == test.bits &&
+                    frame.storageBitsPerPixel == test.bits,
+                "Packed sample bit depth was not preserved.");
+        require(frame.strideBytes == test.expectedStride,
+                "Packed row stride was not computed correctly.");
+        require(frame.pixels == original,
+                "Packed payload bytes were modified or unpacked.");
+    }
+}
+
+void testPackedMonochromeRejectsIncorrectPayloadLength() {
+    auto source = validMono8Frame();
+    source.pixelFormat = UINT64_C(0x010A0046);
+    source.payload.resize(5);
+    const auto result = camera::gentl::makeCommonFrame(source);
+    require(result.has_value(), "Opaque packed frame should remain available.");
+    require((*result)->pixelPacking == camera::PixelPacking::Unknown &&
+                (*result)->strideBytes == 0,
+            "Invalid packed payload length was assigned a false row layout.");
+}
+
 void testMono16ProjectionUsesReportedByteOrder() {
     auto source = validMono8Frame();
     source.pixelFormat = UINT64_C(0x01100007);
@@ -384,6 +436,8 @@ int main() {
     try {
         testMono8Projection();
         testRvalueProjectionTransfersPayload();
+        testPackedMono10pAndMono12pPreserveByteLayout();
+        testPackedMonochromeRejectsIncorrectPayloadLength();
         testMono16ProjectionUsesReportedByteOrder();
         testUnpackedMono10Mono12Mono14Projection();
         testBayerMosaicFormatsPreservePatternAndRawSamples();

@@ -171,6 +171,23 @@ const std::filesystem::path& GenTLProducerLibrary::path() const noexcept {
     return path_;
 }
 
+Consumer GenTLProducerLibrary::createConsumer() {
+    auto owner = shared_from_this();
+    return Consumer(
+        std::move(owner), this,
+        [](const void*, void* producerContext, Operation operation,
+           const std::uint64_t* arguments, std::uint32_t argumentCount) noexcept {
+            if (!producerContext) return GenTL::GC_ERR_INVALID_HANDLE;
+            const auto* producer =
+                static_cast<const GenTLProducerLibrary*>(producerContext);
+            return producer->invokeRaw(operation, arguments, argumentCount);
+        },
+        [](const void*, void*) noexcept {
+            // The shared owner retains the CTI library. There is no per-consumer
+            // native context to destroy.
+        });
+}
+
 std::int32_t GenTLProducerLibrary::invokeRaw(
     Operation operation,
     const std::uint64_t* arguments,

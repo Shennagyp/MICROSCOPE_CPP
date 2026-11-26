@@ -73,14 +73,26 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
     using namespace microscope::core;
 
     const auto microscopeId = makeId<MicroscopeId>("binding-test-microscope");
+    const auto objectiveId = makeId<EquipmentComponentId>("objective-main");
     const auto cameraId = makeId<EquipmentComponentId>("camera-main");
+    const auto objectiveOutput =
+        makeId<OpticalPortId>("objective-main-output");
     const auto cameraInput = makeId<OpticalPortId>("camera-main-input");
 
+    const auto objectiveComponent = take(EquipmentComponent::create(
+        objectiveId,
+        EquipmentComponentKind::OpticalElement,
+        {take(OpticalPort::create(
+            objectiveOutput, OpticalPortDirection::Output))}));
     const auto cameraComponent = take(EquipmentComponent::create(
         cameraId,
         EquipmentComponentKind::ImagingDevice,
         {take(OpticalPort::create(
             cameraInput, OpticalPortDirection::Input))}));
+    const auto connection = take(OpticalConnection::create(
+        makeId<OpticalConnectionId>("objective-to-camera"),
+        objectiveOutput,
+        cameraInput));
 
     const auto cameraMode = take(CameraOutputMode::create(
         makeId<CameraModeId>("camera-main-mono8"),
@@ -100,7 +112,9 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
     const auto imagingPath = take(OpticalPath::create(
         imagingPathId,
         {take(OpticalPathStep::create(
-            cameraId, std::nullopt, std::nullopt))},
+             objectiveId, std::nullopt, objectiveOutput)),
+         take(OpticalPathStep::create(
+             cameraId, cameraInput, std::nullopt))},
         OpticalPathRole::Imaging));
     const auto lightPath = take(LightPath::create(
         makeId<LightPathId>("camera-main-light-path"),
@@ -109,8 +123,8 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
 
     return take(MicroscopeEquipmentDefinition::create(
         microscopeId,
-        {cameraComponent},
-        {},
+        {objectiveComponent, cameraComponent},
+        {connection},
         {imagingPath},
         {},
         {cameraSpecification},

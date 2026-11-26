@@ -3,6 +3,7 @@
 #include "microscope/core/stage/StageWorkingSurface2D.h"
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -90,6 +91,111 @@ void cadRectanglesAreXYOnlyAndVariableCount() {
     auto machine = take(surface.toStage(id<SlideId>("slide-2"), {10'000, 5'000}));
     check(machine.xMicrometers == 90'000 && machine.yMicrometers == 5'000,
         "maps slide-local XY back into stage coordinates");
+}
+
+void emptyCanvasUsesUserOriginAndTravelRange() {
+    const auto stage = stageSpecification();
+    const auto range = take(StageTravelRange2D::create(420'000, 80'000));
+    const auto empty = take(StageWorkingSurface2D::createEmpty(
+        stage, id<StageAxisId>("x"), id<StageAxisId>("y"),
+        {-10'000, -10'000}, range));
+
+    check(empty.slideRectangles().empty(),
+        "new working surface is an empty canvas with no implicit slide rectangles");
+    check(empty.origin().xMicrometers == -10'000 &&
+        empty.origin().yMicrometers == -10'000,
+        "retains the user-defined starting machine coordinate");
+    check(empty.travelRange().xMicrometers() == 420'000 &&
+        empty.travelRange().yMicrometers() == 80'000,
+        "retains the user-defined positive X/Y travel extents");
+    check(empty.maximumBoundary().xMicrometers == 410'000 &&
+        empty.maximumBoundary().yMicrometers == 70'000,
+        "derives the far canvas boundary from origin plus travel extents");
+    check(empty.contains({-10'000, -10'000}) && empty.contains({410'000, 70'000}) &&
+        !empty.contains({410'000.1, 70'000}),
+        "uses a closed workspace boundary and rejects points beyond travel extents");
+
+    auto position = take(StagePosition3D::unknown(
+        empty, stage, id<StageAxisId>("z-focus")));
+    auto noSlide = position.positionOnSlide(empty, id<SlideId>("not-drawn-yet"));
+    check(!noSlide && noSlide.error() == StagePosition3DError::SlideNotFound,
+        "an empty workspace has machine-axis coordinates but no slide-local projection");
+
+    auto invalidZero = StageTravelRange2D::create(0.0, 10.0);
+    auto invalidNegative = StageTravelRange2D::create(10.0, -1.0);
+    auto invalidInfinite = StageTravelRange2D::create(
+        std::numeric_limits<double>::infinity(), 10.0);
+    check(!invalidZero && !invalidNegative && !invalidInfinite,
+        "rejects zero, negative and non-finite travel extents");
+
+    auto invalidOrigin = StageWorkingSurface2D::createEmpty(
+        stage, id<StageAxisId>("x"), id<StageAxisId>("y"),
+        {std::numeric_limits<double>::quiet_NaN(), 0.0}, range);
+    check(!invalidOrigin && invalidOrigin.error() ==
+        StageWorkingSurface2DError::NonFiniteOrigin,
+        "rejects a non-finite user-defined workspace origin");
+
+    auto outsideAxisRange = StageWorkingSurface2D::createEmpty(
+        stage, id<StageAxisId>("x"), id<StageAxisId>("y"),
+        {-10'000, -10'000}, take(StageTravelRange2D::create(420'001, 80'000)));
+    check(!outsideAxisRange && outsideAxisRange.error() ==
+        StageWorkingSurface2DError::WorkingSurfaceOutsideAxisRange,
+        "rejects a user workspace that exceeds the configured physical axis ranges");
+
+    auto overflow = StageWorkingSurface2D::createEmpty(
+        stage, id<StageAxisId>("x"), id<StageAxisId>("y"),
+        {1.0e308, 0.0}, take(StageTravelRange2D::create(1.0e308, 10.0)));
+    check(!overflow && overflow.error() ==
+        StageWorkingSurface2DError::TravelRangeNotRepresentable,
+        "rejects an overflowing or unrepresentable workspace boundary");
+}
+
+void emptyCanvasSupportsImmutableSlideRectangleEdits() {
+    const auto stage = stageSpecification();
+    const auto empty = take(StageWorkingSurface2D::createEmpty(
+        stage, id<StageAxisId>("x"), id<StageAxisId>("y"), {0,0},
+        take(StageTravelRange2D::create(250'000, 60'000))));
+
+    const auto first = rectangle("slide-1", 40'000, 10'000);
+    const auto oneSlide = take(empty.withSlideRectangle(first));
+    const auto* firstStored = oneSlide.rectangleFor(id<SlideId>("slide-1"));
+    check(empty.slideRectangles().empty() && oneSlide.slideRectangles().size() == 1,
+        "adding a drawn slide creates a new snapshot without mutating the blank canvas");
+    check(firstStored && firstStored->stopPointEndpoint().xMicrometers == 40'000 &&
+        firstStored->stopPointEndpoint().yMicrometers == 10'000 &&
+        empty.origin().xMicrometers == 0 && empty.origin().yMicrometers == 0,
+        "keeps the slide's user-defined stop point separate from the workspace origin");
+
+    auto duplicate = oneSlide.withSlideRectangle(first);
+    check(!duplicate && duplicate.error() ==
+        StageWorkingSurface2DError::DuplicateSlideIdentity,
+        "rejects adding a slide identity already present on the canvas");
+
+    const auto revised = take(SlideRectangleDefinition2D::create(
+        id<SlideId>("slide-1"), id<CalibrationRevisionId>("slide-1-v2"),
+        {40'000,10'000}, {40'001,10'001}, SlideRectangleLengthAxis::StageX,
+        80'000, 20'000));
+    const auto replaced = take(oneSlide.replacingSlideRectangle(revised));
+    check(oneSlide.rectangleFor(id<SlideId>("slide-1"))->constrainedLengthMicrometers() == 75'000 &&
+        replaced.rectangleFor(id<SlideId>("slide-1"))->constrainedLengthMicrometers() == 80'000 &&
+        replaced.rectangleFor(id<SlideId>("slide-1"))->registrationRevision() ==
+            id<CalibrationRevisionId>("slide-1-v2"),
+        "replaces one slide registration as a new immutable layout revision");
+
+    auto wrongIdentity = oneSlide.replacingSlideRectangle(rectangle("slide-2", 80'000, 0));
+    check(!wrongIdentity && wrongIdentity.error() == StageWorkingSurface2DError::SlideNotFound,
+        "replacement requires an existing slide identity");
+
+    auto outside = empty.withSlideRectangle(rectangle("slide-outside", 250'000, 0));
+    check(!outside && outside.error() == StageWorkingSurface2DError::SlideOutsideWorkingSurface,
+        "rejects a slide footprint that extends beyond the user-defined travel range");
+
+    const auto removed = take(oneSlide.withoutSlideRectangle(id<SlideId>("slide-1")));
+    check(removed.slideRectangles().empty() && oneSlide.slideRectangles().size() == 1,
+        "removes a slide into another immutable snapshot without changing earlier snapshots");
+    auto missing = empty.withoutSlideRectangle(id<SlideId>("slide-1"));
+    check(!missing && missing.error() == StageWorkingSurface2DError::SlideNotFound,
+        "rejects removal of a slide that is not on the canvas");
 }
 
 void zFocusIsIndependentFromSlidePlane() {
@@ -208,6 +314,8 @@ void measuredFullRangeSweepCanUseIndependentFeedback() {
 
 int main() {
     cadRectanglesAreXYOnlyAndVariableCount();
+    emptyCanvasUsesUserOriginAndTravelRange();
+    emptyCanvasSupportsImmutableSlideRectangleEdits();
     zFocusIsIndependentFromSlidePlane();
     physicalEndstopStillUsesItsSwitch();
     zWithoutEndstopUsesSafeFullRangeSweepFromUnknownPosition();

@@ -298,7 +298,7 @@ void testDirectNavigationSupportsAnArbitrarySlideIdentity() {
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted &&
         completed.operation && completed.operation->status() == core::OperationStatus::Succeeded,
         "a correlated completion verifies and completes the navigation operation");
-    check(!navigation.position().z().positionIsUsable(),
+    check(!take(navigation.positionSnapshot()).z().positionIsUsable(),
         "focus Z remains unknown and unchanged by the XY slide move");
     auto local = take(navigation.currentSlidePosition(id<core::SlideId>("slide-c")));
     check(std::abs(local.position.xMicrometers - 10000.0) < 1e-9 &&
@@ -345,9 +345,9 @@ void testHomeReferencesOnlyXYThenRestoresTheSlideTarget() {
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted &&
         completed.operation && completed.operation->status() == core::OperationStatus::Succeeded,
         "home and restored movement complete as one operation");
-    check(navigation.position().x().positionIsUsable() &&
-        navigation.position().y().positionIsUsable() &&
-        !navigation.position().z().positionIsUsable(),
+    check(take(navigation.positionSnapshot()).x().positionIsUsable() &&
+        take(navigation.positionSnapshot()).y().positionIsUsable() &&
+        !take(navigation.positionSnapshot()).z().positionIsUsable(),
         "successful slide homing references X/Y without changing focus Z");
 }
 
@@ -390,8 +390,8 @@ void testDeviceReadbackVerifiesBothAxesAndNotOne() {
     check(completed.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted,
         "both in-tolerance axis readbacks complete the operation");
-    check(navigation.position().x().evidence() == core::StagePositionEvidence::EncoderMeasured &&
-        navigation.position().y().evidence() == core::StagePositionEvidence::EncoderMeasured,
+    check(take(navigation.positionSnapshot()).x().evidence() == core::StagePositionEvidence::EncoderMeasured &&
+        take(navigation.positionSnapshot()).y().evidence() == core::StagePositionEvidence::EncoderMeasured,
         "the runtime retains measured X/Y feedback rather than relabeling it as command-derived");
 }
 
@@ -423,12 +423,12 @@ void testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ() {
         lastOperation(port).operationId));
     check(snapshot.status() == core::OperationStatus::Failed,
         "invalid correlated XY feedback fails the active navigation operation");
-    check(!navigation.position().x().positionIsUsable() &&
-        !navigation.position().y().positionIsUsable(),
+    check(!take(navigation.positionSnapshot()).x().positionIsUsable() &&
+        !take(navigation.positionSnapshot()).y().positionIsUsable(),
         "invalid correlated XY feedback invalidates both in-plane position references");
-    check(navigation.position().z().positionIsUsable() &&
-        navigation.position().z().position() &&
-        navigation.position().z().position()->value() == 5000.0,
+    check(take(navigation.positionSnapshot()).z().positionIsUsable() &&
+        take(navigation.positionSnapshot()).z().position() &&
+        take(navigation.positionSnapshot()).z().position()->value() == 5000.0,
         "invalid XY feedback preserves the independent focus-Z reference");
 }
 
@@ -458,10 +458,10 @@ void testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation() {
     check(rejected.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
         "a valid but off-target measured pose fails the navigation operation");
-    check(navigation.position().x().positionIsUsable() &&
-        navigation.position().x().evidence() == core::StagePositionEvidence::EncoderMeasured &&
-        navigation.position().x().position() &&
-        std::abs(navigation.position().x().position()->value() - 40000.0) < 1e-9,
+    check(take(navigation.positionSnapshot()).x().positionIsUsable() &&
+        take(navigation.positionSnapshot()).x().evidence() == core::StagePositionEvidence::EncoderMeasured &&
+        take(navigation.positionSnapshot()).x().position() &&
+        std::abs(take(navigation.positionSnapshot()).x().position()->value() - 40000.0) < 1e-9,
         "the runtime preserves valid measured evidence for physical recovery");
 }
 
@@ -530,9 +530,9 @@ void testRestoredMoveAdapterRejectionClosesHomedOperation() {
         "a rejected restored move records the verified home step and reports partial completion");
     check(port.homeCalls == 1 && port.moveToCalls == 1 && !navigation.navigationActive(),
         "restored adapter rejection clears active navigation without another adapter call");
-    check(navigation.position().x().positionIsUsable() &&
-        navigation.position().y().positionIsUsable() &&
-        !navigation.position().z().positionIsUsable(),
+    check(take(navigation.positionSnapshot()).x().positionIsUsable() &&
+        take(navigation.positionSnapshot()).y().positionIsUsable() &&
+        !take(navigation.positionSnapshot()).z().positionIsUsable(),
         "successful XY homing evidence remains valid after the later move is rejected");
 
     const auto failedSnapshot = take(fixture.runtime->operationSnapshot(

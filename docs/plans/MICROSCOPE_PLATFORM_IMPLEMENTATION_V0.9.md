@@ -392,21 +392,6 @@ The Application layer now has StagePosition3DFeedbackReducer for serialized work
 Physical endstop datum evidence is represented separately from encoder and external measurement and from command-derived estimates. The Core and Application tests were registered; they were not executed here. The existing application worker still requires a concrete host composition to invoke the reducer and publish its resulting snapshots.
 
 
-### Stage layout correction — parametric CAD slide rectangles
+### Remaining CAD authoring work
 
-The earlier fixed-ten slide array is superseded. A stage working surface now owns a variable-size collection of user-authored `SlideRectangleDefinition2D` values. Each definition retains the fixed stop-point endpoint, initial opposite-corner handle, solved opposite endpoint, explicit length/width constraints, length-axis assignment, Z datum, thickness and constraint tolerance. The constraints solve the final opposite endpoint while the first endpoint stays anchored; the 3D slide placement is derived from that solved rectangle.
-
-This is an editable layout definition, not automatic hardware discovery or a fixed slot count. Interactive pointer-driven drawing/editing, incremental constraint re-solving while dragging, undo/redo, persistence and overlap/clearance rules remain outstanding. The Core definition already solves the initial two-point rectangle from its dimensional constraints.
-
-
-### Physical model correction — XY slide layout and independent focus Z
-
-The previous working-surface model incorrectly included slide Z datum, slide thickness, drawing tolerance and stop-point uncertainty. Those fields have been removed from the replacement model.
-
-StageWorkingSurface2D owns only the physical XY working boundaries, X/Y axis identities and user-authored slide rectangles. Each slide rectangle retains its stop-point endpoint, initial opposite-corner handle, solved opposite endpoint and constrained length/width. Its transform is strictly two-dimensional.
-
-StagePosition3D still tracks machine X/Y and microscope focus Z. Slide position projection requires only referenced X and Y; focus Z remains a separate axis coordinate and cannot change the slide-local XY mapping.
-
-The no-switch focus reference is FullRangeSweep: command one complete configured Z travel range in the selected top/bottom direction from an unknown in-range start. This is allowed only when the focus mechanism declares ContinuousKnobRotationWithoutClash. After exact correlated motion completion, the selected Z boundary is recorded as an estimated calibrated reference unless encoder/external measurement verifies it. The reference state no longer requires the start coordinate to be known.
-
-Interactive CAD editing, persisted layout revisions and Application execution/composition of the Z full-range sweep remain outstanding.
+Interactive pointer-driven drawing/editing, incremental constraint solving while dragging, undo/redo, persisted layout revisions and overlap/clearance rules remain outstanding.

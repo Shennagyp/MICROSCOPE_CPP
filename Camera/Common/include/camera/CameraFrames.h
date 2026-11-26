@@ -27,6 +27,18 @@ enum class PixelByteOrder : std::uint8_t {
     BigEndian
 };
 
+// Sensor color-filter-array pattern is independent of the sample storage
+// container. Bayer samples remain RAW8/RAW16 until an image-processing layer
+// deliberately performs demosaicing.
+enum class PixelColorFilterArray : std::uint8_t {
+    Unknown,
+    NotApplicable,
+    RGGB,
+    GRBG,
+    GBRG,
+    BGGR
+};
+
 // A format identifier is meaningful only inside its declared scheme.
 // Examples: "amcam.fourcc" and "pfnc". The common layer never translates
 // values between schemes unless an explicit, verified mapping exists.
@@ -62,6 +74,8 @@ struct Frame {
     std::uint32_t strideBytes = 0;
     PixelFormat pixelFormat = PixelFormat::Unknown;
     PixelByteOrder pixelByteOrder = PixelByteOrder::Unknown;
+    PixelColorFilterArray pixelColorFilterArray =
+        PixelColorFilterArray::Unknown;
     std::optional<PixelFormatIdentifier> pixelFormatIdentifier;
     std::uint8_t significantBitsPerPixel = 0;
     std::uint8_t storageBitsPerPixel = 0;

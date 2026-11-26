@@ -92,10 +92,15 @@ public:
 
         const auto* home=std::get_if<core::StageHomeReferenceObservation>(&envelope.payload());
         if(!home)return Result::failure({StagePosition3DFeedbackErrorCode::InvalidHomeReferencePayload,std::nullopt,std::nullopt});
+        // A home fact may reference any non-empty subset of this machine's
+        // three axes. Slide-plane navigation requests exactly X+Y, leaving
+        // focus Z untouched; a separate focus workflow may request Z alone.
         const auto& axes=requestedHome.axes().axes();
-        if(axes.size()!=3||std::find(axes.begin(),axes.end(),current.x().axisId())==axes.end()||
-            std::find(axes.begin(),axes.end(),current.y().axisId())==axes.end()||
-            std::find(axes.begin(),axes.end(),current.z().axisId())==axes.end())
+        if(axes.empty()||axes.size()>3||
+            std::any_of(axes.begin(),axes.end(),[&](const auto& axis){
+                return axis!=current.x().axisId()&&axis!=current.y().axisId()&&
+                    axis!=current.z().axisId();
+            }))
             return Result::failure({StagePosition3DFeedbackErrorCode::RequestedAxesDoNotMatchStage,std::nullopt,std::nullopt});
         if(!home->matchesAxes(requestedHome.axes()))
             return Result::failure({StagePosition3DFeedbackErrorCode::HomeReferenceAxisSetMismatch,std::nullopt,std::nullopt});

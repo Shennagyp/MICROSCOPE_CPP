@@ -1,17 +1,32 @@
 #include "camera/gentl/Producer.h"
 #include "camera/gentl/GenTLFrameAdapter.h"
 
+#include <charconv>
 #include <exception>
 #include <iostream>
 #include <string>
 #include <stdexcept>
 
 int main(int argc, char** argv) {
-    if (argc != 3) {
+    if (argc != 3 && argc != 4) {
         std::cerr
             << "Usage: camera_gentl_simulator_smoke "
-            << "<native-test-bridge-library> <vendor-producer.cti>\n";
+            << "<native-test-bridge-library> <vendor-producer.cti> "
+            << "[device-index]\n";
         return 64;
+    }
+
+    std::size_t selectedDeviceIndex = 0;
+    if (argc == 4) {
+        const std::string indexText = argv[3];
+        const auto result = std::from_chars(
+            indexText.data(), indexText.data() + indexText.size(),
+            selectedDeviceIndex);
+        if (result.ec != std::errc{} ||
+            result.ptr != indexText.data() + indexText.size()) {
+            std::cerr << "The device index must be a non-negative integer.\n";
+            return 65;
+        }
     }
 
     try {
@@ -25,10 +40,17 @@ int main(int argc, char** argv) {
             std::cerr << "The CTI Producer discovered no devices.\n";
             return 2;
         }
+        if (selectedDeviceIndex >= devices.size()) {
+            std::cerr << "Requested device index " << selectedDeviceIndex
+                      << " is outside the discovered device range [0, "
+                      << (devices.size() - 1) << "].\n";
+            return 66;
+        }
 
-        const auto& descriptor = devices.front();
+        const auto& descriptor = devices[selectedDeviceIndex];
         std::cout << "Discovered " << devices.size()
-                  << " device(s); testing first device:\n"
+                  << " device(s); testing device index "
+                  << selectedDeviceIndex << ":\n"
                   << "  interface: " << descriptor.interfaceId << '\n'
                   << "  device ID: " << descriptor.deviceId << '\n'
                   << "  display:   " << descriptor.displayName << '\n'

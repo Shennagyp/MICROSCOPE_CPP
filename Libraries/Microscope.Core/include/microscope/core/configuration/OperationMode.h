@@ -17,6 +17,7 @@ enum class OperationModeError {
     LightPathSettingModeMismatch,
     LightPathSettingRevisionMismatch,
     LightPathSettingMicroscopeMismatch,
+    LightPathSettingEquipmentRevisionMismatch,
     DuplicateLightPath
 };
 

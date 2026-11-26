@@ -27,7 +27,7 @@ OPTIKA B293 is a microscope workstation. It coordinates independent capabilities
 - Camera connection, camera configuration and acquisition.
 - Microscope optics, illumination, condenser and optical calibration.
 - Motorized stage coordinates, slide registration, homing and movement.
-- Physical slide/sample organization and image-field acquisition.
+- Physical slide organization, SampleType-based microscopy requirements and image-field acquisition.
 - Image documents, measurements, annotations and derived-image processing.
 - Workspace navigation, capture gallery and persistence.
 
@@ -223,7 +223,7 @@ Every state item has one authoritative owner. Other components receive observati
 | Stage machine XYZ position | Stage capability | One machine-coordinate authority |
 | Per-axis home/reference and uncertainty | Stage capability | Independent axis lifecycle; XY and focus Z are separate |
 | Active operation and step status | The workflow/capability that created it | One owner; correlation is not caller-generated state |
-| Physical slide/sample state | Open in-memory domain aggregate | Loaded once by stable identity when activated; durable persistence is its backing store; independent of current stage position |
+| Physical Slide state and pinned SampleType definition | Slide aggregate plus shared versioned SampleType definition | Slide is loaded by SlideId; its exact SampleTypeId/revision must be resolved separately; independent of current stage position |
 | Workspace active selection and dock state | Workspace model | UI state, not physical device state |
 | Image source and overlays | Slide document | Source-pixel coordinate system |
 | Capture files and gallery listing | Capture store | Current PNG capture path is distinct from acquisition runs |
@@ -320,7 +320,7 @@ The focus-Z full-range sweep without an endstop remains an explicit reference wo
 There are three separate models:
 
 1. **Workspace UI model:** active view, selected document/slide, dock visibility, tab selection, pane layout and other transient interaction state.
-2. **Physical slide/workspace model:** stable SlideIds, user-authored stage registrations, sample/preparation associations, physical occupancy and slide selection.
+2. **Physical slide/workspace model:** stable SlideIds, physical geometry, user-authored stage registrations, SlidePreparation facts, physical occupancy and slide selection. Each Slide directly pins a SampleTypeId and exact SampleType revision and may carry an optional OriginLabId. There is no Sample instance, SampleId, patient identity or SlideType entity in this microscope model.
 3. **Slide image document:** source image identity/payload, image-space overlays, measurements, annotations, view state and provenance.
 
 The current `NativeWorkspaceModel` owns active two-pane target selection and dock state. Its `NativeSlideID.slide1/slide2` values are current presentation slots, not the eventual persistent physical `SlideId`.
@@ -355,7 +355,8 @@ Persistence is divided by the type of state being saved:
 - **User preferences:** layout and non-domain presentation preferences. Domain-relevant optical preferences belong to the operation-mode or imaging-intent records so that resolution is reproducible.
 - **Resolved/effective configuration records:** a desired configuration may be stored as an acquisition snapshot with its source revisions; observed/verified effective state remains separate evidence.
 - **Calibration records:** immutable versioned optical/motion calibration and its observations.
-- **Workspace and slide data:** stable Sample/Slide/Tile identities, slide registration revisions, source metadata and document relationships.
+- **SampleType definitions:** versioned microscopy and optional slide-preparation requirements. A Slide pins one SampleTypeId and exact revision; changing the current definition must not rewrite existing Slides. Persistence must retain historical revisions or an equivalent immutable snapshot. The current Core SampleTypeCatalog is a current-definition index, not a historical revision store.
+- **Workspace and slide data:** stable Slide/Tile identities, the pinned SampleTypeId/revision, optional OriginLabId, slide registration revisions, source metadata and document relationships. No Sample instance or patient identity is stored by this microscope model.
 - **Image/capture payloads:** original PNG/frame payloads and derived artifacts with integrity/provenance metadata.
 - **Runtime checkpoints:** only where needed for recovery. A saved last coordinate is not proof that the physical stage is currently at that coordinate after restart.
 
@@ -375,7 +376,7 @@ Persistence is the durable backing store. It is not the live object-access path.
 
 The lifecycle is:
 
-1. **Load on activation.** When a Sample, Slide, Tile, image document, acquisition record or other persistent aggregate is first opened or required by a workflow, the application loads and validates it by stable identity.
+1. **Load on activation.** When a Slide, Tile, image document, acquisition record or other persistent aggregate is first opened or required by a workflow, the application loads and validates it by stable identity. It also resolves the Slide's exact pinned SampleTypeId/revision from immutable definition history.
 2. **Materialize the required object graph.** Load the aggregate and the related metadata needed for the active use. Resolve required relationships in the same load/batch boundary where practical. Do not implement database-backed lazy properties or issue one query per relationship/property.
 3. **Reuse the active instance.** Within its active workspace/runtime scope, a stable persistent identity resolves to one owner-retained in-memory instance. Consumers access that same instance through its owning object's API or receive read-only projections; only the designated owner mutates it. They must not construct competing mutable copies of the same active aggregate.
 4. **Operate in memory.** Commands, calculations, navigation and edits use the loaded object. No per-command rereads, getter-triggered I/O, polling of persistence for current object state, or N+1 loading is permitted.
@@ -383,7 +384,7 @@ The lifecycle is:
 6. **Release after use.** Keep the object resident while it is open, selected for an active task, referenced by another active object or used by an in-flight workflow. Release it only after it is no longer in use and its dirty state has been committed or explicitly handled. A failed save must not cause the live dirty object to be discarded or silently reloaded over.
 7. **Reopen as a new active incarnation.** After a clean close/release, a later activation loads the latest durable revision once. If an external revision conflict is detected during commit, report/reconcile it explicitly; do not silently refresh an object while it is active.
 
-This is owner-scoped object residency, not a requirement for a generic global cache or an ORM identity-map framework. The existing workspace/document/runtime owner should retain the objects it has opened and share their references with consumers. Do not load every Sample, Slide, acquisition or image document at application startup merely to avoid later reads.
+This is owner-scoped object residency, not a requirement for a generic global cache or an ORM identity-map framework. The existing workspace/document/runtime owner should retain the Slides and documents it has opened and share their references with consumers. SampleType definitions are shared read-only revisioned values. Do not load every Slide, acquisition or image document at application startup merely to avoid later reads.
 
 Large immutable image payloads are a separate resource concern: keep their document/frame metadata as in-memory objects while active, but read or decode pixel data through file-backed storage or bounded tile/frame buffers as the image workflow requires. Do not duplicate an entire large image into general application state just to keep its document open.
 
@@ -492,7 +493,7 @@ The stage owner and camera controller may run concurrently because they own diff
 
 1. The application delegate creates and retains the composition root.
 2. The composition creates the long-lived application models and subsystem owners once.
-3. Static equipment definitions, deployment bindings, user configuration and the minimal catalog/index metadata required by the startup UI are loaded and validated. Individual Sample, Slide, Tile, document and acquisition objects are materialized by stable identity when first opened or required by a workflow, then retained in memory while in use.
+3. Static equipment definitions, deployment bindings, user configuration and the minimal SampleType catalog/index metadata required by the startup UI are loaded and validated. Individual Slide, Tile, document and acquisition objects are materialized by stable identity when first opened or required by a workflow, then retained in memory while in use.
 4. Device controllers exist with a defined disconnected/closed state. Device handles are opened only through their capability lifecycle.
 5. The physical stage driver and stage runtime are bound once to the selected instrument; their owner thread and feedback ingress live for the runtime lifetime.
 6. The UI observes the existing objects and submits commands.
@@ -579,7 +580,7 @@ Implementation follows the dependency graph and current real consumers. Do not a
 ### E. Add physical slide/document persistence and acquisition
 
 - Persist variable-count slide registrations and revision identities.
-- Establish Sample/Slide/Tile ownership and active-slide preconditions.
+- Establish Slide/Tile ownership, exact SampleType revision references and active-slide preconditions.
 - Distinguish preview captures, device stills and AcquisitionRuns.
 - Make incomplete runs recoverable and original image payloads immutable.
 - Link measurements/annotations to source images and calibration revisions.

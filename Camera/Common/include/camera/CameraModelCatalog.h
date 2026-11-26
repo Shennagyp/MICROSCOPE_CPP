@@ -46,6 +46,53 @@ inline std::string normalizeCameraModelText(std::string value) {
 
 inline bool validSensorCharacteristics(
     const CameraSensorCharacteristics& sensor) noexcept {
+    const auto knownTechnology = [](CameraSensorTechnology value) {
+        switch (value) {
+        case CameraSensorTechnology::CCD:
+        case CameraSensorTechnology::CMOS:
+        case CameraSensorTechnology::ScientificCMOS:
+        case CameraSensorTechnology::Unknown:
+            return true;
+        }
+        return false;
+    };
+    const auto knownShutter = [](CameraShutterType value) {
+        switch (value) {
+        case CameraShutterType::Global:
+        case CameraShutterType::Rolling:
+        case CameraShutterType::FrameTransfer:
+        case CameraShutterType::GlobalReset:
+        case CameraShutterType::Unknown:
+            return true;
+        }
+        return false;
+    };
+    const auto knownColorMode = [](CameraColorMode value) {
+        switch (value) {
+        case CameraColorMode::Monochrome:
+        case CameraColorMode::Color:
+        case CameraColorMode::Unknown:
+            return true;
+        }
+        return false;
+    };
+    switch (sensor.provenance) {
+    case CameraSpecificationProvenance::ManufacturerDatasheet:
+    case CameraSpecificationProvenance::VendorModelDescriptor:
+    case CameraSpecificationProvenance::UserVerified:
+    case CameraSpecificationProvenance::Measured:
+    case CameraSpecificationProvenance::Unknown:
+        break;
+    default:
+        return false;
+    }
+
+    if ((sensor.technology && !knownTechnology(*sensor.technology)) ||
+        (sensor.shutterType && !knownShutter(*sensor.shutterType)) ||
+        (sensor.colorMode && !knownColorMode(*sensor.colorMode))) {
+        return false;
+    }
+
     const auto positiveFinite = [](const std::optional<double>& value) {
         return !value || (std::isfinite(*value) && *value > 0.0);
     };
@@ -230,6 +277,10 @@ inline std::optional<CameraModelProfile> CameraModelProfile::create(
     std::uint64_t profileRevision,
     std::string sourceReference) {
     if (profileRevision == 0 ||
+        key.manufacturer.find('\\0') != std::string::npos ||
+        key.model.find('\\0') != std::string::npos ||
+        (key.variant && key.variant->find('\\0') != std::string::npos) ||
+        sourceReference.find('\\0') != std::string::npos ||
         detail::normalizeCameraModelText(key.manufacturer).empty() ||
         detail::normalizeCameraModelText(key.model).empty() ||
         (key.variant && detail::normalizeCameraModelText(*key.variant).empty()) ||

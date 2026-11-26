@@ -104,6 +104,11 @@ reported as opaque rather than treated as CTI failures. CMake registers it with 
 
 The device-index source change in `Camera/GenTL/tests/SimulatorSmoke.cpp` passed both replacement GitHub Actions workflows at tested commit `337bc58fc25de903b1c8e103261d9e89bc7d9c60`: [GenTL bridge #45781919824](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45781919824) and [package/external-consumer #45781919810](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45781919810). Both workflows passed Intel x86_64 and Apple Silicon arm64. The optional simulator test was not registered because no CTI path was supplied. No local build/test/debug run or simulator execution has occurred.
 
+
+### GenApi feature/command coverage now uses the CTI loader
+
+The official GenApi integration test was changed to accept the CTI path as an argument. CMake now supplies `gentl_native_consumer_bridge_fixture` plus `gentl_test_simulator_cti`, rather than the direct mock C ABI bridge. Consequently the existing broad GenApi integration suite now runs its feature/command operations through the same direct CTI dynamic loader and `Producer` path used by the simulator smoke. Coverage includes feature discovery, nested categories, unavailable selectors, integer/float/string/enum reads and writes, range/increment validation, command enumeration/execution, read-only access, backend port failures, and malformed XML recovery. This source change is awaiting the current CI run; it is not yet validated.
+
 ### First-party in-repository CTI simulator — implemented, CI pending
 
 The existing `tests/MockConsumerBridge.c` exports the GenTL Producer C

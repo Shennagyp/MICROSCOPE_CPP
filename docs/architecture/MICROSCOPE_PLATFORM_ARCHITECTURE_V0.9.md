@@ -141,7 +141,7 @@ The runtime is not a generic workflow platform. It is the execution mechanism fo
 
 The installed imaging path may include tube lenses, intermediate relay optics and camera/reduction adapters. These are component-scoped OpticalRelaySpecification values with typed roles and optional positive factors. OpticalMagnificationResolver composes the objective's nominal magnification with factors on the selected Imaging path only; unknown factors stay unknown, and display zoom/software resizing is excluded.
 
-## 5. Equipment model
+Each physical Slide carries a required human-facing code, its exact SampleType identity/revision, actual preparation facts, optional OriginLabId, and zero or more Stain identities. Stain suitability metadata is optional and advisory: it may recommend contrast methods but cannot make a Stain invalid or create a SampleType requirement. The historical Slide name is not a substitute for a code.## 5. Equipment model
 
 ### 5.1 Microscope composition
 

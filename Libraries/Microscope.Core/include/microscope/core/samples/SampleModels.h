@@ -445,11 +445,74 @@ private:
     std::vector<SampleType> sampleTypes_;
 };
 
+enum class StainMicroscopySuitabilityError {
+    InvalidRecommendedContrastMethod,
+    DuplicateRecommendedContrastMethod
+};
+
+// Optional recommendations about microscopy suitability. This is not a
+// constraint and is not required for a Stain to be valid.
+class StainMicroscopySuitability final {
+public:
+    [[nodiscard]] static Result<
+        StainMicroscopySuitability,
+        StainMicroscopySuitabilityError> create(
+            std::vector<ContrastMethod> recommendedContrastMethods = {});
+
+    [[nodiscard]] const std::vector<ContrastMethod>&
+    recommendedContrastMethods() const noexcept;
+
+private:
+    explicit StainMicroscopySuitability(
+        std::vector<ContrastMethod> recommendedContrastMethods);
+
+    std::vector<ContrastMethod> recommendedContrastMethods_;
+};
+
+enum class StainError {
+    EmptyName,
+    InvalidName,
+    EmptyDescription,
+    InvalidDescription
+};
+
+// A stain is descriptive identity attached to a physical Slide.
+class Stain final {
+public:
+    [[nodiscard]] static Result<Stain, StainError> create(
+        StainId id,
+        std::string name,
+        std::optional<std::string> description = std::nullopt,
+        std::optional<StainMicroscopySuitability> microscopySuitability =
+            std::nullopt);
+
+    [[nodiscard]] const StainId& id() const noexcept;
+    [[nodiscard]] const std::string& name() const noexcept;
+    [[nodiscard]] const std::optional<std::string>& description() const noexcept;
+    [[nodiscard]] const std::optional<StainMicroscopySuitability>&
+    microscopySuitability() const noexcept;
+
+private:
+    Stain(
+        StainId id,
+        std::string name,
+        std::optional<std::string> description,
+        std::optional<StainMicroscopySuitability> microscopySuitability);
+
+    StainId id_;
+    std::string name_;
+    std::optional<std::string> description_;
+    std::optional<StainMicroscopySuitability> microscopySuitability_;
+};
+
 enum class SlideError {
+    EmptyCode,
+    InvalidCode,
     EmptyName,
     InvalidName,
     ZeroRevision,
-    ZeroSampleTypeRevision
+    ZeroSampleTypeRevision,
+    DuplicateStain
 };
 
 enum class SpecimenLabelError {
@@ -550,7 +613,21 @@ private:
 
 class Slide final {
 public:
+    // New physical Slide records require an explicit human-facing code.
     [[nodiscard]] static Result<Slide, SlideError> create(
+        SlideId id,
+        std::uint64_t revision,
+        SampleTypeId sampleTypeId,
+        std::uint64_t sampleTypeRevision,
+        std::string code,
+        std::string name,
+        SlideGeometry geometry,
+        SlidePreparation preparation,
+        std::vector<Stain> stains = {},
+        std::optional<OriginLabId> originLabId = std::nullopt);
+
+    // Used only to restore historical records that predate Slide codes.
+    [[nodiscard]] static Result<Slide, SlideError> restoreLegacy(
         SlideId id,
         std::uint64_t revision,
         SampleTypeId sampleTypeId,
@@ -564,9 +641,11 @@ public:
     [[nodiscard]] std::uint64_t revision() const noexcept;
     [[nodiscard]] const SampleTypeId& sampleTypeId() const noexcept;
     [[nodiscard]] std::uint64_t sampleTypeRevision() const noexcept;
+    [[nodiscard]] const std::optional<std::string>& code() const noexcept;
     [[nodiscard]] const std::string& name() const noexcept;
     [[nodiscard]] const SlideGeometry& geometry() const noexcept;
     [[nodiscard]] const SlidePreparation& preparation() const noexcept;
+    [[nodiscard]] const std::vector<Stain>& stains() const noexcept;
     [[nodiscard]] const std::optional<OriginLabId>& originLabId() const noexcept;
 
 private:
@@ -575,18 +654,22 @@ private:
         std::uint64_t revision,
         SampleTypeId sampleTypeId,
         std::uint64_t sampleTypeRevision,
+        std::optional<std::string> code,
         std::string name,
         SlideGeometry geometry,
         SlidePreparation preparation,
+        std::vector<Stain> stains,
         std::optional<OriginLabId> originLabId);
 
     SlideId id_;
     std::uint64_t revision_;
     SampleTypeId sampleTypeId_;
     std::uint64_t sampleTypeRevision_;
+    std::optional<std::string> code_;
     std::string name_;
     SlideGeometry geometry_;
     SlidePreparation preparation_;
+    std::vector<Stain> stains_;
     std::optional<OriginLabId> originLabId_;
 };
 

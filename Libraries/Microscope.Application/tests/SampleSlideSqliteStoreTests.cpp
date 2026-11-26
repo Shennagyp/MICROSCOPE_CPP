@@ -136,9 +136,11 @@ Slide makeSlide(
         revision,
         sampleType.id(),
         sampleType.revision(),
+        std::string("SLIDE-") + id.value(),
         "Kidney cortex section",
         take(SlideGeometry::create(75000.0, 25000.0)),
         makeSlidePreparation(),
+        {},
         std::move(originLabId)));
 }
 
@@ -707,20 +709,30 @@ void testMultipleSlidesShareOneSampleTypeAndUnknownFactsRemainAbsent() {
         const auto observedPreparation = take(SlidePreparation::create(
             SpecimenPreparationMethod::FreshUnfixed,
             SpecimenFixationState::Unknown));
+        const auto bloodFilmSuitability = take(StainMicroscopySuitability::create({
+            ContrastMethod::Brightfield, ContrastMethod::PhaseContrast}));
+        const auto bloodFilmStain = take(Stain::create(
+            makeId<StainId>("stain-blood-film"),
+            "Blood film stain",
+            std::nullopt,
+            bloodFilmSuitability));
         const auto firstSlide = take(Slide::create(
             firstSlideId,
             1,
             typeId,
             1,
+            "BF-001",
             "Blood film A",
             take(SlideGeometry::create(75000.0, 25000.0)),
             observedPreparation,
+            {bloodFilmStain},
             firstLab));
         const auto secondSlide = take(Slide::create(
             secondSlideId,
             1,
             typeId,
             1,
+            "BF-002",
             "Blood film B",
             take(SlideGeometry::create(76000.0, 26000.0)),
             observedPreparation));
@@ -749,6 +761,20 @@ void testMultipleSlidesShareOneSampleTypeAndUnknownFactsRemainAbsent() {
             check(firstLoaded.value()->slide.originLabId() == firstLab &&
                   !secondLoaded.value()->slide.originLabId(),
                   "optional origin-lab references remain local to each physical Slide");
+            check(firstLoaded.value()->slide.code() ==
+                      std::optional<std::string>{"BF-001"} &&
+                  firstLoaded.value()->slide.stains().size() == 1 &&
+                  firstLoaded.value()->slide.stains().front().id() ==
+                      bloodFilmStain.id(),
+                  "round-trips code and stain identity");
+            check(firstLoaded.value()->slide.stains().front().microscopySuitability() &&
+                  firstLoaded.value()->slide.stains().front().microscopySuitability()
+                      ->recommendedContrastMethods().size() == 2,
+                  "round-trips optional stain suitability");
+            check(secondLoaded.value()->slide.code() ==
+                      std::optional<std::string>{"BF-002"} &&
+                  secondLoaded.value()->slide.stains().empty(),
+                  "allows an unstained or unidentified Slide without fabricated stain data");
             const auto& preparation = secondLoaded.value()->slide.preparation();
             check(preparation.method() == SpecimenPreparationMethod::FreshUnfixed &&
                   preparation.fixationState() == SpecimenFixationState::Unknown &&

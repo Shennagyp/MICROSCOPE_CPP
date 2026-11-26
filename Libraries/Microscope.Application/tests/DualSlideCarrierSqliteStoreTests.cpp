@@ -84,6 +84,7 @@ Slide makeSlide(
         1,
         sampleType.id(),
         sampleType.revision(),
+        std::string("SLIDE-") + id.value(),
         "Histology slide",
         take(SlideGeometry::create(width, height)),
         makePreparation()));

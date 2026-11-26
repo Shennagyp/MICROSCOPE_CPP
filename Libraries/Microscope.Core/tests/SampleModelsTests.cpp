@@ -93,10 +93,10 @@ void testSlidesPinSampleTypeAndOwnIndependentDetails() {
     const auto originLab = makeId<OriginLabId>("origin-lab-cairo");
     const auto slideA = take(Slide::create(
         makeId<SlideId>("slide-a"), 1, type.id(), type.revision(),
-        "Slide A", geometry, makePreparation()));
+        "BLOOD-001", "Slide A", geometry, makePreparation()));
     const auto slideB = take(Slide::create(
         makeId<SlideId>("slide-b"), 1, type.id(), type.revision(),
-        "Slide B", geometry, makePreparation(), originLab));
+        "BLOOD-002", "Slide B", geometry, makePreparation(), {}, originLab));
 
     check(slideA.id() != slideB.id(), "each physical slide has a distinct identity");
     check(slideA.sampleTypeId() == type.id() &&
@@ -120,23 +120,77 @@ void testSlidePreservesSampleTypeRevisionAndRejectsInvalidRevisions() {
     const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
     const auto historicalSlide = take(Slide::create(
         makeId<SlideId>("slide-pinned-to-v1"), 3, v1.id(), v1.revision(),
-        "Slide prepared under SampleType v1", geometry, makePreparation()));
+        "HIST-003", "Slide prepared under SampleType v1",
+        geometry, makePreparation()));
     check(historicalSlide.sampleTypeId() == v2.id() &&
           historicalSlide.sampleTypeRevision() == 1 && v2.revision() == 2,
           "does not silently rebind an existing Slide when SampleType advances");
 
     const auto zeroSlideRevision = Slide::create(
         makeId<SlideId>("slide-zero-revision"), 0, typeId, 1,
-        "Invalid", geometry, makePreparation());
+        "INVALID-001", "Invalid", geometry, makePreparation());
     check(!zeroSlideRevision && zeroSlideRevision.error() == SlideError::ZeroRevision,
           "rejects an unversioned Slide record");
 
     const auto zeroTypeRevision = Slide::create(
         makeId<SlideId>("slide-zero-type-revision"), 1, typeId, 0,
-        "Invalid", geometry, makePreparation());
+        "INVALID-002", "Invalid", geometry, makePreparation());
     check(!zeroTypeRevision &&
           zeroTypeRevision.error() == SlideError::ZeroSampleTypeRevision,
           "rejects a Slide without a pinned SampleType revision");
+}
+
+void testStainIdentityAndOptionalSuitabilityAreAdvisory() {
+    const auto stainId = makeId<StainId>("stain-he");
+    const auto identityOnly = take(Stain::create(stainId, "Hematoxylin and eosin"));
+    check(!identityOnly.microscopySuitability(),
+          "Stain is valid with identity only and no suitability metadata");
+
+    const auto suitability = take(StainMicroscopySuitability::create({
+        ContrastMethod::Brightfield, ContrastMethod::PolarizedLight}));
+    const auto stain = take(Stain::create(
+        stainId, "Hematoxylin and eosin", "Routine histological stain",
+        suitability));
+    check(stain.microscopySuitability() &&
+          stain.microscopySuitability()->recommendedContrastMethods().size() == 2,
+          "retains optional recommended contrast methods");
+
+    const auto duplicateMethods = StainMicroscopySuitability::create({
+        ContrastMethod::Brightfield, ContrastMethod::Brightfield});
+    check(!duplicateMethods &&
+          duplicateMethods.error() ==
+              StainMicroscopySuitabilityError::DuplicateRecommendedContrastMethod,
+          "rejects duplicate stain recommendations");
+    const auto unknownMethod = StainMicroscopySuitability::create({
+        ContrastMethod::Unknown});
+    check(!unknownMethod &&
+          unknownMethod.error() ==
+              StainMicroscopySuitabilityError::InvalidRecommendedContrastMethod,
+          "rejects unknown methods in explicit recommendations");
+
+    const auto typeId = makeId<SampleTypeId>("sample-type-stained-slide");
+    const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
+    const auto slide = take(Slide::create(
+        makeId<SlideId>("slide-stained-he"), 1, typeId, 1,
+        "HE-001", "Kidney cortex", geometry, makePreparation(), {stain}));
+    check(slide.code() == std::optional<std::string>{"HE-001"} &&
+          slide.stains().size() == 1 &&
+          slide.stains().front().id() == stainId,
+          "Slide owns its code and stain identity");
+
+    const auto duplicateStains = Slide::create(
+        makeId<SlideId>("slide-duplicate-stains"), 1, typeId, 1,
+        "HE-002", "Duplicate stains", geometry, makePreparation(),
+        {stain, stain});
+    check(!duplicateStains &&
+          duplicateStains.error() == SlideError::DuplicateStain,
+          "rejects duplicate stain identities on one Slide");
+
+    const auto legacy = take(Slide::restoreLegacy(
+        makeId<SlideId>("slide-legacy-no-code"), 1, typeId, 1,
+        "Legacy slide", geometry, makePreparation()));
+    check(!legacy.code() && legacy.stains().empty(),
+          "legacy Slide restoration preserves missing code and stain facts");
 }
 
 void testPreparationRequirementsDoNotPopulateObservedSlideFacts() {
@@ -254,6 +308,7 @@ int main() {
     testSampleTypeAndCatalogRevisionContracts();
     testSlidesPinSampleTypeAndOwnIndependentDetails();
     testSlidePreservesSampleTypeRevisionAndRejectsInvalidRevisions();
+    testStainIdentityAndOptionalSuitabilityAreAdvisory();
     testPreparationRequirementsDoNotPopulateObservedSlideFacts();
     testCondenserAndIlluminationRequirements();
     testFluorescentSlideLabelPreservesSpectralProfile();

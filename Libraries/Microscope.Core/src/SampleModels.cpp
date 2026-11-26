@@ -1007,6 +1007,92 @@ const SampleType* SampleTypeCatalog::find(const SampleTypeId& id) const noexcept
     return found == sampleTypes_.end() ? nullptr : &*found;
 }
 
+StainMicroscopySuitability::StainMicroscopySuitability(
+    std::vector<ContrastMethod> recommendedContrastMethods)
+    : recommendedContrastMethods_(std::move(recommendedContrastMethods)) {}
+
+Result<
+    StainMicroscopySuitability,
+    StainMicroscopySuitabilityError>
+StainMicroscopySuitability::create(
+    std::vector<ContrastMethod> recommendedContrastMethods) {
+    std::set<ContrastMethod> methods;
+    for (const auto method : recommendedContrastMethods) {
+        if (!isKnownContrast(method)) {
+            return Result<
+                StainMicroscopySuitability,
+                StainMicroscopySuitabilityError>::failure(
+                    StainMicroscopySuitabilityError::InvalidRecommendedContrastMethod);
+        }
+        if (!methods.insert(method).second) {
+            return Result<
+                StainMicroscopySuitability,
+                StainMicroscopySuitabilityError>::failure(
+                    StainMicroscopySuitabilityError::DuplicateRecommendedContrastMethod);
+        }
+    }
+
+    return Result<
+        StainMicroscopySuitability,
+        StainMicroscopySuitabilityError>::success(
+            StainMicroscopySuitability(std::move(recommendedContrastMethods)));
+}
+
+const std::vector<ContrastMethod>&
+StainMicroscopySuitability::recommendedContrastMethods() const noexcept {
+    return recommendedContrastMethods_;
+}
+
+Stain::Stain(
+    StainId id,
+    std::string name,
+    std::optional<std::string> description,
+    std::optional<StainMicroscopySuitability> microscopySuitability)
+    : id_(std::move(id)),
+      name_(std::move(name)),
+      description_(std::move(description)),
+      microscopySuitability_(std::move(microscopySuitability)) {}
+
+Result<Stain, StainError> Stain::create(
+    StainId id,
+    std::string name,
+    std::optional<std::string> description,
+    std::optional<StainMicroscopySuitability> microscopySuitability) {
+    if (name.find(char{}) != std::string::npos) {
+        return Result<Stain, StainError>::failure(StainError::InvalidName);
+    }
+    if (!hasText(name)) {
+        return Result<Stain, StainError>::failure(StainError::EmptyName);
+    }
+    if (description) {
+        if (description->find(char{}) != std::string::npos) {
+            return Result<Stain, StainError>::failure(
+                StainError::InvalidDescription);
+        }
+        if (!hasText(*description)) {
+            return Result<Stain, StainError>::failure(
+                StainError::EmptyDescription);
+        }
+    }
+
+    return Result<Stain, StainError>::success(
+        Stain(
+            std::move(id),
+            std::move(name),
+            std::move(description),
+            std::move(microscopySuitability)));
+}
+
+const StainId& Stain::id() const noexcept { return id_; }
+const std::string& Stain::name() const noexcept { return name_; }
+const std::optional<std::string>& Stain::description() const noexcept {
+    return description_;
+}
+const std::optional<StainMicroscopySuitability>&
+Stain::microscopySuitability() const noexcept {
+    return microscopySuitability_;
+}
+
 SpecimenLabel::SpecimenLabel(
     std::string name,
     SpecimenLabelKind kind,
@@ -1198,20 +1284,76 @@ Slide::Slide(
     std::uint64_t revision,
     SampleTypeId sampleTypeId,
     std::uint64_t sampleTypeRevision,
+    std::optional<std::string> code,
     std::string name,
     SlideGeometry geometry,
     SlidePreparation preparation,
+    std::vector<Stain> stains,
     std::optional<OriginLabId> originLabId)
     : id_(std::move(id)),
       revision_(revision),
       sampleTypeId_(std::move(sampleTypeId)),
       sampleTypeRevision_(sampleTypeRevision),
+      code_(std::move(code)),
       name_(std::move(name)),
       geometry_(std::move(geometry)),
       preparation_(std::move(preparation)),
+      stains_(std::move(stains)),
       originLabId_(std::move(originLabId)) {}
 
 Result<Slide, SlideError> Slide::create(
+    SlideId id,
+    std::uint64_t revision,
+    SampleTypeId sampleTypeId,
+    std::uint64_t sampleTypeRevision,
+    std::string code,
+    std::string name,
+    SlideGeometry geometry,
+    SlidePreparation preparation,
+    std::vector<Stain> stains,
+    std::optional<OriginLabId> originLabId) {
+    if (revision == 0) {
+        return Result<Slide, SlideError>::failure(SlideError::ZeroRevision);
+    }
+    if (sampleTypeRevision == 0) {
+        return Result<Slide, SlideError>::failure(
+            SlideError::ZeroSampleTypeRevision);
+    }
+    if (code.find(char{}) != std::string::npos) {
+        return Result<Slide, SlideError>::failure(SlideError::InvalidCode);
+    }
+    if (!hasText(code)) {
+        return Result<Slide, SlideError>::failure(SlideError::EmptyCode);
+    }
+    if (name.find(char{}) != std::string::npos) {
+        return Result<Slide, SlideError>::failure(SlideError::InvalidName);
+    }
+    if (!hasText(name)) {
+        return Result<Slide, SlideError>::failure(SlideError::EmptyName);
+    }
+
+    std::set<StainId> stainIds;
+    for (const auto& stain : stains) {
+        if (!stainIds.insert(stain.id()).second) {
+            return Result<Slide, SlideError>::failure(SlideError::DuplicateStain);
+        }
+    }
+
+    return Result<Slide, SlideError>::success(
+        Slide(
+            std::move(id),
+            revision,
+            std::move(sampleTypeId),
+            sampleTypeRevision,
+            std::move(code),
+            std::move(name),
+            std::move(geometry),
+            std::move(preparation),
+            std::move(stains),
+            std::move(originLabId)));
+}
+
+Result<Slide, SlideError> Slide::restoreLegacy(
     SlideId id,
     std::uint64_t revision,
     SampleTypeId sampleTypeId,
@@ -1240,9 +1382,11 @@ Result<Slide, SlideError> Slide::create(
             revision,
             std::move(sampleTypeId),
             sampleTypeRevision,
+            std::nullopt,
             std::move(name),
             std::move(geometry),
             std::move(preparation),
+            {},
             std::move(originLabId)));
 }
 
@@ -1250,9 +1394,11 @@ const SlideId& Slide::id() const noexcept { return id_; }
 std::uint64_t Slide::revision() const noexcept { return revision_; }
 const SampleTypeId& Slide::sampleTypeId() const noexcept { return sampleTypeId_; }
 std::uint64_t Slide::sampleTypeRevision() const noexcept { return sampleTypeRevision_; }
+const std::optional<std::string>& Slide::code() const noexcept { return code_; }
 const std::string& Slide::name() const noexcept { return name_; }
 const SlideGeometry& Slide::geometry() const noexcept { return geometry_; }
 const SlidePreparation& Slide::preparation() const noexcept { return preparation_; }
+const std::vector<Stain>& Slide::stains() const noexcept { return stains_; }
 const std::optional<OriginLabId>& Slide::originLabId() const noexcept { return originLabId_; }
 
 } // namespace microscope::core

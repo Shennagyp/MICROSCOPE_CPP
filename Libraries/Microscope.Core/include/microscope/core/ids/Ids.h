@@ -25,6 +25,7 @@ struct ConfigurationTransitionStepIdTag final {};
 struct OpticalCompatibilityIdTag final {};
 struct IlluminationChannelIdTag final {};
 struct SampleTypeIdTag final {};
+struct StainIdTag final {};
 struct OriginLabIdTag final {};
 struct SlideIdTag final {};
 struct TileIdTag final {};
@@ -55,6 +56,7 @@ using ConfigurationTransitionStepId =
 using OpticalCompatibilityId = StrongId<detail::OpticalCompatibilityIdTag>;
 using IlluminationChannelId = StrongId<detail::IlluminationChannelIdTag>;
 using SampleTypeId = StrongId<detail::SampleTypeIdTag>;
+using StainId = StrongId<detail::StainIdTag>;
 using OriginLabId = StrongId<detail::OriginLabIdTag>;
 using SlideId = StrongId<detail::SlideIdTag>;
 using TileId = StrongId<detail::TileIdTag>;

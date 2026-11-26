@@ -347,6 +347,8 @@ int32_t gentl_consumer_invoke(
     }
     case 29:
         if (argument_count != 4 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+        if (strcmp((const char*)pointer(arguments[1]), "device0") != 0)
+            return GC_ERR_INVALID_PARAMETER;
         *(DEV_HANDLE*)pointer(arguments[3]) = (DEV_HANDLE)(uintptr_t)0x3333;
         return GC_ERR_SUCCESS;
     case 30:

@@ -575,6 +575,8 @@ CameraComponentModelBindingSqliteStore::loadBindings(
     }
 
     PersistedCameraComponentModelBindings result;
+    result.microscopeId = equipment.microscopeId();
+    result.equipmentDefinitionRevision = equipment.revision();
     result.bindingRevision = currentRevision.value_or(0);
     if (!currentRevision) {
         return core::Result<

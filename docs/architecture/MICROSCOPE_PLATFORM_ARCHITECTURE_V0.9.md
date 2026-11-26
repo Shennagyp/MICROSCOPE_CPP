@@ -319,6 +319,7 @@ ExposurePreset is distinct from ExposurePolicy. A profile may provide an initial
 ~~~text
 Operation request + equipment-constitution revision
        + operation-mode revision + optional imaging intent
+       + optional LightPath constraint
        + optional explicit component constraints
                          |
                          v
@@ -404,6 +405,8 @@ For the supported widefield cases, use the following Rayleigh lateral-resolution
 
 - **Transmitted (diascopic) widefield:** (r_{lat} = 1.22\lambda_{em}/(NA_{obj}+NA_{cond})). Use the condenser NA actually selected for the imaging configuration, not merely the condenser's maximum capability.
 - **Reflected/episcopic widefield, including conventional epifluorescence:** (r_{lat} = 0.61\lambda_{em}/NA_{obj}), because the objective also acts as the condenser.
+
+For phase contrast in transmitted light, the condenser annulus defines an annular illumination pupil. The effective illumination NA used by the resolution model must therefore come from the installed and selected annulus/condenser arrangement, not from the condenser's maximum aperture marking alone. Other techniques may require their own pupil/transfer-function model; if the Core does not yet implement that model, sampling is unknown rather than being declared equivalent to ordinary brightfield.
 - **Confocal:** do not reuse the widefield formula blindly. Resolution depends on the confocal modality, excitation wavelength and pinhole/Airy-unit setting; a modality-specific model is required before the resolver can claim sampling adequacy.
 
 These are optical-resolution estimates under the named model and assumptions, not guarantees of real-world image quality. Aberrations, misalignment, specimen preparation, refractive-index mismatch, focus, objective correction and detector noise can reduce achieved performance. The stored model and returned rationale must identify which criterion and reference wavelength were used. For broadband illumination/detection, the mode must define its reference-wavelength policy; the resolver must not treat an entire spectrum as one exact wavelength.

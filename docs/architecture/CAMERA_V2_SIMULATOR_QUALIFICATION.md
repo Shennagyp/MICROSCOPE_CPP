@@ -2,7 +2,7 @@
 
 **Branch:** `camera-v.2.0`  
 **Purpose:** Add vendor-independent software integration evidence for the GenTL consumer without claiming physical-camera qualification.  
-**Status:** Test-only harness source is implemented. The device-index selection change is CI-validated at `337bc58fc25de903b1c8e103261d9e89bc7d9c60`; both GenTL bridge and package/external-consumer workflows passed on Intel x86_64 and Apple Silicon arm64. No simulator has been executed.
+**Status:** The external-CTI harness and a first-party test-only CTI simulator target are implemented in source. The device-index baseline passed both workflows at `337bc58fc25de903b1c8e103261d9e89bc7d9c60`. The new in-repository CTI simulator smoke is awaiting CI validation. No vendor simulator has been executed.
 
 ## 1. Qualification boundary
 
@@ -104,6 +104,41 @@ reported as opaque rather than treated as CTI failures. CMake registers it with 
 
 The device-index source change in `Camera/GenTL/tests/SimulatorSmoke.cpp` passed both replacement GitHub Actions workflows at tested commit `337bc58fc25de903b1c8e103261d9e89bc7d9c60`: [GenTL bridge #45781919824](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45781919824) and [package/external-consumer #45781919810](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45781919810). Both workflows passed Intel x86_64 and Apple Silicon arm64. The optional simulator test was not registered because no CTI path was supplied. No local build/test/debug run or simulator execution has occurred.
 
+### First-party in-repository CTI simulator — implemented, CI pending
+
+The existing `tests/MockConsumerBridge.c` exports the GenTL Producer C
+symbols already resolved by `GenTLProducerLibrary::load`. The existing
+`camera_gentl_cti_loader_tests` proves that this shared library can be opened
+as a CTI and that the required exports resolve. The same fixture is now built
+a second time as `gentl_test_simulator.cti` with
+`CAMERA_GENTL_SIMULATOR_MODE=1`.
+
+Simulator mode relaxes only two assumptions that were deliberately strict in
+the unit-test mock:
+- the fixed 2-second discovery timeout check;
+- the long EventGetData wait branch used to test cancellation.
+
+The ordinary mock bridge target is compiled without this definition, so its
+existing cancellation tests retain their prior behavior. CMake registers
+`camera_gentl_inrepo_simulator_smoke` unconditionally when
+`BUILD_TESTING=ON`. It uses the native test shim and the actual
+`GenTLProducerLibrary` dynamic loader to load the test CTI, then exercises
+the public `ConsumerBridge` and `Producer` path: discovery, device open,
+GenApi XML retrieval, data-stream acquisition, five frame deliveries,
+Common-frame projection and orderly teardown.
+
+The in-repository simulator is deterministic and license-independent. It
+currently models one mock camera, one interface, one data stream and repeated
+Mono8 image buffers. It is not an independent vendor implementation and does
+not qualify multiple physical transports, vendor-specific features, real
+hardware timing, or physical cameras. Its purpose is to turn the C++ CTI
+loading and consumer path into a continuously executed integration test.
+
+The new target and test have not been built or executed locally. GitHub Actions
+must validate compilation and the simulator smoke. A CI pass will establish
+in-repository CTI integration only; a separate approved vendor CTI remains
+necessary for third-party interoperability evidence.
+
 ## 5. Acceptance criteria
 
 Simulator software qualification is accepted only when the exact branch commit has evidence for:
@@ -137,4 +172,4 @@ The current vendor evidence does not justify downloading or executing any extern
 - Vimba X has a genuine simulator CTI, but its license restrictions remain unresolved for this purpose.
 - Aravis fake GV is a network GigE Vision simulator, not a CTI. It can only qualify a separate GEV transport implementation, not this direct CTI loader.
 
-Do not create a green CI gate that silently skips the simulator. Once a vendor approves a CTI, run it on a compatible isolated runner and preserve the exact package/version/hash and test logs. In the meantime, evaluate a first-party, test-only simulated CTI fixture (implementing only the GenTL 1.6 calls exercised by this project) as a deterministic integration test. Keep that fixture separate from claims of vendor interoperability and do not use it to replace vendor or physical qualification.
+Do not create a green CI gate that silently skips the simulator. Once a vendor approves a CTI, run it on a compatible isolated runner and preserve the exact package/version/hash and test logs. The first-party, test-only simulated CTI fixture is now implemented and awaits CI validation. Keep its evidence separate from vendor interoperability and do not use it to replace vendor or physical qualification.

@@ -41,7 +41,7 @@ static const char mock_xml[] =
     "    <pFeature>TriggerMode</pFeature>\n" \
     "    <pFeature>Temperature</pFeature>\n" \
     "    <pFeature>DeviceLabel</pFeature>\n" \
-    "    <pFeature>UnsupportedNode</pFeature>\n" \
+    "    <pFeature>RawRegister</pFeature>\n" \
     "    <pFeature>AcquisitionControl</pFeature>\n" \
     "  </Category>\n" \
     "  <Category Name=\"AcquisitionControl\">\n" \
@@ -151,9 +151,12 @@ static const char mock_xml[] =
     "  <Port Name=\"Device\">\n" \
     "    <ToolTip>Default device port</ToolTip>\n" \
     "  </Port>\n" \
-    "  <Node Name=\"UnsupportedNode\">\n" \
-    "    <ToolTip>Generic node without a scalar feature interface</ToolTip>\n" \
-    "  </Node>\n" \
+    "  <Register Name=\"RawRegister\">\n" \
+    "    <Address>0x1010</Address>\n" \
+    "    <Length>2</Length>\n" \
+    "    <AccessMode>RO</AccessMode>\n" \
+    "    <pPort>Device</pPort>\n" \
+    "  </Register>\n" \
     "</RegisterDescription>\n";
 static uint8_t* stream_memory[16];
 static BUFFER_HANDLE stream_handles[16];

@@ -145,6 +145,56 @@ int runProducerTests(int argc, char** argv) {
         stream.stop();
         if (stream) return 21;
 
+        // A Producer may enqueue a buffer and still return an error. The
+        // consumer must not blindly retry DSQueueBuffer because the native
+        // queue state is then uncertain.
+        void* queueMockLibrary = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+        if (!queueMockLibrary) return 34;
+        using CountFunction = std::size_t (*)();
+        const auto queueCalls = reinterpret_cast<CountFunction>(
+            dlsym(queueMockLibrary, "gentl_mock_queue_buffer_calls"));
+        const auto duplicateQueues = reinterpret_cast<CountFunction>(
+            dlsym(queueMockLibrary, "gentl_mock_duplicate_queue_count"));
+        if (!queueCalls || !duplicateQueues) {
+            dlclose(queueMockLibrary);
+            return 35;
+        }
+
+        auto queueFailureProducer = camera::gentl::Producer::open(bridge, ctiPath);
+        const auto queueFailureDevices = queueFailureProducer.discover();
+        if (queueFailureDevices.size() != 1) {
+            dlclose(queueMockLibrary);
+            return 36;
+        }
+        auto queueFailureDevice =
+            queueFailureProducer.openDevice(queueFailureDevices.front());
+        auto queueFailureStream =
+            queueFailureDevice.openDataStream("stream0", 3);
+        queueFailureStream.start();
+
+        const auto queueCallsBefore = queueCalls();
+        const auto duplicateQueuesBefore = duplicateQueues();
+        if (setenv("MOCK_GENTL_FAIL_QUEUE_AFTER_MUTATION", "1", 1) != 0) {
+            dlclose(queueMockLibrary);
+            return 37;
+        }
+        bool queueFailureObserved = false;
+        try {
+            (void)queueFailureStream.nextFrame(100);
+        } catch (const std::runtime_error&) {
+            queueFailureObserved = true;
+        }
+        unsetenv("MOCK_GENTL_FAIL_QUEUE_AFTER_MUTATION");
+
+        const auto queueCallDelta = queueCalls() - queueCallsBefore;
+        const auto duplicateQueueDelta = duplicateQueues() - duplicateQueuesBefore;
+        dlclose(queueMockLibrary);
+        if (!queueFailureObserved || queueCallDelta != 1 ||
+            duplicateQueueDelta != 0) return 38;
+
+        queueFailureStream.stop();
+        queueFailureDevice.close();
+
 
         // GCUnregisterEvent must abort a pending EventGetData operation.
         // The mock blocks deterministically until the event is unregistered.

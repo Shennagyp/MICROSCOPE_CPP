@@ -162,9 +162,15 @@ void CameraCommandPanel::updateRow(CommandRow& row) {
     QString text;
     switch (row.state) {
     case CameraCommandExecutionState::Idle:
-        text = row.descriptor.disabledReason
-            ? QString::fromStdString(*row.descriptor.disabledReason)
-            : QStringLiteral("Ready");
+        if (row.descriptor.disabledReason) {
+            text = QString::fromStdString(*row.descriptor.disabledReason);
+        } else if (!row.descriptor.isAvailable) {
+            text = QStringLiteral("Unavailable");
+        } else if (!row.descriptor.isExecutable) {
+            text = QStringLiteral("Not executable");
+        } else {
+            text = QStringLiteral("Ready");
+        }
         break;
     case CameraCommandExecutionState::RequestPending:
         text = QStringLiteral("Request pending");

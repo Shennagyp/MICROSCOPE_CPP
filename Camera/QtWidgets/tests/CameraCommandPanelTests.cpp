@@ -12,7 +12,7 @@
 namespace {
 
 void fail(const char* message) {
-    std::cerr << message << '\\n';
+    std::cerr << message << '\n';
 }
 
 QPushButton* commandButton(
@@ -94,7 +94,11 @@ int main(int argc, char** argv) {
         requestedName = name;
     });
     if (!runButton->isEnabled() || resetButton->isEnabled() ||
-        saveButton->isEnabled()) {
+        saveButton->isEnabled() ||
+        commandStateText(panel, "Reset sensor") !=
+            QStringLiteral("Not supported by this device.") ||
+        commandStateText(panel, "Save calibration") !=
+            QStringLiteral("Command is read-only.")) {
         fail("Availability/executability gating is incorrect.");
         return EXIT_FAILURE;
     }
@@ -149,12 +153,12 @@ int main(int argc, char** argv) {
 
     panel.setCommands({});
     if (panel.commandCount() != 0 ||
-        !panel.findChild<QLabel*>(
-            QStringLiteral("cameraCommandEmptyLabel"))->isVisible()) {
+        panel.findChild<QLabel*>(
+            QStringLiteral("cameraCommandEmptyLabel"))->isHidden()) {
         fail("Empty command set did not show its empty state.");
         return EXIT_FAILURE;
     }
 
-    std::cout << "All Qt Widgets camera command panel tests passed.\\n";
+    std::cout << "All Qt Widgets camera command panel tests passed.\n";
     return EXIT_SUCCESS;
 }

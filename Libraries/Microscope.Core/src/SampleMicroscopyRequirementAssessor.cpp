@@ -468,63 +468,71 @@ void assessFluorescenceFilterSet(
         }
     }
 
-    const auto bandCovered = [](const OpticalFilterSpecification& filter,
-                                const SpectralBand& band,
-                                bool reflection) {
-        const auto evaluate = [&](double wavelength) {
-            return reflection
-                ? filter.reflectionAt(wavelength)
-                : filter.transmissionAt(wavelength);
-        };
-        return evaluate(band.minimumWavelengthNanometers()).has_value() &&
-               evaluate(band.maximumWavelengthNanometers()).has_value();
+    const auto assessFilterBand = [&](
+        const OpticalFilterSpecification* filter,
+        const SpectralBand& band,
+        bool reflection,
+        const char* coverageCode,
+        const char* noResponseCode,
+        const char* metricName) {
+        if (filter == nullptr) {
+            return;
+        }
+        const auto response =
+            filterBandHasPositiveResponse(*filter, band, reflection);
+        if (!response) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Warning,
+                coverageCode,
+                std::string("The selected ") + metricName +
+                    " curve does not cover the complete declared band; compatibility remains unknown rather than extrapolated.",
+                "EquipmentComponent",
+                filter->componentId().value());
+        } else if (!*response) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                noResponseCode,
+                std::string("The selected ") + metricName +
+                    " curve covers the declared band but has no positive spectral response in it.",
+                "EquipmentComponent",
+                filter->componentId().value());
+        }
     };
 
     if (label.excitationBand()) {
-        if (excitationFilter != nullptr &&
-            !bandCovered(
-                *excitationFilter, *label.excitationBand(), false)) {
-            appendDiagnostic(
-                diagnostics,
-                DiagnosticSeverity::Error,
-                "sample.microscopy.excitation_filter_spectral_coverage_incomplete",
-                "The selected excitation filter does not characterize the complete excitation band declared by the specimen label.",
-                "EquipmentComponent",
-                excitationFilter->componentId().value());
-        }
-        if (dichroic != nullptr &&
-            !bandCovered(*dichroic, *label.excitationBand(), true)) {
-            appendDiagnostic(
-                diagnostics,
-                DiagnosticSeverity::Error,
-                "sample.microscopy.dichroic_excitation_coverage_incomplete",
-                "The selected dichroic reflection curve does not characterize the complete declared excitation band.",
-                "EquipmentComponent",
-                dichroic->componentId().value());
-        }
+        assessFilterBand(
+            excitationFilter,
+            *label.excitationBand(),
+            false,
+            "sample.microscopy.excitation_filter_spectral_coverage_incomplete",
+            "sample.microscopy.excitation_filter_has_no_band_transmission",
+            "excitation-filter transmission");
+        assessFilterBand(
+            dichroic,
+            *label.excitationBand(),
+            true,
+            "sample.microscopy.dichroic_excitation_coverage_incomplete",
+            "sample.microscopy.dichroic_has_no_excitation_reflection",
+            "dichroic reflection");
     }
 
     if (label.emissionBand()) {
-        if (emissionFilter != nullptr &&
-            !bandCovered(*emissionFilter, *label.emissionBand(), false)) {
-            appendDiagnostic(
-                diagnostics,
-                DiagnosticSeverity::Error,
-                "sample.microscopy.emission_filter_spectral_coverage_incomplete",
-                "The selected emission filter does not characterize the complete emission band declared by the specimen label.",
-                "EquipmentComponent",
-                emissionFilter->componentId().value());
-        }
-        if (dichroic != nullptr &&
-            !bandCovered(*dichroic, *label.emissionBand(), false)) {
-            appendDiagnostic(
-                diagnostics,
-                DiagnosticSeverity::Error,
-                "sample.microscopy.dichroic_emission_coverage_incomplete",
-                "The selected dichroic transmission curve does not characterize the complete declared emission band.",
-                "EquipmentComponent",
-                dichroic->componentId().value());
-        }
+        assessFilterBand(
+            emissionFilter,
+            *label.emissionBand(),
+            false,
+            "sample.microscopy.emission_filter_spectral_coverage_incomplete",
+            "sample.microscopy.emission_filter_has_no_band_transmission",
+            "emission-filter transmission");
+        assessFilterBand(
+            dichroic,
+            *label.emissionBand(),
+            false,
+            "sample.microscopy.dichroic_emission_coverage_incomplete",
+            "sample.microscopy.dichroic_has_no_emission_transmission",
+            "dichroic transmission");
     }
 }
 
@@ -609,7 +617,10 @@ void assessFluorescenceFilterSet(
            fraction * (right.relativePower - left.relativePower);
 }
 
-[[nodiscard]] bool filterBandHasPositiveResponse(
+// nullopt means the measured curve does not characterize the whole band;
+// false means it covers the band but declares zero response; true means some
+// positive response exists. Unknown coverage must never be confused with zero.
+[[nodiscard]] std::optional<bool> filterBandHasPositiveResponse(
     const OpticalFilterSpecification& filter,
     const SpectralBand& band,
     bool reflection) {
@@ -623,7 +634,7 @@ void assessFluorescenceFilterSet(
     const auto lower = evaluate(minimum);
     const auto upper = evaluate(maximum);
     if (!lower || !upper) {
-        return false;
+        return std::nullopt;
     }
     if (*lower > 0.0 || *upper > 0.0) {
         return true;
@@ -720,28 +731,50 @@ void assessExcitationAvailability(
     const auto* dichroic = findSelectedFilterForLabel(
         equipment, request, label, OpticalFilterRole::Dichroic);
 
-    if (excitationFilter != nullptr &&
-        !filterBandHasPositiveResponse(
-            *excitationFilter, *label.excitationBand(), false)) {
-        appendDiagnostic(
-            diagnostics,
-            DiagnosticSeverity::Error,
-            "sample.microscopy.excitation_filter_has_no_band_transmission",
-            "The selected excitation filter has no declared transmission in the fluorophore excitation band or does not cover that band.",
-            "EquipmentComponent",
-            excitationFilter->componentId().value());
-    }
-    if (dichroic != nullptr &&
-        !filterBandHasPositiveResponse(
-            *dichroic, *label.excitationBand(), true)) {
-        appendDiagnostic(
-            diagnostics,
-            DiagnosticSeverity::Error,
-            "sample.microscopy.dichroic_has_no_excitation_reflection",
-            "The selected dichroic has no declared reflection in the fluorophore excitation band or does not cover that band.",
-            "EquipmentComponent",
-            dichroic->componentId().value());
-    }
+    const auto assessResponse = [&](
+        const OpticalFilterSpecification* filter,
+        bool reflection,
+        const char* coverageCode,
+        const char* noResponseCode,
+        const char* metric) {
+        if (filter == nullptr) {
+            return;
+        }
+        const auto response = filterBandHasPositiveResponse(
+            *filter, *label.excitationBand(), reflection);
+        if (!response) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Warning,
+                coverageCode,
+                std::string("The selected ") + metric +
+                    " curve does not cover the complete excitation band; no extrapolation was used.",
+                "EquipmentComponent",
+                filter->componentId().value());
+        } else if (!*response) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                noResponseCode,
+                std::string("The selected ") + metric +
+                    " curve has no positive response in the excitation band.",
+                "EquipmentComponent",
+                filter->componentId().value());
+        }
+    };
+
+    assessResponse(
+        excitationFilter,
+        false,
+        "sample.microscopy.excitation_filter_spectral_coverage_incomplete",
+        "sample.microscopy.excitation_filter_has_no_band_transmission",
+        "excitation-filter transmission");
+    assessResponse(
+        dichroic,
+        true,
+        "sample.microscopy.dichroic_excitation_coverage_incomplete",
+        "sample.microscopy.dichroic_has_no_excitation_reflection",
+        "dichroic reflection");
 }
 
 void assessFluorescenceCameraSuitability(

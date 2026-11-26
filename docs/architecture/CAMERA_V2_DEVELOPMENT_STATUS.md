@@ -392,3 +392,42 @@ This simulator track supplements GenTL software integration only. It does not
 close installed physical-camera smoke, AmScope physical tests, Phase 4 visual
 acceptance, Phase 6 frozen AmScope provider tests, or redistribution gates.
 See [CAMERA_V2_SIMULATOR_QUALIFICATION.md](CAMERA_V2_SIMULATOR_QUALIFICATION.md).
+
+
+## 12. Simulator harness CI and candidate update — 26 November 2026
+
+The initial simulator harness source baseline at
+`7d3a83b4ff87d5a9ee24f04a26f86d00ab6d6976` passed:
+- [GenTL bridge workflow #45780921668](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45780921668):
+  Intel x86_64 and Apple Silicon arm64 jobs passed, including build, CTest,
+  architecture checks and official GenApi 3.5.1 integration.
+- [Package workflow #45780921652](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45780921652):
+  Intel x86_64 and Apple Silicon arm64 jobs passed package tests, install and
+  relocation, clean external consumers, runtime-link inspection and
+  architecture checks.
+
+These workflows compiled the test-only native shim and simulator smoke target.
+They did not register or execute the opt-in simulator test because no
+`CAMERA_GENTL_SIMULATOR_CTI` was supplied. They are not simulator-run evidence.
+
+A follow-up source correction in
+`Camera/GenTL/tests/SimulatorSmoke.cpp` adds optional non-negative
+`device-index` selection; default remains index 0. This supports selecting a
+specific simulated camera model when a CTI exposes multiple devices. Source
+commit: `5f99561c78d85f5de5818ccf602040cb8af8bc38`. Its own CI result must be
+checked before treating this follow-up as validated. No local build/test/debug
+run or simulator execution has occurred.
+
+Candidate research now identifies Hikrobot MVS's documented
+`MvProducerVIR.cti` as a practical additional candidate. Its third-party
+GenTL consumer compatibility and license permission remain unconfirmed; it
+may require a Linux or Windows test environment. Critical Link's simulated
+GenTL Producer is a secondary candidate. The Imaging Source Virtual Camera
+remains subject to the same third-party consumer and license checks. Vimba X
+remains excluded pending license clarification; Aravis fake GV is not a CTI
+Producer.
+
+The next action is to inspect CI for the device-index source commit, then obtain
+an approved CTI package and run the opt-in smoke on a compatible runner. Keep
+simulator software evidence separate from physical-camera evidence and preserve
+the AmScope freeze.

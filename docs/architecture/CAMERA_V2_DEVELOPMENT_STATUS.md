@@ -424,3 +424,25 @@ a supported CTI package, or (b) implement a first-party test-only GenTL
 simulator CTI fixture. Such a fixture would validate the project's GenTL
 consumer implementation deterministically but would not prove vendor
 interoperability. Preserve all physical-camera and AmScope release gates.
+
+
+### First-party CTI simulator implementation — 26 November 2026
+
+A deterministic in-repository CTI simulator has now been added:
+- The existing GenTL mock fixture is built a second time as
+  `gentl_test_simulator.cti`.
+- Compile definition `CAMERA_GENTL_SIMULATOR_MODE` relaxes only mock-specific
+  discovery timeout and long EventGetData cancellation assumptions.
+- The normal mock bridge remains compiled without that definition, preserving
+  its existing deterministic cancellation tests.
+- CMake registers `camera_gentl_inrepo_simulator_smoke` in every
+  `BUILD_TESTING=ON` build.
+- The test exercises the actual direct CTI dynamic loader through the native
+  test-only C ABI shim and the existing Producer/device/stream path, then
+  checks five frames and Common-frame projection.
+
+This fixture represents one deterministic mock camera and Mono8 stream. It
+provides first-party integration evidence only, not third-party vendor
+interoperability. Source changes are awaiting GitHub CI. No local build, test,
+or debugger was run. External vendor CTI testing remains a separate gate and
+requires written license/compatibility clearance.

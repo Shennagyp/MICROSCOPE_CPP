@@ -250,6 +250,10 @@ void testCameraComponentModelBindingRoundTripAndRevisionControl() {
         check(initial && initial.value().bindingRevision == 0 &&
               initial.value().bindings.empty(),
               "returns an empty binding set before the first save");
+        check(initial && initial.value().microscopeId ==
+                  std::optional<microscope::core::MicroscopeId>{equipment.microscopeId()} &&
+              initial.value().equipmentDefinitionRevision == equipment.revision(),
+              "tags even an empty binding set with its microscope and equipment revision");
 
         const auto saved = store->replaceBindings(
             equipment, catalog1, {binding}, 0, 1);
@@ -259,6 +263,10 @@ void testCameraComponentModelBindingRoundTripAndRevisionControl() {
         const auto loaded = store->loadBindings(equipment, catalog1);
         check(loaded && loaded.value().bindingRevision == 1,
               "restores the binding-set revision for this equipment revision");
+        check(loaded && loaded.value().microscopeId ==
+                  std::optional<microscope::core::MicroscopeId>{equipment.microscopeId()} &&
+              loaded.value().equipmentDefinitionRevision == 7,
+              "returns binding-set scope metadata alongside its entries");
         check(loaded && loaded.value().bindings.size() == 1,
               "restores one installed camera component binding");
         if (loaded && !loaded.value().bindings.empty()) {
@@ -306,7 +314,8 @@ void testCameraComponentModelBindingRoundTripAndRevisionControl() {
             store->loadBindings(newerEquipment, catalog2);
         check(noBindingsForNewEquipmentRevision &&
               noBindingsForNewEquipmentRevision.value().bindingRevision == 0 &&
-              noBindingsForNewEquipmentRevision.value().bindings.empty(),
+              noBindingsForNewEquipmentRevision.value().bindings.empty() &&
+              noBindingsForNewEquipmentRevision.value().equipmentDefinitionRevision == 8,
               "does not silently carry an old camera binding into a new equipment definition revision");
 
         const auto duplicate = store->replaceBindings(

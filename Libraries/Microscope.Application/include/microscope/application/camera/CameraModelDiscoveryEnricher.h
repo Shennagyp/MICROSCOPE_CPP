@@ -84,9 +84,9 @@ public:
     // are returned as warnings; they do not silently replace equipment data.
     [[nodiscard]] static core::Result<
         CameraSpecificationProjectionResult,
-        core::CameraSpecificationError> projectToCoreCameraSpecification(
+        CameraSpecificationProjectionError> projectToCoreCameraSpecification(
             const core::CameraSpecification& installedSpecification,
-            const ::camera::CameraDeviceInfo& enrichedDevice);
+            const CameraModelEnrichmentResult& enrichment);
 };
 
 } // namespace microscope::application::camera_support

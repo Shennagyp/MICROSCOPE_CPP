@@ -450,6 +450,12 @@ public:
     [[nodiscard]] OpticalFilterRole role() const noexcept;
     [[nodiscard]] const std::vector<OpticalFilterSpectralSample>&
     spectralResponse() const noexcept;
+    // Linear interpolation between measured samples; no extrapolation outside
+    // the characterized wavelength range.
+    [[nodiscard]] std::optional<double> transmissionAt(
+        double wavelengthNanometers) const noexcept;
+    [[nodiscard]] std::optional<double> reflectionAt(
+        double wavelengthNanometers) const noexcept;
     [[nodiscard]] const std::optional<OpticalCompatibilityId>&
     compatibilityId() const noexcept;
 

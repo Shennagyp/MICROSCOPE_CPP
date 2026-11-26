@@ -1,6 +1,7 @@
 #include "microscope/application/camera/CameraModelDiscoveryEnricher.h"
 
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -24,6 +25,14 @@ TValue take(microscope::core::Result<TValue, TError> result) {
         throw std::runtime_error("A camera discovery enrichment fixture failed.");
     }
     return std::move(result).value();
+}
+
+template <typename TValue>
+TValue take(std::optional<TValue> result) {
+    if (!result) {
+        throw std::runtime_error("An optional camera test fixture was empty.");
+    }
+    return std::move(*result);
 }
 
 camera::CameraModelProfile makeProfile(

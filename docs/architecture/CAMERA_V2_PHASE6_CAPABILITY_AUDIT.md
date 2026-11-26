@@ -50,7 +50,7 @@ malformed XML rejection/recovery, unsupported public IRegister handling,
 feature read/write failure recovery, command execution failure recovery and
 command-completion polling failure recovery.
 The exact green checkpoint is `a4559796cbc5c0fa99bfad85e7c259f4b6bdf78b`,
-workflow [#45768851121](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45768295355).
+workflow [#45768851121](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45768851121).
 
 Phase 6 remains open. AmScope provider-level feature/command behavior remains
 a known gap but is blocked by the explicit AmScope freeze. The GenTL discovery
@@ -75,7 +75,7 @@ Reusable command and capability presentation are implemented.
 | GenTL frames | Data stream preserves payload and optional metadata; safe PFNC projection supports only explicitly verified layouts and leaves unsupported layouts opaque | Mock Producer/frame-adapter tests cover lifecycle, metadata, payload and layout checks | Good deterministic software coverage; real CTI camera evidence remains separate Phase 8 work |
 | GenTL GenApi features | Boolean, Integer, Float, String and Enumeration nodes; Root-category traversal; dynamic availability/access modes; units/ranges/enumeration symbols; validated writes with GenApi verification | XML-backed tests cover all five scalar kinds, nested categories, internal-register exclusion, dynamic availability, read-only access and readback | Positive-path coverage is meaningful |
 | GenTL GenApi commands | `ICommand` discovery, issue and `IsDone` polling through common command contract | XML-backed tests cover root/nested commands, internal command-register rejection, issue and incomplete→complete transition; read-only command rejection | Positive-path coverage is meaningful; malformed/failure cases remain |
-| Cross-backend discovery semantics | AmScope discovery exposes common `CameraDeviceInfo`; GenTL discovery exposes `DeviceDescriptor`; GenApi features/commands use common access contracts | No shared provider/discovery abstraction or explicit GenTL→Common projection appears in the current public headers | **API alignment decision required**, not permission to restart Phase 5 |
+| Cross-backend discovery semantics | AmScope discovery exposes common `CameraDeviceInfo`; GenTL discovery exposes provider-specific `DeviceDescriptor`; GenApi features/commands use common access contracts | `Producer::openDevice` consumes the exact producer/interface/device route tuple and rejects foreign/stale descriptors | **Decision recorded:** keep provider-specific discovery until a concrete multi-provider consumer requires a Common projection; preserve the route descriptor separately if that requirement emerges |
 | Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor, ImageInfoBar and CameraCapabilityPanel are integrated into the preview; CameraCommandPanel represents no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned | Workflow [#45759739032](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45759739032) built the preview and passed 24/24 Qt CTest tests on both architectures, including the offscreen composition/dock-state smoke | Phase 4 remains open for human visual inspection and physical MU503 UI smoke. The offscreen composition test is not hardware qualification. Widget presence is not evidence of provider hardware capability |
 
 ### 3.1 AmScope feature inventory accounting
@@ -217,7 +217,7 @@ supported or hardware-qualified.
    AmScope source, tests, public contracts or behavior.
 3. GenApi malformed XML, unsupported public IRegister, feature read/write
    failure recovery and command execution failure recovery tests are complete
-   at `ee2681d`; workflow #45768851121 passed Intel x86_64 and Apple Silicon
+   at `a455979`; workflow #45768851121 passed Intel x86_64 and Apple Silicon
    arm64 with the official GenApi 3.5.1 integration.
 4. Retain provider-specific GenTL `DeviceDescriptor` for now. It carries the
    Producer/interface/device routing identity needed by `openDevice`; the

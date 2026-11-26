@@ -785,12 +785,12 @@ private:
                 }
                 cameraControls_->setDevices(std::move(commonDevices));
 
-                if (discoveredCameras.empty()) {
+                if (discoveredCameras_.empty()) {
                     showStatusMessage("No AmScope camera detected.");
                 } else {
                     showStatusMessage(
                         QString("%1 camera(s) detected.")
-                            .arg(static_cast<qulonglong>(discoveredCameras.size())));
+                            .arg(static_cast<qulonglong>(discoveredCameras_.size())));
                 }
                 updateControls(camera_.state());
             });
@@ -1698,7 +1698,7 @@ private:
                                 std::get_if<camera::CameraFeatureAccessError>(&result)) {
                             found->second.hasCurrentValue = false;
                             found->second.currentValue.reset();
-                            found->second.editor->setCurrentValue(std::nullopt);
+                            static_cast<void>(found->second.editor->setCurrentValue(std::nullopt));
                             found->second.editor->setErrorMessage(error->message);
                             QString tooltip = QString::fromStdString(error->message);
                             if (found->second.descriptor.disabledReason) {

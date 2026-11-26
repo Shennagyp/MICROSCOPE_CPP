@@ -166,6 +166,75 @@ void testExactProfileEnrichesMissingSensorFacts() {
     }
 }
 
+void testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeometry() {
+    const auto catalog = makeCatalog({makeProfile("Rev-C", true, 1.2)});
+    const auto discovered = makeDiscoveredDevice();
+    const auto enriched = CameraModelDiscoveryEnricher::enrich(
+        discovered, catalog);
+
+    const auto componentId =
+        take<microscope::core::EquipmentComponentId>(
+            microscope::core::EquipmentComponentId::create("installed-camera-1"));
+    const auto activeDimensions =
+        take(microscope::core::PixelDimensions::create(1024, 768));
+    const auto cameraMode = take(microscope::core::CameraOutputMode::create(
+        take<microscope::core::CameraModeId>(
+            microscope::core::CameraModeId::create("installed-camera-mono8")),
+        take(microscope::core::SensorRegionOfInterest::create(
+            0, 0, 1024, 768)),
+        take(microscope::core::PixelBinning::create(1, 1)),
+        activeDimensions,
+        microscope::core::CameraPixelLayout::Monochrome,
+        "Mono8"));
+    const auto installedSpecification = take(
+        microscope::core::CameraSpecification::create(
+            componentId,
+            activeDimensions,
+            take(microscope::core::PositiveMicrometers::create(5.0)),
+            take(microscope::core::PositiveMicrometers::create(5.0)),
+            {cameraMode}));
+
+    const auto projection =
+        CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
+            installedSpecification, enriched.deviceInfo);
+
+    check(static_cast<bool>(projection),
+          "creates a Core camera specification from the installed spec and exact model discovery");
+    if (!projection) {
+        return;
+    }
+
+    const auto& projected = projection.value().specification;
+    check(projected.componentId() == componentId,
+          "retains the installed camera component identity");
+    check(projected.activeSensorDimensions().width() == 1024 &&
+          projected.activeSensorDimensions().height() == 768,
+          "does not silently replace equipment-owned active sensor dimensions");
+    check(projected.pixelPitchXMicrometers() == 5.0 &&
+          projected.pixelPitchYMicrometers() == 5.0,
+          "does not silently replace equipment-owned pixel pitch");
+    check(projected.outputModes().size() == 1 &&
+          projected.outputModes().front().id() ==
+              take<microscope::core::CameraModeId>(
+                  microscope::core::CameraModeId::create("installed-camera-mono8")),
+          "preserves the installed camera output-mode definition");
+    check(projected.sensorCharacteristics().has_value() &&
+          projected.sensorCharacteristics()->quantumEfficiency.size() == 4,
+          "projects the model catalog's wavelength-dependent QE curve into Core");
+
+    bool dimensionsWarning = false;
+    bool pitchWarning = false;
+    for (const auto& warning : projection.value().warnings) {
+        dimensionsWarning |=
+            warning.code == "camera.model_profile.active_sensor_dimensions_mismatch";
+        pitchWarning |=
+            warning.code == "camera.model_profile.pixel_pitch_x_mismatch" ||
+            warning.code == "camera.model_profile.pixel_pitch_y_mismatch";
+    }
+    check(dimensionsWarning && pitchWarning,
+          "reports catalog/equipment geometry disagreements without overwriting installed values");
+}
+
 void testIncompleteIdentityRequiresCandidateSelection() {
     const auto catalog = makeCatalog({
         makeProfile("Rev-B", true, 1.2),
@@ -217,6 +286,7 @@ void testLiveBackendConflictsAreRetainedAndReported() {
 
 int main() {
     testExactProfileEnrichesMissingSensorFacts();
+    testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeometry();
     testIncompleteIdentityRequiresCandidateSelection();
     testLiveBackendConflictsAreRetainedAndReported();
 

@@ -2,6 +2,7 @@
 
 #include "microscope/core/diagnostics/Diagnostic.h"
 #include "microscope/core/equipment/OpticalTopology.h"
+#include "microscope/core/equipment/MicroscopyTechniques.h"
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"
 
@@ -11,17 +12,6 @@
 #include <vector>
 
 namespace microscope::core {
-
-enum class ContrastMethod {
-    Brightfield,
-    PhaseContrast,
-    DifferentialInterferenceContrast,
-    PolarizedLight,
-    Fluorescence,
-    Darkfield,
-    Other,
-    Unknown
-};
 
 enum class ExposurePolicy {
     Manual,

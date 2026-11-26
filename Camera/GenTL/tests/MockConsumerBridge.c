@@ -302,13 +302,28 @@ int32_t gentl_consumer_invoke(
         if (fails_at_address("MOCK_GENTL_FAIL_PORT_READ_ADDRESS", arguments[1]))
             return GC_ERR_IO;
         if (arguments[1] == 0x1002 && *size == 2) {
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            if (command_poll_count[port] > 0)
+                memset(register_memory[port] + 0x1002, 0, 2);
+            ++command_poll_count[port];
+            if (arguments[1] <= sizeof(register_memory[port]) &&
+                *size <= sizeof(register_memory[port]) - (size_t)arguments[1])
+                memcpy(bytes, register_memory[port] + (size_t)arguments[1], *size);
+#else
             if (command_poll_count > 0)
                 memset(register_memory + 0x1002, 0, 2);
             ++command_poll_count;
+#endif
         }
-        if (arguments[1] <= sizeof(register_memory) &&
-            *size <= sizeof(register_memory) - (size_t)arguments[1]) {
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        else if (arguments[1] <= sizeof(register_memory[port]) &&
+                 *size <= sizeof(register_memory[port]) - (size_t)arguments[1]) {
+            memcpy(bytes, register_memory[port] + (size_t)arguments[1], *size);
+#else
+        else if (arguments[1] <= sizeof(register_memory) &&
+                 *size <= sizeof(register_memory) - (size_t)arguments[1]) {
             memcpy(bytes, register_memory + (size_t)arguments[1], *size);
+#endif
         } else {
             for (size_t i = 0; i < *size; ++i) bytes[i] = (uint8_t)(0xA0 + i);
         }
@@ -324,11 +339,19 @@ int32_t gentl_consumer_invoke(
         if (!size || (!bytes && *size != 0)) return GC_ERR_INVALID_PARAMETER;
         if (fails_at_address("MOCK_GENTL_FAIL_PORT_WRITE_ADDRESS", address))
             return GC_ERR_IO;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        if (address == 0x1002 && *size == 2) command_poll_count[port] = 0;
+        if (address <= sizeof(register_memory[port]) &&
+            *size <= sizeof(register_memory[port]) - (size_t)address) {
+            memcpy(register_memory[port] + (size_t)address, bytes, *size);
+        }
+#else
         if (address == 0x1002 && *size == 2) command_poll_count = 0;
         if (address <= sizeof(register_memory) &&
             *size <= sizeof(register_memory) - (size_t)address) {
             memcpy(register_memory + (size_t)address, bytes, *size);
         }
+#endif
         return GC_ERR_SUCCESS;
     }
     case 6:
@@ -488,8 +511,10 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     }
     case 10: { // EventGetData
-        if (argument_count != 4 || arguments[0] != 0x6666)
-            return GC_ERR_INVALID_HANDLE;
+        if (argument_count != 4) return GC_ERR_INVALID_PARAMETER;
+        const int event = event_index((EVENT_HANDLE)pointer(arguments[0]));
+        if (event < 0) return GC_ERR_INVALID_HANDLE;
+        const DS_HANDLE owner = (DS_HANDLE)(uintptr_t)(0x5555 + event);
         size_t* size = (size_t*)pointer(arguments[2]);
         if (!size || !pointer(arguments[1])) return GC_ERR_INVALID_PARAMETER;
 #if !defined(CAMERA_GENTL_SIMULATOR_MODE)
@@ -501,20 +526,30 @@ int32_t gentl_consumer_invoke(
             return GC_ERR_ABORT;
         }
 #endif
-        if (queued_buffer_count == 0) return GC_ERR_TIMEOUT;
+        size_t queuedIndex = 0;
+        while (queuedIndex < queued_buffer_count) {
+            size_t bufferIndex = 0;
+            while (bufferIndex < stream_buffer_count &&
+                   stream_handles[bufferIndex] != queued_buffers[queuedIndex]) ++bufferIndex;
+            if (bufferIndex < stream_buffer_count &&
+                stream_owners[bufferIndex] == owner) break;
+            ++queuedIndex;
+        }
+        if (queuedIndex == queued_buffer_count) return GC_ERR_TIMEOUT;
         if (*size < sizeof(EVENT_NEW_BUFFER_DATA)) {
             *size = sizeof(EVENT_NEW_BUFFER_DATA);
             return GC_ERR_BUFFER_TOO_SMALL;
         }
-        const BUFFER_HANDLE handle = queued_buffers[0];
-        for (size_t i = 1; i < queued_buffer_count; ++i)
+        const BUFFER_HANDLE handle = queued_buffers[queuedIndex];
+        for (size_t i = queuedIndex + 1; i < queued_buffer_count; ++i)
             queued_buffers[i - 1] = queued_buffers[i];
         --queued_buffer_count;
         size_t index = 0;
         while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
-        if (index == stream_buffer_count) return GC_ERR_INVALID_BUFFER;
+        if (index == stream_buffer_count || stream_owners[index] != owner)
+            return GC_ERR_INVALID_BUFFER;
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
-        stream_frame_ids[index] = next_simulator_frame_id++;
+        stream_frame_ids[index] = next_simulator_frame_ids[event]++;
         stream_timestamps_ns[index] =
             UINT64_C(123456789) + stream_frame_ids[index] * UINT64_C(1000000);
         for (size_t i = 0; i < 16; ++i) {

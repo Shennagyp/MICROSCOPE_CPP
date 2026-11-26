@@ -27,6 +27,9 @@ int main() {
     camera::Frame frame;
     require(frame.pixelFormat == camera::PixelFormat::Unknown,
             "A default frame does not claim an encoding or buffer layout");
+    require(frame.pixelColorFilterArray ==
+                camera::PixelColorFilterArray::Unknown,
+            "A default frame does not invent a sensor color-filter-array pattern");
     require(!frame.pixelFormatIdentifier,
             "A default frame has no invented pixel-format identity");
     require(!frame.sequenceNumber && !frame.timestamp && !frame.exposure,
@@ -53,6 +56,9 @@ int main() {
         camera::PixelFormatIdentifier{"amcam.fourcc", 0x42474752U};
     frame.significantBitsPerPixel = 10;
     frame.storageBitsPerPixel = 8;
+    frame.pixelColorFilterArray = camera::PixelColorFilterArray::RGGB;
+    require(frame.pixelColorFilterArray == camera::PixelColorFilterArray::RGGB,
+            "Sensor mosaic identity is independent from RAW sample storage");
     require(frame.pixelFormatIdentifier->scheme == "amcam.fourcc" &&
                 frame.pixelFormatIdentifier->value == 0x42474752U,
             "Opaque pixel-format values retain their originating scheme");

@@ -97,16 +97,7 @@ public:
     [[nodiscard]] static std::optional<CameraModelProfile> create(
         CameraModelKey key,
         CameraCapabilities capabilities,
-        CameraSensorCharacteristics sensorCharacteristics) {
-        if (detail::normalizeCameraModelText(key.manufacturer).empty() ||
-            detail::normalizeCameraModelText(key.model).empty() ||
-            (key.variant && detail::normalizeCameraModelText(*key.variant).empty()) ||
-            !detail::validSensorCharacteristics(sensorCharacteristics)) {
-            return std::nullopt;
-        }
-        return CameraModelProfile(
-            std::move(key), capabilities, std::move(sensorCharacteristics));
-    }
+        CameraSensorCharacteristics sensorCharacteristics);
 
     [[nodiscard]] const CameraModelKey& key() const noexcept {
         return key_;
@@ -139,17 +130,7 @@ private:
 class CameraModelCatalog final {
 public:
     [[nodiscard]] static std::optional<CameraModelCatalog> create(
-        std::vector<CameraModelProfile> profiles) {
-        for (std::size_t left = 0; left < profiles.size(); ++left) {
-            for (std::size_t right = left + 1; right < profiles.size(); ++right) {
-                if (detail::sameCameraModelKey(
-                        profiles[left].key(), profiles[right].key())) {
-                    return std::nullopt;
-                }
-            }
-        }
-        return CameraModelCatalog(std::move(profiles));
-    }
+        std::vector<CameraModelProfile> profiles);
 
     [[nodiscard]] const std::vector<CameraModelProfile>& profiles() const noexcept {
         return profiles_;
@@ -181,5 +162,32 @@ private:
 
     std::vector<CameraModelProfile> profiles_;
 };
+
+inline std::optional<CameraModelProfile> CameraModelProfile::create(
+    CameraModelKey key,
+    CameraCapabilities capabilities,
+    CameraSensorCharacteristics sensorCharacteristics) {
+    if (detail::normalizeCameraModelText(key.manufacturer).empty() ||
+        detail::normalizeCameraModelText(key.model).empty() ||
+        (key.variant && detail::normalizeCameraModelText(*key.variant).empty()) ||
+        !detail::validSensorCharacteristics(sensorCharacteristics)) {
+        return std::nullopt;
+    }
+    return CameraModelProfile(
+        std::move(key), capabilities, std::move(sensorCharacteristics));
+}
+
+inline std::optional<CameraModelCatalog> CameraModelCatalog::create(
+    std::vector<CameraModelProfile> profiles) {
+    for (std::size_t left = 0; left < profiles.size(); ++left) {
+        for (std::size_t right = left + 1; right < profiles.size(); ++right) {
+            if (detail::sameCameraModelKey(
+                    profiles[left].key(), profiles[right].key())) {
+                return std::nullopt;
+            }
+        }
+    }
+    return CameraModelCatalog(std::move(profiles));
+}
 
 } // namespace camera

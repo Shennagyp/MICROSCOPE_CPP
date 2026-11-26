@@ -1,18 +1,24 @@
 import SwiftUI
+import Combine
+
+private final class ObjectiveExposureSettingsViewState: ObservableObject {
+    @Published var viewState.exposureDraft = ""
+    @Published var viewState.isEditingExposure = false
+    @Published var viewState.saveMessage = ""
+}
 
 struct ObjectiveExposureSettingsWindow: View {
     @ObservedObject var model: NativeCameraModel
     @ObservedObject var microscope: MicroscopeConfigurationModel
     @ObservedObject private var features: NativeCameraFeatureModel
 
-    @State private var exposureDraft = ""
-    @State private var isEditingExposure = false
-    @State private var saveMessage = ""
+    @ObservedObject private var viewState: ObjectiveExposureSettingsViewState
 
     init(model: NativeCameraModel, microscope: MicroscopeConfigurationModel) {
         self.model = model
         self.microscope = microscope
         self.features = model.features
+        self.viewState = ObjectiveExposureSettingsViewState()
     }
 
     private var activeObjective: MicroscopeObjective? {
@@ -54,7 +60,7 @@ struct ObjectiveExposureSettingsWindow: View {
         !model.isCameraOperationPending &&
         !features.isFeatureSnapshotLoading &&
         !features.isFeatureWritePending &&
-        Int64(exposureDraft.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+        Int64(viewState.exposureDraft.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
     }
 
     private var canSaveProfile: Bool {
@@ -72,7 +78,7 @@ struct ObjectiveExposureSettingsWindow: View {
 
         if exposureMode == "Off" {
             guard let readback = manualExposureReadback else { return false }
-            let draft = Int64(exposureDraft.trimmingCharacters(in: .whitespacesAndNewlines))
+            let draft = Int64(viewState.exposureDraft.trimmingCharacters(in: .whitespacesAndNewlines))
             return draft == readback
         }
         return true
@@ -100,12 +106,12 @@ struct ObjectiveExposureSettingsWindow: View {
             loadStoredExposureDraft()
         }
         .onChange(of: microscope.configuration.activeObjectiveID) { _ in
-            saveMessage = ""
+            viewState.saveMessage = ""
             loadStoredExposureDraft()
         }
         .onChange(of: manualExposureReadback) { value in
-            guard !isEditingExposure, let value = value else { return }
-            exposureDraft = String(value)
+            guard !viewState.isEditingExposure, let value = value else { return }
+            viewState.exposureDraft = String(value)
         }
         .alert(isPresented: $model.isShowingError) {
             Alert(
@@ -275,9 +281,9 @@ struct ObjectiveExposureSettingsWindow: View {
                         HStack {
                             TextField(
                                 "Exposure time in microseconds",
-                                text: $exposureDraft,
+                                text: $viewState.exposureDraft,
                                 onEditingChanged: { editing in
-                                    isEditingExposure = editing
+                                    viewState.isEditingExposure = editing
                                 },
                                 onCommit: {
                                     applyManualExposure()
@@ -322,8 +328,8 @@ struct ObjectiveExposureSettingsWindow: View {
                     .disabled(!canSaveProfile)
                 }
 
-                if !saveMessage.isEmpty {
-                    Text(saveMessage)
+                if !viewState.saveMessage.isEmpty {
+                    Text(viewState.saveMessage)
                         .font(.caption)
                         .foregroundColor(OptikaPalette.secondaryText)
                 }
@@ -350,31 +356,31 @@ struct ObjectiveExposureSettingsWindow: View {
 
     private func loadStoredExposureDraft() {
         if let stored = storedProfile.manualExposureTimeMicroseconds {
-            exposureDraft = String(stored)
+            viewState.exposureDraft = String(stored)
         } else if let readback = manualExposureReadback {
-            exposureDraft = String(readback)
+            viewState.exposureDraft = String(readback)
         } else {
-            exposureDraft = ""
+            viewState.exposureDraft = ""
         }
-        isEditingExposure = false
+        viewState.isEditingExposure = false
     }
 
     private func applyManualExposure() {
         guard canApplyManualExposure,
               let descriptor = exposureTimeDescriptor,
-              let value = Int64(exposureDraft.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+              let value = Int64(viewState.exposureDraft.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return
         }
 
         if descriptor.hasNumericRange && descriptor.integerRange {
             guard value >= descriptor.minimumInteger &&
                   value <= descriptor.maximumInteger else {
-                saveMessage = "Exposure time is outside the camera-reported range."
+                viewState.saveMessage = "Exposure time is outside the camera-reported range."
                 return
             }
         }
 
-        saveMessage = ""
+        viewState.saveMessage = ""
         features.writeInteger(value, for: descriptor)
     }
 
@@ -397,6 +403,6 @@ struct ObjectiveExposureSettingsWindow: View {
             profile,
             for: microscope.configuration.activeObjectiveID
         )
-        saveMessage = "Exposure profile saved for \(activeObjective?.name ?? "this objective")."
+        viewState.saveMessage = "Exposure profile saved for \(activeObjective?.name ?? "this objective")."
     }
 }

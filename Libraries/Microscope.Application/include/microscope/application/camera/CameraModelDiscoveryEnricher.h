@@ -1,7 +1,9 @@
 #pragma once
 
 #include "camera/CameraModelCatalog.h"
+#include "microscope/core/equipment/OpticalSpecifications.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,13 @@ public:
     [[nodiscard]] static CameraModelEnrichmentResult enrich(
         const ::camera::CameraDeviceInfo& discoveredDevice,
         const ::camera::CameraModelCatalog& catalog);
+
+    // Projects enriched backend-neutral facts into the persistence-free Core
+    // sensor model. Active sensor dimensions and pixel pitch remain on the
+    // Core CameraSpecification itself.
+    [[nodiscard]] static std::optional<core::CameraSensorCharacteristics>
+    toCoreSensorCharacteristics(
+        const ::camera::CameraDeviceInfo& enrichedDevice);
 };
 
 } // namespace microscope::application::camera_support

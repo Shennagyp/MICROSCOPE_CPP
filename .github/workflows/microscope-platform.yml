@@ -7,6 +7,10 @@ on:
     paths:
       - "CMakeLists.txt"
       - "Libraries/**"
+      - "Application/OptikaB293/**"
+      - "Camera/Amscope/**"
+      - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
+      - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
       - "Camera/Common/**"
       - "docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md"
       - ".github/workflows/microscope-platform.yml"
@@ -111,4 +115,29 @@ jobs:
 
       - name: Test root platform-only composition
         run: ctest --test-dir build/platform -C Release --output-on-failure
+        shell: bash
+
+      # The native host is macOS-only and must be compiled separately from the
+      # portable platform matrix. Keep Qt disabled: the production host is SwiftUI.
+      - name: Configure native OPTIKA B293 application
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build/native-app \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOPTIKA_BUILD_AMSCOPE=ON \
+            -DOPTIKA_BUILD_NATIVE_APP=ON \
+            -DAMSCOPE_VENDOR_MAC_ARCH=x64+arm64 \
+            -DAMSCOPE_BUILD_QT_ADAPTER=OFF \
+            -DAMSCOPE_BUILD_PREVIEW_APP=OFF \
+            -DBUILD_TESTING=ON
+        shell: bash
+
+      - name: Build native OPTIKA B293 application
+        if: runner.os == 'macOS'
+        run: cmake --build build/native-app --config Release --parallel
+        shell: bash
+
+      - name: Test native OPTIKA B293 application
+        if: runner.os == 'macOS'
+        run: ctest --test-dir build/native-app -C Release --output-on-failure
         shell: bash

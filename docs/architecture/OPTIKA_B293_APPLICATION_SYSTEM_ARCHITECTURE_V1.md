@@ -389,6 +389,34 @@ Large immutable image payloads are a separate resource concern: keep their docum
 
 Persisted hardware coordinates are recovery/history data only. On application restart they do not prove the stage's current physical position and must not be restored as verified machine state.
 
+
+### 7.6.2 Microscope equipment, camera catalog and LightPath calibration persistence
+
+These records have different ownership and revision scopes; do not put them into one undifferentiated "microscope settings" document.
+
+| Persistent record | Scope and owner | Contents |
+|---|---|---|
+| Camera model catalog | Application camera-model catalog owner; shared across microscopes | Manufacturer/model/variant key, model capabilities, shutter/sensor technology, sensor dimensions/pixel pitch when sourced, QE curve, read noise, dark current, full well, frame rate, profile revision and evidence/provenance |
+| Microscope equipment constitution | One physical microscope | Installed component identities; optical ports/connections/routes; named LightPaths; installed camera component-to-model-profile binding; objective/condenser specifications; light-source/channel specifications; optical-filter spectral curves; hardware/selector topology; constitution revision |
+| Operation mode | One microscope, editable and revisioned | Objective constraints, selected technique composition, path preferences, camera preference policy, desired illumination per LightPath, exposure settings and other mode-level targets |
+| LightPath calibration | One microscope and one calibrated optical-state fingerprint; referenced by a mode | Measurement plane, source/channel, selected LightPath and route revision, optical-state fingerprint, source-drive-to-irradiance points, uncertainty, measurement instrument/provenance and calibration revision |
+| Acquisition/configuration snapshot | One completed or attempted acquisition | Equipment/mode revisions, selected LightPath, actual connected camera and output mode, camera suitability warnings and user acknowledgement, filter/source/channel state, target/effective irradiance, calibration revision and verification evidence |
+
+The Camera project provides the backend-neutral model/profile types and runtime discovery enrichment. It does not own the persistence technology. Application loads/persists the shared `CameraModelCatalog`, then merges a matching catalog profile into discovered device information by manufacturer/model/variant. Serial number and SDK enumeration ID identify a physical connected unit/session; they are not reusable camera-model keys. If model identity is incomplete and more than one profile matches, keep the result ambiguous instead of assigning one profile silently.
+
+The microscope equipment constitution references a camera model profile for each installed camera component. It also retains the physical route relationship: an operation mode does not choose an arbitrary camera from the global catalog. The selected LightPath's imaging route determines the connected camera endpoint; the catalog only enriches that connected camera with model-level sensor facts.
+
+An operation mode can be edited by the user and saved as a new mode revision. Its per-LightPath intensity target and calibration reference are persisted with the mode revision. The saved target is a specimen-plane irradiance, not a hardware percentage. Application resolves the target through the referenced calibration curve to obtain the source drive setting. A target outside the measured interval requires a new calibration or user intervention; the application must not extrapolate.
+
+The calibration fingerprint must include every selected identity and adjustable setting that affects the measured transfer: route membership/revision, objective, condenser/annulus/stop, source/channel, excitation/neutral-density/dichroic/emission filters, aperture/iris/selector state, beam-splitter/relay state and relevant illumination geometry. The record also identifies the measurement plane, meter/reference instrument and its calibration, environmental/measurement conditions, date and uncertainty. A list of component IDs without settings is not a sufficient physical calibration key.
+
+A mode can legitimately use different calibrated irradiance targets for different LightPaths or microscopy techniques. For example, 4× Brightfield can be deliberately configured with a lower specimen-plane irradiance than 40× Brightfield or 4× Darkfield. Persist each target independently. The software must not infer a universal intensity ratio from objective magnification; darkfield condenser/stop geometry, filter attenuation and source spectrum alter delivered irradiance.
+
+When an acquisition starts, materialize the required equipment, camera catalog profiles, mode and calibration records once into their owner-retained in-memory objects. The running workflow uses those objects without getter-triggered persistence reads. Editing a mode while an acquisition is running creates a new revision; it does not mutate the running acquisition snapshot. A completed/attempted acquisition retains the exact revisions and selected settings it used.
+
+**Implementation status:** the repository now contains initial typed C++ value contracts for camera model profiles/catalog, sensor characteristics, spectral source output, optical filter response, warning-only camera suitability and mode-specific LightPath calibration/settings. Durable repositories, schema/migrations, transaction handling, profile import/edit UI and actual camera/illumination runtime integration are not implemented by those value types alone. Keep this distinction in release notes and phase status.
+
+
 ## 8. Commands, operations and feedback
 
 ### 8.1 State-changing commands target existing objects

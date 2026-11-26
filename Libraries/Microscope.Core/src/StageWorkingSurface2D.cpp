@@ -410,6 +410,9 @@ StageWorkingSurface2D::replacingSlideRectangle(
     if (it == rectangles_.end())
         return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
             StageWorkingSurface2DError::SlideNotFound);
+    if (rectangle.registrationRevision() == it->registrationRevision())
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::RegistrationRevisionMustChange);
     if (!rectangleInside(rectangle, minimumBoundary_, maximumBoundary_))
         return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
             StageWorkingSurface2DError::SlideOutsideWorkingSurface);

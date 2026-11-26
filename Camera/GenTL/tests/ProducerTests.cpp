@@ -57,6 +57,17 @@ int runProducerTests(int argc, char** argv) {
         }
         if (!rejectedForeign) return 6;
 
+        auto staleInterfaceDescriptor = descriptor;
+        staleInterfaceDescriptor.interfaceId = "missing-interface";
+        bool rejectedStaleInterface = false;
+        try {
+            auto invalid = producer.openDevice(staleInterfaceDescriptor);
+            (void)invalid;
+        } catch (const std::invalid_argument&) {
+            rejectedStaleInterface = true;
+        }
+        if (!rejectedStaleInterface) return 21;
+
         auto device = producer.openDevice(descriptor);
         if (!device || device.deviceId() != "device0") return 7;
         producer = camera::gentl::Producer{}; // The session retains producer state.

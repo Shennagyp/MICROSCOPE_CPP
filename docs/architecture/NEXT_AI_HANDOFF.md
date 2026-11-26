@@ -176,9 +176,10 @@ Continue Phase 6 on `camera-v.2.0`:
    identity and no generic multi-provider discovery consumer justifies a
    lossy Common projection. Do not implement a projection unless that consumer
    requirement changes.
-2. Preserve the decision to defer per-element vector descriptor metadata.
-   Do not expand the common contract unless a concrete generic consumer needs
-   per-element labels/ranges.
+2. Preserve the vector decision: `CameraFeatureEditor` uses `elementCount`
+   for cardinality guidance and Common validation rejects wrong vector
+   lengths; provider code retains per-field semantics. Do not add per-element
+   labels/ranges unless a concrete generic consumer needs them.
 3. Select the next provider-neutral Phase 6 coverage gap. AmScope provider
    tests remain blocked by the explicit AmScope freeze; do not change its
    source, tests, public contracts or behavior.

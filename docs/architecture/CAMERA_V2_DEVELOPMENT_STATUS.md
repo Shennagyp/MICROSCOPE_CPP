@@ -241,8 +241,10 @@ Next Phase 6 actions:
    `DeviceDescriptor` for now because it carries producer/interface/device
    routing identity; do not synthesize a lossy common discovery record without
    a real multi-provider consumer requirement.
-2. Decide whether per-element vector constraints have a concrete generic
-   consumer. Do not expand `CameraFeatureDescriptor` absent that requirement.
+2. Preserve the vector-descriptor decision: the reusable editor consumes
+   `elementCount` for cardinality guidance, and Common validation rejects a
+   mismatched vector length. Per-element labels/ranges are not currently
+   required; do not expand `CameraFeatureDescriptor` without a new consumer.
 3. Keep AmScope provider-level feature/command coverage as a known gap blocked
    by the explicit AmScope freeze. Do not alter AmScope to close it.
 4. Continue with the next provider-neutral Phase 6 gap; keep physical MU503,

@@ -189,7 +189,7 @@ passed 24/24 tests on each architecture.
 | P1 | AmScope command/accessory behavior has no direct provider tests | Public API includes trigger, I/O, light, filter-wheel, ST4, focuser, lens and still-capture operations; current tests do not exercise their provider-side preconditions, rollback, readback or asynchronous completion | Build a separate command-family test matrix. Do not merge settings, telemetry and actions. Start with one deterministic, low-risk command family after its SDK semantics are traced. |
 | P2 | GenApi vendor/device behavior remains unverified | Synthetic XML and mock-port tests now cover malformed XML rejection/recovery, unsupported public IRegister classification, feature read/write failure recovery and command execution failure recovery. No vendor CTI or physical GenTL camera is part of this evidence. | Keep vendor XML/CTI/device qualification in Phase 8. Do not treat mock/XML CI as hardware evidence. |
 | P2 | GenTL discovery-to-Common projection decision | `Producer::discover` returns provider-specific `DeviceDescriptor`; `CameraDeviceInfo` is a data model, not a required cross-provider discovery API. The GenTL descriptor carries Producer path, interface ID and device ID required for routing. | **Decision: retain provider-specific `DeviceDescriptor`; do not add a Common projection without a concrete multi-provider consumer.** A future projection must preserve the routing descriptor separately and define a collision-safe opaque identity. No source/API change is justified now. |
-| P2 | Vector descriptors expose cardinality but not per-element semantics | Common descriptor has `elementCount`; AmScope ROI/sharpening writes enforce element-specific constraints in provider code. No concrete generic consumer requiring per-element labels/ranges has been established. | **Decision: defer contract expansion.** Revisit only when a generic consumer needs to render or validate per-element constraints. Keep provider validation authoritative. |
+| P2 | Vector descriptors expose cardinality but not per-element semantics | `CameraFeatureEditor` uses `elementCount` for vector cardinality guidance; `validateFeatureWrite` rejects a vector whose length differs from the descriptor. Provider code retains semantic checks for each field (e.g. ROI geometry and sharpening parameters). No consumer currently requires per-element labels/ranges. | **Decision: defer contract expansion.** Existing cardinality is sufficient for current consumers; keep provider validation authoritative. Revisit only when a concrete generic consumer needs per-element labels/ranges or independent per-element bounds. |
 | P3 | Hardware/model evidence remains narrow | Existing MU503 short runs are useful regression observations, not evidence for every supported model/feature/accessory or GenTL CTI camera | Carry the exact supported model/backend matrix and records into Phase 8. Do not claim hardware support from SDK flags, mocks or XML alone. |
 
 ## 6. Explicitly deferred or unsupported behavior
@@ -223,9 +223,10 @@ supported or hardware-qualified.
    Producer/interface/device routing identity needed by `openDevice`; there
    is no established generic multi-provider discovery consumer that justifies
    a lossy Common projection. Revisit only when such a consumer exists.
-5. Defer per-element vector descriptor expansion until a concrete generic
-   consumer requires per-element metadata. Provider-side validation remains
-   authoritative.
+5. Preserve the vector decision: the reusable editor uses `elementCount` for
+   cardinality guidance and Common validation rejects wrong vector lengths;
+   providers retain per-field semantics. Defer per-element labels/ranges until
+   a concrete generic consumer requires them.
 6. Continue the next provider-neutral Phase 6 coverage gap. Keep vendor CTI,
    vendor GenApi XML and physical camera qualification as Phase 8 evidence;
    mock/XML CI is not hardware verification.

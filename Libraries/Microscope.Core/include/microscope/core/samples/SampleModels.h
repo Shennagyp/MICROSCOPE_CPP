@@ -260,7 +260,7 @@ public:
         SampleTypeId sampleTypeId,
         std::uint64_t sampleTypeRevision,
         std::string name,
-        std::string biologicalEntity,
+        std::string materialDescription,
         std::optional<std::string> organismScientificName = std::nullopt,
         std::optional<std::string> externalAccession = std::nullopt,
         std::optional<std::string> description = std::nullopt);
@@ -270,7 +270,7 @@ public:
     [[nodiscard]] const SampleTypeId& sampleTypeId() const noexcept;
     [[nodiscard]] std::uint64_t sampleTypeRevision() const noexcept;
     [[nodiscard]] const std::string& name() const noexcept;
-    [[nodiscard]] const std::string& biologicalEntity() const noexcept;
+    [[nodiscard]] const std::string& materialDescription() const noexcept;
     [[nodiscard]] const std::optional<std::string>& organismScientificName() const noexcept;
     [[nodiscard]] const std::optional<std::string>& externalAccession() const noexcept;
     [[nodiscard]] const std::optional<std::string>& description() const noexcept;
@@ -282,7 +282,7 @@ private:
         SampleTypeId sampleTypeId,
         std::uint64_t sampleTypeRevision,
         std::string name,
-        std::string biologicalEntity,
+        std::string materialDescription,
         std::optional<std::string> organismScientificName,
         std::optional<std::string> externalAccession,
         std::optional<std::string> description);
@@ -292,7 +292,7 @@ private:
     SampleTypeId sampleTypeId_;
     std::uint64_t sampleTypeRevision_;
     std::string name_;
-    std::string biologicalEntity_;
+    std::string materialDescription_;
     std::optional<std::string> organismScientificName_;
     std::optional<std::string> externalAccession_;
     std::optional<std::string> description_;

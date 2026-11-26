@@ -385,12 +385,14 @@ For the stated 2.3-pixel Rayleigh sampling policy, let:
 - lambda be the declared reference wavelength in the image-forming optical path.
 - d_R = 0.61 lambda / NA be the object-space Rayleigh separation under the declared criterion.
 - P_x, P_y be camera sensor pixel pitches.
-- s_x, s_y be the selected camera output mode's physical sensor-pixels-per-delivered-pixel ratios.
+- s_x, s_y be conservative effective independent-sensor-sample spacing factors for the selected camera output mode, accounting for hardware binning and any decimation/downscaling represented by its sensor ROI and delivered dimensions. They must never be less than 1; output upscaling cannot create additional independent sensor samples.
 - M_eff be total image-forming magnification, including the objective and any magnification-affecting relay optics in the selected imaging path.
 
-The delivered object-space pixel pitches are:
+The effective object-space sampling pitches are:
 
 p_x = (P_x s_x) / M_eff and p_y = (P_y s_y) / M_eff.
+
+For the current CameraOutputMode data, derive each s conservatively from the maximum of 1, its hardware binning factor, and the corresponding sensor-ROI-to-delivered-dimension ratio. This prevents an upscaled output from claiming better optical sampling than the physical sensor acquired. If the camera performs a different readout or super-resolution process, that capability must be represented explicitly before the resolver can credit it.
 
 The candidate satisfies the sampling policy only when both axes meet:
 
@@ -399,7 +401,7 @@ d_R / p_x >= 2.3 and d_R / p_y >= 2.3.
 Equivalently, the required total magnification must satisfy both axes, so M_eff must be at least the larger of:
 2.3 NA P_x s_x / (0.61 lambda) and 2.3 NA P_y s_y / (0.61 lambda).
 
-The resolver then chooses the lowest available objective/relay combination whose total magnification reaches that threshold while satisfying the NA requirement. This is a sampling condition, not a statement that the camera's total width/height pixel count alone establishes resolution. Pixel pitch, selected readout/ROI/binning/resampling mode, total optical magnification, NA and wavelength all matter. The existing CameraOutputMode sensor-to-delivered-pixel mapping is therefore part of objective qualification, and the camera must first be identified from the imaging route. If required wavelength or relay-magnification data are absent, the resolver must report that sampling adequacy is unknown rather than manufacture a pass.
+The resolver then chooses the lowest available objective/relay combination whose total magnification reaches that threshold while satisfying the NA requirement. This is a sampling condition, not a statement that the camera's total width/height pixel count alone establishes resolution. Pixel pitch, selected readout/ROI/binning/resampling mode, total optical magnification, NA and wavelength all matter. Interpolation/upscaling may change delivered dimensions but cannot improve the independent sensor sampling or satisfy this criterion by itself. The existing CameraOutputMode sensor-to-delivered-pixel mapping is therefore part of objective qualification, and the camera must first be identified from the imaging route. If required wavelength or relay-magnification data are absent, the resolver must report that sampling adequacy is unknown rather than manufacture a pass.
 
 The 2.3 factor is an explicit system policy that may be configured by an imaging requirement; it is not to be confused with the Rayleigh formula itself. Where illumination is broadband, the mode/technique data must define the reference-wavelength policy (for example, a conservative wavelength selected from the declared band). The resolver must not silently treat an entire broadband spectrum as one exact wavelength.
 

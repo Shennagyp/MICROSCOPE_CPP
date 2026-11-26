@@ -675,6 +675,99 @@ void testStoreReopensAndResolvesHistoricalSlideAndSampleType() {
     removeDatabaseFiles(path);
 }
 
+
+void testMultipleSlidesShareOneSampleTypeAndUnknownFactsRemainAbsent() {
+    const auto path = uniqueDatabasePath("microscope-shared-sample-type-");
+    const auto typeId = makeId<SampleTypeId>("sample-type-blood-film");
+    const auto firstSlideId = makeId<SlideId>("slide-blood-film-a");
+    const auto secondSlideId = makeId<SlideId>("slide-blood-film-b");
+    const auto firstLab = makeId<OriginLabId>("origin-lab-a");
+
+    {
+        auto opened = SampleSlideSqliteStore::open(path);
+        check(static_cast<bool>(opened),
+              "opens store for independent Slides sharing one SampleType");
+        if (!opened) {
+            removeDatabaseFiles(path);
+            return;
+        }
+        auto store = std::move(opened).value();
+        const auto sampleType = take(SampleType::create(
+            typeId,
+            1,
+            "Peripheral blood film",
+            SampleMaterialClass::Biological,
+            take(MicroscopyRequirements::create(
+                {{ContrastMethod::Brightfield,
+                  MicroscopyTechniqueConstraintKind::Required}}))));
+
+        check(store->saveSampleTypeRevision(sampleType, 0).isSuccess(),
+              "persists the shared blood-film SampleType once");
+
+        const auto observedPreparation = take(SlidePreparation::create(
+            SpecimenPreparationMethod::FreshUnfixed,
+            SpecimenFixationState::Unknown));
+        const auto firstSlide = take(Slide::create(
+            firstSlideId,
+            1,
+            typeId,
+            1,
+            "Blood film A",
+            take(SlideGeometry::create(75000.0, 25000.0)),
+            observedPreparation,
+            firstLab));
+        const auto secondSlide = take(Slide::create(
+            secondSlideId,
+            1,
+            typeId,
+            1,
+            "Blood film B",
+            take(SlideGeometry::create(76000.0, 26000.0)),
+            observedPreparation));
+
+        check(store->saveSlideRevision(firstSlide, 0).isSuccess(),
+              "persists the first independent physical Slide");
+        check(store->saveSlideRevision(secondSlide, 0).isSuccess(),
+              "persists a second independent Slide referencing the same SampleType revision");
+
+        const auto firstLoaded = store->loadCurrentSlideWithPinnedSampleType(firstSlideId);
+        const auto secondLoaded = store->loadCurrentSlideWithPinnedSampleType(secondSlideId);
+        check(firstLoaded && firstLoaded.value() &&
+              secondLoaded && secondLoaded.value(),
+              "loads both physical Slides with their pinned SampleType definitions");
+        if (firstLoaded && firstLoaded.value() &&
+            secondLoaded && secondLoaded.value()) {
+            check(firstLoaded.value()->sampleType.id() == typeId &&
+                  firstLoaded.value()->sampleType.revision() == 1 &&
+                  secondLoaded.value()->sampleType.id() == typeId &&
+                  secondLoaded.value()->sampleType.revision() == 1,
+                  "both Slides resolve to the same immutable SampleType identity and revision");
+            check(firstLoaded.value()->slide.id() != secondLoaded.value()->slide.id() &&
+                  firstLoaded.value()->slide.geometry().widthMicrometers() == 75000.0 &&
+                  secondLoaded.value()->slide.geometry().widthMicrometers() == 76000.0,
+                  "Slide identity and physical geometry remain independent");
+            check(firstLoaded.value()->slide.originLabId() == firstLab &&
+                  !secondLoaded.value()->slide.originLabId(),
+                  "optional origin-lab references remain local to each physical Slide");
+            const auto& preparation = secondLoaded.value()->slide.preparation();
+            check(preparation.method() == SpecimenPreparationMethod::FreshUnfixed &&
+                  preparation.fixationState() == SpecimenFixationState::Unknown &&
+                  !preparation.sectionThicknessMicrometers() &&
+                  !preparation.coverglassThicknessMicrometers() &&
+                  !preparation.mountingMediumName() &&
+                  !preparation.mountingMediumRefractiveIndex() &&
+                  preparation.labels().empty(),
+                  "unknown preparation facts stay absent rather than being inferred from SampleType requirements");
+        }
+
+        const auto workspace = store->loadCurrentSlidesWithPinnedSampleTypes();
+        check(workspace && workspace.value().size() == 2,
+              "workspace enumeration returns both Slides without duplicating SampleType records");
+    }
+
+    removeDatabaseFiles(path);
+}
+
 } // namespace
 
 int main() {
@@ -685,6 +778,7 @@ int main() {
     testConcurrentStoreHandlesRejectStaleRevisionWriters();
     testImmutableRevisionRowsRejectDirectSqlMutation();
     testStoreReopensAndResolvesHistoricalSlideAndSampleType();
+    testMultipleSlidesShareOneSampleTypeAndUnknownFactsRemainAbsent();
 
     if (failures != 0) {
         std::cerr << failures << " SampleType/Slide SQLite persistence test(s) failed.\n";

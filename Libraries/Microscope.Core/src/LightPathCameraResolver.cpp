@@ -343,6 +343,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
 
     if (manuallySelectedCameraId) {
         const auto& candidate = candidates.front();
+        const auto selectedCameraId = candidate.cameraComponentId;
         const auto* camera = specifications.front();
         const auto selectedModeId = cameraModeId
             ? cameraModeId
@@ -368,7 +369,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 operationMode.id(),
                 operationMode.revision(),
                 lightPathId,
-                candidate.cameraComponentId,
+                selectedCameraId,
                 *selectedModeId},
             std::move(candidates),
             std::move(diagnostics));
@@ -379,13 +380,14 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             candidate.recommended = candidates.size() == 1;
         }
         if (candidates.size() == 1) {
+            const auto selectedCameraId = candidates.front().cameraComponentId;
             return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::Resolved,
                 ResolvedLightPathCamera{
                     operationMode.id(),
                     operationMode.revision(),
                     lightPathId,
-                    candidates.front().cameraComponentId,
+                    selectedCameraId,
                     *cameraModeId},
                 std::move(candidates),
                 std::move(diagnostics));
@@ -393,6 +395,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
     }
 
     if (candidates.size() == 1) {
+        const auto selectedCameraId = candidates.front().cameraComponentId;
         const auto selectedModeId =
             singleOutputModeId(*specifications.front());
         if (!selectedModeId) {
@@ -402,7 +405,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 "light_path_camera.output_mode_selection_required",
                 "The connected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
-                candidates.front().cameraComponentId.value());
+                selectedCameraId.value());
             return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::InputRequired,
                 std::nullopt,
@@ -417,7 +420,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 operationMode.id(),
                 operationMode.revision(),
                 lightPathId,
-                candidates.front().cameraComponentId,
+                selectedCameraId,
                 *selectedModeId},
             std::move(candidates),
             std::move(diagnostics));
@@ -429,6 +432,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 candidates, specifications,
                 *fluorescenceRequirements, bestIndex)) {
             candidates[bestIndex].recommended = true;
+            const auto selectedCameraId = candidates[bestIndex].cameraComponentId;
             const auto selectedModeId = cameraModeId
                 ? cameraModeId
                 : singleOutputModeId(*specifications[bestIndex]);
@@ -439,7 +443,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                         operationMode.id(),
                         operationMode.revision(),
                         lightPathId,
-                        candidates[bestIndex].cameraComponentId,
+                        selectedCameraId,
                         *selectedModeId},
                     std::move(candidates),
                     std::move(diagnostics));
@@ -451,7 +455,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
                 "light_path_camera.output_mode_selection_required",
                 "The best-ranked connected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
-                candidates[bestIndex].cameraComponentId.value());
+                selectedCameraId.value());
             return LightPathCameraResolution(
                 LightPathCameraResolutionStatus::InputRequired,
                 std::nullopt,

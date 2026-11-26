@@ -69,7 +69,8 @@ camera::CameraModelCatalog makeCatalog(std::uint64_t catalogRevision,
 }
 
 microscope::core::MicroscopeEquipmentDefinition makeEquipment(
-    std::uint64_t equipmentRevision) {
+    std::uint64_t equipmentRevision,
+    bool includeCameraSpecification = true) {
     using namespace microscope::core;
 
     const auto microscopeId = makeId<MicroscopeId>("binding-test-microscope");
@@ -121,13 +122,18 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
         "Camera main",
         {imagingPathId}));
 
+    std::vector<CameraSpecification> cameraSpecifications;
+    if (includeCameraSpecification) {
+        cameraSpecifications.push_back(cameraSpecification);
+    }
+
     return take(MicroscopeEquipmentDefinition::create(
         microscopeId,
         {objectiveComponent, cameraComponent},
         {connection},
         {imagingPath},
         {},
-        {cameraSpecification},
+        std::move(cameraSpecifications),
         {},
         {},
         {},
@@ -147,6 +153,73 @@ CameraComponentModelBinding makeBinding(
             "FluoroCam-2048",
             std::optional<std::string>{"Rev-C"}},
         profileRevision};
+}
+
+void testCameraComponentModelBindingRejectsInvalidEquipmentAndModelKeys() {
+    const auto nonce = std::chrono::steady_clock::now()
+        .time_since_epoch().count();
+    const auto databasePath =
+        std::filesystem::temp_directory_path() /
+        ("microscope-camera-model-binding-invalid-" + std::to_string(nonce) + ".sqlite");
+    const auto path = databasePath.string();
+
+    {
+        auto opened = CameraComponentModelBindingSqliteStore::open(path);
+        check(static_cast<bool>(opened),
+              "opens store for camera binding validation tests");
+        if (!opened) {
+            return;
+        }
+        auto store = std::move(opened).value();
+        const auto equipment = makeEquipment(3);
+        const auto catalog = makeCatalog(1, 1);
+
+        const auto missingComponent = makeBinding(
+            makeId<microscope::core::EquipmentComponentId>("not-installed"), 1);
+        const auto missingResult = store->replaceBindings(
+            equipment, catalog, {missingComponent}, 0, 1);
+        check(!missingResult.isSuccess() &&
+              missingResult.error().code ==
+                  CameraComponentModelBindingStoreErrorCode::CameraComponentNotInstalled,
+              "rejects bindings to components absent from the equipment constitution");
+
+        const auto wrongKind = makeBinding(
+            makeId<microscope::core::EquipmentComponentId>("objective-main"), 1);
+        const auto wrongKindResult = store->replaceBindings(
+            equipment, catalog, {wrongKind}, 0, 1);
+        check(!wrongKindResult.isSuccess() &&
+              wrongKindResult.error().code ==
+                  CameraComponentModelBindingStoreErrorCode::CameraComponentWrongKind,
+              "rejects model bindings on non-imaging equipment components");
+
+        auto emptyVariant = makeBinding(
+            makeId<microscope::core::EquipmentComponentId>("camera-main"), 1);
+        emptyVariant.modelKey.variant = std::string{};
+        const auto emptyVariantResult = store->replaceBindings(
+            equipment, catalog, {emptyVariant}, 0, 1);
+        check(!emptyVariantResult.isSuccess() &&
+              emptyVariantResult.error().code ==
+                  CameraComponentModelBindingStoreErrorCode::InvalidModelKey,
+              "requires an absent variant to be represented as null rather than an empty string");
+
+        const auto equipmentWithoutCameraSpecification = makeEquipment(4, false);
+        const auto noSpecificationResult = store->replaceBindings(
+            equipmentWithoutCameraSpecification,
+            catalog,
+            {makeBinding(
+                makeId<microscope::core::EquipmentComponentId>("camera-main"), 1)},
+            0,
+            1);
+        check(!noSpecificationResult.isSuccess() &&
+              noSpecificationResult.error().code ==
+                  CameraComponentModelBindingStoreErrorCode::CameraSpecificationMissing,
+              "rejects model binding where an ImagingDevice has no CameraSpecification");
+    }
+
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    std::filesystem::remove(path + "-wal", ignored);
+    std::filesystem::remove(path + "-shm", ignored);
 }
 
 void testCameraComponentModelBindingRoundTripAndRevisionControl() {
@@ -251,6 +324,7 @@ void testCameraComponentModelBindingRoundTripAndRevisionControl() {
 } // namespace
 
 int main() {
+    testCameraComponentModelBindingRejectsInvalidEquipmentAndModelKeys();
     testCameraComponentModelBindingRoundTripAndRevisionControl();
 
     if (failures != 0) {

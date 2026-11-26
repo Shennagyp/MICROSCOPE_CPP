@@ -241,8 +241,8 @@ private:
 enum class SampleError {
     EmptyName,
     InvalidName,
-    EmptyBiologicalEntity,
-    InvalidBiologicalEntity,
+    EmptyMaterialDescription,
+    InvalidMaterialDescription,
     InvalidOrganismScientificName,
     InvalidExternalAccession,
     InvalidDescription,

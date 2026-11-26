@@ -230,6 +230,16 @@ jobs:
       - name: Run combined configuration tests
         run: ctest --test-dir build/dual-frontend -C Release --output-on-failure
 
+      - name: Capture Swift test crash backtrace
+        if: failure()
+        run: |
+          TEST=build/dual-frontend/Application/OptikaB293/optika_preview_frame_rate_meter_tests
+          if [ -x "$TEST" ]; then
+            xcrun lldb --batch -o run -o "thread backtrace all" -- "$TEST" || true
+          else
+            echo "Swift test executable was not produced: $TEST"
+          fi
+
       - name: Verify both frontend deliverables
         run: |
           test -d build/dual-frontend/Application/OptikaB293/optika_b293_dualslide_app.app

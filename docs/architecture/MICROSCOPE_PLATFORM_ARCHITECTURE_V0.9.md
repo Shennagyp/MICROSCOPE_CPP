@@ -4,7 +4,7 @@
 **Date:** 2026-11-25  
 **Scope:** Microscope domain model, C++ libraries, adapter integration, operation lifecycle, calibration, slides, persistence and frontend independence.
 
-This document supersedes earlier application-level architecture descriptions wherever they conflict with the platform boundaries defined here. The initial C++17 Microscope.Core and Microscope.Application static-library targets and foundational contracts now exist in the repository. They are only the Phase 1 foundation: the microscope equipment model, configuration engine, operation executor, JSON loading, adapter composition, persistence and hardware integration are not yet implemented. The existing native application and camera pipeline remain the implementation baseline during migration.
+This document is authoritative for microscope-domain semantics and the C++ Core/Application boundary. The product-level long-lived object graph, stateful OOP ownership, native application composition, subsystem lifecycles, concurrency and complete application implementation order are defined in [OPTIKA B293 Application System Architecture v1](OPTIKA_B293_APPLICATION_SYSTEM_ARCHITECTURE_V1.md). The initial C++17 Microscope.Core and Microscope.Application static-library targets and foundational contracts now exist in the repository. They are an incremental foundation: equipment/configuration workflows, full operation execution, JSON loading, adapter composition, persistence and physical hardware integration remain incomplete. The existing native application and camera pipeline remain the implementation baseline during migration.
 
 ## 1. Architectural decisions
 

@@ -355,4 +355,132 @@ CameraModelEnrichmentResult CameraModelDiscoveryEnricher::enrich(
     return result;
 }
 
+std::optional<core::CameraSensorCharacteristics>
+CameraModelDiscoveryEnricher::toCoreSensorCharacteristics(
+    const ::camera::CameraDeviceInfo& enrichedDevice) {
+    core::CameraSensorCharacteristics result;
+    bool hasKnownFacts = false;
+
+    const auto mapTechnology = [](::camera::CameraSensorTechnology value) {
+        switch (value) {
+        case ::camera::CameraSensorTechnology::CCD:
+            return core::CameraSensorTechnology::CCD;
+        case ::camera::CameraSensorTechnology::CMOS:
+            return core::CameraSensorTechnology::CMOS;
+        case ::camera::CameraSensorTechnology::ScientificCMOS:
+            return core::CameraSensorTechnology::ScientificCMOS;
+        case ::camera::CameraSensorTechnology::Unknown:
+            return core::CameraSensorTechnology::Unknown;
+        }
+        return core::CameraSensorTechnology::Unknown;
+    };
+    const auto mapShutter = [](::camera::CameraShutterType value) {
+        switch (value) {
+        case ::camera::CameraShutterType::Global:
+            return core::CameraShutterType::Global;
+        case ::camera::CameraShutterType::Rolling:
+            return core::CameraShutterType::Rolling;
+        case ::camera::CameraShutterType::FrameTransfer:
+            return core::CameraShutterType::FrameTransfer;
+        case ::camera::CameraShutterType::GlobalReset:
+            return core::CameraShutterType::GlobalReset;
+        case ::camera::CameraShutterType::Unknown:
+            return core::CameraShutterType::Unknown;
+        }
+        return core::CameraShutterType::Unknown;
+    };
+    const auto mapColorMode = [](::camera::CameraColorMode value) {
+        switch (value) {
+        case ::camera::CameraColorMode::Monochrome:
+            return core::CameraSensorColorMode::Monochrome;
+        case ::camera::CameraColorMode::Color:
+            return core::CameraSensorColorMode::Color;
+        case ::camera::CameraColorMode::Unknown:
+            return core::CameraSensorColorMode::Unknown;
+        }
+        return core::CameraSensorColorMode::Unknown;
+    };
+    const auto mapProvenance = [](::camera::CameraSpecificationProvenance value) {
+        switch (value) {
+        case ::camera::CameraSpecificationProvenance::ManufacturerDatasheet:
+            return core::CameraSpecificationProvenance::ManufacturerDatasheet;
+        case ::camera::CameraSpecificationProvenance::VendorModelDescriptor:
+            return core::CameraSpecificationProvenance::VendorModelDescriptor;
+        case ::camera::CameraSpecificationProvenance::UserVerified:
+            return core::CameraSpecificationProvenance::UserVerified;
+        case ::camera::CameraSpecificationProvenance::Measured:
+            return core::CameraSpecificationProvenance::Measured;
+        case ::camera::CameraSpecificationProvenance::Unknown:
+            return core::CameraSpecificationProvenance::Unknown;
+        }
+        return core::CameraSpecificationProvenance::Unknown;
+    };
+
+    if (enrichedDevice.sensorCharacteristics) {
+        const auto& sensor = *enrichedDevice.sensorCharacteristics;
+        if (sensor.technology) {
+            result.technology = mapTechnology(*sensor.technology);
+            hasKnownFacts |= *sensor.technology !=
+                ::camera::CameraSensorTechnology::Unknown;
+        }
+        if (sensor.shutterType) {
+            result.shutterType = mapShutter(*sensor.shutterType);
+            hasKnownFacts |= *sensor.shutterType !=
+                ::camera::CameraShutterType::Unknown;
+        }
+        if (sensor.colorMode) {
+            result.colorMode = mapColorMode(*sensor.colorMode);
+            hasKnownFacts |= *sensor.colorMode !=
+                ::camera::CameraColorMode::Unknown;
+        }
+        result.readNoiseElectronsRms = sensor.readNoiseElectronsRms;
+        result.darkCurrentElectronsPerPixelPerSecond =
+            sensor.darkCurrentElectronsPerPixelPerSecond;
+        result.fullWellCapacityElectrons = sensor.fullWellCapacityElectrons;
+        result.maximumFrameRateFramesPerSecond =
+            sensor.maximumFrameRateFramesPerSecond;
+        result.provenance = mapProvenance(sensor.provenance);
+        result.provenanceReference = sensor.provenanceReference;
+
+        hasKnownFacts |= sensor.readNoiseElectronsRms.has_value() ||
+                         sensor.darkCurrentElectronsPerPixelPerSecond.has_value() ||
+                         sensor.fullWellCapacityElectrons.has_value() ||
+                         sensor.maximumFrameRateFramesPerSecond.has_value() ||
+                         !sensor.quantumEfficiency.empty();
+
+        result.quantumEfficiency.reserve(sensor.quantumEfficiency.size());
+        for (const auto& sample : sensor.quantumEfficiency) {
+            result.quantumEfficiency.push_back({
+                sample.wavelengthNanometers,
+                sample.quantumEfficiency});
+        }
+    }
+
+    if (!result.shutterType &&
+        enrichedDevice.capabilities.supports(
+            ::camera::CameraCapability::GlobalShutter)) {
+        result.shutterType = core::CameraShutterType::Global;
+        hasKnownFacts = true;
+        if (result.provenance == core::CameraSpecificationProvenance::Unknown) {
+            result.provenance =
+                core::CameraSpecificationProvenance::VendorModelDescriptor;
+        }
+    }
+
+    if (!result.colorMode &&
+        enrichedDevice.capabilities.supports(
+            ::camera::CameraCapability::MonochromeSensor)) {
+        result.colorMode = core::CameraSensorColorMode::Monochrome;
+        hasKnownFacts = true;
+        if (result.provenance == core::CameraSpecificationProvenance::Unknown) {
+            result.provenance =
+                core::CameraSpecificationProvenance::VendorModelDescriptor;
+        }
+    }
+
+    return hasKnownFacts
+        ? std::optional<core::CameraSensorCharacteristics>{std::move(result)}
+        : std::nullopt;
+}
+
 } // namespace microscope::application::camera_support

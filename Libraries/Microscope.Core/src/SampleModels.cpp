@@ -270,7 +270,10 @@ Result<
         std::optional<double> minimumFrameRateFramesPerSecond,
         std::optional<double> maximumReadNoiseElectronsRms,
         std::optional<double> maximumDarkCurrentElectronsPerPixelPerSecond,
-        std::optional<double> minimumFullWellCapacityElectrons) {
+        std::optional<double> minimumFullWellCapacityElectrons,
+        std::optional<double> minimumMeanQuantumEfficiency,
+        bool preferMonochrome,
+        bool preferGlobalShutter) {
     if (!minimumFrameRateFramesPerSecond &&
         !maximumReadNoiseElectronsRms &&
         !maximumDarkCurrentElectronsPerPixelPerSecond &&

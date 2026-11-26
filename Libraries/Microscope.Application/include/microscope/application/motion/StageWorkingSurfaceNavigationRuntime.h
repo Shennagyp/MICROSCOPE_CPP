@@ -233,15 +233,15 @@ public:
 
         const auto* xBudget = errorBudget.contributionFor(surface.xAxisId());
         const auto* yBudget = errorBudget.contributionFor(surface.yAxisId());
-        const bool boundedMode =
-            verificationPolicy.mode() ==
-            StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate;
+        // Completion always creates a bounded command-derived machine-position
+        // candidate before applying any optional device readbacks. Both axes
+        // therefore require a calibrated conservative bound in every mode.
         if (errorBudget.contributions().size() != 2 ||
             xBudget == nullptr || yBudget == nullptr ||
             xBudget->unit() != surface.xAxisUnit() ||
             yBudget->unit() != surface.yAxisUnit() ||
-            (boundedMode &&
-                (!xBudget->conservativeBound() || !yBudget->conservativeBound()))) {
+            !xBudget->conservativeBound() ||
+            !yBudget->conservativeBound()) {
             return creationFailure(StageWorkingSurfaceNavigationRuntimeErrorCode::ErrorBudgetMismatch);
         }
 

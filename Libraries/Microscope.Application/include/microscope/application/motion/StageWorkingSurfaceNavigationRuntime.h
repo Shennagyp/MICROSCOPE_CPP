@@ -166,9 +166,9 @@ enum class StageWorkingSurfaceNavigationRuntimeErrorCode {
 struct StageWorkingSurfaceNavigationRuntimeError final {
     StageWorkingSurfaceNavigationRuntimeErrorCode code;
     std::optional<core::StageWorkingSurfaceNavigationPlanningError> planningError;
-    std::optional<core::StageWorkingSurfaceNavigationExecutionErrorCode> executionError;
-    std::optional<core::StagePosition3DCommandReductionErrorCode> commandReductionError;
-    std::optional<core::StagePosition3DFeedbackErrorCode> feedbackReductionError;
+    std::optional<StageWorkingSurfaceNavigationExecutionErrorCode> executionError;
+    std::optional<StagePosition3DCommandReductionErrorCode> commandReductionError;
+    std::optional<StagePosition3DFeedbackErrorCode> feedbackReductionError;
     std::optional<core::StagePosition3DError> positionError;
     std::optional<core::SerializedOperationRuntimeError> runtimeError;
 };

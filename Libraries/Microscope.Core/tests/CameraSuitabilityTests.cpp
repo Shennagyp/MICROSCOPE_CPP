@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -31,6 +32,17 @@ TValue take(Result<TValue, TError> result) {
 template <typename TId>
 TId makeId(const char* value) {
     return take(TId::create(value));
+}
+
+bool hasDiagnosticCode(
+    const CameraSuitabilityReport& report,
+    std::string_view code) {
+    for (const auto& diagnostic : report.warnings) {
+        if (diagnostic.code() == code) {
+            return true;
+        }
+    }
+    return false;
 }
 
 CameraSpecification makeCamera(

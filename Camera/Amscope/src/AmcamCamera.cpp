@@ -4882,43 +4882,30 @@ AmcamCamera::readFeature(std::string_view name) {
         return CameraFeatureValue{value != 0};
     }
     if (name == camera::RawOutputBitDepthFeature) {
-        int pixelFormatCount = 0;
-        HRESULT pixelHr = Amcam_get_PixelFormatSupport(
-            impl_->handle, static_cast<char>(-1), &pixelFormatCount);
-        if (SUCCEEDED(pixelHr) && pixelFormatCount > 0 && pixelFormatCount <= 64) {
-            std::vector<int> supportedFormats;
-            supportedFormats.reserve(static_cast<std::size_t>(pixelFormatCount));
-            for (int i = 0; i < pixelFormatCount; ++i) {
-                int code = -1;
-                pixelHr = Amcam_get_PixelFormatSupport(
-                    impl_->handle, static_cast<char>(i), &code);
-                if (FAILED(pixelHr))
-                    return featureBackendError(
-                        std::string(name), "Amcam_get_PixelFormatSupport(entry)", pixelHr);
-                supportedFormats.push_back(code);
-            }
-            const auto choices = rawPixelFormatChoices(supportedFormats);
+        const auto queryFormats = [&]() {
+            return amscope::detail::enumeratePixelFormats(
+                std::string(name),
+                [&](int* count) {
+                    return Amcam_get_PixelFormatSupport(
+                        impl_->handle, static_cast<char>(-1), count);
+                },
+                [&](char index, int* code) {
+                    return Amcam_get_PixelFormatSupport(
+                        impl_->handle, index, code);
+                });
+        };
+        const auto readCurrentFormat = [&]()
+            -> camera::CameraFeatureResult<int> {
             int currentFormat = -1;
-            const HRESULT currentHr = Amcam_get_Option(
+            const HRESULT hr = Amcam_get_Option(
                 impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, &currentFormat);
-            if (FAILED(currentHr))
+            if (FAILED(hr))
                 return featureBackendError(
-                    std::string(name), "Amcam_get_Option(PIXEL_FORMAT)", currentHr);
-            const auto selectedDepth =
-                rawBitDepthForPixelFormat(choices, supportedFormats, currentFormat);
-            if (!selectedDepth)
-                return featureError(
-                    CameraFeatureAccessError::Code::FeatureNotReadable,
-                    std::string(name),
-                    "The current pixel format is not a discrete RAW bit-depth format.");
-            return CameraFeatureValue{
-                static_cast<std::int64_t>(*selectedDepth)};
-        }
-
-        return featureError(
-            CameraFeatureAccessError::Code::FeatureUnavailable,
-            std::string(name),
-            "The SDK does not expose enumerable pixel formats. The legacy 8-bit/maximum switch cannot provide the complete discrete bit-depth selector.");
+                    std::string(name), "Amcam_get_Option(PIXEL_FORMAT)", hr);
+            return currentFormat;
+        };
+        return amscope::detail::readRawOutputBitDepth(
+            std::string(name), queryFormats, readCurrentFormat);
     }
     if (name == "AmcamRawSensorFormat") {
         unsigned fourCC = 0, bitsPerPixel = 0;
@@ -5213,55 +5200,44 @@ AmcamCamera::writeFeature(std::string_view name, const camera::CameraFeatureValu
         if (impl_->state.load(std::memory_order_acquire) != CameraState::Open)
             return featureError(CameraFeatureAccessError::Code::FeatureNotWritable,
                                 std::string(name), "RAW output bit depth can only be changed while acquisition is stopped.");
-        const auto selectedBitDepth = std::get<std::int64_t>(value);
 
-        int pixelFormatCount = 0;
-        HRESULT pixelHr = Amcam_get_PixelFormatSupport(
-            impl_->handle, static_cast<char>(-1), &pixelFormatCount);
-        if (const auto error = amscope::detail::pixelFormatEnumerationError(
-                std::string(name), pixelHr, pixelFormatCount)) {
+        const auto queryFormats = [&]() {
+            return amscope::detail::enumeratePixelFormats(
+                std::string(name),
+                [&](int* count) {
+                    return Amcam_get_PixelFormatSupport(
+                        impl_->handle, static_cast<char>(-1), count);
+                },
+                [&](char index, int* code) {
+                    return Amcam_get_PixelFormatSupport(
+                        impl_->handle, index, code);
+                });
+        };
+        const auto writeFormat = [&](int format)
+            -> camera::CameraFeatureResult<std::monostate> {
+            const HRESULT hr = Amcam_put_Option(
+                impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, format);
+            if (FAILED(hr))
+                return featureBackendError(
+                    std::string(name), "Amcam_put_Option(PIXEL_FORMAT)", hr);
+            return std::monostate{};
+        };
+        const auto readFormat = [&]() -> camera::CameraFeatureResult<int> {
+            int readbackFormat = -1;
+            const HRESULT hr = Amcam_get_Option(
+                impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, &readbackFormat);
+            if (FAILED(hr))
+                return featureBackendError(
+                    std::string(name), "Amcam_get_Option(PIXEL_FORMAT)", hr);
+            return readbackFormat;
+        };
+        auto result = amscope::detail::writeRawOutputBitDepth(
+            std::string(name), std::get<std::int64_t>(value),
+            queryFormats, writeFormat, readFormat);
+        if (const auto* error =
+                std::get_if<CameraFeatureAccessError>(&result)) {
             return *error;
         }
-
-        std::vector<int> supportedFormats;
-        supportedFormats.reserve(static_cast<std::size_t>(pixelFormatCount));
-        for (int i = 0; i < pixelFormatCount; ++i) {
-            int code = -1;
-            pixelHr = Amcam_get_PixelFormatSupport(
-                impl_->handle, static_cast<char>(i), &code);
-            if (FAILED(pixelHr))
-                return featureBackendError(
-                    std::string(name), "Amcam_get_PixelFormatSupport(entry)", pixelHr);
-            supportedFormats.push_back(code);
-        }
-        const auto choices = rawPixelFormatChoices(supportedFormats);
-        const auto requestedFormat =
-            selectedBitDepth >= 8 && selectedBitDepth <= 16
-                ? rawPixelFormatForBitDepth(
-                    choices, static_cast<unsigned>(selectedBitDepth))
-                : std::nullopt;
-        if (!requestedFormat)
-            return featureError(
-                CameraFeatureAccessError::Code::InvalidValue,
-                std::string(name),
-                "The requested significant bit depth is not represented by a supported RAW or sensor-mosaic pixel format.");
-
-        pixelHr = Amcam_put_Option(
-            impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, *requestedFormat);
-        if (FAILED(pixelHr))
-            return featureBackendError(
-                std::string(name), "Amcam_put_Option(PIXEL_FORMAT)", pixelHr);
-        int readbackFormat = -1;
-        pixelHr = Amcam_get_Option(
-            impl_->handle, AMCAM_OPTION_PIXEL_FORMAT, &readbackFormat);
-        if (FAILED(pixelHr))
-            return featureBackendError(
-                std::string(name), "Amcam_get_Option(PIXEL_FORMAT)", pixelHr);
-        if (readbackFormat != *requestedFormat)
-            return featureError(
-                CameraFeatureAccessError::Code::BackendFailure,
-                std::string(name),
-                "RAW pixel-format readback did not match the requested bit depth.");
         impl_->requestedRawBitDepthMode.store(-1, std::memory_order_release);
         return std::monostate{};
     }

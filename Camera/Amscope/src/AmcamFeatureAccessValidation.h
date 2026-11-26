@@ -71,6 +71,39 @@ pixelFormatEnumerationError(
 // A RAW pixel format represents significant precision independently of its
 // packing/container representation. The supported-format list remains the
 // authority for the exact formats accepted by this camera.
+template <typename QueryCount, typename QueryEntry>
+inline camera::CameraFeatureResult<std::vector<int>> enumeratePixelFormats(
+    std::string feature,
+    QueryCount&& queryCount,
+    QueryEntry&& queryEntry) {
+    int count = 0;
+    const HRESULT countResult = queryCount(&count);
+    if (const auto error =
+            pixelFormatEnumerationError(feature, countResult, count)) {
+        return *error;
+    }
+
+    std::vector<int> formats;
+    formats.reserve(static_cast<std::size_t>(count));
+    for (int index = 0; index < count; ++index) {
+        int code = -1;
+        const HRESULT entryResult =
+            queryEntry(static_cast<char>(index), &code);
+        if (FAILED(entryResult)) {
+            return camera::CameraFeatureAccessError{
+                camera::CameraFeatureAccessError::Code::BackendFailure,
+                std::move(feature),
+                "Amcam_get_PixelFormatSupport(entry) failed.",
+                static_cast<std::int32_t>(entryResult),
+                std::nullopt,
+                std::nullopt
+            };
+        }
+        formats.push_back(code);
+    }
+    return formats;
+}
+
 inline std::optional<unsigned> rawPixelFormatBitDepth(int pixelFormat) {
     switch (pixelFormat) {
     case AMCAM_PIXELFORMAT_RAW8:
@@ -171,6 +204,122 @@ inline std::optional<unsigned> rawBitDepthForPixelFormat(
             return choice.bitDepth == *bitDepth;
         });
     return supportedDepth == choices.end() ? std::nullopt : bitDepth;
+}
+
+template <typename QueryFormats, typename ReadCurrentFormat>
+inline camera::CameraFeatureResult<camera::CameraFeatureValue>
+readRawOutputBitDepth(
+    std::string feature,
+    QueryFormats&& queryFormats,
+    ReadCurrentFormat&& readCurrentFormat) {
+    auto formatsResult = queryFormats();
+    if (const auto* error =
+            std::get_if<camera::CameraFeatureAccessError>(&formatsResult)) {
+        return *error;
+    }
+
+    const auto& supportedFormats =
+        std::get<std::vector<int>>(formatsResult);
+    const auto choices = rawPixelFormatChoices(supportedFormats);
+    if (choices.empty()) {
+        return camera::CameraFeatureAccessError{
+            camera::CameraFeatureAccessError::Code::FeatureUnavailable,
+            std::move(feature),
+            "The SDK exposes no supported RAW or sensor-mosaic precision formats.",
+            0,
+            std::nullopt,
+            std::nullopt
+        };
+    }
+
+    auto currentResult = readCurrentFormat();
+    if (const auto* error =
+            std::get_if<camera::CameraFeatureAccessError>(&currentResult)) {
+        return *error;
+    }
+    const int currentFormat = std::get<int>(currentResult);
+    const auto selectedDepth =
+        rawBitDepthForPixelFormat(choices, supportedFormats, currentFormat);
+    if (!selectedDepth) {
+        return camera::CameraFeatureAccessError{
+            camera::CameraFeatureAccessError::Code::FeatureNotReadable,
+            std::move(feature),
+            "The current pixel format is not a discrete RAW bit-depth format.",
+            0,
+            std::nullopt,
+            std::nullopt
+        };
+    }
+    return camera::CameraFeatureValue{
+        static_cast<std::int64_t>(*selectedDepth)};
+}
+
+template <typename QueryFormats, typename WriteFormat, typename ReadFormat>
+inline camera::CameraFeatureResult<std::monostate>
+writeRawOutputBitDepth(
+    std::string feature,
+    std::int64_t requestedDepth,
+    QueryFormats&& queryFormats,
+    WriteFormat&& writeFormat,
+    ReadFormat&& readFormat) {
+    auto formatsResult = queryFormats();
+    if (const auto* error =
+            std::get_if<camera::CameraFeatureAccessError>(&formatsResult)) {
+        return *error;
+    }
+
+    const auto& supportedFormats =
+        std::get<std::vector<int>>(formatsResult);
+    const auto choices = rawPixelFormatChoices(supportedFormats);
+    if (choices.empty()) {
+        return camera::CameraFeatureAccessError{
+            camera::CameraFeatureAccessError::Code::FeatureUnavailable,
+            std::move(feature),
+            "The SDK exposes no supported RAW or sensor-mosaic precision formats.",
+            0,
+            std::nullopt,
+            std::nullopt
+        };
+    }
+
+    const auto requestedFormat =
+        requestedDepth >= 8 && requestedDepth <= 16
+            ? rawPixelFormatForBitDepth(
+                  choices, static_cast<unsigned>(requestedDepth))
+            : std::nullopt;
+    if (!requestedFormat) {
+        return camera::CameraFeatureAccessError{
+            camera::CameraFeatureAccessError::Code::InvalidValue,
+            std::move(feature),
+            "The requested significant bit depth is not represented by a supported RAW or sensor-mosaic pixel format.",
+            0,
+            std::nullopt,
+            std::nullopt
+        };
+    }
+
+    auto writeResult = writeFormat(*requestedFormat);
+    if (const auto* error =
+            std::get_if<camera::CameraFeatureAccessError>(&writeResult)) {
+        return *error;
+    }
+
+    auto readbackResult = readFormat();
+    if (const auto* error =
+            std::get_if<camera::CameraFeatureAccessError>(&readbackResult)) {
+        return *error;
+    }
+    if (std::get<int>(readbackResult) != *requestedFormat) {
+        return camera::CameraFeatureAccessError{
+            camera::CameraFeatureAccessError::Code::BackendFailure,
+            std::move(feature),
+            "RAW pixel-format readback did not match the requested bit depth.",
+            0,
+            std::nullopt,
+            std::nullopt
+        };
+    }
+    return std::monostate{};
 }
 
 inline camera::CameraFeatureDescriptor makeRawOutputBitDepthDescriptor(

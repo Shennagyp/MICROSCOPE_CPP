@@ -1,3 +1,5 @@
 #include <amscope/AmcamCamera.h>
-#include <amscope/CameraTypes.h>
-int main() { return 0; }
+int main() {
+    amscope::AmcamCamera camera;
+    return camera.state() == amscope::CameraState::Closed ? 0 : 1;
+}

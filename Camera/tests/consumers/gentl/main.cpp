@@ -1,3 +1,5 @@
 #include <camera/gentl/Producer.h>
-#include <camera/gentl/GenTLFrameAdapter.h>
-int main() { return 0; }
+int main() {
+    camera::gentl::Producer producer;
+    return producer ? 1 : 0;
+}

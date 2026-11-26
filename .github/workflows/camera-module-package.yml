@@ -72,3 +72,15 @@ jobs:
           cmake --build build/consumer-gentl --config Release --parallel
           cmake --build build/consumer-amscope --config Release --parallel
           cmake --build build/consumer-qt --config Release --parallel
+
+      - name: Verify installed runtime loading and link paths
+        run: |
+          test -f build/camera-relocated/lib/libcamera_amscope_driver.dylib
+          test -f build/camera-relocated/lib/libamcam.dylib
+          otool -L build/camera-relocated/lib/libcamera_amscope_driver.dylib
+          otool -L build/consumer-amscope/camera_module_amscope_consumer
+          otool -L build/consumer-qt/camera_module_qt_consumer
+          build/consumer-common/camera_module_common_consumer
+          build/consumer-gentl/camera_module_gentl_consumer
+          build/consumer-amscope/camera_module_amscope_consumer
+          QT_QPA_PLATFORM=offscreen build/consumer-qt/camera_module_qt_consumer

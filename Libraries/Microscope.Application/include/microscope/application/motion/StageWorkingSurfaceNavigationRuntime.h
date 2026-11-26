@@ -5,7 +5,10 @@
 #include "microscope/application/motion/StagePosition3DFeedbackReducer.h"
 
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <optional>
+#include <string>
 #include <thread>
 #include <utility>
 
@@ -139,6 +142,7 @@ enum class StageWorkingSurfaceNavigationRuntimeDisposition {
 
 struct StageWorkingSurfaceNavigationRuntimeUpdate final {
     StageWorkingSurfaceNavigationRuntimeDisposition disposition;
+    std::optional<core::OperationId> operationId;
     std::optional<core::OperationSnapshot> operation;
 };
 
@@ -162,6 +166,8 @@ enum class StageWorkingSurfaceNavigationRuntimeErrorCode {
     HomeReferenceRejected,
     StepVerificationRejected,
     OperationCompletionRejected,
+    NavigationIdentityExhausted,
+    NavigationIdentityCreationFailed,
     SurfaceReplacementDuringNavigation
 };
 
@@ -272,34 +278,54 @@ public:
         return core::Result<bool, StageWorkingSurfaceNavigationRuntimeError>::success(newlyBound);
     }
 
-    // Application-control entry point. It validates the requested slide
-    // target before allocating operation state, then creates the operation and
-    // its first Pending step on the serialized owner thread.
+    // Front-end entry point. The immutable target carries the registration
+    // revision captured when the user selected the slide point. This long-lived
+    // object allocates operation identities and owns the operation lifecycle.
     [[nodiscard]] Result beginRequest(
-        const core::SlideId& slideId,
-        core::SlidePoint2D destination,
-        StageWorkingSurfaceNavigationOperationIdentity identities) {
+        const core::SlideNavigationTarget2D& target) {
         auto owner = requireOwnerThread();
-        if (!owner) {
-            return Result::failure(owner.error());
-        }
-        if (active_) {
+        if (!owner) return Result::failure(owner.error());
+        if (active_)
             return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::NavigationAlreadyActive);
-        }
         if (operationRuntime_->feedbackLossLatched()) {
             position_ = position_.invalidateMachineReference();
             feedbackLossObserved_ = true;
             return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::FeedbackLossUnresolved);
         }
-        // Validate identities before creating persistent operation state. A
-        // rejected identity set must not leave a Running operation or Pending step.
+
+        const auto plan = core::StageWorkingSurfaceNavigationPlanner::plan(
+            surface_, target, position_, homingPolicy_);
+        if (!plan) {
+            return failure(
+                StageWorkingSurfaceNavigationRuntimeErrorCode::PlanningRejected,
+                plan.error());
+        }
+        auto identities = allocateNavigationIdentity();
+        if (!identities) return Result::failure(identities.error());
+        return beginRequest(target, std::move(identities).value());
+    }
+
+    // Explicit-identity overload for deterministic orchestration and tests.
+    // Normal callers use beginRequest(target), keeping identity allocation here.
+    [[nodiscard]] Result beginRequest(
+        const core::SlideNavigationTarget2D& target,
+        StageWorkingSurfaceNavigationOperationIdentity identities) {
+        auto owner = requireOwnerThread();
+        if (!owner) return Result::failure(owner.error());
+        if (active_)
+            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::NavigationAlreadyActive);
+        if (operationRuntime_->feedbackLossLatched()) {
+            position_ = position_.invalidateMachineReference();
+            feedbackLossObserved_ = true;
+            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::FeedbackLossUnresolved);
+        }
         if (identities.initialStepId == identities.restoredMoveStepId ||
             identities.initialCommandId == identities.restoredMoveCommandId) {
             return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected);
         }
 
-        auto plan = core::StageWorkingSurfaceNavigationPlanner::planToSlidePoint(
-            surface_, slideId, destination, position_, homingPolicy_);
+        const auto plan = core::StageWorkingSurfaceNavigationPlanner::plan(
+            surface_, target, position_, homingPolicy_);
         if (!plan) {
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::PlanningRejected,
@@ -328,15 +354,29 @@ public:
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
                 std::nullopt, step.error());
         }
+        return beginNavigation(target, std::move(identities));
+    }
 
-        return beginNavigation(slideId, destination, std::move(identities));
+    // Compatibility entry point for synchronous callers with no queued target.
+    [[nodiscard]] Result beginRequest(
+        const core::SlideId& slideId,
+        core::SlidePoint2D destination,
+        StageWorkingSurfaceNavigationOperationIdentity identities) {
+        const auto target = surface_.createNavigationTarget(slideId, destination);
+        if (!target) {
+            const auto error = target.error() ==
+                core::SlideNavigationTarget2DError::SlideNotFound
+                ? core::StageWorkingSurfaceNavigationPlanningError::SlideNotFound
+                : core::StageWorkingSurfaceNavigationPlanningError::SlidePointOutsideGeometry;
+            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::PlanningRejected, error);
+        }
+        return beginRequest(target.value(), std::move(identities));
     }
 
     // operationId must already be Running and initialStepId must already be
     // Pending in the supplied serialized operation runtime.
     [[nodiscard]] Result beginNavigation(
-        const core::SlideId& slideId,
-        core::SlidePoint2D destination,
+        const core::SlideNavigationTarget2D& target,
         StageWorkingSurfaceNavigationOperationIdentity identities) {
         auto owner = requireOwnerThread();
         if (!owner) {
@@ -385,7 +425,7 @@ public:
         }
 
         auto execution = StageWorkingSurfaceNavigationExecutor::begin(
-            surface_, slideId, destination, position_, homingPolicy_, runtimeDevice_,
+            surface_, target, position_, homingPolicy_, runtimeDevice_,
             identities.operationId, identities.initialStepId,
             identities.initialCommandId, *port_, *operationRuntime_);
         if (!execution) {
@@ -439,6 +479,21 @@ public:
         // of claiming that the stage stayed still.
         position_ = position_.invalidateXYReference();
         return success(StageWorkingSurfaceNavigationRuntimeDisposition::SubmissionIndeterminate);
+    }
+
+    [[nodiscard]] Result beginNavigation(
+        const core::SlideId& slideId,
+        core::SlidePoint2D destination,
+        StageWorkingSurfaceNavigationOperationIdentity identities) {
+        const auto target = surface_.createNavigationTarget(slideId, destination);
+        if (!target) {
+            const auto error = target.error() ==
+                core::SlideNavigationTarget2DError::SlideNotFound
+                ? core::StageWorkingSurfaceNavigationPlanningError::SlideNotFound
+                : core::StageWorkingSurfaceNavigationPlanningError::SlidePointOutsideGeometry;
+            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::PlanningRejected, error);
+        }
+        return beginNavigation(target.value(), std::move(identities));
     }
 
     [[nodiscard]] Result processFeedback(const FeedbackResult& feedback) {
@@ -619,6 +674,10 @@ public:
         return active_.has_value();
     }
 
+    [[nodiscard]] const core::OperationId* activeOperationId() const noexcept {
+        return active_ ? &active_->identities.operationId : nullptr;
+    }
+
 private:
     struct CorrelatedAxisObservation final {
         core::AxisPositionObservation observation;
@@ -654,6 +713,54 @@ private:
           port_(&port),
           operationRuntime_(&operationRuntime) {}
 
+    [[nodiscard]] core::Result<
+        StageWorkingSurfaceNavigationOperationIdentity,
+        StageWorkingSurfaceNavigationRuntimeError> allocateNavigationIdentity() {
+        if (identitySequenceExhausted_) {
+            return core::Result<StageWorkingSurfaceNavigationOperationIdentity,
+                StageWorkingSurfaceNavigationRuntimeError>::failure(
+                    makeError(StageWorkingSurfaceNavigationRuntimeErrorCode::NavigationIdentityExhausted));
+        }
+
+        const auto sequence = nextNavigationSequence_;
+        const std::string prefix = "stage-navigation/" +
+            std::to_string(runtimeDevice_.microscopeId.value().size()) + ":" +
+            runtimeDevice_.microscopeId.value() + "/" +
+            std::to_string(runtimeDevice_.runtimeId.value().size()) + ":" +
+            runtimeDevice_.runtimeId.value() + "/" +
+            std::to_string(runtimeDevice_.runtimeGeneration.value()) + "/" +
+            std::to_string(surface_.stageComponentId().value().size()) + ":" +
+            surface_.stageComponentId().value() + "/" +
+            std::to_string(runtimeDevice_.deviceId.value().size()) + ":" +
+            runtimeDevice_.deviceId.value() + "/" + std::to_string(sequence);
+
+        auto operation = core::OperationId::create(prefix + "/operation");
+        auto initialStep = core::StepId::create(prefix + "/step/initial");
+        auto initialCommand = core::CommandId::create(prefix + "/command/initial");
+        auto restoredStep = core::StepId::create(prefix + "/step/restored");
+        auto restoredCommand = core::CommandId::create(prefix + "/command/restored");
+        if (!operation || !initialStep || !initialCommand || !restoredStep || !restoredCommand) {
+            return core::Result<StageWorkingSurfaceNavigationOperationIdentity,
+                StageWorkingSurfaceNavigationRuntimeError>::failure(
+                    makeError(StageWorkingSurfaceNavigationRuntimeErrorCode::NavigationIdentityCreationFailed));
+        }
+
+        if (sequence == std::numeric_limits<std::uint64_t>::max()) {
+            identitySequenceExhausted_ = true;
+        } else {
+            ++nextNavigationSequence_;
+        }
+
+        return core::Result<StageWorkingSurfaceNavigationOperationIdentity,
+            StageWorkingSurfaceNavigationRuntimeError>::success(
+                StageWorkingSurfaceNavigationOperationIdentity{
+                    std::move(operation).value(),
+                    std::move(initialStep).value(),
+                    std::move(initialCommand).value(),
+                    std::move(restoredStep).value(),
+                    std::move(restoredCommand).value()});
+    }
+
     [[nodiscard]] static StageWorkingSurfaceNavigationRuntimeError makeError(
         StageWorkingSurfaceNavigationRuntimeErrorCode code) {
         return StageWorkingSurfaceNavigationRuntimeError{
@@ -684,8 +791,11 @@ private:
     [[nodiscard]] Result success(
         StageWorkingSurfaceNavigationRuntimeDisposition disposition,
         std::optional<core::OperationSnapshot> operation = std::nullopt) const {
+        std::optional<core::OperationId> operationId;
+        if (operation) operationId = operation->operationId();
+        else if (active_) operationId = active_->identities.operationId;
         return Result::success(StageWorkingSurfaceNavigationRuntimeUpdate{
-            disposition, std::move(operation)});
+            disposition, std::move(operationId), std::move(operation)});
     }
 
     [[nodiscard]] core::Result<bool, StageWorkingSurfaceNavigationRuntimeError>
@@ -1209,6 +1319,8 @@ private:
     core::IStageMotionPort* port_;
     Runtime* operationRuntime_;
     std::optional<ActiveNavigation> active_;
+    std::uint64_t nextNavigationSequence_{1};
+    bool identitySequenceExhausted_{false};
     std::thread::id ownerThread_{};
     bool ownerThreadBound_{false};
     bool feedbackLossObserved_{false};

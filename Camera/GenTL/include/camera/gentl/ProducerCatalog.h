@@ -14,11 +14,19 @@ struct ProducerCatalogFailure {
     std::string message;
 };
 
+// A catalog entry retains the Producer instance that performed discovery.
+// Its DeviceDescriptor values can therefore be passed directly to openDevice;
+// the retained interface handles are not detached from their owner.
+struct ProducerCatalogEntry {
+    Producer producer;
+    std::vector<DeviceDescriptor> devices;
+};
+
 // A scan is partial-success by design: one incompatible or damaged CTI must
 // not hide devices exposed by other installed Producers.
 struct ProducerCatalogReport {
     std::vector<std::filesystem::path> producerPaths;
-    std::vector<DeviceDescriptor> devices;
+    std::vector<ProducerCatalogEntry> producers;
     std::vector<ProducerCatalogFailure> failures;
 };
 

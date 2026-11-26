@@ -19,9 +19,12 @@ if(NOT TARGET Camera::Common)
         "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
 endif()
 
+find_package(SQLite3 REQUIRED)
+
 add_library(microscope_application STATIC
     src/RuntimeHandle.cpp
-    src/RuntimeWakeSignal.cpp)
+    src/RuntimeWakeSignal.cpp
+    src/CameraModelCatalogSqliteStore.cpp)
 add_library(Microscope::Application ALIAS microscope_application)
 
 target_compile_features(microscope_application PUBLIC cxx_std_17)
@@ -31,7 +34,8 @@ target_include_directories(microscope_application
         "$<INSTALL_INTERFACE:include>")
 
 target_link_libraries(microscope_application
-    PUBLIC Microscope::Core Camera::Common)
+    PUBLIC Microscope::Core Camera::Common
+    PRIVATE SQLite::SQLite3)
 
 set_target_properties(microscope_application PROPERTIES
     POSITION_INDEPENDENT_CODE ON
@@ -40,6 +44,18 @@ set_target_properties(microscope_application PROPERTIES
     CXX_EXTENSIONS OFF)
 
 if(BUILD_TESTING)
+    add_executable(microscope_application_camera_model_catalog_store_tests
+        tests/CameraModelCatalogSqliteStoreTests.cpp)
+    target_link_libraries(microscope_application_camera_model_catalog_store_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_camera_model_catalog_store_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_camera_model_catalog_store_tests
+        COMMAND microscope_application_camera_model_catalog_store_tests)
+
     add_executable(microscope_application_contract_tests
         tests/ApplicationContractTests.cpp)
     target_link_libraries(microscope_application_contract_tests

@@ -14,7 +14,6 @@ using StageWorkingSurfaceNavigationDispatchOutcome =
     std::variant<StageMotionDispatchReceipt, StageMotionDispatchError>;
 
 enum class StageWorkingSurfaceNavigationExecutionErrorCode {
-    PlanningRejected,
     CommandContextRejected,
     NotAwaitingHoming,
     HomeStepNotVerified,
@@ -49,28 +48,16 @@ public:
     using CompletionResult =
         core::Result<core::OperationSnapshot, StageWorkingSurfaceNavigationExecutionError>;
 
-    // The stateful StageWorkingSurfaceNavigationRuntime owns operation identity
-    // allocation and lifecycle. This executor receives that existing operation
-    // context and a destination captured against a specific slide revision.
+    // The stateful stage runtime validates and plans the captured target once.
+    // The executor only binds correlation and dispatches that already accepted plan.
     [[nodiscard]] static Result begin(
-        const core::StageWorkingSurface2D& surface,
-        const core::SlideNavigationTarget2D& target,
-        const core::StagePosition3D& position,
-        const core::StageXYHomingPolicy& homingPolicy,
+        core::StageWorkingSurfaceNavigationPlan plan,
         core::RuntimeDeviceCorrelation runtimeDevice,
         core::OperationId operationId,
         core::StepId stepId,
         core::CommandId commandId,
         core::IStageMotionPort& port,
         Runtime& runtime) {
-        auto plan = core::StageWorkingSurfaceNavigationPlanner::plan(
-            surface, target, position, homingPolicy);
-        if (!plan) {
-            return Result::failure(StageWorkingSurfaceNavigationExecutionError{
-                StageWorkingSurfaceNavigationExecutionErrorCode::PlanningRejected,
-                plan.error(), std::nullopt, std::nullopt, std::nullopt});
-        }
-
         auto context = core::StageMotionCommandContext::create(
             std::move(runtimeDevice),
             core::OperationCorrelation{operationId, stepId, std::move(commandId)});
@@ -80,9 +67,9 @@ public:
                 std::nullopt, context.error(), std::nullopt, std::nullopt});
         }
 
-        auto outcome = dispatchPlan(plan.value(), context.value(), port, runtime);
+        auto outcome = dispatchPlan(plan, context.value(), port, runtime);
         return Result::success(StageWorkingSurfaceNavigationExecution{
-            std::move(plan).value(), std::move(context).value(),
+            std::move(plan), std::move(context).value(),
             std::move(outcome), false});
     }
 

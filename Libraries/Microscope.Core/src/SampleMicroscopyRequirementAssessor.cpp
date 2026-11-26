@@ -960,6 +960,11 @@ void assessFluorescenceFilterSet(
     return channel == channels.end() ? nullptr : &*channel;
 }
 
+[[nodiscard]] std::optional<bool> filterBandHasPositiveResponse(
+    const OpticalFilterSpecification& filter,
+    const SpectralBand& band,
+    bool reflection);
+
 [[nodiscard]] std::optional<double> spectralPowerAt(
     const SpectralPowerDistribution& spectrum,
     double wavelengthNanometers) {
@@ -1158,6 +1163,9 @@ void assessFluorescenceCameraSuitability(
     const ConfigurationRequest& request,
     const SlidePreparation& preparation,
     const std::optional<CameraPerformanceRequirements>& requirements) {
+    if (!requirements) {
+        return;
+    }
     const auto* camera = findCamera(equipment, request.cameraComponentId());
     if (camera == nullptr) {
         return;
@@ -1184,13 +1192,13 @@ void assessFluorescenceCameraSuitability(
 
         FluorescenceCameraRequirements cameraRequirements{
             *label.emissionBand(),
-            requirements.minimumMeanQuantumEfficiency(),
+            requirements->minimumMeanQuantumEfficiency(),
             std::nullopt,
             std::nullopt,
             std::nullopt,
             std::nullopt,
-            requirements.preferMonochrome(),
-            requirements.preferGlobalShutter(),
+            requirements->preferMonochrome(),
+            requirements->preferGlobalShutter(),
             label.emissionSpectrum(),
             std::move(dichroic),
             std::move(emissionFilter)};

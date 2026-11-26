@@ -35,10 +35,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         name: Checkout
-      - name: Install Qt 6
-        run: |
-          brew install qt@6
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
       - name: Download official GenICam package
         run: |
           mkdir -p build
@@ -77,9 +73,6 @@ jobs:
             -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
             -DCAMERA_MODULE_BUILD_AMSCOPE=ON \
             -DCAMERA_MODULE_BUILD_GENTL=ON \
-            -DCAMERA_MODULE_BUILD_QT=ON \
-            -DCAMERA_MODULE_BUILD_QT_WIDGETS=ON \
-            -DCAMERA_MODULE_BUILD_AMSCOPE_QT=ON \
             -DCAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=ON \
             -DCAMERA_MODULE_BUILD_GENAPI=ON \
             -DGENAPI_ROOT="$GENAPI_ROOT" \
@@ -99,14 +92,12 @@ jobs:
           cmake -S Camera/tests/consumers/gentl -B build/consumer-gentl -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE -DCMAKE_DISABLE_FIND_PACKAGE_GenApi=TRUE
           cmake -S Camera/tests/consumers/amscope -B build/consumer-amscope -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
           cmake -S Camera/tests/consumers/genapi -B build/consumer-genapi -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DGenApi_DIR="$GENAPI_CMAKE_DIR" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
-          cmake -S Camera/tests/consumers/qt -B build/consumer-qt -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated"
       - name: Build clean external consumers
         run: |
           cmake --build build/consumer-common --config Release --parallel
           cmake --build build/consumer-gentl --config Release --parallel
           cmake --build build/consumer-amscope --config Release --parallel
           cmake --build build/consumer-genapi --config Release --parallel
-          cmake --build build/consumer-qt --config Release --parallel
 
       - name: Verify installed runtime loading and link paths
         run: |
@@ -115,24 +106,18 @@ jobs:
           otool -L build/camera-relocated/lib/libcamera_amscope_driver.dylib
           otool -L build/consumer-amscope/camera_module_amscope_consumer
           otool -L build/consumer-genapi/camera_module_genapi_consumer
-          otool -L build/consumer-qt/camera_module_qt_consumer
           lipo build/camera-relocated/lib/libcamera_amscope_driver.dylib -verify_arch "${{ matrix.architecture }}"
           lipo build/camera-relocated/lib/libamcam.dylib -verify_arch "${{ matrix.architecture }}"
           lipo build/camera-relocated/lib/libcamera_gentl_consumer_bridge.a -verify_arch "${{ matrix.architecture }}"
           lipo build/camera-relocated/lib/libcamera_gentl_genapi.a -verify_arch "${{ matrix.architecture }}"
-          lipo build/camera-relocated/lib/libcamera_qt_core.a -verify_arch "${{ matrix.architecture }}"
-          lipo build/camera-relocated/lib/libcamera_qt_widgets.a -verify_arch "${{ matrix.architecture }}"
-          lipo build/camera-relocated/lib/libcamera_amscope_qt.a -verify_arch "${{ matrix.architecture }}"
           lipo build/consumer-amscope/camera_module_amscope_consumer -verify_arch "${{ matrix.architecture }}"
           lipo build/consumer-genapi/camera_module_genapi_consumer -verify_arch "${{ matrix.architecture }}"
-          lipo build/consumer-qt/camera_module_qt_consumer -verify_arch "${{ matrix.architecture }}"
           SIMULATOR_CTI="$(find build/camera-module -type f -name gentl_test_simulator.cti -print -quit)"
           test -n "$SIMULATOR_CTI"
           build/consumer-common/camera_module_common_consumer
           build/consumer-gentl/camera_module_gentl_consumer "$SIMULATOR_CTI"
           build/consumer-amscope/camera_module_amscope_consumer
           build/consumer-genapi/camera_module_genapi_consumer
-          QT_QPA_PLATFORM=offscreen build/consumer-qt/camera_module_qt_consumer
 
       - name: Verify vendor runtime bundling is opt-in
         if: matrix.architecture == 'arm64'

@@ -1157,7 +1157,7 @@ void assessFluorescenceCameraSuitability(
     const MicroscopeEquipmentDefinition& equipment,
     const ConfigurationRequest& request,
     const SpecimenPreparation& preparation,
-    const CameraPerformanceRequirements& requirements) {
+    const std::optional<CameraPerformanceRequirements>& requirements) {
     const auto* camera = findCamera(equipment, request.cameraComponentId());
     if (camera == nullptr) {
         return;
@@ -1433,14 +1433,13 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
         }
     }
 
-    if (request.contrastMethod() == ContrastMethod::Fluorescence &&
-        requirements.camera()) {
+    if (request.contrastMethod() == ContrastMethod::Fluorescence) {
         assessFluorescenceCameraSuitability(
             diagnostics,
             equipment,
             request,
             specimen.preparation(),
-            *requirements.camera());
+            requirements.camera());
     }
 
     return SampleMicroscopyAssessment(std::move(diagnostics));

@@ -281,6 +281,33 @@ private:
     std::optional<IlluminationMicroscopyRequirements> illumination_;
 };
 
+enum class SpecimenPreparationMethod {
+    Smear,
+    TissueSection,
+    CellCulture,
+    WholeMount,
+    Suspension,
+    Cytospin,
+    FreshUnfixed,
+    Other,
+    Unknown
+};
+
+enum class SpecimenFixationState {
+    Live,
+    Unfixed,
+    Fixed,
+    Killed,
+    Unknown
+};
+
+enum class SpecimenLabelKind {
+    Fluorescent,
+    Chromogenic,
+    Histochemical,
+    Other
+};
+
 enum class SpecimenPreparationRequirementsError {
     NoConstraint,
     InvalidMethod,
@@ -472,33 +499,6 @@ private:
     std::optional<std::string> organismScientificName_;
     std::optional<std::string> externalAccession_;
     std::optional<std::string> description_;
-};
-
-enum class SpecimenPreparationMethod {
-    Smear,
-    TissueSection,
-    CellCulture,
-    WholeMount,
-    Suspension,
-    Cytospin,
-    FreshUnfixed,
-    Other,
-    Unknown
-};
-
-enum class SpecimenFixationState {
-    Live,
-    Unfixed,
-    Fixed,
-    Killed,
-    Unknown
-};
-
-enum class SpecimenLabelKind {
-    Fluorescent,
-    Chromogenic,
-    Histochemical,
-    Other
 };
 
 enum class SpecimenLabelError {

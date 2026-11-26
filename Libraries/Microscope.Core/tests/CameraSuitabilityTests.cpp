@@ -1,0 +1,201 @@
+#include "microscope/core/configuration/CameraSuitability.h"
+
+#include <cmath>
+#include <iostream>
+#include <stdexcept>
+#include <utility>
+#include <vector>
+
+namespace {
+
+using namespace microscope::core;
+
+int failures = 0;
+
+void check(bool condition, const char* message) {
+    if (!condition) {
+        ++failures;
+        std::cerr << "FAIL: " << message << '\n';
+    }
+}
+
+template <typename TValue, typename TError>
+TValue take(Result<TValue, TError> result) {
+    if (!result) {
+        throw std::runtime_error("A camera suitability test fixture factory rejected valid input.");
+    }
+    return std::move(result).value();
+}
+
+template <typename TId>
+TId makeId(const char* value) {
+    return take(TId::create(value));
+}
+
+CameraSpecification makeCamera(
+    const char* componentId,
+    CameraShutterType shutter,
+    double qe450,
+    double qe550,
+    double qe650,
+    double readNoise,
+    double darkCurrent,
+    double fullWell) {
+    const auto outputMode = take(CameraOutputMode::create(
+        makeId<CameraModeId>((std::string(componentId) + "-mode").c_str()),
+        take(SensorRegionOfInterest::create(0, 0, 1024, 1024)),
+        take(PixelBinning::create(1, 1)),
+        take(PixelDimensions::create(1024, 1024)),
+        CameraPixelLayout::Monochrome,
+        "Mono16"));
+
+    CameraSensorCharacteristics sensor;
+    sensor.technology = CameraSensorTechnology::ScientificCMOS;
+    sensor.shutterType = shutter;
+    sensor.colorMode = CameraSensorColorMode::Monochrome;
+    sensor.readNoiseElectronsRms = readNoise;
+    sensor.darkCurrentElectronsPerPixelPerSecond = darkCurrent;
+    sensor.fullWellCapacityElectrons = fullWell;
+    sensor.maximumFrameRateFramesPerSecond = 100.0;
+    sensor.quantumEfficiency = {
+        {400.0, qe450 * 0.8},
+        {450.0, qe450},
+        {550.0, qe550},
+        {650.0, qe650},
+        {700.0, qe650 * 0.9}};
+    sensor.provenance = CameraSpecificationProvenance::ManufacturerDatasheet;
+
+    return take(CameraSpecification::create(
+        makeId<EquipmentComponentId>(componentId),
+        take(PixelDimensions::create(1024, 1024)),
+        take(PositiveMicrometers::create(6.5)),
+        take(PositiveMicrometers::create(6.5)),
+        {outputMode},
+        std::nullopt,
+        sensor));
+}
+
+FluorescenceCameraRequirements requirements() {
+    return FluorescenceCameraRequirements{
+        take(SpectralBand::create(
+            take(PositiveNanometers::create(500.0)),
+            take(PositiveNanometers::create(600.0)))),
+        0.75,
+        2.0,
+        0.1,
+        20000.0,
+        30.0,
+        true,
+        true};
+}
+
+void testFluorescenceSuitabilityReturnsWarningsWithoutRejectingCamera() {
+    const auto camera = makeCamera(
+        "camera-low-qe",
+        CameraShutterType::Rolling,
+        0.35, 0.40, 0.30,
+        5.0, 0.5, 10000.0);
+    const auto report = CameraSuitabilityAssessor::assessFluorescence(
+        camera, requirements());
+
+    check(report.hasWarnings(),
+          "returns diagnostics for a camera below fluorescence preferences");
+    check(report.knownPreferenceFailures >= 4,
+          "reports weak QE, read noise, dark current and full-well shortfalls");
+    check(report.meanQuantumEfficiencyInEmissionBand.has_value(),
+          "computes QE within the requested emission band");
+    check(std::any_of(
+              report.warnings.begin(), report.warnings.end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "camera.fluorescence.qe_below_preference";
+              }),
+          "uses a stable diagnostic code for low QE");
+
+    // The assessor returns a report for the selected camera. No Result failure
+    // or automatic camera substitution occurs because preferences were missed.
+    check(camera.componentId().value() == "camera-low-qe",
+          "manual selection remains the caller's camera choice despite warnings");
+}
+
+void testUnknownQuantumEfficiencyProducesWarningNotFailure() {
+    const auto camera = makeCamera(
+        "camera-no-qe",
+        CameraShutterType::Global,
+        0.0, 0.0, 0.0,
+        1.0, 0.01, 30000.0);
+
+    auto noQe = camera.sensorCharacteristics().value();
+    noQe.quantumEfficiency.clear();
+    const auto cameraWithoutQe = take(CameraSpecification::create(
+        camera.componentId(),
+        camera.activeSensorDimensions(),
+        take(PositiveMicrometers::create(camera.pixelPitchXMicrometers())),
+        take(PositiveMicrometers::create(camera.pixelPitchYMicrometers())),
+        camera.outputModes(),
+        camera.exposureTimeRange(),
+        noQe));
+
+    const auto report = CameraSuitabilityAssessor::assessFluorescence(
+        cameraWithoutQe, requirements());
+    check(report.meanQuantumEfficiencyInEmissionBand == std::nullopt,
+          "reports QE as unknown when the persisted model does not contain a curve");
+    check(std::any_of(
+              report.warnings.begin(), report.warnings.end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "camera.fluorescence.qe_unknown_in_emission_band";
+              }),
+          "warns when the emission band is not characterized");
+}
+
+void testGlobalShutterIsOnlyTheFinalTieBreaker() {
+    const auto rolling = makeCamera(
+        "camera-rolling",
+        CameraShutterType::Rolling,
+        0.85, 0.90, 0.78,
+        1.2, 0.02, 30000.0);
+    const auto global = makeCamera(
+        "camera-global",
+        CameraShutterType::Global,
+        0.85, 0.90, 0.78,
+        1.2, 0.02, 30000.0);
+
+    const auto request = requirements();
+    const auto rollingReport =
+        CameraSuitabilityAssessor::assessFluorescence(rolling, request);
+    const auto globalReport =
+        CameraSuitabilityAssessor::assessFluorescence(global, request);
+
+    check(CameraSuitabilityAssessor::shouldRecommendBefore(
+              global, globalReport, rolling, rollingReport, request),
+          "recommends global shutter when the other measured suitability metrics are equal");
+
+    const auto betterSensitivity = makeCamera(
+        "camera-better-qe-rolling",
+        CameraShutterType::Rolling,
+        0.90, 0.95, 0.85,
+        0.8, 0.01, 35000.0);
+    const auto betterReport =
+        CameraSuitabilityAssessor::assessFluorescence(betterSensitivity, request);
+
+    check(CameraSuitabilityAssessor::shouldRecommendBefore(
+              betterSensitivity, betterReport, global, globalReport, request),
+          "prefers better fluorescence detector performance over global shutter");
+}
+
+} // namespace
+
+int main() {
+    testFluorescenceSuitabilityReturnsWarningsWithoutRejectingCamera();
+    testUnknownQuantumEfficiencyProducesWarningNotFailure();
+    testGlobalShutterIsOnlyTheFinalTieBreaker();
+
+    if (failures != 0) {
+        std::cerr << failures << " camera suitability contract test(s) failed.\n";
+        return 1;
+    }
+
+    std::cout << "All camera suitability contract tests passed.\n";
+    return 0;
+}

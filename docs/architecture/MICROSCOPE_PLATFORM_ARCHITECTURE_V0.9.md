@@ -261,7 +261,7 @@ If an axis has no position feedback, a command-derived value is an estimate, not
 
 The equipment model describes what physically exists and what it supports.
 
-Configuration profiles describe valid desired arrangements and relationships. They are declarative data, not executable behavior attached to objective/filter classes.
+The target model separates reusable TechniqueDefinition values from editable OperationMode values. A technique describes one optical function/constraint contribution; an operation mode composes one or more techniques with objective requirements and desired operating settings. The current ConfigurationProfile is an earlier implementation baseline to evolve toward this model. These definitions are declarative data, not executable behavior attached to objective/filter classes.
 
 A profile can specify:
 
@@ -283,7 +283,7 @@ A request may name exact installed components when the user wants manual control
 
 ### 6.2 Independent configuration dimensions
 
-Objective requirements, selected techniques, optical routes and detector output are related inputs to one configuration-resolution problem. The camera is derived from the selected imaging route: an installed camera is eligible only when that route terminates at, or otherwise explicitly traverses, the camera's imaging endpoint. The request does not independently select an unrelated camera identity. Where the selected route set exposes more than one valid camera endpoint, the resolver returns complete alternatives or a selection-required result.
+Objective requirements, selected techniques, optical routes and detector output are related inputs to one configuration-resolution problem. The camera is derived from the selected imaging route's terminal imaging-device component, which must have a CameraSpecification. The request does not independently select a camera identity. A manually supplied camera identity is only an optional assertion/constraint and must equal the camera derived from the route. If a candidate route set contains more than one imaging endpoint, each endpoint participates in a separate complete candidate; the resolver returns alternatives or a selection-required result rather than choosing an unrelated installed camera.
 
 Examples:
 - Selecting a 4× brightfield requirement resolves a compatible objective, illumination route, and the camera connected to the selected imaging route.
@@ -300,13 +300,21 @@ ExposurePreset is distinct from ExposurePolicy. A profile may provide an initial
 ### 6.3 Pure configuration pipeline
 
 ~~~text
-Configuration request + equipment definition + profile catalog
+Operation request + equipment-constitution revision
+       + operation-mode revision + optional imaging intent
+       + optional explicit component constraints
                          |
                          v
-               Pure configuration resolver
+           Pure candidate configuration resolver
                          |
-                         v
-      Microscope-scoped ResolvedConfiguration + diagnostics
+             +-----------+-----------+
+             |           |           |
+             v           v           v
+          Resolved   Selection   Unsupported
+          candidate  required    + diagnostics
+             |
+             v
+       Valid alternatives + selection rationale
                          |
                          v
             Pure transition requirement planner
@@ -319,7 +327,7 @@ Configuration request + equipment definition + profile catalog
           verified effective state + execution
 ~~~
 
-The resolver is independent of current runtime state. It validates static compatibility and profile targets only. Phase 3D's transition planner conservatively emits the full desired requirement set from ResolvedConfiguration; it does not diff against current observations. Phase 4 runtime may reconcile this plan against a verified effective-configuration snapshot. Unknown or unverified observed values must not be treated as effective state.
+The resolver is independent of current runtime state and persistence. It evaluates equipment constitution, technique composition, mode constraints, optional imaging intent and explicit selections, then returns complete candidate configurations and any selection requirement. Phase 3D's transition planner conservatively emits the full desired requirement set from the chosen ResolvedConfiguration; it does not diff against current observations. Phase 4 runtime may reconcile this plan against a verified effective-configuration snapshot. Unknown or unverified observed values must not be treated as effective state.
 
 Composition must be conflict-aware. Unrestricted last-write-wins merging is prohibited. Contradictory profile contributions produce explicit validation diagnostics.
 

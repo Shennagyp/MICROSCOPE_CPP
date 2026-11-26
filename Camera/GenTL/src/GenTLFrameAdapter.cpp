@@ -105,40 +105,43 @@ camera::PixelByteOrder pixelByteOrder(
     }
 }
 
-bool payloadSizeMatches(
-    std::uint32_t width, std::uint32_t height,
-    std::size_t bytesPerPixel, std::size_t actualSize) noexcept {
+bool imageLayoutFits(
+    std::size_t activeRowBytes, std::size_t height,
+    std::size_t imageOffset, std::size_t rowPadding,
+    std::size_t trailingPadding, std::size_t payloadSize,
+    std::uint32_t& strideBytes) noexcept {
     const auto maximum = std::numeric_limits<std::size_t>::max();
-    const auto w = static_cast<std::size_t>(width);
-    const auto h = static_cast<std::size_t>(height);
-    if (w == 0 || h == 0 || w > maximum / h) return false;
-    const auto pixelCount = w * h;
-    if (bytesPerPixel == 0 || pixelCount > maximum / bytesPerPixel)
+    if (activeRowBytes == 0 || height == 0 ||
+        rowPadding > maximum - activeRowBytes) return false;
+    const auto rowStride = activeRowBytes + rowPadding;
+    if (rowStride > std::numeric_limits<std::uint32_t>::max() ||
+        rowStride > maximum / height) return false;
+    const auto imageBytes = rowStride * height;
+    if (imageOffset > payloadSize ||
+        imageBytes > payloadSize - imageOffset ||
+        trailingPadding != payloadSize - imageOffset - imageBytes) return false;
+    strideBytes = static_cast<std::uint32_t>(rowStride);
+    return true;
+}
+
+bool rowBytesForPixels(std::uint32_t width, std::size_t bytesPerPixel,
+                       std::size_t& rowBytes) noexcept {
+    if (width == 0 || bytesPerPixel == 0 ||
+        static_cast<std::size_t>(width) >
+            std::numeric_limits<std::size_t>::max() / bytesPerPixel)
         return false;
-    return actualSize == pixelCount * bytesPerPixel;
+    rowBytes = static_cast<std::size_t>(width) * bytesPerPixel;
+    return true;
 }
 
-bool strideFits(std::uint32_t width, std::size_t bytesPerPixel) noexcept {
-    return bytesPerPixel != 0 &&
-        static_cast<std::uint64_t>(width) <=
-            std::numeric_limits<std::uint32_t>::max() / bytesPerPixel;
-}
-
-bool packedRowLayout(
-    std::uint32_t width, std::uint8_t bitsPerPixel,
-    std::uint32_t& strideBytes, std::size_t& totalBytes,
-    std::uint32_t height) noexcept {
-    if (width == 0 || height == 0 || bitsPerPixel == 0) return false;
+bool packedRowBytes(std::uint32_t width, std::uint8_t bitsPerPixel,
+                    std::size_t& rowBytes) noexcept {
+    if (width == 0 || bitsPerPixel == 0) return false;
     const auto maximum = std::numeric_limits<std::size_t>::max();
     const auto w = static_cast<std::size_t>(width);
     if (w > (maximum - 7) / bitsPerPixel) return false;
-    const auto rowBytes = (w * bitsPerPixel + 7) / 8;
-    if (rowBytes > std::numeric_limits<std::uint32_t>::max()) return false;
-    const auto h = static_cast<std::size_t>(height);
-    if (rowBytes > maximum / h) return false;
-    strideBytes = static_cast<std::uint32_t>(rowBytes);
-    totalBytes = rowBytes * h;
-    return true;
+    rowBytes = (w * bitsPerPixel + 7) / 8;
+    return rowBytes != 0;
 }
 
 } // namespace
@@ -166,15 +169,17 @@ makeCommonFrame(DataStreamFrame source) {
         return std::nullopt;
     }
 
-    if (!source.imageOffset || *source.imageOffset != 0 ||
-        !source.xPadding || *source.xPadding != 0 ||
-        !source.yPadding || *source.yPadding != 0) {
+    if (!source.imageOffset || !source.xPadding || !source.yPadding ||
+        *source.imageOffset > source.payload.size() ||
+        *source.yPadding > source.payload.size() - *source.imageOffset)
         return std::nullopt;
-    }
 
     auto frame = std::make_shared<camera::Frame>();
     frame->width = static_cast<std::uint32_t>(*source.width);
     frame->height = static_cast<std::uint32_t>(*source.height);
+    frame->imageOffsetBytes = *source.imageOffset;
+    frame->rowPaddingBytes = *source.xPadding;
+    frame->trailingPaddingBytes = *source.yPadding;
     frame->pixels = std::move(source.payload);
     frame->sequenceNumber = source.frameId;
     frame->pixelByteOrder = pixelByteOrder(source.pixelEndianness);
@@ -203,11 +208,12 @@ makeCommonFrame(DataStreamFrame source) {
     if (const auto bayer = bayerFormat(source)) {
         frame->pixelColorFilterArray = bayer->pattern;
         if (bayer->packed) {
+            std::size_t activeRowBytes = 0;
             std::uint32_t packedStride = 0;
-            std::size_t expectedPayload = 0;
-            if (packedRowLayout(frame->width, bayer->significantBits,
-                                packedStride, expectedPayload, frame->height) &&
-                frame->pixels.size() == expectedPayload) {
+            if (packedRowBytes(frame->width, bayer->significantBits, activeRowBytes) &&
+                imageLayoutFits(activeRowBytes, frame->height, frame->imageOffsetBytes,
+                    frame->rowPaddingBytes, frame->trailingPaddingBytes,
+                    frame->pixels.size(), packedStride)) {
                 frame->pixelFormat = camera::PixelFormat::Raw8;
                 frame->pixelPacking = bayer->significantBits == 10
                     ? camera::PixelPacking::PFNC10p
@@ -221,12 +227,15 @@ makeCommonFrame(DataStreamFrame source) {
             const std::size_t bytesPerPixel =
                 bayer->significantBits == 8 ? 1 : 2;
             const auto reportedByteOrder = pixelByteOrder(source.pixelEndianness);
+            std::size_t activeRowBytes = 0;
+            std::uint32_t rowStride = 0;
             const bool byteOrderIsSafe = bytesPerPixel == 1 ||
                 reportedByteOrder != camera::PixelByteOrder::Unknown;
             if (byteOrderIsSafe &&
-                payloadSizeMatches(frame->width, frame->height, bytesPerPixel,
-                                   frame->pixels.size()) &&
-                strideFits(frame->width, bytesPerPixel)) {
+                rowBytesForPixels(frame->width, bytesPerPixel, activeRowBytes) &&
+                imageLayoutFits(activeRowBytes, frame->height, frame->imageOffsetBytes,
+                    frame->rowPaddingBytes, frame->trailingPaddingBytes,
+                    frame->pixels.size(), rowStride)) {
                 frame->pixelFormat = bytesPerPixel == 1
                     ? camera::PixelFormat::Raw8
                     : camera::PixelFormat::Raw16;
@@ -234,8 +243,7 @@ makeCommonFrame(DataStreamFrame source) {
                 frame->pixelByteOrder = bytesPerPixel == 1
                     ? camera::PixelByteOrder::NotApplicable
                     : reportedByteOrder;
-                frame->strideBytes = static_cast<std::uint32_t>(
-                    static_cast<std::size_t>(frame->width) * bytesPerPixel);
+                frame->strideBytes = rowStride;
                 frame->significantBitsPerPixel = bayer->significantBits;
                 frame->storageBitsPerPixel = static_cast<std::uint8_t>(
                     bytesPerPixel * 8);
@@ -257,11 +265,12 @@ makeCommonFrame(DataStreamFrame source) {
         packedKind = camera::PixelPacking::PFNC12p;
     }
     if (packedSignificantBits != 0) {
+        std::size_t activeRowBytes = 0;
         std::uint32_t packedStride = 0;
-        std::size_t expectedPayload = 0;
-        if (packedRowLayout(frame->width, packedSignificantBits,
-                            packedStride, expectedPayload, frame->height) &&
-            frame->pixels.size() == expectedPayload) {
+        if (packedRowBytes(frame->width, packedSignificantBits, activeRowBytes) &&
+            imageLayoutFits(activeRowBytes, frame->height, frame->imageOffsetBytes,
+                frame->rowPaddingBytes, frame->trailingPaddingBytes,
+                frame->pixels.size(), packedStride)) {
             frame->pixelFormat = camera::PixelFormat::Raw8;
             frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
             frame->pixelColorFilterArray =
@@ -279,15 +288,18 @@ makeCommonFrame(DataStreamFrame source) {
     const bool mono8 =
         isPfnc32(source, pfnc32Mono8) ||
         isPfnc16(source, pfnc16Mono8);
-    if (mono8 && payloadSizeMatches(frame->width, frame->height, 1,
-                                    frame->pixels.size()) &&
-        strideFits(frame->width, 1)) {
+    std::size_t mono8RowBytes = 0;
+    std::uint32_t mono8Stride = 0;
+    if (mono8 && rowBytesForPixels(frame->width, 1, mono8RowBytes) &&
+        imageLayoutFits(mono8RowBytes, frame->height, frame->imageOffsetBytes,
+            frame->rowPaddingBytes, frame->trailingPaddingBytes,
+            frame->pixels.size(), mono8Stride)) {
         frame->pixelFormat = camera::PixelFormat::Raw8;
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
         frame->pixelColorFilterArray =
             camera::PixelColorFilterArray::NotApplicable;
         frame->pixelPacking = camera::PixelPacking::NotPacked;
-        frame->strideBytes = frame->width;
+        frame->strideBytes = mono8Stride;
         frame->significantBitsPerPixel = 8;
         frame->storageBitsPerPixel = 8;
     }
@@ -295,15 +307,18 @@ makeCommonFrame(DataStreamFrame source) {
     const bool rgb8 =
         isPfnc32(source, pfnc32Rgb8) ||
         isPfnc16(source, pfnc16Rgb8);
-    if (rgb8 && payloadSizeMatches(frame->width, frame->height, 3,
-                                   frame->pixels.size()) &&
-        strideFits(frame->width, 3)) {
+    std::size_t rgb8RowBytes = 0;
+    std::uint32_t rgb8Stride = 0;
+    if (rgb8 && rowBytesForPixels(frame->width, 3, rgb8RowBytes) &&
+        imageLayoutFits(rgb8RowBytes, frame->height, frame->imageOffsetBytes,
+            frame->rowPaddingBytes, frame->trailingPaddingBytes,
+            frame->pixels.size(), rgb8Stride)) {
         frame->pixelFormat = camera::PixelFormat::RGB24;
         frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
         frame->pixelColorFilterArray =
             camera::PixelColorFilterArray::NotApplicable;
         frame->pixelPacking = camera::PixelPacking::NotPacked;
-        frame->strideBytes = frame->width * 3;
+        frame->strideBytes = rgb8Stride;
         frame->significantBitsPerPixel = 24;
         frame->storageBitsPerPixel = 24;
     }
@@ -316,17 +331,20 @@ makeCommonFrame(DataStreamFrame source) {
              isPfnc16(source, pfnc16Mono16)) monoSignificantBits = 16;
 
     const auto byteOrder = pixelByteOrder(source.pixelEndianness);
+    std::size_t mono16RowBytes = 0;
+    std::uint32_t mono16Stride = 0;
     if (monoSignificantBits != 0 &&
         byteOrder != camera::PixelByteOrder::Unknown &&
-        payloadSizeMatches(frame->width, frame->height, 2,
-                           frame->pixels.size()) &&
-        strideFits(frame->width, 2)) {
+        rowBytesForPixels(frame->width, 2, mono16RowBytes) &&
+        imageLayoutFits(mono16RowBytes, frame->height, frame->imageOffsetBytes,
+            frame->rowPaddingBytes, frame->trailingPaddingBytes,
+            frame->pixels.size(), mono16Stride)) {
         frame->pixelFormat = camera::PixelFormat::Raw16;
         frame->pixelByteOrder = byteOrder;
         frame->pixelColorFilterArray =
             camera::PixelColorFilterArray::NotApplicable;
         frame->pixelPacking = camera::PixelPacking::NotPacked;
-        frame->strideBytes = frame->width * 2;
+        frame->strideBytes = mono16Stride;
         frame->significantBitsPerPixel = monoSignificantBits;
         frame->storageBitsPerPixel = 16;
     }

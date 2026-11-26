@@ -49,11 +49,14 @@ inline bool validSensorCharacteristics(
     const auto positiveFinite = [](const std::optional<double>& value) {
         return !value || (std::isfinite(*value) && *value > 0.0);
     };
+    const auto nonNegativeFinite = [](const std::optional<double>& value) {
+        return !value || (std::isfinite(*value) && *value >= 0.0);
+    };
 
     if (!positiveFinite(sensor.pixelPitchXMicrometers) ||
         !positiveFinite(sensor.pixelPitchYMicrometers) ||
-        !positiveFinite(sensor.readNoiseElectronsRms) ||
-        !positiveFinite(sensor.darkCurrentElectronsPerPixelPerSecond) ||
+        !nonNegativeFinite(sensor.readNoiseElectronsRms) ||
+        !nonNegativeFinite(sensor.darkCurrentElectronsPerPixelPerSecond) ||
         !positiveFinite(sensor.fullWellCapacityElectrons) ||
         !positiveFinite(sensor.maximumFrameRateFramesPerSecond)) {
         return false;
@@ -192,7 +195,7 @@ public:
 
     // Exact manufacturer/model/variant matching only.
     [[nodiscard]] const CameraModelProfile* findExact(
-        const CameraIdentity& identity) const noexcept {
+        const CameraIdentity& identity) const {
         if (!identity.manufacturer || !identity.model) {
             return nullptr;
         }

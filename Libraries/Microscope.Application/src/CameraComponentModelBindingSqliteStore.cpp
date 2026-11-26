@@ -176,6 +176,26 @@ private:
     const std::vector<CameraComponentModelBinding>& bindings) {
     std::set<core::EquipmentComponentId> cameraComponentIds;
     for (const auto& binding : bindings) {
+        const auto normalizedManufacturer =
+            ::camera::detail::normalizeCameraModelText(binding.modelKey.manufacturer);
+        const auto normalizedModel =
+            ::camera::detail::normalizeCameraModelText(binding.modelKey.model);
+        const bool invalidVariant =
+            binding.modelKey.variant &&
+            ::camera::detail::normalizeCameraModelText(*binding.modelKey.variant).empty();
+        if (normalizedManufacturer.empty() ||
+            normalizedModel.empty() ||
+            invalidVariant ||
+            binding.modelKey.manufacturer.find('\\0') != std::string::npos ||
+            binding.modelKey.model.find('\\0') != std::string::npos ||
+            (binding.modelKey.variant &&
+             binding.modelKey.variant->find('\\0') != std::string::npos)) {
+            return failureStatus(makeError(
+                StoreErrorCode::InvalidModelKey,
+                nullptr,
+                "A camera component binding must use a nonempty canonical model key; an empty variant must be represented as no variant."));
+        }
+
         if (binding.modelProfileRevision == 0 ||
             binding.modelProfileRevision > kMaximumSqliteInteger) {
             return failureStatus(makeError(
@@ -258,7 +278,7 @@ private:
     }
 
     const sqlite3_int64 stored = sqlite3_column_int64(statement.get(), 0);
-    if (stored < 0) {
+    if (stored <= 0) {
         return false;
     }
     revision = static_cast<std::uint64_t>(stored);

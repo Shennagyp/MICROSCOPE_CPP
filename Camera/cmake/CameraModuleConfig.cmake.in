@@ -20,13 +20,15 @@ if("GenTLGenApi" IN_LIST CameraModule_FIND_COMPONENTS)
     endif()
 endif()
 
-if("Amscope" IN_LIST CameraModule_FIND_COMPONENTS OR "AmscopeQt" IN_LIST CameraModule_FIND_COMPONENTS)
+if("Amscope" IN_LIST CameraModule_FIND_COMPONENTS OR
+   ("AmscopeQt" IN_LIST CameraModule_FIND_COMPONENTS AND @CAMERA_MODULE_HAS_AMSCOPE_QT@))
     if(@CAMERA_MODULE_HAS_AMSCOPE@)
         include("${CMAKE_CURRENT_LIST_DIR}/AmscopeDriverTargets.cmake")
         set(CameraModule_Amscope_FOUND TRUE)
     endif()
 endif()
-if("Qt" IN_LIST CameraModule_FIND_COMPONENTS OR "AmscopeQt" IN_LIST CameraModule_FIND_COMPONENTS)
+if("Qt" IN_LIST CameraModule_FIND_COMPONENTS OR
+   ("AmscopeQt" IN_LIST CameraModule_FIND_COMPONENTS AND @CAMERA_MODULE_HAS_AMSCOPE_QT@))
     if(@CAMERA_MODULE_HAS_QT@)
         find_dependency(Qt6 6.2 COMPONENTS Core)
         include("${CMAKE_CURRENT_LIST_DIR}/CameraQtTargets.cmake")

@@ -132,6 +132,13 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         endif()
     endforeach()
 
+    if(CAMERA_MODULE_PACKAGE_BUILD AND
+       (NOT _camera_genapi_target_found OR NOT _camera_gcbase_target_found))
+        message(FATAL_ERROR
+            "CameraModule package export requires imported GenApi and GCBase "
+            "targets from the official GenApi 3.5.1 CMake package.")
+    endif()
+
     if(NOT _camera_genapi_target_found OR NOT _camera_gcbase_target_found)
         find_path(GENAPI_INCLUDE_DIR
             NAMES GenApi/GenApi.h

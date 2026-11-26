@@ -62,6 +62,8 @@ Result<OperationMode, OperationModeError> OperationMode::create(
     }
 
     std::set<LightPathId> lightPathIds;
+    const auto equipmentRevision =
+        lightPathSettings.front().equipmentDefinitionRevision();
     for (const auto& setting : lightPathSettings) {
         if (setting.operationModeId() != id) {
             return Result<OperationMode, OperationModeError>::failure(
@@ -74,6 +76,10 @@ Result<OperationMode, OperationModeError> OperationMode::create(
         if (setting.microscopeId() != microscopeId) {
             return Result<OperationMode, OperationModeError>::failure(
                 OperationModeError::LightPathSettingMicroscopeMismatch);
+        }
+        if (setting.equipmentDefinitionRevision() != equipmentRevision) {
+            return Result<OperationMode, OperationModeError>::failure(
+                OperationModeError::LightPathSettingEquipmentRevisionMismatch);
         }
         if (!lightPathIds.insert(setting.lightPathId()).second) {
             return Result<OperationMode, OperationModeError>::failure(

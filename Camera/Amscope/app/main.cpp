@@ -884,9 +884,11 @@ private:
         capabilityPanel_->setCapabilities(found->capabilities);
         const QString model = !found->modelName.empty()
             ? QString::fromStdString(found->modelName)
-            : (!found->identity.model
-                ? QStringLiteral("Model not reported")
-                : QString::fromStdString(*found->identity.model));
+            : (found->identity.model && !found->identity.model->empty()
+                ? QString::fromStdString(*found->identity.model)
+                : (!found->displayName.empty()
+                    ? QString::fromStdString(found->displayName)
+                    : QStringLiteral("Model not reported")));
         if (found->hasModelDescriptor) {
             QStringList previewModes;
             previewModes.reserve(static_cast<qsizetype>(found->previewResolutions.size()));

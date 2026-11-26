@@ -481,7 +481,8 @@ bool CameraSuitabilityAssessor::shouldRecommendBefore(
         return left.unknownPreferenceData < right.unknownPreferenceData;
     }
 
-    if (hasDifferentKnownValue(
+    if (left.completeSpectralWeighting == right.completeSpectralWeighting &&
+        hasDifferentKnownValue(
             left.meanQuantumEfficiencyInEmissionBand,
             right.meanQuantumEfficiencyInEmissionBand)) {
         return *left.meanQuantumEfficiencyInEmissionBand >

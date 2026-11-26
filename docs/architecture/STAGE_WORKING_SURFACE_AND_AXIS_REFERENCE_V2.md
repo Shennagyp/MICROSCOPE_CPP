@@ -32,8 +32,11 @@ Each saved slide rectangle contains:
 - A first XY endpoint that is fixed as the physical mechanical stop-point datum and slide-local origin.
 - An initial opposite-corner handle that chooses the rectangle quadrant.
 - A solved opposite endpoint.
+- All four stage-coordinate corners, with the two adjacent corners derived from the slide-local orthogonal basis.
 - An explicit assignment of slide length to stage X or stage Y.
 - Constrained length and width.
+
+The four stage-coordinate corners are constrained geometry results derived from the user-supplied stop point and dimensions. They are not four separate sensor measurements or independent calibration observations.
 
 The dimensions solve the final opposite corner while the stop point remains fixed. The original handle and solved corner are both retained. The slide's coordinate transform is two-dimensional.
 

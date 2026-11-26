@@ -9,6 +9,15 @@ namespace microscope::core {
 struct StagePoint2D final { double xMicrometers; double yMicrometers; };
 struct SlidePoint2D final { double xMicrometers; double yMicrometers; };
 
+// Stage-coordinate corners derived from the slide stop point, orthogonal axis
+// assignment and constrained length/width. These are not independent readings.
+struct SlideRectangleCorners2D final {
+    StagePoint2D stopPoint;
+    StagePoint2D lengthEdgeEnd;
+    StagePoint2D widthEdgeEnd;
+    StagePoint2D oppositeCorner;
+};
+
 enum class StageTravelRange2DError { NonFiniteRange, NonPositiveRange };
 
 // Positive X/Y extents measured from the user-defined working-area origin.
@@ -100,6 +109,7 @@ public:
     const StagePoint2D& stopPointEndpoint() const noexcept;
     const StagePoint2D& drawnOppositeEndpoint() const noexcept;
     const StagePoint2D& solvedOppositeEndpoint() const noexcept;
+    SlideRectangleCorners2D stageCorners() const noexcept;
     SlideRectangleLengthAxis lengthAxis() const noexcept;
     double constrainedLengthMicrometers() const noexcept;
     double constrainedWidthMicrometers() const noexcept;

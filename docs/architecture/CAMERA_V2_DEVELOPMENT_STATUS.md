@@ -2,15 +2,15 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Current branch HEAD:** `808779f8f67d81ed99e66a2aff0b5b9f1cde1321` — `fix(gentl): use global GenTL bool8_t ABI type`.  
-**Latest CI-validated checkpoint:** `808779f8f67d81ed99e66a2aff0b5b9f1cde1321` — GenTL/GenApi workflow [#45733875474](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45733875474) passed Intel x86_64 and Apple Silicon arm64, including the C++ GenTL suite and official GenApi 3.5.1 build/tests.  
+**Latest reviewed implementation checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b` — Phase 6 AmScope feature/error-policy corrections.  
+**Latest CI-validated checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b` — AmScope workflow [#45742968336](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742968336) passed Intel x86_64 and Apple Silicon arm64, including compile, CTest, install-surface and architecture checks.  
 **Review date:** 26 November 2026.  
-**Next implementation milestone:** Phase 6 — capability, feature, command and model coverage. Phase 5 is owner-confirmed complete; do not restart it.  
+**Phase status:** Phase 6 is in progress. Phase 5 is owner-confirmed complete; do not restart it. Recheck the live branch tip before each session; documentation-only commits may advance it beyond this implementation checkpoint.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
 
 ## 0. Immediate continuation instruction
 
-The next AI must read [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md) before touching source. The project owner has confirmed Phase 5 as complete and identified Phase 6 as the next implementation milestone. Do not restart GenTL/GenApi integration, replace the Consumer architecture, or revive retired repositories as an assumed dependency. Start Phase 6 with a read-only source-to-test capability audit; implement only concrete, evidenced gaps.
+The next AI must read [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md) and [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md) before touching source. Phase 5 remains complete by owner direction. The initial Phase 6 audit is recorded, and two narrow AmScope gaps have been corrected with cross-architecture CI evidence. Continue from the audit's remaining prioritized gaps; do not restart GenTL/GenApi integration or revive retired repositories.
 
 ## 1. Branch provenance
 
@@ -96,7 +96,7 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 3 | Separate driver, programmatic control and Qt streaming libraries | **Excluded from active scope by owner decision.** The non-Qt `AmcamCamera` control/session API remains the active boundary. Existing Qt code is retained as legacy source but is not to be extended or qualified for this roadmap. |
 | 4 | Extract reusable Qt camera UI library | **Excluded from active scope by owner decision.** No reusable Qt UI, camera preview or UI-consumer work is required. Optika presentation remains application-owned. |
 | 5 | Integrate existing GenTL/GenApi implementation | **COMPLETE — owner-confirmed implementation milestone.** The GenTL Producer/device/stream lifecycle, buffer acquisition, frame metadata projection, remote-port access, XML retrieval and GenApi 3.5.1 feature/command integration are implemented and covered by cross-architecture CI. Do not reopen or reimplement Phase 5. Vendor CTI/device and physical-camera qualification are external integration/release evidence and must be tracked separately; they do not authorize restarting the completed implementation milestone. |
-| 6 | Complete capability, feature, command and model coverage | **Open.** Broad AmScope implementation exists. Reconcile every exposed claim to provider/model support, units, preconditions, readback, asynchronous completion and physical evidence. |
+| 6 | Complete capability, feature, command and model coverage | **IN PROGRESS.** Initial source-to-test audit completed. Two AmScope gaps corrected: RAW bit-depth SDK error classification and PixelFormatSelection profile enforcement. Provider-level feature/command tests, GenApi negative/failure tests and GenTL common-discovery mapping decision remain. See [Phase 6 audit](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md). |
 | 7 | Release packaging and external-consumer integration | **Open.** Initial install rules exist and native public headers install/compile. An exported CMake package/config/version flow and clean native/GenTL external consumers remain; Qt/UI consumers are excluded. |
 | 8 | Final hardware qualification and release | **Not started/accepted.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer tests, release CI and owner acceptance. |
 
@@ -132,6 +132,9 @@ Active continuation order: 0 → 1 → 2 → 5 → **6 (next implementation mile
 | `b9945dc` | Handle shutdown/unregister race | `EventGetData` returns `nullopt` for `GC_ERR_INVALID_HANDLE` only when shutdown is already in progress; both architectures passed [#45702691214](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45702691214). |
 | `b1d0a61` | Complete scalar GenApi write coverage | Added Float/String write-readback and Float increment validation tests; both architectures passed [#45703819447](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45703819447). |
 
+| `a1be35d` | Preserve RAW bit-depth enumeration errors | Distinguishes vendor `E_NOTIMPL` (feature unavailable) from other SDK failures (backend failure with native HRESULT); rejects invalid enumeration counts; adds a private classifier and CTest coverage. |
+| `b8148ee` | Apply model profile to RAW bit-depth selection | `RawOutputBitDepth` now obeys the same `PixelFormatSelection` profile policy as `AmcamPixelFormat`; adds profile-policy assertion and documents the mapping. |
+
 ### CI evidence
 
 Workflow [#45667125968](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45667125968) passed at exact source checkpoint `e12d765f408c2b0be7100c64b2eb245de5a2aca4` on both Intel x86_64 and Apple Silicon arm64:
@@ -164,7 +167,37 @@ Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCO
 
 No local build or physical-camera test is claimed in this status update. The GenTL/GenApi workflow [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670) passed both architectures with the pending-wait cancellation test. The newer `EventKill` fallback change passed Intel x86_64 in [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523); Apple Silicon validation is queued. Vendor CTI and physical-camera validation remain outstanding.
 
-## 6. Highest-priority unresolved risks
+
+## 7. Phase 6 audit checkpoint — 26 November 2026
+
+The initial source-to-test audit is recorded in
+[CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
+It covers Common contracts, AmScope discovery/features/commands/model policy,
+and GenTL/GenApi discovery/features/commands. The audit is not a Phase 6
+completion claim.
+
+The first two confirmed AmScope gaps were corrected:
+- `a1be35d`: preserve `E_NOTIMPL` as model-level unavailability and map
+  other failed `Amcam_get_PixelFormatSupport` calls to `BackendFailure`
+  with the native HRESULT. Add deterministic classification tests.
+- `b8148ee`: gate `RawOutputBitDepth` with the existing
+  `PixelFormatSelection` model-profile policy because both settings mutate
+  `AMCAM_OPTION_PIXEL_FORMAT`.
+
+CI evidence:
+- [#45742832263](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742832263)
+  passed Intel x86_64 and Apple Silicon arm64 for `a1be35d`.
+- [#45742968336](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742968336)
+  passed Intel x86_64 and Apple Silicon arm64 for `b8148ee`.
+
+No local build/test/debug run or new physical-camera test was performed.
+Phase 6 remains open. The next bounded task is to establish deterministic
+provider-level AmScope feature coverage without introducing a public SDK
+abstraction or changing the one-session/one-handle lifecycle. The existing
+Phase 1 SDK seam design is lifecycle-focused; extend it only for a specific
+Phase 6 test requirement, and do not reopen Phase 1 wholesale.
+
+## 8. Highest-priority unresolved risks
 
 ### Callback quiescence
 
@@ -180,7 +213,7 @@ The intended seam remains private to implementation/test support. It must preser
 
 MU503 RGB24 and short-rate observations are narrow evidence. They do not prove production RAW layout, all features/accessories, other models, long-duration stability, reconnect recovery or CTI operation. Keep source presence, automated tests, physical tests and owner acceptance as separate evidence categories.
 
-## 7. Next development sequence
+## 9. Next development sequence
 
 1. Validate the real Swift `libGenTLConsumerCAPI.dylib`: pointer marshalling, complete operation mapping, dynamic loading and Swift runtime packaging. The current C++ workflow validates only a mock bridge.
 2. Expand GenApi runtime coverage for malformed XML, unsupported/unknown node types, command completion transitions and failure/recovery paths; keep public access restricted to Root-category features.
@@ -193,7 +226,7 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 9. Complete Phase 8 physical qualification for every declared provider/model combination.
 10. Verify vendor SDK redistribution terms.
 
-## 8. Continuation rules
+## 10. Continuation rules
 
 - Continue Camera source work on `camera-v.2.0`; do not develop the library on the Optika application branch.
 - Use Optika as an application integration/reference line only. Its camera preview already exists; do not restart preview development or merge its GUI/workspace changes into Camera.
@@ -203,7 +236,7 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 - Update this ledger after each meaningful increment with exact source commit, changed files, tests actually run, physical hardware evidence and the next bounded task.
 - Never mark phases complete from source presence or CI alone.
 
-## 9. References
+## 11. References
 
 - [Governing original Camera Module Phase 0–8 roadmap](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
 - [AmScope implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md)

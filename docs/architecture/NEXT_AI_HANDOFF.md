@@ -5,10 +5,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Code baseline reviewed:** `808779f8f67d81ed99e66a2aff0b5b9f1cde1321`  
-**Documentation correction:** `3349a176e8ed6feb52d8167ed89b47379448eb02`  
-**Latest CI for code baseline:** [workflow #45733875474](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45733875474) — Intel x86_64 and Apple Silicon arm64 jobs passed, including GenTL tests and official GenApi 3.5.1 build/tests.  
-**Next implementation milestone:** **Phase 6 — capability, feature, command and model coverage.**
+**Latest reviewed implementation checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b`  
+**Latest CI:** [workflow #45742968336](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45742968336) — Intel x86_64 and Apple Silicon arm64 jobs passed for the Phase 6 AmScope corrections.  
+**Phase status:** **Phase 6 in progress** — initial source-to-test audit recorded; two narrow gaps corrected. Recheck the live branch tip before each session.
 
 ---
 
@@ -33,7 +32,7 @@ If older documents conflict with this owner direction or the current status ledg
 | 3 — Qt streaming separation | Excluded from active scope by owner decision | No Qt work. |
 | 4 — Reusable Qt UI | Excluded from active scope by owner decision | No UI or preview work. |
 | 5 — GenTL/GenApi integration | **Complete by owner direction** | Do not restart, duplicate, or replace the integration. External device qualification is separate Phase 8 evidence. |
-| 6 — Capability, feature, command and model coverage | **NEXT IMPLEMENTATION MILESTONE** | Start with a read-only coverage audit; implement only evidenced gaps. |
+| 6 — Capability, feature, command and model coverage | **IN PROGRESS** | Initial audit and two AmScope corrections complete; continue from the prioritized gaps in `CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md`. |
 | 7 — Packaging and external consumers | Open | Do not jump ahead of Phase 6. |
 | 8 — Hardware qualification and release | Open | Preserve as a separate evidence/release milestone. |
 
@@ -67,6 +66,12 @@ The separate Optika application owns presentation, UI, workspace, microscope sta
 12. Do not add Qt/UI dependencies to the active native library.
 
 ## 5. Phase 6 work package
+
+The initial source-to-test audit and two corrected gaps are recorded in
+[CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
+Continue from its prioritized remaining-gap matrix; do not repeat the initial
+audit or reopen Phase 5.
+
 
 ### 6.1 Create a source-grounded coverage matrix
 
@@ -147,4 +152,9 @@ Phase 8 remains responsible for exact-commit hardware records, supported provide
 
 ## 9. Immediate next action
 
-Perform a read-only Phase 6 audit of public capability, feature and command surfaces in `Camera/Common`, `Camera/Amscope` and `Camera/GenTL`. Trace every public item to implementation, model policy, tests and evidence. Return a prioritized gap matrix. Do not start by adding features or changing GenTL architecture. Implement the first confirmed gap only after its semantics and downstream impact are established.
+Continue with **P1: deterministic AmScope feature behavior tests** from
+[CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
+First design the smallest private testability boundary for descriptor
+construction and feature operations. Keep it separate from the lifecycle seam
+unless a specific operation requires reuse. Do not add a public SDK interface,
+change session ownership, or modify the completed GenTL integration.

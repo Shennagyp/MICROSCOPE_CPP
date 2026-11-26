@@ -10,8 +10,13 @@ The microscope has one physical motorized stage with an XY working surface and a
 
 The stage working surface is strictly 2D. It owns:
 - X/Y stage axis identities and units.
-- The usable XY working boundaries, validated against the stage axes' configured operating ranges.
-- A variable-size, user-authored collection of slide rectangles.
+- A user-defined XY origin and positive X/Y travel extents. The far boundaries are derived as origin plus travel extent and validated against the stage axes' configured operating ranges.
+- A variable-size, user-authored collection of slide rectangles, which is empty when a new canvas is created.
+- Immutable add, replace and remove operations for slide-rectangle snapshots.
+
+The workspace origin is not automatically the stop-point origin of any slide. Each slide's first CAD endpoint is supplied independently when that slide is drawn; the two origins may coincide only by explicit user choice.
+
+The initial canvas has no implicit slide count, default slide geometry or pre-populated rectangle. The empty workspace still has a valid machine-coordinate area and X/Y axis binding; slide-local projection is unavailable until a slide rectangle has been added.
 
 It does not own or store:
 - Z datum or slide height.
@@ -39,6 +44,8 @@ For slide-local point p_s=(u,v), stage point p_m is:
 The inverse applies the transpose of the 2D orthonormal basis. Mapping remains valid outside the selected slide footprint; insideSlide and insideWorkingSurface are reported separately.
 
 There is no slide-local Z coordinate in this rectangle model. A selected slide determines the XY reference frame only.
+
+The slide's stop-point coordinate is a stage-coordinate point supplied by the user for that rectangle. It is checked against the workspace through all four solved corners, but it is not inferred from the workspace origin.
 
 ## 3. Actual position and focus Z
 
@@ -83,7 +90,7 @@ The actual focus Z coordinate is independent of the slide rectangle and is not f
 
 ## 6. Integration boundary
 
-Core now defines the XY CAD working surface, slide rectangle transform, three-axis machine-position aggregate, physical-endstop reference, and safe full-range sweep state. The remaining Application work is to execute the full-range motion command through the correlated operation runtime, update the Z axis state from the resulting reference snapshot, publish immutable X/Y/Z snapshots, and expose the CAD editing/persistence workflow to the UI.
+Core now defines the XY CAD working surface, an initially empty canvas created from the user-defined origin and X/Y travel extents, immutable slide-rectangle add/replace/remove snapshots, the slide rectangle transform, the three-axis machine-position aggregate, physical-endstop reference, and safe full-range sweep state. The remaining Application work is to execute the full-range motion command through the correlated operation runtime, update the Z axis state from the resulting reference snapshot, publish immutable X/Y/Z snapshots, and expose interactive CAD drawing, undo/redo and persisted layout revisions to the UI.
 
 
 ## 7. Microscope focus Z and no-switch homing

@@ -213,8 +213,22 @@ enum class ConfigurationRequestError {
     DuplicateAdditionalOpticalComponent
 };
 
+// Identity of a camera choice resolved from one exact OperationMode revision
+// and one selected LightPath. It is retained with the request and any resolved
+// configuration so the choice can be audited and cannot be detached from its
+// originating selection context.
+struct LightPathConfigurationBinding final {
+    OperationModeId operationModeId;
+    std::uint64_t operationModeRevision = 0;
+    LightPathId lightPathId;
+    EquipmentComponentId cameraComponentId;
+    CameraModeId cameraModeId;
+};
+
 // An immutable selection request. It names concrete installed components and
 // device-supported modes; it does not claim that any selection is active yet.
+// Requests produced through LightPathConfigurationRequestFactory additionally
+// carry the source OperationMode/LightPath binding and camera-selection diagnostics.
 class ConfigurationRequest final {
 public:
     [[nodiscard]] static Result<
@@ -244,8 +258,18 @@ public:
     [[nodiscard]] const EquipmentComponentId& illuminationComponentId() const noexcept;
     [[nodiscard]] const IlluminationChannelId& illuminationChannelId() const noexcept;
     [[nodiscard]] ExposurePolicy exposurePolicy() const noexcept;
+    [[nodiscard]] const std::optional<LightPathConfigurationBinding>&
+    lightPathBinding() const noexcept;
+    [[nodiscard]] const Diagnostics& cameraSelectionDiagnostics() const noexcept;
 
 private:
+    friend class LightPathConfigurationRequestFactory;
+
+    ConfigurationRequest(
+        ConfigurationRequest base,
+        LightPathConfigurationBinding lightPathBinding,
+        Diagnostics cameraSelectionDiagnostics);
+
     ConfigurationRequest(
         ConfigurationProfileId profileId,
         ContrastMethod contrastMethod,
@@ -270,6 +294,8 @@ private:
     IlluminationChannelId illuminationChannelId_;
     ExposurePolicy exposurePolicy_;
     std::vector<EquipmentComponentId> selectedAdditionalOpticalComponentIds_;
+    std::optional<LightPathConfigurationBinding> lightPathBinding_;
+    Diagnostics cameraSelectionDiagnostics_;
 };
 
 // A validated desired microscope state, scoped to the exact installed

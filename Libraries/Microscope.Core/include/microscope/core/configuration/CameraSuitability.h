@@ -3,6 +3,7 @@
 #include "microscope/core/diagnostics/Diagnostic.h"
 #include "microscope/core/equipment/OpticalSpecifications.h"
 
+#include <cstdint>
 #include <optional>
 
 namespace microscope::core {

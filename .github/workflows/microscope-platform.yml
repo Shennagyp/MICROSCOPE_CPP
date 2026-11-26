@@ -7,12 +7,14 @@ on:
     paths:
       - "CMakeLists.txt"
       - "Libraries/**"
+      - "Camera/Common/**"
       - "docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md"
       - ".github/workflows/microscope-platform.yml"
   pull_request:
     paths:
       - "CMakeLists.txt"
       - "Libraries/**"
+      - "Camera/Common/**"
       - "docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md"
       - ".github/workflows/microscope-platform.yml"
   workflow_dispatch:

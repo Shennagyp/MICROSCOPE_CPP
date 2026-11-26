@@ -113,8 +113,7 @@ final class NativeCaptureGalleryStore: ObservableObject {
 
                 switch result {
                 case .success(let item):
-                    self.captures.insert(item, at: 0)
-                    self.trimGallery()
+                    self.retainCapture(item)
                 case .failure(let error):
                     self.captureErrorMessage = error.localizedDescription
                 }
@@ -150,6 +149,16 @@ final class NativeCaptureGalleryStore: ObservableObject {
 
     func dismissCaptureError() {
         captureErrorMessage = nil
+    }
+
+    private func retainCapture(_ item: NativeCaptureItem) {
+        // A capture can finish while the initial directory listing is in
+        // flight. Replace the metadata-only entry rather than retaining two
+        // in-memory objects for the same persisted file identity.
+        captures.removeAll { $0.id == item.id }
+        captures.insert(item, at: 0)
+        captures.sort { $0.capturedAt > $1.capturedAt }
+        trimGallery()
     }
 
     private func trimGallery() {
@@ -302,13 +311,12 @@ private enum NativeCaptureFileCodec {
 
         // Build the gallery item from the image already in memory. Do not
         // reopen the PNG that was just written merely to create its thumbnail.
-        guard let thumbnail = makeThumbnail(from: image),
-              let thumbnailData = encodeThumbnail(thumbnail) else {
-            return .failure(makeError(
-                "The PNG was saved, but its gallery thumbnail could not be generated. The file remains in the capture folder."
-            ))
+        let thumbnailData = makeThumbnail(from: image).flatMap {
+            encodeThumbnail($0)
         }
 
+        // The durable capture is successful even if its preview thumbnail
+        // cannot be produced now. The row can retry thumbnail loading lazily.
         return .success(NativeCaptureItem(
             id: url.lastPathComponent,
             fileURL: url,

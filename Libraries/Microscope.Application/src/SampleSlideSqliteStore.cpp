@@ -488,7 +488,9 @@ void writeOptionalBand(
     writer.optionalString(sampleType.description());
 
     const auto& requirements = sampleType.microscopyRequirements();
-    writer.count(requirements.techniques().size());
+    if (!writer.count(requirements.techniques().size())) {
+        return false;
+    }
     for (const auto& technique : requirements.techniques()) {
         writer.enumeration(technique.method);
         writer.enumeration(technique.kind);
@@ -792,7 +794,9 @@ void writeOptionalBand(
     writer.optionalString(preparation.mountingMediumName());
     writer.optionalReal(preparation.mountingMediumRefractiveIndex());
 
-    writer.count(preparation.labels().size());
+    if (!writer.count(preparation.labels().size())) {
+        return false;
+    }
     for (const auto& label : preparation.labels()) {
         writer.string(label.name());
         writer.enumeration(label.kind());
@@ -802,7 +806,9 @@ void writeOptionalBand(
         writer.boolean(label.emissionSpectrum().has_value());
         if (label.emissionSpectrum()) {
             const auto& samples = label.emissionSpectrum()->samples();
-            writer.count(samples.size());
+            if (!writer.count(samples.size())) {
+                return false;
+            }
             for (const auto& sample : samples) {
                 writer.real(sample.wavelength.value());
                 writer.real(sample.relativeIntensity);

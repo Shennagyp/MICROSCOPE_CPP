@@ -255,6 +255,10 @@ CameraSpecification attaches to the installed ImagingDevice EquipmentComponentId
 
 Do not assume sensor pitch alone maps directly to delivered pixels or that horizontal and vertical mapping ratios are equal. A camera is eligible for a requested acquisition only when it is the terminal imaging device of a route included in the selected LightPath.
 
+The Core `LightPathCameraResolver` consumes an OperationMode and selected LightPath. It derives candidate cameras exclusively from Imaging route terminal devices and only accepts manual camera selection among those endpoints. It also resolves the connected camera's declared output mode. A manually selected endpoint with poor or unknown suitability remains selected with warning diagnostics; a camera outside the selected LightPath is unsupported. If several cameras are connected, Core may recommend a unique task-suitable candidate, using global shutter only after task-specific sensor metrics; an equal ranking requires user selection.
+
+This resolver validates the microscope's declared equipment constitution. It does not establish that a physical camera session is currently connected, open or operable. Application must verify the live device capability/session before acquisition dispatch. The selected camera and camera-mode identity plus all suitability warnings must be retained in the resolved configuration and acquisition snapshot.
+
 The adapter supplies actual device capabilities and observations. The Core validates them against the definition and requested configuration.
 
 #### Camera model catalog and fluorescence suitability

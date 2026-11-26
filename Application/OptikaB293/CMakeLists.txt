@@ -68,6 +68,10 @@ target_compile_options(optika_b293_dualslide_app PRIVATE
     "$<$<COMPILE_LANGUAGE:Swift>:5>"
 )
 target_link_libraries(optika_b293_dualslide_app PRIVATE
+    # The native application consumes the same backend-neutral platform targets
+    # used by other hosts. No hardware adapter is implied by linking the libraries.
+    Microscope::Application
+    Microscope::Core
     Amscope::Driver
     "${OPTIKA_SWIFTUI_FRAMEWORK}"
     "${OPTIKA_APPKIT_FRAMEWORK}"

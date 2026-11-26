@@ -401,6 +401,73 @@ void testLightPathFactoryRejectsDuplicateRoutes() {
           "requires a non-empty selectable LightPath name");
 }
 
+void testInstalledFilterSpecificationsMatchOpticalFunctionsAndCompatibility() {
+    auto fixture = makeSharedSplitterFixture();
+    const auto filterId =
+        makeId<EquipmentComponentId>("installed-excitation-filter");
+    const auto compatibilityId =
+        makeId<OpticalCompatibilityId>("fluorescence-cube-set-A");
+    const auto filterComponent = take(EquipmentComponent::create(
+        filterId,
+        EquipmentComponentKind::OpticalElement,
+        {makePort("installed-filter-input", OpticalPortDirection::Input),
+         makePort("installed-filter-output", OpticalPortDirection::Output)},
+        {take(OpticalFunctionCapability::create(
+            OpticalElementFunction::ExcitationFilter, compatibilityId))}));
+    fixture.components.push_back(filterComponent);
+
+    const auto matchingFilter = take(OpticalFilterSpecification::create(
+        filterId,
+        OpticalFilterRole::Excitation,
+        {{take(PositiveNanometers::create(400.0)), 0.1, std::nullopt},
+         {take(PositiveNanometers::create(500.0)), 0.9, std::nullopt}},
+        compatibilityId));
+
+    auto valid = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        fixture.paths,
+        {}, {}, {}, {}, {}, {}, {},
+        {matchingFilter});
+    check(static_cast<bool>(valid),
+          "accepts an installed excitation filter whose role and compatibility match its optical function");
+
+    const auto wrongCompatibility = take(OpticalFilterSpecification::create(
+        filterId,
+        OpticalFilterRole::Excitation,
+        {{take(PositiveNanometers::create(400.0)), 0.1, std::nullopt},
+         {take(PositiveNanometers::create(500.0)), 0.9, std::nullopt}},
+        makeId<OpticalCompatibilityId>("fluorescence-cube-set-B")));
+    auto mismatch = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        fixture.paths,
+        {}, {}, {}, {}, {}, {}, {},
+        {wrongCompatibility});
+    check(!mismatch &&
+          mismatch.error() == EquipmentDefinitionError::FilterCompatibilityMismatch,
+          "rejects a filter profile whose compatibility identity differs from the installed optical capability");
+
+    const auto wrongRole = take(OpticalFilterSpecification::create(
+        filterId,
+        OpticalFilterRole::Emission,
+        {{take(PositiveNanometers::create(400.0)), 0.1, std::nullopt},
+         {take(PositiveNanometers::create(500.0)), 0.9, std::nullopt}},
+        compatibilityId));
+    auto roleMismatch = MicroscopeEquipmentDefinition::create(
+        fixture.microscopeId,
+        fixture.components,
+        fixture.connections,
+        fixture.paths,
+        {}, {}, {}, {}, {}, {}, {},
+        {wrongRole});
+    check(!roleMismatch &&
+          roleMismatch.error() == EquipmentDefinitionError::FilterOpticalFunctionMismatch,
+          "rejects an emission-filter record attached to an excitation-filter component");
+}
+
 void testStrongEquipmentIdentities() {
     static_assert(!std::is_convertible<
         EquipmentComponentId, DeviceId>::value,
@@ -794,6 +861,7 @@ void testPathAndPortFactoryValidation() {
 int main() {
     testStrongEquipmentIdentities();
     testSharedComponentsAndBranching();
+    testInstalledFilterSpecificationsMatchOpticalFunctionsAndCompatibility();
     testLightPathDerivesOnlyConnectedCameraEndpoints();
     testImagingRouteMustTerminateAtSpecifiedCamera();
     testLightPathMustContainAnImagingRoute();

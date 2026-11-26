@@ -33,18 +33,11 @@ bool inside(const StagePoint2D& point, const StagePoint2D& minimum,
 }
 bool rectangleInside(const SlideRectangleDefinition2D& rectangle,
     const StagePoint2D& minimum, const StagePoint2D& maximum) noexcept {
-    const auto& placement = rectangle.placement();
-    const auto& geometry = placement.geometry();
-    for (unsigned mask = 0; mask < 4; ++mask) {
-        const SlidePoint2D corner{
-            (mask & 1U) ? geometry.lengthMicrometers() : 0.0,
-            (mask & 2U) ? geometry.widthMicrometers() : 0.0
-        };
-        const auto mapped = placement.toStage(corner);
-        if (!mapped || !inside(mapped.value(), minimum, maximum))
-            return false;
-    }
-    return true;
+    const auto corners = rectangle.stageCorners();
+    return inside(corners.stopPoint, minimum, maximum) &&
+        inside(corners.lengthEdgeEnd, minimum, maximum) &&
+        inside(corners.widthEdgeEnd, minimum, maximum) &&
+        inside(corners.oppositeCorner, minimum, maximum);
 }
 }
 
@@ -211,7 +204,18 @@ SlideRectangleDefinition2D::create(
         return Result<SlideRectangleDefinition2D, SlideRectangleDefinitionError>::failure(
             SlideRectangleDefinitionError::PlacementRejected);
 
+    const StagePoint2D lengthEdgeEnd{
+        stop.xMicrometers + localXX * length,
+        stop.yMicrometers + localXY * length
+    };
+    const StagePoint2D widthEdgeEnd{
+        stop.xMicrometers + localYX * width,
+        stop.yMicrometers + localYY * width
+    };
     const StagePoint2D solved{stop.xMicrometers + solvedX, stop.yMicrometers + solvedY};
+    if (!finite(lengthEdgeEnd) || !finite(widthEdgeEnd) || !finite(solved))
+        return Result<SlideRectangleDefinition2D, SlideRectangleDefinitionError>::failure(
+            SlideRectangleDefinitionError::NonFiniteEndpoint);
     return Result<SlideRectangleDefinition2D, SlideRectangleDefinitionError>::success(
         SlideRectangleDefinition2D(std::move(id), std::move(revision), stop, handle,
             solved, axis, length, width, geometry.value(), std::move(placement).value()));
@@ -221,6 +225,21 @@ const CalibrationRevisionId& SlideRectangleDefinition2D::registrationRevision() 
 const StagePoint2D& SlideRectangleDefinition2D::stopPointEndpoint() const noexcept { return stopPoint_; }
 const StagePoint2D& SlideRectangleDefinition2D::drawnOppositeEndpoint() const noexcept { return drawnOppositeCorner_; }
 const StagePoint2D& SlideRectangleDefinition2D::solvedOppositeEndpoint() const noexcept { return solvedOppositeCorner_; }
+SlideRectangleCorners2D SlideRectangleDefinition2D::stageCorners() const noexcept {
+    const auto& origin = placement_.stopPointOrigin();
+    return {
+        origin,
+        {
+            origin.xMicrometers + placement_.localXAxisX() * geometry_.lengthMicrometers(),
+            origin.yMicrometers + placement_.localXAxisY() * geometry_.lengthMicrometers()
+        },
+        {
+            origin.xMicrometers + placement_.localYAxisX() * geometry_.widthMicrometers(),
+            origin.yMicrometers + placement_.localYAxisY() * geometry_.widthMicrometers()
+        },
+        solvedOppositeCorner_
+    };
+}
 SlideRectangleLengthAxis SlideRectangleDefinition2D::lengthAxis() const noexcept { return lengthAxis_; }
 double SlideRectangleDefinition2D::constrainedLengthMicrometers() const noexcept { return length_; }
 double SlideRectangleDefinition2D::constrainedWidthMicrometers() const noexcept { return width_; }

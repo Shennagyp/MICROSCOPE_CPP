@@ -153,41 +153,31 @@ Phase 7 requires baseline physical-camera smoke using the installed AmScope and 
 
 ## 9. Immediate next action — Phase 7
 
-Owner authorization is explicit. Do not ask again whether Phase 7 may start.
+**Automated package acceptance is complete.** Workflow [#45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) passed at CI definition commit `bdd39bd218e1f10a80266c7ea677d4f416f15aba` on Intel x86_64 and Apple Silicon arm64. Each architecture passed 28/28 CTest tests, installation and prefix relocation, clean Common/GenTL/GenApi/AmScope/Qt consumer configure/build/run, runtime-link inspection and architecture checks. The separate default-off vendor-runtime installation check passed on Apple Silicon.
 
-1. Use `Camera/CMakeLists.txt` as the reusable package entry point. The
-   repository root remains the application build.
-2. Export `Camera::Common`, `Camera::GenTLConsumerBridge`, optional
-   `Camera::GenTLGenApi`, `Amscope::Driver`, optional `Amscope::Qt`,
-   and optional `Camera::Qt` / `Camera::QtWidgets`.
-3. Keep components and dependencies selective. Common, GenTL and native
-   AmScope consumers must not acquire Qt. GenApi exports must depend on the
-   official GenApi 3.5.1 CMake package, not absolute workstation paths.
-4. Configure external consumers from `Camera/tests/consumers` against an
-   installed and relocated prefix. Do not pass source-tree include paths.
-5. Verify package build, tests, install, relocation and clean consumer builds
-   on Intel x86_64 and Apple Silicon arm64. Do not claim a pass until the
-   exact workflow run completes.
-6. Keep Phase 6 open/blocked at the frozen AmScope provider-test boundary.
+The next Phase 7 work is **not another package implementation pass**. It is the remaining release evidence:
+
+1. Obtain owner-run installed-artifact physical smoke records for the non-Qt
+   AmScope enumerate/open/read-setting/start/frame/stop/close path, the installed
+   Qt preview and descriptor-driven controls, and an installed GenTL consumer
+   with a real vendor CTI Producer and physical camera. These tests require
+   physical hardware and are not represented by hosted CI results. Respect the
+   owner's postponement of physical testing; do not simulate or claim it.
+2. Resolve AmScope SDK redistribution rights from the actual SDK license terms
+   or written vendor permission. The checked-in SDK tree has no license,
+   notice or EULA. The public downloads page points users to software licensing
+   terms, but the applicable SDK redistribution grant has not been obtained.
+   Keep `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF` for releases until
+   this is resolved. CI's opt-in is limited to ephemeral internal validation.
+3. Keep Phase 6 open/blocked at the frozen AmScope provider-test boundary.
    Do not modify AmScope provider source, tests, public contracts or runtime
-   behavior. Phase 7 CMake packaging metadata is the only AmScope-area change
-   authorized by this scope.
-7. Keep Phase 4 visual/workspace acceptance pending and physical MU503 UI
-   testing postponed; do not mark Phase 4 accepted.
-8. The reusable package defaults `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF`. The checked-in SDK tree contains no license/notice/EULA. Do not enable runtime bundling for a release until the actual SDK terms or written vendor permission establish redistribution rights; CI opts in only for ephemeral internal validation.
-9. Phase 7 also requires installed-artifact physical smoke: non-Qt AmScope
-   enumerate/open/read-setting/start/frame/stop/close; Qt AmScope preview and
-   descriptor-driven controls; and a GenTL installed consumer with a physical
-   CTI camera. Document vendor SDK redistribution requirements before
-   publication.
-10. Phase 8 expands qualification across the declared provider/model matrix,
-   long-duration and recovery cases, deployment configurations and release
-   acceptance.
+   behavior. Phase 7 CMake packaging metadata does not lift that freeze.
+4. Keep Phase 4 visual/workspace acceptance pending and physical MU503 UI
+   testing postponed. Do not mark Phase 4 accepted.
+5. Phase 8 remains the broader exact-commit provider/model qualification,
+   long-duration/recovery, deployment and release-acceptance phase.
 
-Package exports and runtime consumer smoke do not qualify physical camera
-operation. Before Phase 7 can close, run the installed non-Qt AmScope consumer
-through enumerate/open/read-setting/start/frame/stop/close, verify the installed
-Qt consumer's physical preview and feature controls, and test the installed
-GenTL package against a physical CTI camera. Document vendor SDK redistribution
-requirements. Phase 8 then covers the full provider/model qualification and
-release evidence.
+Do not repeat the completed Phase 7 package build/consumer work unless package
+inputs change or a regression requires it. The next software action is driven
+by an identified packaging defect; otherwise the remaining Phase 7 gates need
+physical evidence and the actual SDK licensing document.

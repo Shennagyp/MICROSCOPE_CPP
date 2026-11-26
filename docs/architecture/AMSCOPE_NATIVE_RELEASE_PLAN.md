@@ -264,13 +264,14 @@ Use `AMSCOPE_IMPLEMENTATION_INVENTORY.md` and `Camera/Amscope/README.md` as the 
 
 ### Phase 6 — CMake package and external consumers
 
-**Status: ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026).** The package entry
+**Status: AUTOMATED PACKAGE ACCEPTANCE PASSED; PHYSICAL RELEASE GATES OPEN.** The package entry
 point, namespaced exports, component-aware config/version files, clean
 Common/GenTL/GenApi/AmScope/Qt consumer fixtures and vendor-runtime opt-in
 are committed in `camera-v.2.0`. Package CI #45778844769 passed on both
 architectures (28/28 tests per architecture, relocated external consumers,
 runtime/architecture checks); the default-off vendor-runtime contract also
-passed on Apple Silicon. See
+passed on Apple Silicon. Installed-artifact physical AmScope/GenTL smoke and
+AmScope SDK redistribution clearance remain pending. See
 [Camera/README.md](../../Camera/README.md) and the canonical
 [Camera v2.0 status ledger](CAMERA_V2_DEVELOPMENT_STATUS.md).
 
@@ -291,8 +292,11 @@ passed on Apple Silicon. See
 6. Document required Qt components, bundled Amcam runtime selection,
    supported macOS architectures and build options.
 7. The checked-in vendor SDK tree contains no license/notice/EULA. The
-   reusable package defaults `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF`;
-   CI opts in only for ephemeral internal validation. Obtain and review the
+   public [AmScope software downloads page](https://amscope.com/pages/software-downloads)
+   directs users to software licensing terms, but the applicable SDK
+   redistribution grant has not been obtained or verified. The reusable
+   package defaults `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF`; CI
+   opts in only for ephemeral internal validation. Obtain and review the
    actual SDK terms or written vendor permission before redistributing the
    linked driver binary or vendor runtime. Preserve vendor notices.
 8. Build clean Common, GenTL, GenApi, AmScope and Qt consumers using

@@ -6,6 +6,7 @@
 #include <exception>
 #include <set>
 #include <system_error>
+#include <utility>
 
 namespace camera::gentl {
 namespace {

@@ -336,7 +336,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
         if (!selectedModeId) {
             appendDiagnostic(
                 diagnostics,
-                DiagnosticSeverity::Information,
+                DiagnosticSeverity::Warning,
                 "light_path_camera.output_mode_selection_required",
                 "The selected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
@@ -384,7 +384,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
         if (!selectedModeId) {
             appendDiagnostic(
                 diagnostics,
-                DiagnosticSeverity::Information,
+                DiagnosticSeverity::Warning,
                 "light_path_camera.output_mode_selection_required",
                 "The connected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
@@ -433,7 +433,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
 
             appendDiagnostic(
                 diagnostics,
-                DiagnosticSeverity::Information,
+                DiagnosticSeverity::Warning,
                 "light_path_camera.output_mode_selection_required",
                 "The best-ranked connected camera supports multiple output modes; select one before acquisition.",
                 lightPathId.value(),
@@ -448,7 +448,7 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
 
     appendDiagnostic(
         diagnostics,
-        DiagnosticSeverity::Information,
+        DiagnosticSeverity::Warning,
         "light_path_camera.camera_selection_required",
         "Multiple cameras are physically connected to the selected LightPath and no unique suitability winner was established. Select one of the listed camera endpoints.",
         lightPathId.value());

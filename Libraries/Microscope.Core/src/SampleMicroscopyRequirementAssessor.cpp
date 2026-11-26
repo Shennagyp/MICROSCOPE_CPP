@@ -267,6 +267,11 @@ void assessCondenser(
     }
 }
 
+[[nodiscard]] bool sourceBandHasPositivePower(
+    const SpectralPowerDistribution& spectrum,
+    const SpectralBand& band,
+    bool& completeCoverage);
+
 void assessIllumination(
     Diagnostics& diagnostics,
     const MicroscopeEquipmentDefinition& equipment,

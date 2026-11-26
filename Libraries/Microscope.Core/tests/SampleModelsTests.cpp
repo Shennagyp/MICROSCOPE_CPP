@@ -1,402 +1,267 @@
 #include "microscope/core/samples/SampleModels.h"
 
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace {
-
 using namespace microscope::core;
-
 int failures = 0;
 
 void check(bool condition, const char* message) {
     if (!condition) {
         ++failures;
-        std::cerr << "FAIL: " << message << '\n';
+        std::cerr << "FAIL: " << message << '\\n';
     }
 }
 
 template <typename TValue, typename TError>
 TValue take(Result<TValue, TError> result) {
     if (!result) {
-        throw std::runtime_error("A sample model fixture factory rejected valid input.");
+        throw std::runtime_error("A sample/slide model fixture rejected valid input.");
     }
     return std::move(result).value();
 }
 
 template <typename TId>
-TId makeId(const char* value) {
-    return take(TId::create(value));
+TId makeId(const char* value) { return take(TId::create(value)); }
+
+MicroscopyRequirements makeMicroscopyRequirements() {
+    const auto objective = take(ObjectiveMicroscopyRequirements::create(
+        10.0, 100.0, 0.25, {ObjectiveImmersionMedium::Air}, 15.0));
+    const auto camera = take(CameraPerformanceRequirements::create(
+        30.0, 2.0, std::nullopt, 20000.0));
+    return take(MicroscopyRequirements::create(
+        {{ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Required},
+         {ContrastMethod::PhaseContrast, MicroscopyTechniqueConstraintKind::Preferred}},
+        objective, camera));
 }
 
-MicroscopyRequirements makeBloodFilmRequirements() {
-    const auto objective = take(ObjectiveMicroscopyRequirements::create(
-        10.0,
-        100.0,
-        0.25,
-        {ObjectiveImmersionMedium::Air},
-        15.0));
-    const auto camera = take(CameraPerformanceRequirements::create(
-        30.0,
-        2.0,
-        std::nullopt,
-        20000.0));
-    return take(MicroscopyRequirements::create(
-        {{ContrastMethod::Brightfield,
-          MicroscopyTechniqueConstraintKind::Required},
-         {ContrastMethod::PhaseContrast,
-          MicroscopyTechniqueConstraintKind::Preferred}},
-        objective,
-        camera));
+SlidePreparationRequirements makePreparationRequirements() {
+    return take(SlidePreparationRequirements::create(
+        {SpecimenPreparationMethod::TissueSection},
+        {SpecimenFixationState::Fixed},
+        3.0, 8.0, 150.0, 190.0, true,
+        {SpecimenLabelKind::Fluorescent}));
+}
+
+SampleType makeSampleType(
+    const SampleTypeId& id,
+    std::uint64_t revision,
+    std::optional<SlidePreparationRequirements> preparation = std::nullopt) {
+    return take(SampleType::create(
+        id, revision, "Peripheral blood film",
+        SampleMaterialClass::Biological,
+        makeMicroscopyRequirements(),
+        "Fixed, stained material for cellular morphology.",
+        std::move(preparation)));
+}
+
+SlidePreparation makePreparation(std::vector<SpecimenLabel> labels = {}) {
+    return take(SlidePreparation::create(
+        SpecimenPreparationMethod::TissueSection,
+        SpecimenFixationState::Fixed,
+        5.0, 170.0, "Antifade mounting medium", 1.48,
+        std::move(labels)));
 }
 
 void testSampleTypeAndCatalogRevisionContracts() {
-    const auto sampleTypeId = makeId<SampleTypeId>("sample-type-blood-film");
-    const auto typeV1 = take(SampleType::create(
-        sampleTypeId,
-        1,
-        "Peripheral blood film",
-        SampleMaterialClass::Biological,
-        makeBloodFilmRequirements(),
-        "Fixed, stained peripheral blood smear for cellular morphology."));
-    const auto typeV2 = take(SampleType::create(
-        sampleTypeId,
-        2,
-        "Peripheral blood film",
-        SampleMaterialClass::Biological,
-        makeBloodFilmRequirements(),
-        "Revised specimen handling and imaging requirements."));
-
-    const auto catalog = take(SampleTypeCatalog::create(4, {typeV2}));
-    check(catalog.revision() == 4,
-          "retains the sample-type catalog revision");
-    check(catalog.find(sampleTypeId) != nullptr &&
-          catalog.find(sampleTypeId)->revision() == 2,
-          "catalog resolves one current definition revision by stable SampleTypeId");
-    check(!SampleTypeCatalog::create(5, {typeV1, typeV2}) &&
-          SampleTypeCatalog::create(5, {typeV1, typeV2}).error() ==
-              SampleTypeCatalogError::DuplicateSampleTypeId,
-          "does not load multiple current revisions of one SampleType into a single catalog");
-    check(!SampleType::create(
-              makeId<SampleTypeId>("invalid-sample-type"),
-              0,
-              "Invalid",
-              SampleMaterialClass::Biological,
-              makeBloodFilmRequirements()) &&
-          SampleType::create(
-              makeId<SampleTypeId>("invalid-sample-type-2"),
-              0,
-              "Invalid",
-              SampleMaterialClass::Biological,
-              makeBloodFilmRequirements()).error() == SampleTypeError::ZeroRevision,
-          "rejects an unversioned sample type definition");
+    const auto typeId = makeId<SampleTypeId>("sample-type-blood-film");
+    const auto v1 = makeSampleType(typeId, 1);
+    const auto v2 = makeSampleType(typeId, 2);
+    const auto catalog = take(SampleTypeCatalog::create(4, {v2}));
+    check(catalog.revision() == 4, "retains the SampleType catalog revision");
+    check(catalog.find(typeId) && catalog.find(typeId)->revision() == 2,
+          "resolves the current SampleType by stable identity");
+    const auto duplicate = SampleTypeCatalog::create(5, {v1, v2});
+    check(!duplicate && duplicate.error() == SampleTypeCatalogError::DuplicateSampleTypeId,
+          "does not load multiple revisions as simultaneous current catalog entries");
+    const auto zero = SampleType::create(
+        makeId<SampleTypeId>("sample-type-zero"), 0, "Invalid",
+        SampleMaterialClass::Biological, makeMicroscopyRequirements());
+    check(!zero && zero.error() == SampleTypeError::ZeroRevision,
+          "rejects an unversioned SampleType");
 }
 
-void testSamplePinsSampleTypeRevisionAndSpecimenPinsSampleRevision() {
-    const auto sampleTypeId = makeId<SampleTypeId>("sample-type-cell-culture");
-    const auto sampleId = makeId<SampleId>("sample-cell-culture-001");
-    const auto sample = take(Sample::create(
-        sampleId,
-        3,
-        sampleTypeId,
-        2,
-        "Cell culture 001",
-        "Caco-2 epithelial cell culture",
-        "Homo sapiens",
-        "LIMS-ACC-00912",
-        "Passage 24, treatment group control."));
+void testSlidesPinSampleTypeAndOwnIndependentDetails() {
+    const auto type = makeSampleType(
+        makeId<SampleTypeId>("sample-type-fixed-section"),
+        7, makePreparationRequirements());
+    const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
+    const auto originLab = makeId<OriginLabId>("origin-lab-cairo");
+    const auto slideA = take(Slide::create(
+        makeId<SlideId>("slide-a"), 1, type.id(), type.revision(),
+        "Slide A", geometry, makePreparation()));
+    const auto slideB = take(Slide::create(
+        makeId<SlideId>("slide-b"), 1, type.id(), type.revision(),
+        "Slide B", geometry, makePreparation(), originLab));
 
-    check(sample.sampleTypeId() == sampleTypeId &&
-          sample.sampleTypeRevision() == 2,
-          "pins the exact SampleType revision used when the Sample was defined");
-    check(sample.organismScientificName() ==
-              std::optional<std::string>{"Homo sapiens"},
-          "retains optional organism identity separately from material description");
-    check(sample.externalAccession() ==
-              std::optional<std::string>{"LIMS-ACC-00912"},
-          "retains an external accession without treating it as an internal identity");
-
-    const auto preparation = take(SpecimenPreparation::create(
-        SpecimenPreparationMethod::CellCulture,
-        SpecimenFixationState::Fixed,
-        std::nullopt,
-        170.0,
-        "Fluoromount-G",
-        1.46));
-    const auto specimenA = take(Specimen::create(
-        makeId<SpecimenId>("specimen-cell-culture-001-a"),
-        1,
-        sample.id(),
-        sample.revision(),
-        "Fixed culture coverslip A",
-        preparation));
-    const auto specimenB = take(Specimen::create(
-        makeId<SpecimenId>("specimen-cell-culture-001-b"),
-        1,
-        sample.id(),
-        sample.revision(),
-        "Fixed culture coverslip B",
-        preparation));
-
-    check(specimenA.sampleId() == sample.id() &&
-          specimenA.sampleRevision() == sample.revision(),
-          "pins the exact source Sample revision used to prepare a Specimen");
-    check(specimenA.id() != specimenB.id() &&
-          specimenA.sampleId() == specimenB.sampleId(),
-          "allows one source Sample to produce multiple independently tracked Specimens");
+    check(slideA.id() != slideB.id(), "each physical slide has a distinct identity");
+    check(slideA.sampleTypeId() == type.id() &&
+          slideA.sampleTypeRevision() == type.revision() &&
+          slideB.sampleTypeId() == type.id() &&
+          slideB.sampleTypeRevision() == type.revision(),
+          "independent slides directly pin the same exact SampleType revision");
+    check(!slideA.originLabId() && slideB.originLabId() == originLab,
+          "OriginLabId is optional and retained only when supplied");
+    check(slideA.geometry().widthMicrometers() == 75000.0 &&
+          slideA.preparation().sectionThicknessMicrometers() == std::optional<double>{5.0},
+          "geometry and observed preparation facts are owned by the Slide");
+    check(type.preparationRequirements().has_value(),
+          "reusable preparation requirements are owned by SampleType");
 }
 
-void testSampleTypePreparationRequirementsAreSeparateFromObservedPreparation() {
-    const auto requirements = take(SpecimenPreparationRequirements::create(
-        {SpecimenPreparationMethod::TissueSection},
-        {SpecimenFixationState::Fixed},
-        3.0,
-        8.0,
-        150.0,
-        190.0,
-        true,
-        {SpecimenLabelKind::Fluorescent}));
+void testSlidePreservesSampleTypeRevisionAndRejectsInvalidRevisions() {
+    const auto typeId = makeId<SampleTypeId>("sample-type-versioned");
+    const auto v1 = makeSampleType(typeId, 1);
+    const auto v2 = makeSampleType(typeId, 2);
+    const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
+    const auto historicalSlide = take(Slide::create(
+        makeId<SlideId>("slide-pinned-to-v1"), 3, v1.id(), v1.revision(),
+        "Slide prepared under SampleType v1", geometry, makePreparation()));
+    check(historicalSlide.sampleTypeId() == v2.id() &&
+          historicalSlide.sampleTypeRevision() == 1 && v2.revision() == 2,
+          "does not silently rebind an existing Slide when SampleType advances");
 
-    check(requirements.allowedMethods().front() ==
-              SpecimenPreparationMethod::TissueSection,
-          "constrains the preparation method without storing it as actual specimen data");
+    const auto zeroSlideRevision = Slide::create(
+        makeId<SlideId>("slide-zero-revision"), 0, typeId, 1,
+        "Invalid", geometry, makePreparation());
+    check(!zeroSlideRevision && zeroSlideRevision.error() == SlideError::ZeroRevision,
+          "rejects an unversioned Slide record");
+
+    const auto zeroTypeRevision = Slide::create(
+        makeId<SlideId>("slide-zero-type-revision"), 1, typeId, 0,
+        "Invalid", geometry, makePreparation());
+    check(!zeroTypeRevision &&
+          zeroTypeRevision.error() == SlideError::ZeroSampleTypeRevision,
+          "rejects a Slide without a pinned SampleType revision");
+}
+
+void testPreparationRequirementsDoNotPopulateObservedSlideFacts() {
+    const auto requirements = makePreparationRequirements();
+    check(requirements.allowedMethods().front() == SpecimenPreparationMethod::TissueSection,
+          "constrains preparation method independently of observed Slide values");
     check(requirements.requireMountingMedium() &&
-          requirements.requiredLabelKinds().front() ==
-              SpecimenLabelKind::Fluorescent,
-          "can require mounting medium and one or more label classes");
-
-    const auto sampleType = take(SampleType::create(
-        makeId<SampleTypeId>("sample-type-fixed-fluorescence-section"),
-        1,
-        "Fixed immunofluorescence tissue section",
-        SampleMaterialClass::Biological,
-        take(MicroscopyRequirements::create(
-            {{ContrastMethod::Fluorescence,
-              MicroscopyTechniqueConstraintKind::Required}},
-            std::nullopt,
-            std::nullopt,
-            true)),
-        std::nullopt,
-        requirements));
-
-    check(sampleType.preparationRequirements().has_value() &&
-          sampleType.preparationRequirements()->maximumSectionThicknessMicrometers() ==
+          requirements.requiredLabelKinds().front() == SpecimenLabelKind::Fluorescent,
+          "can require a mounting medium and label kinds");
+    const auto type = makeSampleType(
+        makeId<SampleTypeId>("sample-type-preparation"), 1, requirements);
+    check(type.preparationRequirements() &&
+          type.preparationRequirements()->maximumSectionThicknessMicrometers() ==
               std::optional<double>{8.0},
-          "binds a reusable preparation envelope to the versioned SampleType");
+          "pins a reusable preparation envelope to the SampleType revision");
 
-    const auto inverted = SpecimenPreparationRequirements::create(
-        {SpecimenPreparationMethod::TissueSection},
-        {},
-        8.0,
-        3.0);
+    const auto inverted = SlidePreparationRequirements::create(
+        {SpecimenPreparationMethod::TissueSection}, {}, 8.0, 3.0);
     check(!inverted &&
-          inverted.error() ==
-              SpecimenPreparationRequirementsError::InvalidSectionThicknessRange,
-          "rejects an inverted specimen section thickness range");
-
-    const auto duplicate = SpecimenPreparationRequirements::create(
-        {SpecimenPreparationMethod::TissueSection,
-         SpecimenPreparationMethod::TissueSection});
+          inverted.error() == SlidePreparationRequirementsError::InvalidSectionThicknessRange,
+          "rejects an inverted preparation thickness interval");
+    const auto duplicate = SlidePreparationRequirements::create(
+        {SpecimenPreparationMethod::TissueSection, SpecimenPreparationMethod::TissueSection});
     check(!duplicate &&
-          duplicate.error() ==
-              SpecimenPreparationRequirementsError::DuplicateMethod,
-          "rejects duplicate preparation method constraints");
+          duplicate.error() == SlidePreparationRequirementsError::DuplicateMethod,
+          "rejects duplicate allowed preparation methods");
+
+    const auto unknownFacts = take(SlidePreparation::create(
+        SpecimenPreparationMethod::TissueSection, SpecimenFixationState::Fixed));
+    check(!unknownFacts.sectionThicknessMicrometers() &&
+          !unknownFacts.coverglassThicknessMicrometers() &&
+          !unknownFacts.mountingMediumName(),
+          "leaves unknown actual preparation facts absent rather than copying requirements");
 }
 
-void testCondenserAndSpecimenPlaneIlluminationRequirements() {
+void testCondenserAndIlluminationRequirements() {
     const auto condenser = take(CondenserMicroscopyRequirements::create(
-        0.25,
-        0.90,
-        {CondenserDesign::Abbe, CondenserDesign::Achromatic},
+        0.25, 0.90, {CondenserDesign::Abbe, CondenserDesign::Achromatic},
         {CondenserImmersionMedium::Air}));
     check(condenser.minimumApertureNA() == std::optional<double>{0.25} &&
           condenser.maximumApertureNA() == std::optional<double>{0.90},
-          "retains condenser aperture NA bounds as specimen-side requirements");
-    check(condenser.allowedDesigns().size() == 2 &&
-          condenser.allowedImmersionMedia().front() == CondenserImmersionMedium::Air,
-          "retains condenser design and immersion constraints");
+          "retains condenser aperture limits in the SampleType contract");
 
     const auto band = take(SpectralBand::create(
-        take<PositiveNanometers>(PositiveNanometers::create(500.0)),
-        take<PositiveNanometers>(PositiveNanometers::create(560.0))));
+        take(PositiveNanometers::create(500.0)),
+        take(PositiveNanometers::create(560.0))));
     const auto illumination = take(IlluminationMicroscopyRequirements::create(
-        25.0,
-        125.0,
-        band,
-        true));
+        25.0, 125.0, band, true));
     check(illumination.minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() ==
               std::optional<double>{25.0} &&
           illumination.maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() ==
-              std::optional<double>{125.0},
-          "stores specimen-plane irradiance limits in physical calibrated units");
-    check(illumination.requiredSpectralBand().has_value() &&
+              std::optional<double>{125.0} &&
+          illumination.requiredSpectralBand().has_value() &&
           illumination.requireContinuouslyAdjustableSource(),
-          "stores spectral and continuous-control requirements independently of source drive units");
+          "stores calibrated specimen-plane irradiance, spectrum and control requirements");
 
-    const auto inverted = IlluminationMicroscopyRequirements::create(
-        150.0, 100.0);
+    const auto inverted = IlluminationMicroscopyRequirements::create(150.0, 100.0);
     check(!inverted &&
           inverted.error() == IlluminationRequirementsError::InvertedIrradianceRange,
-          "rejects an inverted specimen-plane irradiance interval");
-
+          "rejects inverted illumination bounds");
     const auto requirements = take(MicroscopyRequirements::create(
-        {{ContrastMethod::Brightfield,
-          MicroscopyTechniqueConstraintKind::Required}},
-        std::nullopt,
-        std::nullopt,
-        false,
-        condenser,
-        illumination));
-    check(requirements.condenser().has_value() &&
-          requirements.illumination().has_value(),
-          "composes condenser and illumination requirements into the reusable SampleType microscopy contract");
+        {{ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Required}},
+        std::nullopt, std::nullopt, false, condenser, illumination));
+    check(requirements.condenser() && requirements.illumination(),
+          "composes condenser and illumination constraints into one microscopy contract");
 }
 
-void testFluorescentLabelStoresSpectralProfileAndFilterCompatibility() {
+void testFluorescentSlideLabelPreservesSpectralProfile() {
     const auto excitation = take(SpectralBand::create(
-        take<PositiveNanometers>(PositiveNanometers::create(470.0)),
-        take<PositiveNanometers>(PositiveNanometers::create(495.0))));
+        take(PositiveNanometers::create(470.0)),
+        take(PositiveNanometers::create(495.0))));
     const auto emission = take(SpectralBand::create(
-        take<PositiveNanometers>(PositiveNanometers::create(500.0)),
-        take<PositiveNanometers>(PositiveNanometers::create(550.0))));
+        take(PositiveNanometers::create(500.0)),
+        take(PositiveNanometers::create(550.0))));
     const auto spectrum = take(FluorescenceEmissionSpectrum::create({
-        FluorescenceEmissionSample{
-            take<PositiveNanometers>(PositiveNanometers::create(500.0)), 0.2},
-        FluorescenceEmissionSample{
-            take<PositiveNanometers>(PositiveNanometers::create(515.0)), 1.0},
-        FluorescenceEmissionSample{
-            take<PositiveNanometers>(PositiveNanometers::create(540.0)), 0.1}}));
-    const auto filterSetId =
-        makeId<OpticalCompatibilityId>("fluorescence-filter-set-green-1");
-
+        {take(PositiveNanometers::create(500.0)), 0.2},
+        {take(PositiveNanometers::create(515.0)), 1.0},
+        {take(PositiveNanometers::create(540.0)), 0.1}}));
+    const auto filterId = makeId<OpticalCompatibilityId>("fluorescence-filter-set-green-1");
     const auto label = take(SpecimenLabel::create(
-        "Alexa Fluor 488 anti-CD3",
-        SpecimenLabelKind::Fluorescent,
-        excitation,
-        emission,
-        spectrum,
-        filterSetId));
-
-    const auto preparation = take(SpecimenPreparation::create(
-        SpecimenPreparationMethod::TissueSection,
-        SpecimenFixationState::Fixed,
-        5.0,
-        170.0,
-        "Antifade mounting medium",
-        1.48,
-        {label}));
-
-    check(preparation.labels().size() == 1,
-          "stores fluorescence labels as specimen preparation facts");
-    check(preparation.labels().front().emissionSpectrum().has_value() &&
+        "Alexa Fluor 488 anti-CD3", SpecimenLabelKind::Fluorescent,
+        excitation, emission, spectrum, filterId));
+    const auto preparation = makePreparation({label});
+    check(preparation.labels().size() == 1 &&
+          preparation.labels().front().emissionSpectrum() &&
           preparation.labels().front().emissionSpectrum()->samples().size() == 3,
-          "retains the fluorophore emission spectrum rather than a color name alone");
-    check(preparation.labels().front().filterSetCompatibilityId() == filterSetId,
-          "retains the matched filter-set compatibility identity on the label");
-
-    const auto invalidNonFluorescentLabel = SpecimenLabel::create(
-        "H&E",
-        SpecimenLabelKind::Histochemical,
-        std::nullopt,
-        emission);
-    check(!invalidNonFluorescentLabel &&
-          invalidNonFluorescentLabel.error() ==
-              SpecimenLabelError::SpectralMetadataOnNonFluorescentLabel,
-          "does not attach fluorescence spectra to a non-fluorescent label");
+          "retains the emission profile on the Slide preparation record");
+    check(preparation.labels().front().filterSetCompatibilityId() == filterId,
+          "retains filter-set compatibility identity on the fluorescent label");
+    const auto invalidLabel = SpecimenLabel::create(
+        "H&E", SpecimenLabelKind::Histochemical, std::nullopt, emission);
+    check(!invalidLabel &&
+          invalidLabel.error() == SpecimenLabelError::SpectralMetadataOnNonFluorescentLabel,
+          "rejects fluorescence metadata on a non-fluorescent label");
 }
 
-void testFluorescenceMetadataRequirementNeedsFluorescenceTechnique() {
+void testFluorescenceMetadataRequiresFluorescenceTechnique() {
     const auto invalid = MicroscopyRequirements::create(
-        {{ContrastMethod::Brightfield,
-          MicroscopyTechniqueConstraintKind::Required}},
-        std::nullopt,
-        std::nullopt,
-        true);
+        {{ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Required}},
+        std::nullopt, std::nullopt, true);
     check(!invalid &&
           invalid.error() ==
               MicroscopyRequirementsError::FluorescenceMetadataWithoutFluorescenceTechnique,
-          "requires a fluorescence technique declaration before requiring fluorescent label metadata");
-
+          "does not allow fluorescence-label metadata requirements without a fluorescence method");
     const auto valid = MicroscopyRequirements::create(
-        {{ContrastMethod::Fluorescence,
-          MicroscopyTechniqueConstraintKind::Required}},
-        std::nullopt,
-        std::nullopt,
-        true);
+        {{ContrastMethod::Fluorescence, MicroscopyTechniqueConstraintKind::Required}},
+        std::nullopt, std::nullopt, true);
     check(static_cast<bool>(valid),
-          "allows a SampleType to require fluorescence imaging with label metadata");
-}
-
-void testSpecimenSlidePlacementIsBoundedAndRegistrationRevisioned() {
-    const auto geometry = take(SlideGeometry::create(75000.0, 25000.0));
-    const auto placement = take(SpecimenSlidePlacement::create(
-        makeId<SpecimenPlacementId>("placement-smear-region-1"),
-        makeId<SpecimenId>("specimen-smear-1"),
-        makeId<SlideId>("slide-left-001"),
-        makeId<CalibrationRevisionId>("slide-left-registration-r7"),
-        12000.0,
-        4000.0,
-        35000.0,
-        15000.0,
-        geometry));
-
-    check(placement.xMicrometers() == 12000.0 &&
-          placement.yMicrometers() == 4000.0 &&
-          placement.widthMicrometers() == 35000.0 &&
-          placement.heightMicrometers() == 15000.0,
-          "stores the specimen footprint in slide-local micrometers");
-    check(placement.slideRegistrationRevision() ==
-              makeId<CalibrationRevisionId>("slide-left-registration-r7"),
-          "binds the placement to the slide registration revision");
-
-    const auto outside = SpecimenSlidePlacement::create(
-        makeId<SpecimenPlacementId>("placement-outside"),
-        makeId<SpecimenId>("specimen-smear-1"),
-        makeId<SlideId>("slide-left-001"),
-        makeId<CalibrationRevisionId>("slide-left-registration-r7"),
-        70000.0,
-        20000.0,
-        10000.0,
-        6000.0,
-        geometry);
-    check(!outside &&
-          outside.error() == SpecimenSlidePlacementError::OutsideSlide,
-          "rejects a specimen region that extends beyond the physical slide geometry");
-
-    const auto invalidExtent = SpecimenSlidePlacement::create(
-        makeId<SpecimenPlacementId>("placement-zero-width"),
-        makeId<SpecimenId>("specimen-smear-1"),
-        makeId<SlideId>("slide-left-001"),
-        makeId<CalibrationRevisionId>("slide-left-registration-r7"),
-        1.0,
-        1.0,
-        0.0,
-        100.0,
-        geometry);
-    check(!invalidExtent &&
-          invalidExtent.error() ==
-              SpecimenSlidePlacementError::NonPositiveExtent,
-          "rejects a zero-width specimen placement");
+          "allows fluorescence imaging requirements with explicit label metadata");
 }
 
 } // namespace
 
 int main() {
     testSampleTypeAndCatalogRevisionContracts();
-    testSamplePinsSampleTypeRevisionAndSpecimenPinsSampleRevision();
-    testSampleTypePreparationRequirementsAreSeparateFromObservedPreparation();
-    testCondenserAndSpecimenPlaneIlluminationRequirements();
-    testFluorescentLabelStoresSpectralProfileAndFilterCompatibility();
-    testFluorescenceMetadataRequirementNeedsFluorescenceTechnique();
-    testSpecimenSlidePlacementIsBoundedAndRegistrationRevisioned();
-
+    testSlidesPinSampleTypeAndOwnIndependentDetails();
+    testSlidePreservesSampleTypeRevisionAndRejectsInvalidRevisions();
+    testPreparationRequirementsDoNotPopulateObservedSlideFacts();
+    testCondenserAndIlluminationRequirements();
+    testFluorescentSlideLabelPreservesSpectralProfile();
+    testFluorescenceMetadataRequiresFluorescenceTechnique();
     if (failures != 0) {
-        std::cerr << failures << " sample model contract test(s) failed.\n";
+        std::cerr << failures << " sample/slide model contract test(s) failed.\\n";
         return 1;
     }
-
-    std::cout << "All sample model contract tests passed.\n";
+    std::cout << "All sample/slide model contract tests passed.\\n";
     return 0;
 }

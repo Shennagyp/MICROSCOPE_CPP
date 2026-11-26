@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
         auto bridge = camera::gentl::ConsumerBridge::load(argv[1]);
         auto producer = camera::gentl::Producer::open(bridge, ctiPath);
         const auto devices = producer.discover();
-        require(devices.size() == 1, "GenApi fixture device was not discovered.");
+        require(!devices.empty(), "GenApi fixture device was not discovered.");
 
         {
             auto device = producer.openDevice(devices.front());

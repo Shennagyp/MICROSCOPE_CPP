@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
                         "Frame IDs or timestamps were not reported consistently.");
                 }
                 if (frame->payload.front() !=
-                    static_cast<std::uint8_t>(0x30 + sequenceOffset + index)) {
+                    static_cast<std::uint8_t>(0x30 + index)) {
                     throw std::runtime_error(
                         "Frame payload did not advance with the simulated frame sequence.");
                 }

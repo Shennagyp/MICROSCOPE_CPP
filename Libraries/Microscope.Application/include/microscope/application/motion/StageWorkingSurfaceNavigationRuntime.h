@@ -976,19 +976,36 @@ private:
         }
 
         const auto& operation = active_->execution.commandContext.operation();
-        auto failed = operationRuntime_->recordPreDispatchFailure(
+        if (dispatch == DispatchDisposition::PreDispatchRejected) {
+            auto failed = operationRuntime_->recordPreDispatchFailure(
+                operation.operationId, operation.stepId);
+            if (!failed) {
+                return failure(
+                    StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
+                    std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                    std::nullopt, failed.error());
+            }
+        }
+
+        // AdapterRejected is already terminalized by StageMotionCommandDispatcher.
+        const auto stepStatus = operationRuntime_->stepStatus(
             operation.operationId, operation.stepId);
-        if (!failed) {
+        const auto snapshot = operationRuntime_->operationSnapshot(operationId);
+        if (!stepStatus || !snapshot ||
+            stepStatus.value() != core::StepStatus::Failed ||
+            snapshot.value().status() != core::OperationStatus::Failed) {
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                std::nullopt, failed.error());
+                std::nullopt,
+                !stepStatus ? std::optional<core::SerializedOperationRuntimeError>(stepStatus.error())
+                : !snapshot ? std::optional<core::SerializedOperationRuntimeError>(snapshot.error())
+                : std::nullopt);
         }
-        const auto snapshot = operationRuntime_->operationSnapshot(operationId);
+
         active_.reset();
         return success(StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
-                       snapshot ? std::optional<core::OperationSnapshot>(snapshot.value())
-                                : std::nullopt);
+                       std::move(snapshot).value());
     }
 
     [[nodiscard]] Result processMoveCompletion(const FeedbackResult& feedback) {

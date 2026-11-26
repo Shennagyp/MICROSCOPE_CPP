@@ -217,13 +217,13 @@ Persistence is implemented in the Application layer:
 - `sample_type_current` and `slide_current` pointers are updated in the same `BEGIN IMMEDIATE` transaction as the revision insert.
 - `slide_revision` has a composite foreign key to the exact `(sample_type_id, sample_type_revision)` row. A Slide cannot be saved against merely the latest SampleType when its pinned revision is absent.
 - Revision writes use compare-and-swap `expectedCurrentRevision`; database triggers enforce sequential revision insertion, monotonic current-pointer advancement, and reject direct UPDATE/DELETE of history or deletion/rewind of current pointers.
-- Versioned, bounded little-endian payload codecs round-trip complete objective/camera/condenser/illumination/technique/preparation requirements, Slide geometry and measured preparation, fluorescent excitation/emission metadata, emission spectrum, filter-set compatibility identity and optional OriginLabId.
+- Versioned, bounded little-endian payload codecs round-trip complete objective/camera/condenser/illumination/technique/preparation requirements, Slide geometry and measured preparation, fluorescent excitation/emission metadata, emission spectrum, filter-set compatibility identity and optional OriginLabId. Every stored enum has an explicit stable numeric tag checked by compile-time assertions.
 - Tests cover historical revision retrieval, full model round-trip, exact-revision foreign-key rejection, stale writers across independent connections, direct SQL mutation/deletion/gap-insertion/rewind rejection, reopen/recovery and no partial Slide record on failed writes.
 
 Still outstanding:
 - Native workspace loading/editing and application-level save/dirty lifecycle for Slides and SampleType definitions; the store is not yet wired into Swift composition.
 - Migration tooling for any legacy external Sample/Specimen/SlideType data. This store introduces a new versioned schema but does not import legacy records.
-- Schema/payload compatibility is versioned; a future payload change must add an explicit migration or a new payload format version rather than reinterpret format 1.
+- Schema/payload compatibility is versioned; stable enum tags must not be renumbered. Any changed tag or payload layout requires a new payload format version and an explicit historical-payload migration rather than reinterpreting format 1.
 - No patient identity, Sample instance identity or patient relationship is part of this microscope model.
 
 ## 7. Execution policy and result reporting

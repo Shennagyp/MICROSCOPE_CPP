@@ -49,12 +49,12 @@ public:
     using CompletionResult =
         core::Result<core::OperationSnapshot, StageWorkingSurfaceNavigationExecutionError>;
 
-    // Host/application allocates the operation, step and command identities.
-    // The operation must already be Running and the step Pending.
+    // The stateful StageWorkingSurfaceNavigationRuntime owns operation identity
+    // allocation and lifecycle. This executor receives that existing operation
+    // context and a destination captured against a specific slide revision.
     [[nodiscard]] static Result begin(
         const core::StageWorkingSurface2D& surface,
-        const core::SlideId& slideId,
-        core::SlidePoint2D destination,
+        const core::SlideNavigationTarget2D& target,
         const core::StagePosition3D& position,
         const core::StageXYHomingPolicy& homingPolicy,
         core::RuntimeDeviceCorrelation runtimeDevice,
@@ -63,8 +63,8 @@ public:
         core::CommandId commandId,
         core::IStageMotionPort& port,
         Runtime& runtime) {
-        auto plan = core::StageWorkingSurfaceNavigationPlanner::planToSlidePoint(
-            surface, slideId, destination, position, homingPolicy);
+        auto plan = core::StageWorkingSurfaceNavigationPlanner::plan(
+            surface, target, position, homingPolicy);
         if (!plan) {
             return Result::failure(StageWorkingSurfaceNavigationExecutionError{
                 StageWorkingSurfaceNavigationExecutionErrorCode::PlanningRejected,

@@ -124,7 +124,11 @@ void mergeCapabilities(
             addWarning(
                 warnings,
                 "camera.model_profile.capability_conflict",
-                "A live camera capability conflicts with the persisted model profile; the live backend capability was retained.");
+                modelSourceReference.empty()
+                    ? "A live camera capability conflicts with the persisted model profile; the live backend capability was retained."
+                    : "A live camera capability conflicts with the persisted model profile (source: " +
+                          modelSourceReference +
+                          "); the live backend capability was retained.");
         }
     }
 }
@@ -345,6 +349,7 @@ CameraModelEnrichmentResult CameraModelDiscoveryEnricher::enrich(
     mergeCapabilities(
         result.deviceInfo.capabilities,
         profile->capabilities(),
+        profile->sourceReference(),
         result.warnings);
 
     mergeSensorCharacteristics(

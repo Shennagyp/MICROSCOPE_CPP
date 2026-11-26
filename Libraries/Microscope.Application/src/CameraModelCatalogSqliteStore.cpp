@@ -779,10 +779,10 @@ core::Status<CameraModelCatalogStoreError> CameraModelCatalogSqliteStore::save(
         const auto& sensor = profile.sensorCharacteristics();
         if (profile.profileRevision() == 0 ||
             profile.profileRevision() > kMaximumSqliteInteger ||
-            key.manufacturer.find('\\0') != std::string::npos ||
-            key.model.find('\\0') != std::string::npos ||
-            (key.variant && key.variant->find('\\0') != std::string::npos) ||
-            profile.sourceReference().find('\\0') != std::string::npos) {
+            key.manufacturer.find('\0') != std::string::npos ||
+            key.model.find('\0') != std::string::npos ||
+            (key.variant && key.variant->find('\0') != std::string::npos) ||
+            profile.sourceReference().find('\0') != std::string::npos) {
             return failureStatus(makeError(
                 StoreErrorCode::InvalidPersistedProfile,
                 database_,

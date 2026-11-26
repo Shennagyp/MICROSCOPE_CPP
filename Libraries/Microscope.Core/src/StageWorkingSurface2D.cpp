@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <utility>
 
 namespace microscope::core {
@@ -30,7 +31,37 @@ bool inside(const StagePoint2D& point, const StagePoint2D& minimum,
         point.yMicrometers >= minimum.yMicrometers &&
         point.yMicrometers <= maximum.yMicrometers;
 }
+bool rectangleInside(const SlideRectangleDefinition2D& rectangle,
+    const StagePoint2D& minimum, const StagePoint2D& maximum) noexcept {
+    const auto& placement = rectangle.placement();
+    const auto& geometry = placement.geometry();
+    for (unsigned mask = 0; mask < 4; ++mask) {
+        const SlidePoint2D corner{
+            (mask & 1U) ? geometry.lengthMicrometers() : 0.0,
+            (mask & 2U) ? geometry.widthMicrometers() : 0.0
+        };
+        const auto mapped = placement.toStage(corner);
+        if (!mapped || !inside(mapped.value(), minimum, maximum))
+            return false;
+    }
+    return true;
 }
+}
+
+StageTravelRange2D::StageTravelRange2D(double x, double y) noexcept : x_(x), y_(y) {}
+Result<StageTravelRange2D, StageTravelRange2DError> StageTravelRange2D::create(
+    double x, double y) {
+    if (!std::isfinite(x) || !std::isfinite(y))
+        return Result<StageTravelRange2D, StageTravelRange2DError>::failure(
+            StageTravelRange2DError::NonFiniteRange);
+    if (x <= 0.0 || y <= 0.0)
+        return Result<StageTravelRange2D, StageTravelRange2DError>::failure(
+            StageTravelRange2DError::NonPositiveRange);
+    return Result<StageTravelRange2D, StageTravelRange2DError>::success(
+        StageTravelRange2D(x, y));
+}
+double StageTravelRange2D::xMicrometers() const noexcept { return x_; }
+double StageTravelRange2D::yMicrometers() const noexcept { return y_; }
 
 SlideGeometry2D::SlideGeometry2D(double length, double width) noexcept
     : length_(length), width_(width) {}
@@ -198,10 +229,11 @@ const SlidePlacement2D& SlideRectangleDefinition2D::placement() const noexcept {
 
 StageWorkingSurface2D::StageWorkingSurface2D(EquipmentComponentId stage, StageAxisId x,
     StageAxisId y, AxisCoordinateUnit xu, AxisCoordinateUnit yu,
-    StagePoint2D minimum, StagePoint2D maximum, SlideRectangles rectangles) noexcept
+    StagePoint2D minimum, StagePoint2D maximum, StageTravelRange2D travelRange,
+    SlideRectangles rectangles) noexcept
     : stageComponentId_(std::move(stage)), xAxisId_(std::move(x)), yAxisId_(std::move(y)),
       xUnit_(xu), yUnit_(yu), minimumBoundary_(minimum), maximumBoundary_(maximum),
-      rectangles_(std::move(rectangles)) {}
+      travelRange_(travelRange), rectangles_(std::move(rectangles)) {}
 
 Result<StageWorkingSurface2D, StageWorkingSurface2DError> StageWorkingSurface2D::create(
     const StageSpecification& stage, StageAxisId x, StageAxisId y,
@@ -213,6 +245,12 @@ Result<StageWorkingSurface2D, StageWorkingSurface2DError> StageWorkingSurface2D:
         minimum.yMicrometers >= maximum.yMicrometers)
         return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
             StageWorkingSurface2DError::InvalidBoundary);
+    auto travelRange = StageTravelRange2D::create(
+        maximum.xMicrometers - minimum.xMicrometers,
+        maximum.yMicrometers - minimum.yMicrometers);
+    if (!travelRange)
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::TravelRangeNotRepresentable);
     if (x == y)
         return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
             StageWorkingSurface2DError::DuplicateStageAxis);
@@ -229,8 +267,10 @@ Result<StageWorkingSurface2D, StageWorkingSurface2DError> StageWorkingSurface2D:
             StageWorkingSurface2DError::UnsupportedStageAxisUnit);
     const auto fits = [](const AxisSpecification& axis, double lo, double hi) {
         const auto& range = axis.operatingRange();
-        return lo >= toMicrometers(range.minimum(), axis.coordinateUnit()) &&
-            hi <= toMicrometers(range.maximum(), axis.coordinateUnit());
+        const double axisMinimum = toMicrometers(range.minimum(), axis.coordinateUnit());
+        const double axisMaximum = toMicrometers(range.maximum(), axis.coordinateUnit());
+        return std::isfinite(axisMinimum) && std::isfinite(axisMaximum) &&
+            lo >= axisMinimum && hi <= axisMaximum;
     };
     if (!fits(*xa, minimum.xMicrometers, maximum.xMicrometers) ||
         !fits(*ya, minimum.yMicrometers, maximum.yMicrometers))
@@ -243,30 +283,100 @@ Result<StageWorkingSurface2D, StageWorkingSurface2DError> StageWorkingSurface2D:
                 return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
                     StageWorkingSurface2DError::DuplicateSlideIdentity);
         }
-        const auto& placement = rectangles[i].placement();
-        const auto& geometry = placement.geometry();
-        for (unsigned mask = 0; mask < 4; ++mask) {
-            const SlidePoint2D corner{
-                (mask & 1U) ? geometry.lengthMicrometers() : 0.0,
-                (mask & 2U) ? geometry.widthMicrometers() : 0.0
-            };
-            const auto mapped = placement.toStage(corner);
-            if (!mapped || !inside(mapped.value(), minimum, maximum))
-                return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
-                    StageWorkingSurface2DError::SlideOutsideWorkingSurface);
-        }
+        if (!rectangleInside(rectangles[i], minimum, maximum))
+            return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+                StageWorkingSurface2DError::SlideOutsideWorkingSurface);
     }
 
     return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::success(
         StageWorkingSurface2D(stage.componentId(), std::move(x), std::move(y),
             xa->coordinateUnit(), ya->coordinateUnit(), minimum, maximum,
-            std::move(rectangles)));
+            travelRange.value(), std::move(rectangles)));
 }
+Result<StageWorkingSurface2D, StageWorkingSurface2DError> StageWorkingSurface2D::createEmpty(
+    const StageSpecification& stage, StageAxisId x, StageAxisId y,
+    StagePoint2D origin, StageTravelRange2D travelRange) {
+    if (!finite(origin))
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::NonFiniteOrigin);
+    const StagePoint2D maximum{
+        origin.xMicrometers + travelRange.xMicrometers(),
+        origin.yMicrometers + travelRange.yMicrometers()
+    };
+    if (!finite(maximum) ||
+        maximum.xMicrometers <= origin.xMicrometers ||
+        maximum.yMicrometers <= origin.yMicrometers)
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::TravelRangeNotRepresentable);
+
+    auto validated = create(stage, x, y, origin, maximum, {});
+    if (!validated)
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            validated.error());
+    const auto& surface = validated.value();
+    return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::success(
+        StageWorkingSurface2D(surface.stageComponentId(), surface.xAxisId(), surface.yAxisId(),
+            surface.xAxisUnit(), surface.yAxisUnit(), origin, maximum,
+            travelRange, {}));
+}
+
+Result<StageWorkingSurface2D, StageWorkingSurface2DError>
+StageWorkingSurface2D::withSlideRectangle(const SlideRectangleDefinition2D& rectangle) const {
+    for (const auto& existing : rectangles_) {
+        if (existing.slideId() == rectangle.slideId())
+            return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+                StageWorkingSurface2DError::DuplicateSlideIdentity);
+    }
+    if (!rectangleInside(rectangle, minimumBoundary_, maximumBoundary_))
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::SlideOutsideWorkingSurface);
+    auto rectangles = rectangles_;
+    rectangles.push_back(rectangle);
+    return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::success(
+        StageWorkingSurface2D(stageComponentId_, xAxisId_, yAxisId_, xUnit_, yUnit_,
+            minimumBoundary_, maximumBoundary_, travelRange_, std::move(rectangles)));
+}
+
+Result<StageWorkingSurface2D, StageWorkingSurface2DError>
+StageWorkingSurface2D::replacingSlideRectangle(
+    const SlideRectangleDefinition2D& rectangle) const {
+    auto it = std::find_if(rectangles_.begin(), rectangles_.end(),
+        [&](const auto& existing) { return existing.slideId() == rectangle.slideId(); });
+    if (it == rectangles_.end())
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::SlideNotFound);
+    if (!rectangleInside(rectangle, minimumBoundary_, maximumBoundary_))
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::SlideOutsideWorkingSurface);
+    auto rectangles = rectangles_;
+    const auto index = static_cast<std::size_t>(std::distance(rectangles_.begin(), it));
+    rectangles[index] = rectangle;
+    return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::success(
+        StageWorkingSurface2D(stageComponentId_, xAxisId_, yAxisId_, xUnit_, yUnit_,
+            minimumBoundary_, maximumBoundary_, travelRange_, std::move(rectangles)));
+}
+
+Result<StageWorkingSurface2D, StageWorkingSurface2DError>
+StageWorkingSurface2D::withoutSlideRectangle(const SlideId& slideId) const {
+    auto rectangles = rectangles_;
+    const auto it = std::find_if(rectangles.begin(), rectangles.end(),
+        [&](const auto& rectangle) { return rectangle.slideId() == slideId; });
+    if (it == rectangles.end())
+        return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::failure(
+            StageWorkingSurface2DError::SlideNotFound);
+    rectangles.erase(it);
+    return Result<StageWorkingSurface2D, StageWorkingSurface2DError>::success(
+        StageWorkingSurface2D(stageComponentId_, xAxisId_, yAxisId_, xUnit_, yUnit_,
+            minimumBoundary_, maximumBoundary_, travelRange_, std::move(rectangles)));
+}
+
 const EquipmentComponentId& StageWorkingSurface2D::stageComponentId() const noexcept { return stageComponentId_; }
 const StageAxisId& StageWorkingSurface2D::xAxisId() const noexcept { return xAxisId_; }
 const StageAxisId& StageWorkingSurface2D::yAxisId() const noexcept { return yAxisId_; }
 AxisCoordinateUnit StageWorkingSurface2D::xAxisUnit() const noexcept { return xUnit_; }
 AxisCoordinateUnit StageWorkingSurface2D::yAxisUnit() const noexcept { return yUnit_; }
+const StagePoint2D& StageWorkingSurface2D::origin() const noexcept { return minimumBoundary_; }
+const StageTravelRange2D& StageWorkingSurface2D::travelRange() const noexcept { return travelRange_; }
 const StagePoint2D& StageWorkingSurface2D::minimumBoundary() const noexcept { return minimumBoundary_; }
 const StagePoint2D& StageWorkingSurface2D::maximumBoundary() const noexcept { return maximumBoundary_; }
 const StageWorkingSurface2D::SlideRectangles& StageWorkingSurface2D::slideRectangles() const noexcept { return rectangles_; }

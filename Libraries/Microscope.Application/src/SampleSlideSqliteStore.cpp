@@ -20,6 +20,28 @@ using StoreError = SampleSlideStoreError;
 using StoreErrorCode = SampleSlideStoreErrorCode;
 using namespace core;
 
+// Payload format 1 stores these enum values as fixed int32 tags. The domain
+// declarations pin their numeric values; changing a tag requires a new codec
+// version and an explicit historical-payload migration.
+static_assert(static_cast<std::int32_t>(ContrastMethod::Brightfield) == 0);
+static_assert(static_cast<std::int32_t>(ContrastMethod::Unknown) == 7);
+static_assert(static_cast<std::int32_t>(ObjectiveImmersionMedium::Air) == 0);
+static_assert(static_cast<std::int32_t>(ObjectiveImmersionMedium::Unknown) == 6);
+static_assert(static_cast<std::int32_t>(CondenserDesign::Abbe) == 0);
+static_assert(static_cast<std::int32_t>(CondenserDesign::Unknown) == 4);
+static_assert(static_cast<std::int32_t>(CondenserImmersionMedium::Air) == 0);
+static_assert(static_cast<std::int32_t>(CondenserImmersionMedium::Unknown) == 4);
+static_assert(static_cast<std::int32_t>(SampleMaterialClass::Biological) == 0);
+static_assert(static_cast<std::int32_t>(SampleMaterialClass::Unknown) == 6);
+static_assert(static_cast<std::int32_t>(MicroscopyTechniqueConstraintKind::Required) == 0);
+static_assert(static_cast<std::int32_t>(MicroscopyTechniqueConstraintKind::Prohibited) == 3);
+static_assert(static_cast<std::int32_t>(SpecimenPreparationMethod::Smear) == 0);
+static_assert(static_cast<std::int32_t>(SpecimenPreparationMethod::Unknown) == 8);
+static_assert(static_cast<std::int32_t>(SpecimenFixationState::Live) == 0);
+static_assert(static_cast<std::int32_t>(SpecimenFixationState::Unknown) == 4);
+static_assert(static_cast<std::int32_t>(SpecimenLabelKind::Fluorescent) == 0);
+static_assert(static_cast<std::int32_t>(SpecimenLabelKind::Other) == 3);
+
 constexpr std::uint32_t kPayloadFormatVersion = 1;
 constexpr std::uint32_t kMaximumCollectionCount = 100000;
 constexpr std::uint32_t kMaximumStringBytes = 1024 * 1024;

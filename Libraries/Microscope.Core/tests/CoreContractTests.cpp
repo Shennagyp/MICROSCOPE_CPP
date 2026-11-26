@@ -30,6 +30,8 @@ void testStrongIdentityTypes() {
                   "raw strings must not implicitly construct SampleTypeId");
     static_assert(!std::is_convertible<SampleTypeId, SlideId>::value,
                   "SampleTypeId must not convert to SlideId");
+    static_assert(!std::is_convertible<OriginLabId, SlideId>::value,
+                  "OriginLabId must not convert to SlideId");
     static_assert(!std::is_convertible<SlideId, TileId>::value,
                   "SlideId must not convert to TileId");
     static_assert(!std::is_convertible<RuntimeId, MicroscopeId>::value,

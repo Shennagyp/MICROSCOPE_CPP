@@ -242,7 +242,15 @@ int32_t gentl_consumer_invoke(
         if (arguments[1] == 0x2000) {
             const size_t available = sizeof(mock_xml) - 1;
             if (*size > available) return GC_ERR_INVALID_PARAMETER;
-            memcpy(bytes, mock_xml, *size);
+            if (getenv("MOCK_GENTL_MALFORMED_GENAPI_XML")) {
+                static const char malformed[] = "<RegisterDescription>";
+                memset(bytes, ' ', *size);
+                const size_t malformedSize = sizeof(malformed) - 1;
+                if (*size < malformedSize) return GC_ERR_INVALID_PARAMETER;
+                memcpy(bytes, malformed, malformedSize);
+            } else {
+                memcpy(bytes, mock_xml, *size);
+            }
             return GC_ERR_SUCCESS;
         }
         if (fails_at_address("MOCK_GENTL_FAIL_PORT_READ_ADDRESS", arguments[1]))

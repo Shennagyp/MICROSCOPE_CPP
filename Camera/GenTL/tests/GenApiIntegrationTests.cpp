@@ -395,6 +395,29 @@ int main(int argc, char** argv) {
                     "Read-only GenApi port accepted a command.");
         }
 
+        {
+            setenv("MOCK_GENTL_MALFORMED_GENAPI_XML", "1", 1);
+            bool malformedXmlRejected = false;
+            try {
+                auto malformedDevice = producer.openDevice(devices.front());
+                camera::gentl::GenApiDeviceAccess malformed(
+                    std::move(malformedDevice));
+            } catch (...) {
+                malformedXmlRejected = true;
+            }
+            unsetenv("MOCK_GENTL_MALFORMED_GENAPI_XML");
+            require(malformedXmlRejected,
+                    "Malformed GenApi XML was accepted as a valid node map.");
+
+            auto recoveredDevice = producer.openDevice(devices.front());
+            camera::gentl::GenApiDeviceAccess recovered(
+                std::move(recoveredDevice));
+            auto recoveredFeatures = recovered.features().featureDescriptors();
+            require(std::holds_alternative<
+                        std::vector<camera::CameraFeatureDescriptor>>(recoveredFeatures),
+                    "GenApi node-map construction did not recover after malformed XML.");
+        }
+
         std::cout << "GenApi feature and command integration tests passed.\n";
         return EXIT_SUCCESS;
     } catch (const GenICam::GenericException& error) {

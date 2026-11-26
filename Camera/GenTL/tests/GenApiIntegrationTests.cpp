@@ -115,6 +115,31 @@ int main(int argc, char** argv) {
                            item.name == "TriggerModeReg" ||
                            item.name == "CommandReg";
                 }), "Internal register nodes leaked into the public feature list.");
+            require(findFeature(*features, "RawRegister") == nullptr,
+                    "Unsupported public Register node was exposed as a scalar feature.");
+
+            auto unsupportedRegisterRead =
+                access.features().readFeature("RawRegister");
+            auto* unsupportedRegisterReadError =
+                std::get_if<camera::CameraFeatureAccessError>(
+                    &unsupportedRegisterRead);
+            require(unsupportedRegisterReadError &&
+                        unsupportedRegisterReadError->code ==
+                            camera::CameraFeatureAccessError::Code::Unsupported,
+                    "Unsupported public Register read was not classified as Unsupported.");
+
+            const camera::CameraFeatureValue unsupportedRegisterValue{
+                std::int64_t{1}};
+            auto unsupportedRegisterWrite =
+                access.features().writeFeature(
+                    "RawRegister", unsupportedRegisterValue);
+            auto* unsupportedRegisterWriteError =
+                std::get_if<camera::CameraFeatureAccessError>(
+                    &unsupportedRegisterWrite);
+            require(unsupportedRegisterWriteError &&
+                        unsupportedRegisterWriteError->code ==
+                            camera::CameraFeatureAccessError::Code::Unsupported,
+                    "Unsupported public Register write was not classified as Unsupported.");
 
             auto hiddenRegisterRead = access.features().readFeature("GainReg");
             auto* hiddenReadError =

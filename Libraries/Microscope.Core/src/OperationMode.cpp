@@ -44,6 +44,10 @@ Result<OperationMode, OperationModeError> OperationMode::create(
     std::string name,
     ContrastMethod contrastMethod,
     std::vector<LightPathModeSetting> lightPathSettings) {
+    if (name.find_first_of("\\0") != std::string::npos) {
+        return Result<OperationMode, OperationModeError>::failure(
+            OperationModeError::InvalidName);
+    }
     if (name.find_first_not_of(" \t\n\r\f\v") == std::string::npos) {
         return Result<OperationMode, OperationModeError>::failure(
             OperationModeError::EmptyName);

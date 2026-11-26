@@ -363,6 +363,17 @@ public:
                 operation ? std::nullopt :
                     std::optional<core::SerializedOperationRuntimeError>(operation.error()));
         }
+        auto restoredStep = operationRuntime_->stepStatus(
+            identities.operationId, identities.restoredMoveStepId);
+        if (restoredStep) {
+            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected);
+        }
+        if (restoredStep.error() != core::SerializedOperationRuntimeError::UnknownStep) {
+            return failure(StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                std::nullopt, restoredStep.error());
+        }
+
         auto step = operationRuntime_->stepStatus(
             identities.operationId, identities.initialStepId);
         if (!step || step.value() != core::StepStatus::Pending) {
@@ -378,11 +389,17 @@ public:
             identities.operationId, identities.initialStepId,
             identities.initialCommandId, *port_, *operationRuntime_);
         if (!execution) {
+            auto preDispatchFailure = operationRuntime_->recordPreDispatchFailure(
+                identities.operationId, identities.initialStepId);
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
                 execution.error().planningError,
                 execution.error().code, std::nullopt, std::nullopt,
-                std::nullopt, execution.error().runtimeError);
+                std::nullopt,
+                preDispatchFailure
+                    ? execution.error().runtimeError
+                    : std::optional<core::SerializedOperationRuntimeError>(
+                        preDispatchFailure.error()));
         }
 
         active_.emplace(ActiveNavigation{

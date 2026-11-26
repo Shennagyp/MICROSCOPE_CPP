@@ -136,7 +136,7 @@ SampleType definition/revision
   -> restart/reopen + historical aggregate retrieval
 ~~~
 
-The suite covers full microscopy/preparation requirement round-trip, Slide geometry, observed preparation, fluorescent excitation/emission and emission spectrum, filter-set compatibility identity, optional OriginLabId, historical revision lookup after SampleType advancement, stale writers on independent connections, absent exact-revision rejection, database-level UPDATE/DELETE rejection, skipped revision insertion, current-pointer rewind/deletion and rollback/no-partial-record behavior.
+The suite covers full microscopy/preparation requirement round-trip, Slide geometry, observed preparation, fluorescent excitation/emission and emission spectrum, filter-set compatibility identity, optional OriginLabId, historical revision lookup after SampleType advancement, multiple independent physical Slides sharing one SampleType revision, per-Slide origin-lab independence, preservation of absent/unknown preparation facts, stale writers on independent connections, absent exact-revision rejection, database-level UPDATE/DELETE rejection, skipped revision insertion, current-pointer rewind/deletion and rollback/no-partial-record behavior.
 
 **Boundary:** this verifies the SQLite store and domain payload codec. It does not yet verify native workspace lifecycle, UI dirty-state ownership, user save/rename flows, import of legacy data, or whole-workspace transactions involving Tile/image/acquisition records.
 

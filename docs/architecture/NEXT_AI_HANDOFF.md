@@ -72,7 +72,7 @@ The separate Optika application owns its own presentation, UI, workspace, micros
 11. Preserve immutable frame ownership, payload lifetime, layout validation, overflow checks and opaque handling of unsupported pixel formats.
 12. Keep Qt optional to Camera/Common and Amscope::Driver, but preserve Phase 3/4 Qt targets and the AmScope preview application. Do not move Qt dependencies into the native core.
 
-## 5. Phase 4 current work and Phase 6 follow-on
+## 5. Phase 4 acceptance and Phase 6 boundary
 
 Phase 4 now includes CameraFeatureEditor in the preview feature tabs,
 ImageInfoBar in the status bar, CameraCapabilityPanel in Camera Properties,
@@ -92,45 +92,23 @@ The GenApi negative/failure slice is CI-green at `ea356d5`. Do not repeat the
 inventory or reopen Phase 5. AmScope source/tests/contracts/behavior are frozen.
 
 
-### 5.1 Create a source-grounded coverage matrix
+Phase 4 includes CameraFeatureEditor in the preview feature tabs,
+ImageInfoBar in the status bar, CameraCapabilityPanel in Camera Properties,
+and CameraCommandPanel for no-argument ICameraCommandAccess commands. The
+AmScope preview's parameterized commands remain host-owned. The current Qt CI
+checkpoint builds amscope_preview and passes 24/24 CTest tests on both
+architectures, including the application-level offscreen composition and
+dock-state restore test. Human visual inspection remains pending; the owner
+postponed the physical MU503 UI smoke. Do not mark Phase 4 accepted.
 
-Inspect current public APIs and implementations for AmScope and GenTL. For every exposed item record:
-- provider and API item;
-- feature, command, telemetry or discovery category;
-- applicable model/provider restrictions;
-- value type, unit, range, increment and enum-symbol rules;
-- availability/readability/writability semantics;
-- preconditions and lifecycle state;
-- synchronous/asynchronous behavior;
-- readback/completion semantics and error mapping;
-- implementation location and automated tests;
-- hardware-evidence status.
-
-Do not guess missing cells. Use explicit `unknown`, `not implemented`, `not applicable` or `hardware unverified`.
-
-### 5.2 Audit capability resolution
-
-Trace provider discovery through model policy to the public API. Check that provider support and per-model restrictions combine consistently; model profiles only narrow support; runtime availability is not confused with static support; unknown SDK flags are not treated as positive; and duplicate layers do not expose conflicting meanings.
-
-### 5.3 Audit feature semantics
-
-Check descriptor kind/value alternative consistency; units; exact numeric bounds/increments; non-finite floating-point handling; current enum symbols; availability/access modes; validation before provider calls; write/readback behavior; and correct preservation of provider-specific errors.
-
-### 5.4 Audit command semantics
-
-Check that commands use the command contract, not writable feature values; issue and completion polling are separate; availability/preconditions are enforced; timeout/cancellation/failure/completion remain distinct; and command issue is not misreported as physical effect.
-
-### 5.5 Audit model coverage
-
-Reconcile model profiles and provider discovery with actual model identifiers and SDK/GenApi evidence. Do not broaden support from family resemblance or marketing descriptions. Unknown models remain conservative.
-
-### 5.6 Add only targeted tests
-
-After the audit finds a concrete gap, add the smallest deterministic test at the correct layer. Test semantic boundaries and failure behavior. Mocks/XML fixtures prove deterministic software behavior, not physical-device behavior. Avoid broad refactors and unrelated cleanup.
-
-### 5.7 Keep the evidence ledger current
-
-For each completed slice record exact commit, source files, public behavior, tests, exact CI run/architectures, hardware evidence separately, limitations and follow-up. Never label a feature hardware-verified from mock CI.
+The Phase 6 audit is retained in
+[CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
+Provider-neutral GenTL/GenApi coverage and the discovery/vector decisions are
+complete for the current public contract. AmScope provider-level feature,
+command and model tests remain blocked by the explicit AmScope freeze. The
+owner authorized Phase 7 on 26 November 2026; this does not waive or complete
+Phase 6. Do not repeat the inventory, reopen Phase 5 or modify AmScope
+provider source, tests, public contracts or runtime behavior.
 
 ## 6. GenTL implementation note — not permission to reopen Phase 5
 

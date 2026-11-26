@@ -4,15 +4,11 @@ on:
     branches: [camera-v.2.0]
     paths:
       - "Camera/**"
-      - "docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md"
-      - "docs/architecture/NEXT_AI_HANDOFF.md"
       - ".github/workflows/camera-module-package.yml"
   pull_request:
     branches: [camera-v.2.0]
     paths:
       - "Camera/**"
-      - "docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md"
-      - "docs/architecture/NEXT_AI_HANDOFF.md"
       - ".github/workflows/camera-module-package.yml"
   workflow_dispatch:
 permissions:

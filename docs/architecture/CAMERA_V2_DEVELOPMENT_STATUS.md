@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery now tests rejection of foreign Producer, stale interface and unknown device identifiers with distinct failure codes; GenApi negative-path coverage includes malformed XML rejection/recovery, unsupported public IRegister classification, and injected feature/command execution/completion failure recovery.  
+**Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `643319ad6e017748e5973254bf8919e64c115d21` — package superbuild, exported target sets, relocatable package config/version, component-aware dependency loading and clean consumer fixtures; package CI pending.  
 **Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64 (10/10 bridge tests and 11/11 official GenApi tests per architecture).  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 remains open but blocked at the frozen AmScope provider-test boundary; Phase 7 is active by explicit owner authorization on 26 November 2026.  

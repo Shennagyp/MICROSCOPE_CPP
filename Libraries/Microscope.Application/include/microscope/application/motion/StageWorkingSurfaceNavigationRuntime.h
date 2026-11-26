@@ -468,8 +468,12 @@ public:
             position_ = position_.invalidateXYReference();
             const auto snapshot =
                 operationRuntime_->operationSnapshot(active_->identities.operationId);
+            const auto disposition = snapshot &&
+                snapshot.value().status() == core::OperationStatus::PartiallyCompleted
+                    ? StageWorkingSurfaceNavigationRuntimeDisposition::NavigationPartiallyCompleted
+                    : StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed;
             active_.reset();
-            return success(StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
+            return success(disposition,
                            snapshot ? std::optional<core::OperationSnapshot>(snapshot.value())
                                     : std::nullopt);
         }

@@ -336,6 +336,21 @@ void testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation() {
             }
         }
 
+        const auto currentSlideContext =
+            store->loadCurrentSlideWithPinnedSampleType(slideId);
+        check(currentSlideContext && currentSlideContext.value() &&
+              currentSlideContext.value()->slide.revision() == 1 &&
+              currentSlideContext.value()->sampleType.revision() == 1 &&
+              currentSlideContext.value()->sampleType.name() == "Kidney histology v1",
+              "loads the Slide together with the exact historical SampleType it pins, not the newer current SampleType");
+
+        const auto historicalSlideContext =
+            store->loadSlideWithPinnedSampleType(slideId, 1);
+        check(historicalSlideContext && historicalSlideContext.value() &&
+              historicalSlideContext.value()->slide.sampleTypeRevision() ==
+                  historicalSlideContext.value()->sampleType.revision(),
+              "historical context lookup preserves exact Slide-to-SampleType revision equality");
+
         const auto currentSlide = store->loadCurrentSlide(slideId);
         check(currentSlide && currentSlide.value() &&
               currentSlide.value()->revision() == 1,

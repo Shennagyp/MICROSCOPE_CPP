@@ -126,7 +126,10 @@ namespace {
     const OpticalFilterSpecification& emissionFilter,
     const SpectralBand& band) noexcept {
     if (dichroic.role() != OpticalFilterRole::Dichroic ||
-        emissionFilter.role() != OpticalFilterRole::Emission) {
+        emissionFilter.role() != OpticalFilterRole::Emission ||
+        (dichroic.compatibilityId() &&
+         emissionFilter.compatibilityId() &&
+         dichroic.compatibilityId() != emissionFilter.compatibilityId())) {
         return std::nullopt;
     }
 
@@ -383,15 +386,28 @@ CameraSuitabilityReport CameraSuitabilityAssessor::assessFluorescence(
             const bool filterRolesMatch =
                 requirements.dichroic->role() == OpticalFilterRole::Dichroic &&
                 requirements.emissionFilter->role() == OpticalFilterRole::Emission;
+            const bool filterSetMismatch =
+                requirements.dichroic->compatibilityId() &&
+                requirements.emissionFilter->compatibilityId() &&
+                requirements.dichroic->compatibilityId() !=
+                    requirements.emissionFilter->compatibilityId();
+            const char* warningCode =
+                !filterRolesMatch
+                    ? "camera.fluorescence.detection_filter_role_invalid"
+                    : (filterSetMismatch
+                           ? "camera.fluorescence.detection_filter_set_mismatch"
+                           : "camera.fluorescence.weighted_qe_coverage_incomplete");
+            const char* warningMessage =
+                !filterRolesMatch
+                    ? "The selected detector-side filters do not have the required dichroic and emission-filter roles."
+                    : (filterSetMismatch
+                           ? "The selected dichroic and emission filter have different compatibility identities and cannot be treated as one matched detector set."
+                           : "The emission spectrum, dichroic transmission, emission-filter transmission and camera QE do not jointly cover the complete detected emission band.");
             addWarning(
                 report,
                 camera,
-                filterRolesMatch
-                    ? "camera.fluorescence.weighted_qe_coverage_incomplete"
-                    : "camera.fluorescence.detection_filter_role_invalid",
-                filterRolesMatch
-                    ? "The emission spectrum, dichroic transmission, emission-filter transmission and camera QE do not jointly cover the complete detected emission band."
-                    : "The selected detector-side filters do not have the required dichroic and emission-filter roles.");
+                warningCode,
+                warningMessage);
         }
     } else {
         report.meanQuantumEfficiencyInEmissionBand =

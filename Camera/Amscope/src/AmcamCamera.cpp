@@ -2331,6 +2331,8 @@ std::vector<CameraInfo> AmcamCamera::enumerate(CameraError* error) {
             if (sensor.technology || sensor.shutterType || sensor.colorMode) {
                 sensor.provenance =
                     camera::CameraSpecificationProvenance::VendorModelDescriptor;
+                sensor.provenanceReference =
+                    "AmScope vendor model descriptor flags";
                 info.sensorCharacteristics = std::move(sensor);
             }
 

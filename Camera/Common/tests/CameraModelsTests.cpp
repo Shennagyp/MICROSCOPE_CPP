@@ -122,6 +122,29 @@ void testPersistableCameraModelCatalog() {
     require(catalog->findExact(incompleteIdentity) == nullptr,
             "does not infer manufacturer identity when discovery omitted it");
 
+    auto profileOtherVariant = CameraModelProfile::create(
+        CameraModelKey{"Example Imaging", "SCMOS-2048", "rev-C"},
+        capabilities,
+        sensor,
+        2,
+        "datasheet:SCMOS-2048-rev-C");
+    require(profileOtherVariant.has_value(),
+            "allows distinct hardware variants of the same camera model");
+
+    auto multiVariantCatalog = CameraModelCatalog::create(
+        {*profile, *profileOtherVariant}, 4);
+    require(multiVariantCatalog.has_value() &&
+            multiVariantCatalog->revision() == 4,
+            "catalog preserves its own persistent revision");
+    CameraIdentity ambiguousIdentity;
+    ambiguousIdentity.manufacturer = "Example Imaging";
+    ambiguousIdentity.model = "SCMOS-2048";
+    const auto candidates = multiVariantCatalog->findCandidates(ambiguousIdentity);
+    require(candidates.size() == 2,
+            "returns both matching model variants when runtime discovery omits variant identity");
+    require(multiVariantCatalog->findExact(ambiguousIdentity) == nullptr,
+            "does not silently choose an exact profile when its variant is unknown");
+
     auto duplicateCatalog = CameraModelCatalog::create({*profile, *profile});
     require(!duplicateCatalog,
             "rejects duplicate stable model keys rather than using last-wins behavior");

@@ -166,6 +166,7 @@ struct CameraSensorCharacteristics {
     std::vector<CameraQuantumEfficiencySample> quantumEfficiency;
     CameraSpecificationProvenance provenance =
         CameraSpecificationProvenance::Unknown;
+    std::optional<std::string> provenanceReference;
 };
 
 // Backend-neutral discovery information. Backend-specific model flags,

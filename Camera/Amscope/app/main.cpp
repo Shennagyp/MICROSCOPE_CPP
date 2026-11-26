@@ -390,7 +390,8 @@ public:
         featureTabs_->setDocumentMode(true);
         featureTabs_->setMovable(false);
         featureTabs_->setToolTip(
-            "Camera features are grouped by function. Stop acquisition before editing settings.");
+            "Settings are organized by capture workflow, exposure, image appearance, and device hardware. "
+            "Stop acquisition before changing stopped-state settings.");
 
         accessoryGroup_ = new QGroupBox("Camera accessories", controlsContent);
         accessoryForm_ = new QFormLayout(accessoryGroup_);
@@ -887,10 +888,36 @@ private:
                 ? QStringLiteral("Model not reported")
                 : QString::fromStdString(*found->identity.model));
         if (found->hasModelDescriptor) {
+            QStringList previewModes;
+            previewModes.reserve(static_cast<qsizetype>(found->previewResolutions.size()));
+            for (const auto& resolution : found->previewResolutions) {
+                previewModes.push_back(
+                    QString("%1 × %2")
+                        .arg(resolution.width)
+                        .arg(resolution.height));
+            }
+
+            QStringList facts;
+            facts.push_back(
+                QString("%1 preview mode(s): %2")
+                    .arg(static_cast<qulonglong>(found->previewResolutions.size()))
+                    .arg(previewModes.isEmpty()
+                        ? QStringLiteral("none reported")
+                        : previewModes.join(QStringLiteral(", "))));
+            if (found->maximumSpeedLevel) {
+                facts.push_back(
+                    QString("Frame-speed levels: 0–%1")
+                        .arg(*found->maximumSpeedLevel));
+            }
+            facts.push_back(
+                QString("I/O lines: %1").arg(found->ioControlLineCount));
+            if (found->maximumFanSpeed) {
+                facts.push_back(
+                    QString("Fan levels: 0–%1").arg(*found->maximumFanSpeed));
+            }
+
             capabilitySummary_->setText(
-                QString("%1 · %2 preview modes · model capability flags loaded")
-                    .arg(model)
-                    .arg(static_cast<qulonglong>(found->previewResolutions.size())));
+                QString("%1 · %2").arg(model, facts.join(QStringLiteral(" · "))));
         } else {
             capabilitySummary_->setText(
                 QString("%1 · SDK did not provide a model descriptor during discovery. "

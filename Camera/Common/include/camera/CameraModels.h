@@ -21,6 +21,7 @@ struct ImageResolution {
 struct CameraIdentity {
     std::optional<std::string> manufacturer;
     std::optional<std::string> model;
+    std::optional<std::string> modelVariant;
     std::optional<std::string> serialNumber;
     std::optional<std::string> firmwareVersion;
     std::optional<std::string> deviceVersion;

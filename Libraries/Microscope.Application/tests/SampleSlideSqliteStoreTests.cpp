@@ -376,6 +376,85 @@ void testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation() {
     removeDatabaseFiles(path);
 }
 
+void testWorkspaceEnumerationIsStableAndReturnsOnlyCurrentRows() {
+    const auto path = uniqueDatabasePath("microscope-workspace-enumeration-");
+    const auto alphaTypeId = makeId<SampleTypeId>("sample-type-alpha");
+    const auto zetaTypeId = makeId<SampleTypeId>("sample-type-zeta");
+    const auto alphaSlideId = makeId<SlideId>("slide-alpha");
+    const auto zetaSlideId = makeId<SlideId>("slide-zeta");
+
+    {
+        auto opened = SampleSlideSqliteStore::open(path);
+        check(static_cast<bool>(opened),
+              "opens the workspace enumeration test store");
+        if (!opened) {
+            removeDatabaseFiles(path);
+            return;
+        }
+        auto store = std::move(opened).value();
+
+        const auto zetaV1 = makeSampleType(zetaTypeId, 1, "Zeta SampleType v1");
+        const auto alphaV1 = makeSampleType(alphaTypeId, 1, "Alpha SampleType v1");
+        const auto zetaV2 = makeSampleType(zetaTypeId, 2, "Zeta SampleType v2");
+
+        // Deliberately write in reverse order. Listing must be deterministic
+        // by identity, not by insert order or SQLite's incidental row order.
+        check(store->saveSampleTypeRevision(zetaV1, 0).isSuccess(),
+              "saves the zeta SampleType first");
+        check(store->saveSampleTypeRevision(alphaV1, 0).isSuccess(),
+              "saves the alpha SampleType second");
+        check(store->saveSampleTypeRevision(zetaV2, 1).isSuccess(),
+              "advances only the zeta SampleType current revision");
+
+        const auto zetaSlideV1 = makeSlide(zetaSlideId, 1, zetaV1);
+        const auto alphaSlideV1 = makeSlide(alphaSlideId, 1, alphaV1);
+        check(store->saveSlideRevision(zetaSlideV1, 0).isSuccess(),
+              "saves the zeta Slide before the alpha Slide");
+        check(store->saveSlideRevision(alphaSlideV1, 0).isSuccess(),
+              "saves the alpha Slide after the zeta Slide");
+        const auto zetaSlideV2 = makeSlide(zetaSlideId, 2, zetaV1);
+        check(store->saveSlideRevision(zetaSlideV2, 1).isSuccess(),
+              "advances the zeta Slide current revision while retaining its pinned SampleType v1");
+
+        const auto currentTypes = store->loadCurrentSampleTypes();
+        check(currentTypes && currentTypes.value().size() == 2,
+              "returns one current definition per SampleType identity");
+        if (currentTypes && currentTypes.value().size() == 2) {
+            check(currentTypes.value()[0].id() == alphaTypeId &&
+                  currentTypes.value()[0].revision() == 1 &&
+                  currentTypes.value()[0].name() == "Alpha SampleType v1",
+                  "orders current SampleTypes by stable ID rather than insertion order");
+            check(currentTypes.value()[1].id() == zetaTypeId &&
+                  currentTypes.value()[1].revision() == 2 &&
+                  currentTypes.value()[1].name() == "Zeta SampleType v2",
+                  "lists the latest SampleType revision without duplicating historical revisions");
+        }
+
+        const auto currentSlides =
+            store->loadCurrentSlidesWithPinnedSampleTypes();
+        check(currentSlides && currentSlides.value().size() == 2,
+              "returns one current Slide context per Slide identity");
+        if (currentSlides && currentSlides.value().size() == 2) {
+            const auto& alpha = currentSlides.value()[0];
+            const auto& zeta = currentSlides.value()[1];
+            check(alpha.slide.id() == alphaSlideId &&
+                  alpha.slide.revision() == 1 &&
+                  alpha.sampleType.id() == alphaTypeId &&
+                  alpha.sampleType.revision() == 1,
+                  "orders current Slide contexts by stable Slide ID");
+            check(zeta.slide.id() == zetaSlideId &&
+                  zeta.slide.revision() == 2 &&
+                  zeta.slide.sampleTypeRevision() == 1 &&
+                  zeta.sampleType.id() == zetaTypeId &&
+                  zeta.sampleType.revision() == 1 &&
+                  zeta.sampleType.name() == "Zeta SampleType v1",
+                  "returns only the current Slide revision while resolving the exact historical SampleType it pins");
+        }
+    }
+
+    removeDatabaseFiles(path);
+}
+
 void testSlideCannotReferenceAnUnpersistedSampleTypeRevision() {
     const auto path = uniqueDatabasePath("microscope-slide-fk-");
     {
@@ -601,6 +680,7 @@ void testStoreReopensAndResolvesHistoricalSlideAndSampleType() {
 int main() {
     testSampleTypeRevisionHistoryAndFullRequirementRoundTrip();
     testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation();
+    testWorkspaceEnumerationIsStableAndReturnsOnlyCurrentRows();
     testSlideCannotReferenceAnUnpersistedSampleTypeRevision();
     testConcurrentStoreHandlesRejectStaleRevisionWriters();
     testImmutableRevisionRowsRejectDirectSqlMutation();

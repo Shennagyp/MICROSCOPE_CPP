@@ -211,10 +211,10 @@ void testFluorescentSlideLabelPreservesSpectralProfile() {
     const auto emission = take(SpectralBand::create(
         take(PositiveNanometers::create(500.0)),
         take(PositiveNanometers::create(550.0))));
-    const auto spectrum = take(FluorescenceEmissionSpectrum::create({
-        {take(PositiveNanometers::create(500.0)), 0.2},
-        {take(PositiveNanometers::create(515.0)), 1.0},
-        {take(PositiveNanometers::create(540.0)), 0.1}}));
+    const auto spectrum = take(SpectralPowerDistribution::create({
+        {500.0, 0.2},
+        {515.0, 1.0},
+        {540.0, 0.1}}));
     const auto filterId = makeId<OpticalCompatibilityId>("fluorescence-filter-set-green-1");
     const auto label = take(SpecimenLabel::create(
         "Alexa Fluor 488 anti-CD3", SpecimenLabelKind::Fluorescent,

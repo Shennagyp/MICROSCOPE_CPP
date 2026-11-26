@@ -1087,6 +1087,7 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
     }
 
     DataStreamFrame frame;
+    bool requeueAttempted = false;
     try {
         std::lock_guard<std::mutex> guard(context->mutex);
         if (context->quarantined)
@@ -1275,12 +1276,25 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
         if (*filled != 0)
             std::memcpy(frame.payload.data(), *base, *filled);
 
-        check(context->consumer.invoke(
-            Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle),
-            "DSQueueBuffer(requeue)");
+        // A failed queue call leaves the Producer's buffer state unknown:
+        // it may have queued the buffer before reporting an error. Never retry
+        // that same operation blindly. Quarantine the context on failure so
+        // uncertain native buffer ownership cannot be reused or torn down as
+        // though the queue state were known.
+        requeueAttempted = true;
+        const auto requeueStatus = context->consumer.invoke(
+            Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle);
+        if (requeueStatus != GenTL::GC_ERR_SUCCESS) {
+            context->quarantineLocked();
+            check(requeueStatus, "DSQueueBuffer(requeue)");
+        }
     } catch (...) {
         std::lock_guard<std::mutex> guard(context->mutex);
-        if (!context->quarantined) {
+        if (!requeueAttempted && !context->quarantined) {
+            // Metadata/payload extraction failed before requeue was attempted.
+            // The buffer is still owned by this consumer, so make one recovery
+            // attempt. A failed attempt is terminal for this Producer context.
+            requeueAttempted = true;
             const auto requeueStatus = context->consumer.invoke(
                 Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle);
             if (requeueStatus != GenTL::GC_ERR_SUCCESS)

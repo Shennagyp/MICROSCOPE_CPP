@@ -339,6 +339,8 @@ Keep three concepts separate:
 - **Hardware still capture:** a device operation that acquires a new frame through the camera driver's still-capture API. It requires its own command, feedback and failure lifecycle if exposed.
 - **Acquisition run:** a domain record of an intended/actual microscope workflow tied to a physical Slide, Tile/field, microscope, configuration and calibration context.
 
+The current native capture gallery follows the in-memory residency rule. The application composition retains its gallery owner, but the owner does not scan the capture folder during application startup. The first time the gallery is opened, it enumerates the folder and materializes metadata objects for the latest 80 captures. Image thumbnails are decoded only when their rows become visible; each decoded thumbnail is retained on its in-memory item. A newly saved capture builds its thumbnail from the already-detached in-memory image, not by reopening the PNG that was just written. Reopening the gallery reuses the resident listing and does not rescan the folder. The PNG remains the durable original; the item and thumbnail are in-memory presentation data.
+
 An acquisition workflow coordinates stage positioning, microscope configuration and camera exposure/capture. It owns the run's operation state and recovery record. It does not own the camera's native handle, the stage driver's protocol state, or the frame-pool implementation.
 
 The image-processing subsystem receives immutable source frames/documents and explicit parameters. It does not control camera acquisition or stage movement. Derived images retain their source frame, calibration, algorithm/version and parameter provenance. Original captures remain immutable.

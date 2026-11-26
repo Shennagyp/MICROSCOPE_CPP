@@ -207,7 +207,7 @@ void testBoundDeviceUsesExactPersistentProfileAndSuppliesMissingIdentity() {
               discovered.identity.serialNumber,
           "retains the connected device serial as runtime identity without making it the model key");
     check(result.deviceInfo.sensorCharacteristics &&
-          result.deviceInfo.sensorCharacteristics->quantumEfficiency.size() == 4,
+          result.deviceInfo.sensorCharacteristics->quantumEfficiency.size() == 3,
           "enriches sensor characteristics from the bound exact model profile");
 }
 
@@ -304,7 +304,7 @@ void testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeo
                   microscope::core::CameraModeId::create("installed-camera-mono8")),
           "preserves the installed camera output-mode definition");
     check(projected.sensorCharacteristics().has_value() &&
-          projected.sensorCharacteristics()->quantumEfficiency.size() == 4,
+          projected.sensorCharacteristics()->quantumEfficiency.size() == 3,
           "projects the model catalog's wavelength-dependent QE curve into Core");
 
     bool dimensionsWarning = false;

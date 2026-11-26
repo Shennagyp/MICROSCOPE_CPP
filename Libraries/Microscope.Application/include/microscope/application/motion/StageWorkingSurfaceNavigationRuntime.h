@@ -117,8 +117,9 @@ private:
     StageWorkingSurfaceNavigationPositionVerificationMode mode_;
 };
 
-// IDs are allocated by the Application boundary. The continuation IDs are
-// consumed only when the initial plan requires homing before the restored move.
+// Correlation identity for one navigation operation and its possible
+// home-then-move continuation. The persistent stage runtime allocates these
+// values; callers do not manufacture per-request operation state.
 struct StageWorkingSurfaceNavigationOperationIdentity final {
     core::OperationId operationId;
     core::StepId initialStepId;
@@ -181,14 +182,19 @@ struct StageWorkingSurfaceNavigationRuntimeError final {
     std::optional<core::SerializedOperationRuntimeError> runtimeError;
 };
 
-// One owner-thread stage subsystem for one microscope runtime. The host invokes
-// beginNavigation() from its typed control-request drain and processFeedback()
-// from SerializedRuntimeWorker's feedback handler. Neither method is callable
-// concurrently; the serialized worker is the state owner.
+// One long-lived, stateful stage subsystem for one microscope runtime
+// incarnation. Composition creates it once and retains it for the lifetime of
+// that runtime; commands do not construct new stage/navigation objects.
 //
-// The caller creates and starts the operation and its initial pending step.
-// This class owns the surface/position state and creates the continuation step
-// only after the complete home-reference fact has been verified.
+// This object owns the current working-surface snapshot, machine position,
+// homing/verification policies, active navigation, and navigation identity
+// sequence. It mutates the persistent SerializedOperationRuntime only on its
+// bound owner thread. Device feedback enters through the runtime's bounded
+// ingress; immutable target values arrive through the control queue.
+//
+// The owner thread is the single writer. Pure Core planning and reducer
+// functions calculate candidate results; this object decides when to apply
+// them to its persistent state and when to publish operation outcomes.
 class StageWorkingSurfaceNavigationRuntime final {
 public:
     using Runtime =
@@ -362,6 +368,8 @@ public:
         const core::SlideId& slideId,
         core::SlidePoint2D destination,
         StageWorkingSurfaceNavigationOperationIdentity identities) {
+        auto owner = requireOwnerThread();
+        if (!owner) return Result::failure(owner.error());
         const auto target = surface_.createNavigationTarget(slideId, destination);
         if (!target) {
             const auto error = target.error() ==
@@ -375,6 +383,9 @@ public:
 
     // operationId must already be Running and initialStepId must already be
     // Pending in the supplied serialized operation runtime.
+    // Lower-level continuation for a caller that already owns an operation
+    // and Pending step in this same persistent SerializedOperationRuntime.
+    // Normal application commands use beginRequest(target).
     [[nodiscard]] Result beginNavigation(
         const core::SlideNavigationTarget2D& target,
         StageWorkingSurfaceNavigationOperationIdentity identities) {
@@ -485,6 +496,8 @@ public:
         const core::SlideId& slideId,
         core::SlidePoint2D destination,
         StageWorkingSurfaceNavigationOperationIdentity identities) {
+        auto owner = requireOwnerThread();
+        if (!owner) return Result::failure(owner.error());
         const auto target = surface_.createNavigationTarget(slideId, destination);
         if (!target) {
             const auto error = target.error() ==

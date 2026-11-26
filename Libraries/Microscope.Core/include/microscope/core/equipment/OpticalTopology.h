@@ -297,8 +297,7 @@ enum class EquipmentDefinitionError {
     DuplicateLightPathId,
     UnknownLightPathOpticalPath,
     LightPathHasNoImagingRoute,
-    LightPathMultipleCamerasRequireSplitter,
-    LightPathSplitterBranchesNotDistinct
+    LightPathMultipleCamerasRequireSplitter
 };
 
 // Immutable definition of the equipment physically installed in one

@@ -378,7 +378,7 @@ The active Core model is split by physical responsibility:
 
 - StageWorkingSurface2D is created as an empty XY canvas from a user-defined stage-coordinate origin and positive X/Y travel extents. It derives the far boundaries and validates the complete canvas against the configured X/Y axis operating ranges.
 - The canvas starts with zero slide rectangles; the user adds, replaces or removes slide rectangles as immutable layout snapshots. The workspace origin is not silently reused as any slide's stop-point origin.
-- Each CAD rectangle retains its fixed mechanical stop-point endpoint, initial opposite-corner handle, solved opposite endpoint and constrained length/width.
+- Each CAD rectangle retains its fixed mechanical stop-point endpoint, initial opposite-corner handle, solved opposite endpoint and constrained length/width. The Core API exposes all four stage-coordinate corners derived from those constraints; the two adjacent corners are not independent measurements.
 - SlidePlacement2D maps between stage XY and the selected slide's local XY. It stores no Z, slide thickness, drawing tolerance or stop-point uncertainty.
 - StagePosition3D tracks machine X/Y plus microscope focus Z. positionOnSlide() requires referenced X/Y only; the current focus Z coordinate is exposed independently and cannot affect slide-local XY.
 

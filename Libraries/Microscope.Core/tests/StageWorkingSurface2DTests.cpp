@@ -213,6 +213,31 @@ void emptyCanvasSupportsImmutableSlideRectangleEdits() {
     check(!outside && outside.error() == StageWorkingSurface2DError::SlideOutsideWorkingSurface,
         "rejects a slide footprint that extends beyond the user-defined travel range");
 
+    const auto overlapRect = rectangle("slide-overlap", 80'000, 20'000);
+    auto overlap = oneSlide.withSlideRectangle(overlapRect);
+    check(!overlap && overlap.error() == StageWorkingSurface2DError::SlideRectanglesOverlap,
+        "rejects positive-area overlap between two slide footprints");
+
+    auto loadedOverlap = StageWorkingSurface2D::create(
+        stage, id<StageAxisId>("x"), id<StageAxisId>("y"),
+        {0,0}, {250'000,60'000}, {first, overlapRect});
+    check(!loadedOverlap && loadedOverlap.error() ==
+        StageWorkingSurface2DError::SlideRectanglesOverlap,
+        "rejects positive-area overlap when validating a loaded full layout");
+
+    auto edgeContact = oneSlide.withSlideRectangle(
+        rectangle("slide-edge-contact", 115'000, 10'000));
+    check(edgeContact && edgeContact.value().slideRectangles().size() == 2,
+        "allows slide footprints to share an exact edge without area overlap");
+
+    const auto withSecond = take(oneSlide.withSlideRectangle(
+        rectangle("slide-2", 150'000, 10'000)));
+    auto overlappingReplacement = withSecond.replacingSlideRectangle(
+        rectangle("slide-1", 100'000, 15'000));
+    check(!overlappingReplacement &&
+        overlappingReplacement.error() == StageWorkingSurface2DError::SlideRectanglesOverlap,
+        "rejects replacing a slide with a footprint overlapping another slide");
+
     const auto removed = take(oneSlide.withoutSlideRectangle(id<SlideId>("slide-1")));
     check(removed.slideRectangles().empty() && oneSlide.slideRectangles().size() == 1,
         "removes a slide into another immutable snapshot without changing earlier snapshots");

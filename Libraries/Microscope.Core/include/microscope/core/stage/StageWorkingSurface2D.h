@@ -147,6 +147,26 @@ struct SlidePosition2D final {
     bool insideWorkingSurface;
 };
 
+enum class SlideNavigationTarget2DError {
+    SlideNotFound, SlidePointOutsideGeometry, RegistrationChanged,
+    InvalidStageCoordinate, OutsideWorkingSurface
+};
+
+// A queued destination is bound to the slide-layout revision that created it.
+// It cannot be silently reinterpreted if the slide is redrawn before execution.
+class SlideNavigationTarget2D final {
+public:
+    const SlideId& slideId() const noexcept;
+    const SlidePoint2D& point() const noexcept;
+    const CalibrationRevisionId& registrationRevision() const noexcept;
+private:
+    SlideNavigationTarget2D(SlideId, SlidePoint2D, CalibrationRevisionId);
+    SlideId slideId_;
+    SlidePoint2D point_;
+    CalibrationRevisionId registrationRevision_;
+    friend class StageWorkingSurface2D;
+};
+
 // The working surface is an XY plane. Z focus travel belongs to the microscope
 // axis model and is deliberately not stored here.
 class StageWorkingSurface2D final {
@@ -188,6 +208,11 @@ public:
     const SlideRectangleDefinition2D* rectangleFor(const SlideId&) const noexcept;
     const SlidePlacement2D* placementFor(const SlideId&) const noexcept;
     bool contains(const StagePoint2D&) const noexcept;
+
+    Result<SlideNavigationTarget2D, SlideNavigationTarget2DError>
+    createNavigationTarget(const SlideId&, const SlidePoint2D&) const;
+    Result<StagePoint2D, SlideNavigationTarget2DError>
+    resolveNavigationTarget(const SlideNavigationTarget2D&) const;
 
     Result<StagePoint2D, SlidePlacement2DError> toStage(
         const SlideId&, const SlidePoint2D&) const;

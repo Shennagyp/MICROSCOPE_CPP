@@ -204,7 +204,7 @@ Source changes now present:
   the existing direct `GenTLProducerLibrary` CTI loader.
 - `Camera/GenTL/tests/SimulatorSmoke.cpp`: opt-in smoke using the existing
   `ConsumerBridge` and `Producer` APIs; it checks discovery, device open,
-  GenApi XML retrieval, five complete frames, stream stop and device close.
+  GenApi XML retrieval, five complete frames, Common frame-projection invocation, stream stop and device close.
 - `Camera/GenTL/CMakeLists.txt`: builds the test-only targets and registers
   the smoke only when `CAMERA_GENTL_SIMULATOR_CTI` is supplied.
 - `Camera/GenTL/README.md`: records setup, coverage and evidence limits.

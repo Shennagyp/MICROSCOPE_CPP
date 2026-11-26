@@ -11,7 +11,7 @@ struct NativeCaptureItem: Identifiable, Equatable {
     let capturedAt: Date
     let pixelWidth: Int
     let pixelHeight: Int
-    var thumbnailData: Data?
+    let thumbnailData: Data?
 
     var dimensionsText: String {
         "\(pixelWidth) × \(pixelHeight)"
@@ -74,7 +74,17 @@ final class NativeCaptureGalleryStore: ObservableObject {
                 guard let thumbnailData,
                       let index = self.captures.firstIndex(where: { $0.id == itemID }),
                       self.captures[index].thumbnailData == nil else { return }
-                self.captures[index].thumbnailData = thumbnailData
+
+                let current = self.captures[index]
+                self.captures[index] = NativeCaptureItem(
+                    id: current.id,
+                    fileURL: current.fileURL,
+                    slide: current.slide,
+                    capturedAt: current.capturedAt,
+                    pixelWidth: current.pixelWidth,
+                    pixelHeight: current.pixelHeight,
+                    thumbnailData: thumbnailData
+                )
             }
         }
     }

@@ -131,7 +131,7 @@ Covers the port dispatch boundary for `MoveAxesTo`, `MoveAxesBy`, `HomeAxes` and
 | Stage Application | Owner-thread navigation runtime, request queue, worker integration, XY command dispatch and feedback verification | Physical controller adapter; runtime cancellation/stop/timeout lifecycle; bridge from native composition |
 | Stage hardware | Abstract `IStageMotionPort` contract only | No concrete controller/driver implementation was found in this branch |
 | Acquisition | Existing camera preview/frame delivery and image-save UI | No complete persisted AcquisitionPlan/AcquisitionRun/AcquisitionField domain and execution pipeline |
-| Slide/SampleType | Versioned SampleType requirement definitions; Slide directly pins SampleTypeId/revision and owns geometry, observed preparation facts and optional OriginLabId; no Sample or SlideType entity | Durable SampleType revision-history lookup/persistence, migration of stored data and native workspace integration are not implemented |
+| Slide/SampleType | Core versioned requirements model; Application SQLite store appends immutable SampleType and Slide revisions, maintains current pointers, and enforces the exact SampleTypeId/revision foreign key | Native workspace loading/editing, user-facing save workflows and migration of any legacy external records remain unimplemented |
 | Native application composition | Camera, optics Swift models/coordinators, workspace/gallery | Swift composition does not yet construct/use the C++ stage owner/runtime or a physical stage adapter |
 | HIL/application acceptance | None established by this test change | Real stage, focus, objective/filter/illumination hardware; native composition; persistence/recovery; operational safety acceptance |
 
@@ -189,10 +189,18 @@ Implemented in the Core model and test sources:
 - Unit coverage checks independent Slides, absent optional OriginLabId, version pinning, incomplete observed facts, invalid preparation ranges, and fluorescent-label metadata.
 - Integration coverage follows LightPath selection through resolved microscope configuration into SampleType/Slide assessment; valid, off-spec and stale-revision cases are represented.
 
+Persistence is implemented in the Application layer:
+- `SampleSlideSqliteStore` uses independent, namespaced schema metadata and append-only `sample_type_revision` and `slide_revision` tables.
+- `sample_type_current` and `slide_current` pointers are updated in the same `BEGIN IMMEDIATE` transaction as the revision insert.
+- `slide_revision` has a composite foreign key to the exact `(sample_type_id, sample_type_revision)` row. A Slide cannot be saved against merely the latest SampleType when its pinned revision is absent.
+- Revision writes use compare-and-swap `expectedCurrentRevision`; revision rows reject direct UPDATE and DELETE through database triggers.
+- Versioned, bounded little-endian payload codecs round-trip complete objective/camera/condenser/illumination/technique/preparation requirements, Slide geometry and measured preparation, fluorescent excitation/emission metadata, emission spectrum, filter-set compatibility identity and optional OriginLabId.
+- Tests cover historical revision retrieval, full model round-trip, exact-revision foreign-key rejection, stale writers across independent connections, direct SQL mutation/deletion rejection, reopen/recovery and no partial Slide record on failed writes.
+
 Still outstanding:
-- Durable persistence and historical lookup of the exact SampleType revision pinned by each Slide. The current SampleTypeCatalog represents current definitions; it is not a historical revision store.
-- Application/native workspace loading and editing of Slides and SampleType definitions.
-- A migration strategy for any previously persisted Sample/Specimen/SlideType data; no persistence schema migration is included in this change.
+- Native workspace loading/editing and application-level save/dirty lifecycle for Slides and SampleType definitions; the store is not yet wired into Swift composition.
+- Migration tooling for any legacy external Sample/Specimen/SlideType data. This store introduces a new versioned schema but does not import legacy records.
+- Schema/payload compatibility is versioned; a future payload change must add an explicit migration or a new payload format version rather than reinterpret format 1.
 - No patient identity, Sample instance identity or patient relationship is part of this microscope model.
 
 ## 7. Execution policy and result reporting

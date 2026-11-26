@@ -1914,12 +1914,22 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
         false,
         condenserRequirements,
         illuminationRequirements));
+    const auto preparationRequirements =
+        take(SpecimenPreparationRequirements::create(
+            {SpecimenPreparationMethod::Smear},
+            {SpecimenFixationState::Fixed},
+            std::nullopt,
+            std::nullopt,
+            150.0,
+            190.0));
     const auto sampleType = take(SampleType::create(
         makeId<SampleTypeId>("sample-type-calibrated-blood-film"),
         1,
         "Peripheral blood film",
         SampleMaterialClass::Biological,
-        compatibleRequirements));
+        compatibleRequirements,
+        std::nullopt,
+        preparationRequirements));
     const auto sample = take(Sample::create(
         makeId<SampleId>("sample-calibrated-blood-film"),
         1,
@@ -1996,6 +2006,50 @@ void testSampleRequirementsUseModeBoundSpecimenPlaneIrradiance() {
                       "sample.microscopy.specimen_irradiance_below_minimum";
               }),
           "rejects a mode whose calibrated specimen-plane irradiance falls below the sample requirement");
+
+    const auto incompatiblePreparationRequirements =
+        take(SpecimenPreparationRequirements::create(
+            {SpecimenPreparationMethod::TissueSection},
+            {SpecimenFixationState::Fixed}));
+    const auto incompatiblePreparationType = take(SampleType::create(
+        makeId<SampleTypeId>("sample-type-tissue-section-only"),
+        1,
+        "Thin tissue section",
+        SampleMaterialClass::Biological,
+        compatibleRequirements,
+        std::nullopt,
+        incompatiblePreparationRequirements));
+    const auto incompatiblePreparationSample = take(Sample::create(
+        makeId<SampleId>("sample-type-tissue-section-only"),
+        1,
+        incompatiblePreparationType.id(),
+        incompatiblePreparationType.revision(),
+        "Smear used as section",
+        "Peripheral blood smear"));
+    const auto incompatiblePreparationSpecimen = take(Specimen::create(
+        makeId<SpecimenId>("specimen-type-tissue-section-only"),
+        1,
+        incompatiblePreparationSample.id(),
+        incompatiblePreparationSample.revision(),
+        "Smear specimen",
+        preparation));
+    const auto preparationMismatch =
+        SampleMicroscopyRequirementAssessor::assess(
+            equipment,
+            incompatiblePreparationType,
+            incompatiblePreparationSample,
+            incompatiblePreparationSpecimen,
+            *configuration.resolvedConfiguration(),
+            &operationMode);
+    check(!preparationMismatch.isCompatible() &&
+          std::any_of(
+              preparationMismatch.diagnostics().begin(),
+              preparationMismatch.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "sample.preparation.method_not_allowed";
+              }),
+          "rejects an actual specimen preparation method outside its SampleType envelope");
 
     const auto missingMode = SampleMicroscopyRequirementAssessor::assess(
         equipment,

@@ -7,8 +7,41 @@
 #include <stdatomic.h>
 
 static int context_token;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+static uint8_t register_memory[2][0x10000];
+static size_t command_poll_count[2];
+#else
 static uint8_t register_memory[0x10000];
-static size_t command_poll_count = 0;
+static size_t command_poll_count;
+#endif
+static int port_index(PORT_HANDLE port) {
+    if ((uintptr_t)port == 0x4444) return 0;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+    if ((uintptr_t)port == 0x4445) return 1;
+#endif
+    return -1;
+}
+static int device_index(DEV_HANDLE device) {
+    if ((uintptr_t)device == 0x3333) return 0;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+    if ((uintptr_t)device == 0x3334) return 1;
+#endif
+    return -1;
+}
+static int stream_index(DS_HANDLE stream) {
+    if ((uintptr_t)stream == 0x5555) return 0;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+    if ((uintptr_t)stream == 0x5556) return 1;
+#endif
+    return -1;
+}
+static int event_index(EVENT_HANDLE event) {
+    if ((uintptr_t)event == 0x6666) return 0;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+    if ((uintptr_t)event == 0x6667) return 1;
+#endif
+    return -1;
+}
 static int fails_at_address(const char* variable, uint64_t address) {
     const char* configured = getenv(variable);
     if (!configured || !*configured) return 0;
@@ -160,12 +193,13 @@ static const char mock_xml[] =
     "</RegisterDescription>\n";
 static uint8_t* stream_memory[16];
 static BUFFER_HANDLE stream_handles[16];
+static DS_HANDLE stream_owners[16];
 static size_t stream_buffer_count;
-static BUFFER_HANDLE queued_buffers[16];
+static BUFFER_HANDLE queued_buffers[32];
 static size_t queued_buffer_count;
 static uint64_t stream_frame_ids[16];
 static uint64_t stream_timestamps_ns[16];
-static uint64_t next_simulator_frame_id = 1;
+static uint64_t next_simulator_frame_ids[2] = {1, 1};
 static atomic_int event_wait_entered = 0;
 static atomic_int event_unregistered = 0;
 
@@ -245,7 +279,9 @@ int32_t gentl_consumer_invoke(
         return argument_count == ((operation == 2 || operation == 3) ? 0u : 1u)
             ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
     case 4: {
-        if (argument_count != 4 || arguments[0] != 0x4444) return GC_ERR_INVALID_HANDLE;
+        if (argument_count != 4) return GC_ERR_INVALID_PARAMETER;
+        const int port = port_index((PORT_HANDLE)pointer(arguments[0]));
+        if (port < 0) return GC_ERR_INVALID_HANDLE;
         size_t* size = (size_t*)pointer(arguments[3]);
         uint8_t* bytes = (uint8_t*)pointer(arguments[2]);
         if (!size || (!bytes && *size != 0)) return GC_ERR_INVALID_PARAMETER;
@@ -279,8 +315,9 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     }
     case 5: {
-        if (argument_count != 4 || arguments[0] != 0x4444)
-            return GC_ERR_INVALID_HANDLE;
+        if (argument_count != 4) return GC_ERR_INVALID_PARAMETER;
+        const int port = port_index((PORT_HANDLE)pointer(arguments[0]));
+        if (port < 0) return GC_ERR_INVALID_HANDLE;
         const uint64_t address = arguments[1];
         const uint8_t* bytes = (const uint8_t*)pointer(arguments[2]);
         const size_t* size = (const size_t*)pointer(arguments[3]);
@@ -295,7 +332,8 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     }
     case 6:
-        if (argument_count != 3 || arguments[0] != 0x4444) return GC_ERR_INVALID_HANDLE;
+        if (argument_count != 3 || port_index((PORT_HANDLE)pointer(arguments[0])) < 0)
+            return GC_ERR_INVALID_HANDLE;
         return write_string((char*)pointer(arguments[1]),
                             (size_t*)pointer(arguments[2]), "Mock://DevicePort");
     case 15:
@@ -331,12 +369,23 @@ int32_t gentl_consumer_invoke(
                                  "Mock Interface");
     case 25:
         if (argument_count != 2 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        *(uint32_t*)pointer(arguments[1]) = 2;
+#else
         *(uint32_t*)pointer(arguments[1]) = 1;
+#endif
         return GC_ERR_SUCCESS;
     case 26:
         if (argument_count != 4 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
-        return write_string((char*)pointer(arguments[2]),
-                            (size_t*)pointer(arguments[3]), "device0");
+        if (arguments[1] == 0)
+            return write_string((char*)pointer(arguments[2]),
+                                (size_t*)pointer(arguments[3]), "device0");
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        if (arguments[1] == 1)
+            return write_string((char*)pointer(arguments[2]),
+                                (size_t*)pointer(arguments[3]), "device1");
+#endif
+        return GC_ERR_INVALID_INDEX;
     case 28: {
         if (argument_count != 6 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
         const char* value = 0;
@@ -351,30 +400,45 @@ int32_t gentl_consumer_invoke(
                                  pointer(arguments[4]), (size_t*)pointer(arguments[5]),
                                  value);
     }
-    case 29:
+    case 29: {
         if (argument_count != 4 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
-        if (strcmp((const char*)pointer(arguments[1]), "device0") != 0)
-            return GC_ERR_INVALID_PARAMETER;
-        *(DEV_HANDLE*)pointer(arguments[3]) = (DEV_HANDLE)(uintptr_t)0x3333;
+        const char* id = (const char*)pointer(arguments[1]);
+        if (strcmp(id, "device0") == 0)
+            *(DEV_HANDLE*)pointer(arguments[3]) = (DEV_HANDLE)(uintptr_t)0x3333;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        else if (strcmp(id, "device1") == 0)
+            *(DEV_HANDLE*)pointer(arguments[3]) = (DEV_HANDLE)(uintptr_t)0x3334;
+#endif
+        else return GC_ERR_INVALID_PARAMETER;
         return GC_ERR_SUCCESS;
-    case 30:
-        if (argument_count != 2 || arguments[0] != 0x3333) return GC_ERR_INVALID_HANDLE;
-        *(PORT_HANDLE*)pointer(arguments[1]) = (PORT_HANDLE)(uintptr_t)0x4444;
+    }
+    case 30: {
+        if (argument_count != 2) return GC_ERR_INVALID_PARAMETER;
+        const int index = device_index((DEV_HANDLE)pointer(arguments[0]));
+        if (index < 0) return GC_ERR_INVALID_HANDLE;
+        *(PORT_HANDLE*)pointer(arguments[1]) = (PORT_HANDLE)(uintptr_t)(0x4444 + index);
         return GC_ERR_SUCCESS;
-    case 31:
-        if (argument_count != 2 || arguments[0] != 0x3333) return GC_ERR_INVALID_HANDLE;
+    }
+    case 31: {
+        if (argument_count != 2 || device_index((DEV_HANDLE)pointer(arguments[0])) < 0)
+            return GC_ERR_INVALID_HANDLE;
         *(uint32_t*)pointer(arguments[1]) = 1;
         return GC_ERR_SUCCESS;
-    case 32:
-        if (argument_count != 4 || arguments[0] != 0x3333) return GC_ERR_INVALID_HANDLE;
+    }
+    case 32: {
+        if (argument_count != 4 || device_index((DEV_HANDLE)pointer(arguments[0])) < 0)
+            return GC_ERR_INVALID_HANDLE;
         return write_string((char*)pointer(arguments[2]),
                             (size_t*)pointer(arguments[3]), "stream0");
+    }
     case 47: // GCGetNumPortURLs
-        if (argument_count != 2 || arguments[0] != 0x4444) return GC_ERR_INVALID_HANDLE;
+        if (argument_count != 2 || port_index((PORT_HANDLE)pointer(arguments[0])) < 0)
+            return GC_ERR_INVALID_HANDLE;
         *(uint32_t*)pointer(arguments[1]) = 1;
         return GC_ERR_SUCCESS;
     case 48: { // GCGetPortURLInfo
-        if (argument_count != 6 || arguments[0] != 0x4444 || arguments[1] != 0)
+        if (argument_count != 6 ||
+            port_index((PORT_HANDLE)pointer(arguments[0])) < 0 || arguments[1] != 0)
             return GC_ERR_INVALID_HANDLE;
         const uint32_t command = (uint32_t)arguments[2];
         if (command == URL_INFO_SCHEME) {
@@ -403,20 +467,26 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_NOT_AVAILABLE;
     }
 
-    case 8: // GCRegisterEvent
-        if (argument_count != 3 || arguments[0] != 0x5555 ||
-            arguments[1] != EVENT_NEW_BUFFER) return GC_ERR_INVALID_PARAMETER;
+    case 8: { // GCRegisterEvent
+        if (argument_count != 3 || arguments[1] != EVENT_NEW_BUFFER)
+            return GC_ERR_INVALID_PARAMETER;
+        const int index = stream_index((DS_HANDLE)pointer(arguments[0]));
+        if (index < 0) return GC_ERR_INVALID_HANDLE;
         atomic_store_explicit(&event_wait_entered, 0, memory_order_release);
         atomic_store_explicit(&event_unregistered, 0, memory_order_release);
-        *(EVENT_HANDLE*)pointer(arguments[2]) = (EVENT_HANDLE)(uintptr_t)0x6666;
+        *(EVENT_HANDLE*)pointer(arguments[2]) = (EVENT_HANDLE)(uintptr_t)(0x6666 + index);
         return GC_ERR_SUCCESS;
-    case 9: // GCUnregisterEvent
-        if (argument_count != 2 || arguments[0] != 0x5555 ||
-            arguments[1] != EVENT_NEW_BUFFER) return GC_ERR_INVALID_PARAMETER;
+    }
+    case 9: {
+        if (argument_count != 2 || arguments[1] != EVENT_NEW_BUFFER)
+            return GC_ERR_INVALID_PARAMETER;
+        if (stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
+            return GC_ERR_INVALID_HANDLE;
         if (getenv("MOCK_GENTL_FAIL_EVENT_UNREGISTER"))
             return GC_ERR_INVALID_PARAMETER;
         atomic_store_explicit(&event_unregistered, 1, memory_order_release);
         return GC_ERR_SUCCESS;
+    }
     case 10: { // EventGetData
         if (argument_count != 4 || arguments[0] != 0x6666)
             return GC_ERR_INVALID_HANDLE;
@@ -460,41 +530,55 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     }
     case 14: // EventKill
-        if (argument_count != 1 || arguments[0] != 0x6666)
+        if (argument_count != 1 ||
+            event_index((EVENT_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_HANDLE;
         atomic_store_explicit(&event_unregistered, 1, memory_order_release);
         return GC_ERR_SUCCESS;
-    case 33: // DevOpenDataStream
-        if (argument_count != 3 || arguments[0] != 0x3333 ||
+    case 33: { // DevOpenDataStream
+        if (argument_count != 3 ||
             strcmp((const char*)pointer(arguments[1]), "stream0") != 0)
             return GC_ERR_INVALID_PARAMETER;
-        *(DS_HANDLE*)pointer(arguments[2]) = (DS_HANDLE)(uintptr_t)0x5555;
+        const int index = device_index((DEV_HANDLE)pointer(arguments[0]));
+        if (index < 0) return GC_ERR_INVALID_HANDLE;
+        *(DS_HANDLE*)pointer(arguments[2]) = (DS_HANDLE)(uintptr_t)(0x5555 + index);
         return GC_ERR_SUCCESS;
+    }
     case 37: { // DSAllocAndAnnounceBuffer
-        if (argument_count != 4 || arguments[0] != 0x5555 ||
+        if (argument_count != 4 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0 ||
             arguments[1] != 64 || stream_buffer_count >= 16)
             return GC_ERR_INVALID_PARAMETER;
         const size_t index = stream_buffer_count++;
         stream_memory[index] = (uint8_t*)malloc(64);
         if (!stream_memory[index]) return GC_ERR_OUT_OF_MEMORY;
         memset(stream_memory[index], 0, 64);
+        stream_owners[index] = (DS_HANDLE)pointer(arguments[0]);
         stream_handles[index] = (BUFFER_HANDLE)(uintptr_t)(0x7000 + index);
         *(BUFFER_HANDLE*)pointer(arguments[3]) = stream_handles[index];
         return GC_ERR_SUCCESS;
     }
-    case 38: // DSFlushQueue
-        if (argument_count != 2 || arguments[0] != 0x5555)
+    case 38: { // DSFlushQueue
+        if (argument_count != 2 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_PARAMETER;
-        queued_buffer_count = 0;
+        const DS_HANDLE owner = (DS_HANDLE)pointer(arguments[0]);
+        size_t writeIndex = 0;
+        for (size_t i = 0; i < queued_buffer_count; ++i) {
+            size_t bi = 0;
+            while (bi < stream_buffer_count && stream_handles[bi] != queued_buffers[i]) ++bi;
+            if (bi < stream_buffer_count && stream_owners[bi] != owner)
+                queued_buffers[writeIndex++] = queued_buffers[i];
+        }
+        queued_buffer_count = writeIndex;
         return GC_ERR_SUCCESS;
+    }
     case 39: // DSStartAcquisition
-        return argument_count == 3 && arguments[0] == 0x5555
+        return argument_count == 3 && stream_index((DS_HANDLE)pointer(arguments[0])) >= 0
             ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
     case 40: // DSStopAcquisition
-        return argument_count == 2 && arguments[0] == 0x5555
+        return argument_count == 2 && stream_index((DS_HANDLE)pointer(arguments[0])) >= 0
             ? GC_ERR_SUCCESS : GC_ERR_INVALID_PARAMETER;
     case 41: { // DSGetInfo
-        if (argument_count != 5 || arguments[0] != 0x5555)
+        if (argument_count != 5 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_HANDLE;
         const int32_t command = (int32_t)arguments[1];
         const size_t value = command == STREAM_INFO_PAYLOAD_SIZE ? 64 :
@@ -505,17 +589,19 @@ int32_t gentl_consumer_invoke(
             INFO_DATATYPE_SIZET, &value, sizeof(value));
     }
     case 43: // DSClose
-        if (argument_count != 1 || arguments[0] != 0x5555)
+        if (argument_count != 1 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_PARAMETER;
         return getenv("MOCK_GENTL_FAIL_DS_CLOSE")
             ? GC_ERR_INVALID_PARAMETER : GC_ERR_SUCCESS;
     case 44: { // DSRevokeBuffer
-        if (argument_count != 4 || arguments[0] != 0x5555)
+        if (argument_count != 4 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_PARAMETER;
         const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
         size_t index = 0;
         while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
-        if (index == stream_buffer_count) return GC_ERR_INVALID_BUFFER;
+        if (index == stream_buffer_count ||
+            stream_owners[index] != (DS_HANDLE)pointer(arguments[0]))
+            return GC_ERR_INVALID_BUFFER;
         free(stream_memory[index]);
         stream_memory[index] = 0;
         *(void**)pointer(arguments[2]) = 0;
@@ -523,23 +609,25 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_SUCCESS;
     }
     case 45: { // DSQueueBuffer
-        if (argument_count != 2 || arguments[0] != 0x5555 ||
-            queued_buffer_count >= 16) return GC_ERR_INVALID_PARAMETER;
+        if (argument_count != 2 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0 ||
+            queued_buffer_count >= 32) return GC_ERR_INVALID_PARAMETER;
         const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
         size_t index = 0;
         while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
-        if (index == stream_buffer_count || !stream_memory[index])
+        if (index == stream_buffer_count || !stream_memory[index] ||
+            stream_owners[index] != (DS_HANDLE)pointer(arguments[0]))
             return GC_ERR_INVALID_BUFFER;
         queued_buffers[queued_buffer_count++] = handle;
         return GC_ERR_SUCCESS;
     }
     case 46: { // DSGetBufferInfo
-        if (argument_count != 6 || arguments[0] != 0x5555)
+        if (argument_count != 6 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_HANDLE;
         const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
         size_t index = 0;
         while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
-        if (index == stream_buffer_count || !stream_memory[index])
+        if (index == stream_buffer_count || !stream_memory[index] ||
+            stream_owners[index] != (DS_HANDLE)pointer(arguments[0]))
             return GC_ERR_INVALID_BUFFER;
         const int32_t command = (int32_t)arguments[2];
         INFO_DATATYPE* type = (INFO_DATATYPE*)pointer(arguments[3]);

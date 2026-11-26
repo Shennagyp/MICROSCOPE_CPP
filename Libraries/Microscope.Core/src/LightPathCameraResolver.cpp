@@ -298,8 +298,8 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             continue;
         }
 
-        LightPathCameraCandidate candidate;
-        candidate.cameraComponentId = endpointId;
+        LightPathCameraCandidate candidate{
+            endpointId, {}, std::nullopt, false};
         for (const auto& outputMode : camera->outputModes()) {
             candidate.availableCameraModeIds.push_back(outputMode.id());
         }

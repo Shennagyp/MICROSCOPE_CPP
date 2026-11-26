@@ -20,6 +20,11 @@ using Policy = StageWorkingSurfaceNavigationVerificationPolicy;
 using Mode = StageWorkingSurfaceNavigationPositionVerificationMode;
 using Error = StageWorkingSurfaceNavigationVerificationPolicyError;
 
+template<class TResult>
+void checkError(TResult result, Error expected, const char* message) {
+    check(!result && result.error() == expected, message);
+}
+
 void testAcceptsValidBoundedAndMeasuredPolicies() {
     const auto bounded = Policy::create(2.0, 3.0, 0.0, 0.5,
         Mode::BoundedCommandEstimate);
@@ -40,59 +45,46 @@ void testAcceptsValidBoundedAndMeasuredPolicies() {
 }
 
 void testRejectsInvalidTargetTolerances() {
-    check(Policy::create(0.0, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidXTolerance,
-          "rejects a zero X target tolerance");
-    check(Policy::create(-1.0, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidXTolerance,
-          "rejects a negative X target tolerance");
-    check(Policy::create(1.0, 0.0, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidYTolerance,
-          "rejects a zero Y target tolerance");
-    check(Policy::create(1.0, -1.0, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidYTolerance,
-          "rejects a negative Y target tolerance");
+    checkError(Policy::create(0.0, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidXTolerance, "rejects a zero X target tolerance");
+    checkError(Policy::create(-1.0, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidXTolerance, "rejects a negative X target tolerance");
+    checkError(Policy::create(1.0, 0.0, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidYTolerance, "rejects a zero Y target tolerance");
+    checkError(Policy::create(1.0, -1.0, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidYTolerance, "rejects a negative Y target tolerance");
 }
 
 void testRejectsNonFiniteTargetTolerances() {
     const auto nan = std::numeric_limits<double>::quiet_NaN();
     const auto infinity = std::numeric_limits<double>::infinity();
-    check(Policy::create(nan, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidXTolerance,
-          "rejects a NaN X tolerance");
-    check(Policy::create(infinity, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidXTolerance,
-          "rejects an infinite X tolerance");
-    check(Policy::create(1.0, nan, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidYTolerance,
-          "rejects a NaN Y tolerance");
-    check(Policy::create(1.0, infinity, 0.0, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidYTolerance,
-          "rejects an infinite Y tolerance");
+    checkError(Policy::create(nan, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidXTolerance, "rejects a NaN X tolerance");
+    checkError(Policy::create(infinity, 1.0, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidXTolerance, "rejects an infinite X tolerance");
+    checkError(Policy::create(1.0, nan, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidYTolerance, "rejects a NaN Y tolerance");
+    checkError(Policy::create(1.0, infinity, 0.0, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidYTolerance, "rejects an infinite Y tolerance");
 }
 
 void testRejectsInvalidHomeUncertainty() {
     const auto nan = std::numeric_limits<double>::quiet_NaN();
     const auto infinity = std::numeric_limits<double>::infinity();
-    check(Policy::create(1.0, 1.0, -0.01, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidXHomeUncertainty,
-          "rejects negative X home-reference uncertainty");
-    check(Policy::create(1.0, 1.0, nan, 0.0, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidXHomeUncertainty,
-          "rejects NaN X home-reference uncertainty");
-    check(Policy::create(1.0, 1.0, 0.0, -0.01, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidYHomeUncertainty,
-          "rejects negative Y home-reference uncertainty");
-    check(Policy::create(1.0, 1.0, 0.0, infinity, Mode::BoundedCommandEstimate).error() ==
-              Error::InvalidYHomeUncertainty,
-          "rejects infinite Y home-reference uncertainty");
+    checkError(Policy::create(1.0, 1.0, -0.01, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidXHomeUncertainty, "rejects negative X home-reference uncertainty");
+    checkError(Policy::create(1.0, 1.0, nan, 0.0, Mode::BoundedCommandEstimate),
+               Error::InvalidXHomeUncertainty, "rejects NaN X home-reference uncertainty");
+    checkError(Policy::create(1.0, 1.0, 0.0, -0.01, Mode::BoundedCommandEstimate),
+               Error::InvalidYHomeUncertainty, "rejects negative Y home-reference uncertainty");
+    checkError(Policy::create(1.0, 1.0, 0.0, infinity, Mode::BoundedCommandEstimate),
+               Error::InvalidYHomeUncertainty, "rejects infinite Y home-reference uncertainty");
 }
 
 void testRejectsUnknownVerificationMode() {
     const auto invalidMode = static_cast<Mode>(255);
-    check(Policy::create(1.0, 1.0, 0.0, 0.0, invalidMode).error() ==
-              Error::InvalidMode,
-          "rejects an enum value not defined by the verification contract");
+    checkError(Policy::create(1.0, 1.0, 0.0, 0.0, invalidMode),
+               Error::InvalidMode, "rejects an enum value not defined by the verification contract");
 }
 } // namespace
 

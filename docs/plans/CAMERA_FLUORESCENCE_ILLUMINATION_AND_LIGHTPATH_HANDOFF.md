@@ -46,7 +46,14 @@ If a future acquisition contract explicitly requires global shutter (for example
   - It deliberately does not invent QE, read noise, dark current, pixel pitch or full-well values.
   - No acquisition, frame-buffer, stream lifecycle or preview implementation was intended to change in this work.
 - `Camera/Common/tests/CameraModelsTests.cpp`
-  - Catalog matching, variant ambiguity, QE validation, provenance and capability tests have been authored.
+  - Catalog matching, generic/specific variant ambiguity, empty-variant identity, QE validation, provenance and capability tests have been authored.
+- `Libraries/Microscope.Application/include/microscope/application/persistence/CameraModelCatalogSqliteStore.h` and `src/CameraModelCatalogSqliteStore.cpp`
+  - Application-owned SQLite store persists the shared catalog, model/profile revision, provenance, capability-known/supported masks, sensor characteristics and wavelength-dependent QE samples.
+  - Writes replace the shared catalog atomically and require the expected current catalog revision. Loads validate persisted profile values and reconstruct the typed catalog.
+- `Libraries/Microscope.Application/include/microscope/application/camera/CameraModelDiscoveryEnricher.h` and `src/CameraModelDiscoveryEnricher.cpp`
+  - Enriches a connected device only from an exact manufacturer/model/variant match. Incomplete identity returns candidate profiles for explicit resolution.
+  - Known live device capabilities/sensor facts are retained; conflicts with persisted model data are returned as warnings.
+- AmScope discovery now identifies manufacturer as `AmScope`, model as the vendor model descriptor name, and leaves hardware variant absent unless the backend reports it. No acquisition/preview code was modified.
 
 ### Microscope Core
 
@@ -68,7 +75,23 @@ If a future acquisition contract explicitly requires global shutter (for example
   - `LightPathCalibration` stores measured source-drive-to-specimen-irradiance points, uncertainty, microscope/equipment/mode revisions, LightPath, source channel and configured optical component identities.
   - `LightPathModeSetting` stores a per-mode target specimen irradiance and references the exact calibration revision.
   - Drive resolution checks microscope, equipment revision, mode revision, LightPath, source/channel, calibration revision and configured component identities. It uses measured-interval interpolation and does not extrapolate.
-- Dedicated test source files were added and registered in CMake for camera suitability and LightPath calibration. Spectral source/filter test coverage was also added to existing Core contract test targets.
+- `Libraries/Microscope.Core/include/microscope/core/configuration/OperationMode.h` and `src/OperationMode.cpp`
+  - Adds an immutable revisioned OperationMode aggregate owning one `LightPathModeSetting` per selected LightPath. Camera identity remains derived from topology, not pinned in the mode.
+  - The aggregate checks microscope, mode ID/revision, equipment revision and unique LightPath identity across all settings.
+- Dedicated test sources exist and are registered in CMake for camera suitability, LightPath calibration and OperationMode. Spectral source/filter test coverage was added to existing Core contract test targets.
+- Tests are authored but have not been run.
+
+### Application persistence
+
+- `Libraries/Microscope.Application/include/microscope/application/persistence/MicroscopeConfigurationSqliteStore.h` and `src/MicroscopeConfigurationSqliteStore.cpp`
+  - Persists immutable LightPath calibration revisions and revisioned OperationMode records in SQLite.
+  - Mode saves validate referenced calibration existence and exact microscope/equipment/mode/path/source/channel/optical-component binding.
+  - Uses transactional current-mode updates and optimistic revision checks; calibration revisions are append-only.
+- Corresponding test source files:
+  - `Libraries/Microscope.Application/tests/CameraModelCatalogSqliteStoreTests.cpp`
+  - `Libraries/Microscope.Application/tests/CameraModelDiscoveryEnricherTests.cpp`
+  - `Libraries/Microscope.Application/tests/MicroscopeConfigurationSqliteStoreTests.cpp`
+- Application CMake links SQLite and Camera::Common; root CMake defines Camera::Common once for both Application and optional AmScope backend. The AmScope CMake target reuses the shared target.
 
 ### Documentation updated
 
@@ -123,10 +146,10 @@ These are user-configured calibration outcomes, not universal rules. Do not fabr
 
 ## 5. Critical gaps — do not treat the work as finished
 
-1. **Persistence is not implemented.** The C++ value types and architecture define persistable data, but there is no complete Application persistence adapter/store/schema/migration for the camera model catalog, equipment constitution, operation modes, filters/source data or LightPath calibration. Implement the storage owner and transaction boundaries.
-2. **OperationMode aggregate is not complete.** `OperationModeId` and `LightPathModeSetting` exist, but the editable/revisioned OperationMode aggregate that composes techniques, camera preference policy and one or more LightPath mode settings still needs to be integrated.
+1. **Persistence is partially implemented.** SQLite stores now persist the shared camera model catalog and the immutable LightPath calibration / revisioned OperationMode records, with optimistic revision checks and test sources. The microscope equipment constitution and its installed camera-to-model-profile bindings are not yet persisted. Source/filter/equipment revisions and acquisition snapshots also need durable records.
+2. **OperationMode aggregate and persistence groundwork are implemented.** Core has a revisioned aggregate owning one LightPath setting per path; Application persists revisions and verifies calibration bindings. The aggregate does not yet include the full declarative technique composition/objective requirement model.
 3. **Resolver integration is not complete.** The current `ConfigurationRequest`/resolver still has legacy explicit camera/path selection. Make LightPath the configuration input and derive camera endpoint/output-mode choices from its imaging routes. Keep manual camera selection as an optional assertion/choice among cameras connected to that LightPath only.
-4. **Camera catalog to Core bridge is not complete.** Application must merge `CameraModelCatalog` data into live camera discovery and project the enriched data into the selected camera's Core `CameraSpecification`. Do not add a Core dependency on `Camera::Common` or vendor SDKs.
+4. **Camera discovery enrichment is implemented; Core projection is not.** Application enriches `CameraDeviceInfo` from an exact persisted catalog profile and reports conflicts/ambiguity. It must still project the selected route-derived camera data into the Core `CameraSpecification` at the configuration boundary. Do not add a Core dependency on `Camera::Common` or vendor SDKs.
 5. **Spectral calculation is incomplete.** The current mean-QE band calculation must be replaced by emission-spectrum/filter/dichroic weighted integration. Implement interpolation with defined behavior for incomplete spectral coverage and preserve unknown evidence as warning.
 6. **Filter route validation is incomplete.** Equipment validation establishes installed-component/filter-role consistency. The resolver must additionally prove each required filter belongs to the selected LightPath and the correct directional route.
 7. **Calibration key is incomplete.** A component ID set does not encode optical state. Add a canonical fingerprint/snapshot for all irradiation-affecting adjustable settings: route revision, objective, condenser, annulus/stop, source/channel, filters, aperture/iris/selector states, splitters/relay and geometry. Include meter identity/calibration, measurement plane, conditions, date and uncertainty.
@@ -144,19 +167,17 @@ Continue in this order; do not skip directly to UI or physical testing.
 - Ensure the model catalog and Core sensor characteristic value models have equivalent validation rules and explicit unknown/provenance semantics.
 - Add/update contract tests but do not run local builds/tests/debugging in this work session.
 
-### Step 2 — Implement Application persistence ports and owner-retained stores
-- Add focused persistence interfaces for camera-model catalog, microscope equipment constitution, operation-mode revisions and LightPath calibration records. Avoid a generic repository framework or service locator.
-- Keep Core persistence-free. Application owns serialization, schema/versioning, transactions, conflict handling, and the active in-memory objects.
-- Persist the shared camera model catalog by stable manufacturer/model/variant key and profile revision.
-- Persist each microscope's equipment constitution with installed camera-to-model-profile binding, optical topology, source/channel and filter records.
-- Persist editable operation modes as revisions, with per-LightPath irradiance targets and exact calibration references.
-- Persist calibration points, uncertainty and the complete physical configuration fingerprint. Preserve old revisions for historical acquisition snapshots.
+### Step 2 — Complete Application persistence
+- **Implemented:** focused SQLite stores exist for the shared camera model catalog and for LightPath calibration / OperationMode revisions. Core remains persistence-free; Application owns serialization, transactions and revision checks.
+- **Remaining:** persist each microscope's equipment constitution with installed camera-to-model-profile binding, optical topology, source/channel and filter records.
+- **Remaining:** replace the provisional calibration component-ID set with the complete optical-state fingerprint and persist measurement instrument/conditions/provenance and measurement plane.
+- **Remaining:** persist acquisition/configuration snapshots including selected camera, warnings/acknowledgements, effective observed illumination and the exact equipment/mode/calibration revisions.
+- Preserve old mode/calibration/equipment revisions for historical acquisition snapshots. Avoid a generic repository framework or service locator.
 
-### Step 3 — Complete Camera discovery enrichment
-- When a device is enumerated, match its manufacturer/model/variant to the persisted catalog.
-- If the variant is absent, return candidates. Do not choose a model profile if multiple variants remain possible.
-- Merge known model facts into `CameraDeviceInfo`; preserve live feature descriptors separately from model specifications.
-- Map the resulting data into Core `CameraSpecification` only for the camera endpoint derived from the selected LightPath.
+### Step 3 — Complete Camera discovery integration
+- **Implemented:** Application matches live discovery by manufacturer/model/variant, enriches missing facts, preserves live facts and returns candidate profiles or conflict warnings when exact matching is not possible.
+- **Remaining:** invoke the enricher from the active camera capability composition using the loaded catalog; persist and maintain the per-microscope installed camera-component-to-model-profile binding with the equipment constitution.
+- Map enriched data into Core `CameraSpecification` only for the camera endpoint derived from the selected LightPath.
 
 ### Step 4 — Integrate LightPath, camera and filter resolution
 - Make selected `LightPathId` part of the configuration request.

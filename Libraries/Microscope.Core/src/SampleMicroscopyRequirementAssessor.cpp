@@ -1,4 +1,5 @@
 #include "microscope/core/configuration/SampleMicroscopyRequirementAssessor.h"
+#include "microscope/core/configuration/CameraSuitability.h"
 
 #include <algorithm>
 #include <cmath>
@@ -527,6 +528,274 @@ void assessFluorescenceFilterSet(
     }
 }
 
+[[nodiscard]] const OpticalFilterSpecification* findSelectedFilterForLabel(
+    const MicroscopeEquipmentDefinition& equipment,
+    const ConfigurationRequest& request,
+    const SpecimenLabel& label,
+    OpticalFilterRole role) {
+    const OpticalFilterSpecification* selected = nullptr;
+    for (const auto& filter : equipment.filterSpecifications()) {
+        if (filter.role() != role ||
+            std::find(
+                request.selectedAdditionalOpticalComponentIds().begin(),
+                request.selectedAdditionalOpticalComponentIds().end(),
+                filter.componentId()) ==
+                request.selectedAdditionalOpticalComponentIds().end()) {
+            continue;
+        }
+        if (label.filterSetCompatibilityId() &&
+            filter.compatibilityId() != label.filterSetCompatibilityId()) {
+            continue;
+        }
+        if (selected != nullptr) {
+            return nullptr;
+        }
+        selected = &filter;
+    }
+    return selected;
+}
+
+[[nodiscard]] const IlluminationChannel* findSelectedIlluminationChannel(
+    const MicroscopeEquipmentDefinition& equipment,
+    const ConfigurationRequest& request) {
+    const auto& specifications = equipment.illuminationSpecifications();
+    const auto specification = std::find_if(
+        specifications.begin(), specifications.end(),
+        [&request](const IlluminationSpecification& value) {
+            return value.componentId() == request.illuminationComponentId();
+        });
+    if (specification == specifications.end()) {
+        return nullptr;
+    }
+
+    const auto& channels = specification->channels();
+    const auto channel = std::find_if(
+        channels.begin(), channels.end(),
+        [&request](const IlluminationChannel& value) {
+            return value.id() == request.illuminationChannelId();
+        });
+    return channel == channels.end() ? nullptr : &*channel;
+}
+
+[[nodiscard]] std::optional<double> spectralPowerAt(
+    const SpectralPowerDistribution& spectrum,
+    double wavelengthNanometers) {
+    const auto& samples = spectrum.samples();
+    if (samples.empty() ||
+        wavelengthNanometers < samples.front().wavelengthNanometers ||
+        wavelengthNanometers > samples.back().wavelengthNanometers) {
+        return std::nullopt;
+    }
+
+    const auto upper = std::lower_bound(
+        samples.begin(), samples.end(), wavelengthNanometers,
+        [](const SpectralPowerSample& sample, double wavelength) {
+            return sample.wavelengthNanometers < wavelength;
+        });
+    if (upper == samples.end()) {
+        return samples.back().relativePower;
+    }
+    if (upper->wavelengthNanometers == wavelengthNanometers ||
+        upper == samples.begin()) {
+        return upper->relativePower;
+    }
+
+    const auto& right = *upper;
+    const auto& left = *(upper - 1);
+    const double fraction =
+        (wavelengthNanometers - left.wavelengthNanometers) /
+        (right.wavelengthNanometers - left.wavelengthNanometers);
+    return left.relativePower +
+           fraction * (right.relativePower - left.relativePower);
+}
+
+[[nodiscard]] bool filterBandHasPositiveResponse(
+    const OpticalFilterSpecification& filter,
+    const SpectralBand& band,
+    bool reflection) {
+    const auto evaluate = [&](double wavelength) {
+        return reflection
+            ? filter.reflectionAt(wavelength)
+            : filter.transmissionAt(wavelength);
+    };
+    const double minimum = band.minimumWavelengthNanometers();
+    const double maximum = band.maximumWavelengthNanometers();
+    const auto lower = evaluate(minimum);
+    const auto upper = evaluate(maximum);
+    if (!lower || !upper) {
+        return false;
+    }
+    if (*lower > 0.0 || *upper > 0.0) {
+        return true;
+    }
+
+    for (const auto& sample : filter.spectralResponse()) {
+        const double wavelength = sample.wavelength.value();
+        if (wavelength < minimum || wavelength > maximum) {
+            continue;
+        }
+        const auto response = evaluate(wavelength);
+        if (response && *response > 0.0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] bool sourceBandHasPositivePower(
+    const SpectralPowerDistribution& spectrum,
+    const SpectralBand& band,
+    bool& completeCoverage) {
+    const double minimum = band.minimumWavelengthNanometers();
+    const double maximum = band.maximumWavelengthNanometers();
+    const auto lower = spectralPowerAt(spectrum, minimum);
+    const auto upper = spectralPowerAt(spectrum, maximum);
+    completeCoverage = lower.has_value() && upper.has_value();
+    if (!completeCoverage) {
+        return false;
+    }
+    if (*lower > 0.0 || *upper > 0.0) {
+        return true;
+    }
+
+    for (const auto& sample : spectrum.samples()) {
+        if (sample.wavelengthNanometers >= minimum &&
+            sample.wavelengthNanometers <= maximum &&
+            sample.relativePower > 0.0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void assessExcitationAvailability(
+    Diagnostics& diagnostics,
+    const MicroscopeEquipmentDefinition& equipment,
+    const ConfigurationRequest& request,
+    const SpecimenLabel& label) {
+    if (!label.excitationBand()) {
+        return;
+    }
+
+    const auto* channel = findSelectedIlluminationChannel(equipment, request);
+    if (channel == nullptr || !channel->spectralPowerDistribution()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Warning,
+            "sample.microscopy.excitation_source_spectrum_unknown",
+            "The selected illumination channel has no spectral power distribution; excitation availability in the fluorophore band is unknown.",
+            "IlluminationChannel",
+            request.illuminationChannelId().value());
+    } else {
+        bool completeCoverage = false;
+        const bool positivePower = sourceBandHasPositivePower(
+            *channel->spectralPowerDistribution(),
+            *label.excitationBand(),
+            completeCoverage);
+        if (!completeCoverage) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Warning,
+                "sample.microscopy.excitation_source_spectrum_coverage_incomplete",
+                "The selected illumination source spectrum does not cover the complete excitation band; excitation availability cannot be established without extrapolation.",
+                "IlluminationChannel",
+                request.illuminationChannelId().value());
+        } else if (!positivePower) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.excitation_source_has_no_band_power",
+                "The selected illumination channel has no declared spectral power in the fluorophore excitation band.",
+                "IlluminationChannel",
+                request.illuminationChannelId().value());
+        }
+    }
+
+    if (!label.filterSetCompatibilityId()) {
+        return;
+    }
+
+    const auto* excitationFilter = findSelectedFilterForLabel(
+        equipment, request, label, OpticalFilterRole::Excitation);
+    const auto* dichroic = findSelectedFilterForLabel(
+        equipment, request, label, OpticalFilterRole::Dichroic);
+
+    if (excitationFilter != nullptr &&
+        !filterBandHasPositiveResponse(
+            *excitationFilter, *label.excitationBand(), false)) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.excitation_filter_has_no_band_transmission",
+            "The selected excitation filter has no declared transmission in the fluorophore excitation band or does not cover that band.",
+            "EquipmentComponent",
+            excitationFilter->componentId().value());
+    }
+    if (dichroic != nullptr &&
+        !filterBandHasPositiveResponse(
+            *dichroic, *label.excitationBand(), true)) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.dichroic_has_no_excitation_reflection",
+            "The selected dichroic has no declared reflection in the fluorophore excitation band or does not cover that band.",
+            "EquipmentComponent",
+            dichroic->componentId().value());
+    }
+}
+
+void assessFluorescenceCameraSuitability(
+    Diagnostics& diagnostics,
+    const MicroscopeEquipmentDefinition& equipment,
+    const ConfigurationRequest& request,
+    const SpecimenPreparation& preparation,
+    const CameraPerformanceRequirements& requirements) {
+    const auto* camera = findCamera(equipment, request.cameraComponentId());
+    if (camera == nullptr) {
+        return;
+    }
+
+    for (const auto& label : preparation.labels()) {
+        if (label.kind() != SpecimenLabelKind::Fluorescent ||
+            !label.emissionBand()) {
+            continue;
+        }
+
+        std::optional<OpticalFilterSpecification> dichroic;
+        std::optional<OpticalFilterSpecification> emissionFilter;
+        if (label.filterSetCompatibilityId()) {
+            if (const auto* selected = findSelectedFilterForLabel(
+                    equipment, request, label, OpticalFilterRole::Dichroic)) {
+                dichroic = *selected;
+            }
+            if (const auto* selected = findSelectedFilterForLabel(
+                    equipment, request, label, OpticalFilterRole::Emission)) {
+                emissionFilter = *selected;
+            }
+        }
+
+        FluorescenceCameraRequirements cameraRequirements{
+            *label.emissionBand(),
+            requirements.minimumMeanQuantumEfficiency(),
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            requirements.preferMonochrome(),
+            requirements.preferGlobalShutter(),
+            label.emissionSpectrum(),
+            std::move(dichroic),
+            std::move(emissionFilter)};
+
+        auto report = CameraSuitabilityAssessor::assessFluorescence(
+            *camera, cameraRequirements);
+        diagnostics.insert(
+            diagnostics.end(),
+            report.warnings.begin(),
+            report.warnings.end());
+    }
+}
+
 void assessFluorescenceLabels(
     Diagnostics& diagnostics,
     const MicroscopyRequirements& requirements,
@@ -709,12 +978,26 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
 
     if (request.contrastMethod() == ContrastMethod::Fluorescence) {
         for (const auto& label : specimen.preparation().labels()) {
-            if (label.kind() == SpecimenLabelKind::Fluorescent &&
-                label.filterSetCompatibilityId()) {
+            if (label.kind() != SpecimenLabelKind::Fluorescent) {
+                continue;
+            }
+            assessExcitationAvailability(
+                diagnostics, equipment, request, label);
+            if (label.filterSetCompatibilityId()) {
                 assessFluorescenceFilterSet(
                     diagnostics, equipment, request, label);
             }
         }
+    }
+
+    if (request.contrastMethod() == ContrastMethod::Fluorescence &&
+        requirements.camera()) {
+        assessFluorescenceCameraSuitability(
+            diagnostics,
+            equipment,
+            request,
+            specimen.preparation(),
+            *requirements.camera());
     }
 
     return SampleMicroscopyAssessment(std::move(diagnostics));

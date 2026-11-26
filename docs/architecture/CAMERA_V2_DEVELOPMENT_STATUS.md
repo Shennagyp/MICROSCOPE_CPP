@@ -2,8 +2,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37` — GenApi negative-path coverage now includes malformed XML rejection/recovery, unsupported public generic-node classification, and injected feature/command failure recovery.  
-**Latest CI-validated checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37` — workflow [#45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
+**Latest reviewed implementation checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284` — GenApi negative-path coverage now includes malformed XML rejection/recovery, unsupported public generic-node classification, and injected feature/command execution/completion failure recovery.  
+**Latest CI-validated checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284` — workflow [#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64.  
 **Review date:** 26 November 2026.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction while Phase 4 acceptance remains pending.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
@@ -141,7 +141,8 @@ Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | `a4fc39b` | Explain RAW bit-depth profile denial | The descriptor factory now supplies an actionable disabled reason when model policy blocks the feature; a regression test checks the exact reason. |
 | `8b9be09`, `977d53b` | Test GenApi port failure recovery | Adds mock read/write fault injection and verifies feature read failure recovery, failed-write no-side-effect behavior, and command execution failure/recovery. The read fault is injected before first feature access to avoid GenApi cache bypass. |
 | `9bb1c4c` | Test malformed GenApi XML handling | Injects malformed XML through the mock remote port; verifies node-map construction rejects it and a later valid node map recovers. |
-| `a07c8a2` | Test unsupported public GenApi node handling | Adds a generic public `Node` reachable from `Root`; verifies scalar descriptor enumeration omits it and direct feature read/write return `Unsupported`. Workflow #45767256996 passed official GenApi 3.5.1 integration on both architectures. |
+| `a07c8a2` | Test unsupported public GenApi node handling | Adds a generic public `Node` reachable from `Root`; verifies scalar descriptor enumeration omits it and direct feature read/write return `Unsupported`. |
+| `ea356d5` | Test GenApi command completion-query failure recovery | Injects a remote-port read failure while `ICommand::IsDone()` polls completion; verifies `BackendFailure` mapping, then verifies polling resumes. Workflow #45767832186 passed official GenApi 3.5.1 integration on both architectures. |
 
 ### Current Qt and non-Qt CI — checkpoint a4fc39b
 
@@ -222,8 +223,8 @@ CI evidence:
 
 No local build/test/debug run or new physical-camera test was performed.
 AmScope source and tests were not modified. The latest GenTL/GenApi-only
-increment is commit `a07c8a2cfc56d639b7c761512fb640cf079cfd37`; workflow
-[#45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996)
+increment is commit `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284`; workflow
+[#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996)
 passed the GenTL suite and official GenApi 3.5.1 build/integration tests on
 Intel x86_64 and Apple Silicon arm64.
 
@@ -231,9 +232,9 @@ That increment covers:
 - malformed GenApi XML is rejected and a subsequent valid node map recovers;
 - a public generic GenApi `Node` reachable from `Root` is omitted from
   scalar feature descriptors and direct read/write return `Unsupported`;
-- injected remote-port failures map feature read, feature write and command
-  execution to `BackendFailure`, with subsequent recovery / no-side-effect
-  assertions.
+- injected remote-port failures map feature read, feature write, command
+  execution and command-completion polling to `BackendFailure`, with subsequent
+  recovery / no-side-effect assertions.
 
 Next Phase 6 actions:
 1. Record the GenTL discovery-to-Common decision: retain provider-specific

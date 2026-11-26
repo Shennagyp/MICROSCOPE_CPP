@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Reviewed provider checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37`  
+**Reviewed provider checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284`  
 **Current Qt/UI checkpoint:** `37a9b544dd30aac2acd6aac349c399d2617477c2`  
 **Review date:** 26 November 2026  
 **Status:** Phase 6 remains open and is the active software workstream by owner direction. Phase 4 visual/physical acceptance remains pending; the owner postponed the physical MU503 test and explicitly directed continued Phase 6 work.
@@ -47,9 +47,10 @@ Both AmScope corrections have cross-architecture CI evidence. No physical
 hardware verification was added. GenApi negative-path coverage has since been
 added and passed official GenApi 3.5.1 integration CI on both architectures:
 malformed XML rejection/recovery, unsupported public generic-node handling,
-feature read/write failure recovery, and command execution failure recovery.
-The exact green checkpoint is `a07c8a2cfc56d639b7c761512fb640cf079cfd37`,
-workflow [#45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996).
+feature read/write failure recovery, command execution failure recovery and
+command-completion polling failure recovery.
+The exact green checkpoint is `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284`,
+workflow [#45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996).
 
 Phase 6 remains open. AmScope provider-level feature/command behavior remains
 a known gap but is blocked by the explicit AmScope freeze. The GenTL discovery
@@ -216,7 +217,7 @@ supported or hardware-qualified.
    AmScope source, tests, public contracts or behavior.
 3. GenApi malformed XML, unsupported public generic-node, feature read/write
    failure recovery and command execution failure recovery tests are complete
-   at `a07c8a2`; workflow #45767256996 passed Intel x86_64 and Apple Silicon
+   at `a07c8a2`; workflow #45767832186 passed Intel x86_64 and Apple Silicon
    arm64 with the official GenApi 3.5.1 integration.
 4. Retain provider-specific GenTL `DeviceDescriptor` for now. It carries the
    Producer/interface/device routing identity needed by `openDevice`; there

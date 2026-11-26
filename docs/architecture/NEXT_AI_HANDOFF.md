@@ -5,8 +5,8 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
-**Latest reviewed implementation checkpoint:** `a07c8a2cfc56d639b7c761512fb640cf079cfd37`  
-**Latest CI:** [workflow #45767256996](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
+**Latest reviewed implementation checkpoint:** `ea356d5d2cc412e8c6aa5a3600e65c650bf9d284`  
+**Latest CI:** [workflow #45767832186](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45767256996) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
 **Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 active by owner direction. Recheck the live branch tip before each session.
 
 ---

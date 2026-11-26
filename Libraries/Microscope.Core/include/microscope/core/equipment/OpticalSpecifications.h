@@ -127,14 +127,15 @@ enum class ObjectiveFieldCorrection {
     Unknown
 };
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class ObjectiveImmersionMedium {
-    Air,
-    Water,
-    Oil,
-    Glycerol,
-    Silicone,
-    Other,
-    Unknown
+    Air = 0,
+    Water = 1,
+    Oil = 2,
+    Glycerol = 3,
+    Silicone = 4,
+    Other = 5,
+    Unknown = 6
 };
 
 enum class ObjectiveSpecificationError {
@@ -191,20 +192,22 @@ private:
     std::optional<PositiveMicrometers> designCoverglassThickness_;
 };
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class CondenserDesign {
-    Abbe,
-    Achromatic,
-    AchromatAplanatic,
-    Other,
-    Unknown
+    Abbe = 0,
+    Achromatic = 1,
+    AchromatAplanatic = 2,
+    Other = 3,
+    Unknown = 4
 };
 
+// Numeric values are stable persistence identities. Add new values without renumbering.
 enum class CondenserImmersionMedium {
-    Air,
-    Water,
-    Oil,
-    Other,
-    Unknown
+    Air = 0,
+    Water = 1,
+    Oil = 2,
+    Other = 3,
+    Unknown = 4
 };
 
 enum class CondenserSpecificationError {

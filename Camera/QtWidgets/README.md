@@ -47,6 +47,33 @@ The `camera_qt_widgets_camera_control_panel_tests` offscreen test covers
 device-label/opaque-ID preservation, callback dispatch, empty discovery,
 pending-state gating, and Closed/Open/Streaming/Faulted action availability.
 
+## CameraCommandPanel
+
+camera::qtwidgets::CameraCommandPanel presents commands described by the
+common ICameraCommandAccess contract. It is intended for no-argument commands;
+parameterized operations remain in host-specific UI and must not be flattened
+into this panel.
+
+The host supplies command descriptors and an execute-request callback. A
+button click moves the row to Request pending only. The host reports Executing
+after the backend accepts the command issue, Completed only after authoritative
+completion polling, and Failed with an error message on failure. The panel
+does not call the backend, poll completion, or infer that a click means the
+device operation has completed. Request-pending/executing commands cannot be
+submitted twice; completed and failed commands may be retried.
+
+## CameraCapabilityPanel
+
+camera::qtwidgets::CameraCapabilityPanel renders the common model capability
+set as a read-only table. Each capability is shown as Unknown, Unsupported or
+Supported. Unknown is preserved explicitly and is never inferred to mean
+Unsupported. The host supplies CameraCapabilities from the selected device
+discovery result; the panel owns no provider or model lookup.
+
+The AmScope preview integrates this panel into Camera Properties and updates
+it when the selected discovery entry changes. Enumeration IDs are treated as
+opaque handles and are not persisted across a new discovery snapshot.
+
 ## CameraFeatureEditor
 
 camera::qtwidgets::CameraFeatureEditor presents one

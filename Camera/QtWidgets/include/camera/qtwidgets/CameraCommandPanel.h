@@ -23,8 +23,9 @@ enum class CameraCommandExecutionState : std::uint8_t {
     Failed
 };
 
-// Backend-neutral command presentation. The host owns command access,
-// scheduling, execution polling and authoritative completion reporting.
+// Backend-neutral presentation for no-argument ICameraCommandAccess commands.
+// Parameterized provider actions remain in host-specific UI. The host owns
+// command access, scheduling, execution polling and authoritative completion.
 class CameraCommandPanel final : public QWidget {
 public:
     using ExecuteRequestedHandler =

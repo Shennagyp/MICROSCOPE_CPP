@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Branch:** `camera-v.2.0`  
 **Reviewed provider checkpoint:** `b8148eeabf374e79182187051da4b871320ce58b`  
-**Current Qt/UI checkpoint:** `a445bfa7a9d01ade09782dd7ad91e1c6c8775f50`  
+**Current Qt/UI checkpoint:** `026c0870c10caf6c6853c09c068df365e65cb09b`  
 **Review date:** 26 November 2026  
 **Status:** Preliminary Phase 6 source-to-test audit complete; Phase 6 remains open and follows Phase 4 in the governing sequence.
 
@@ -45,7 +45,8 @@ feature/command behavior is not adequately tested, GenApi negative/failure
 coverage is incomplete, and the common discovery/capability relationship
 between GenTL and AmScope still needs an explicit API decision. Phase 4 remains
 the current critical-path phase until the preview application's visual and
-physical UI acceptance checks and the remaining reusable command/capability presentation slices are completed.
+physical UI acceptance checks are completed. Reusable command and capability
+presentation are now implemented.
 
 ## 3. Coverage matrix
 
@@ -64,7 +65,7 @@ physical UI acceptance checks and the remaining reusable command/capability pres
 | GenTL GenApi features | Boolean, Integer, Float, String and Enumeration nodes; Root-category traversal; dynamic availability/access modes; units/ranges/enumeration symbols; validated writes with GenApi verification | XML-backed tests cover all five scalar kinds, nested categories, internal-register exclusion, dynamic availability, read-only access and readback | Positive-path coverage is meaningful |
 | GenTL GenApi commands | `ICommand` discovery, issue and `IsDone` polling through common command contract | XML-backed tests cover root/nested commands, internal command-register rejection, issue and incomplete→complete transition; read-only command rejection | Positive-path coverage is meaningful; malformed/failure cases remain |
 | Cross-backend discovery semantics | AmScope discovery exposes common `CameraDeviceInfo`; GenTL discovery exposes `DeviceDescriptor`; GenApi features/commands use common access contracts | No shared provider/discovery abstraction or explicit GenTL→Common projection appears in the current public headers | **API alignment decision required**, not permission to restart Phase 5 |
-| Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor is used by the preview feature tabs; Amcam pixel-format labels are host-supplied while enum symbols remain canonical | Workflow [#45744057767](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45744057767) built the preview and passed 21/21 Qt CTest tests on both architectures | Phase 4 remains open for visual/workspace and physical MU503 UI smoke. Widget presence is not evidence of provider hardware capability |
+| Qt streaming and reusable UI (Phase 3/4 cross-check) | Camera::Qt, Camera::QtWidgets, Amscope::Qt and amscope_preview exist; CameraFeatureEditor, ImageInfoBar and CameraCapabilityPanel are integrated into the preview; CameraCommandPanel represents no-argument ICameraCommandAccess commands; parameterized AmScope actions remain host-owned | Workflow [#45746856752](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45746856752) built the preview and passed 23/23 Qt CTest tests on both architectures | Phase 4 remains open for visual/workspace and physical MU503 UI smoke. Widget presence is not evidence of provider hardware capability |
 
 ### 3.1 AmScope feature inventory accounting
 
@@ -173,9 +174,10 @@ supported or hardware-qualified.
 ## 7. Next work package
 
 1. Preserve the current Phase 5 completion boundary and complete Phase 4
-   acceptance before treating Phase 6 as the active critical-path milestone.
-2. After Phase 4, design a narrow Phase 6 testability layer for AmScope feature descriptor
-   construction and provider operations. The existing Phase 1 seam document
+   visual/physical UI acceptance before treating Phase 6 as the active
+   critical-path milestone.
+2. After Phase 4, design a narrow Phase 6 testability layer for AmScope feature
+   descriptor construction and provider operations. The existing Phase 1 seam document
    covers lifecycle calls and explicitly excludes feature/accessory calls from
    its initial increment; do not turn it into a universal SDK interface.
 3. Add provider tests by semantic family: scalar numeric, enum, Boolean,

@@ -17,6 +17,8 @@ void require(bool condition, const char* message) {
 
 int main() {
     using camera::CameraFeatureAccessError;
+    using camera::CameraFeatureResult;
+    using camera::CameraFeatureValue;
     using amscope::detail::pixelFormatEnumerationError;
 
     const auto unsupported =

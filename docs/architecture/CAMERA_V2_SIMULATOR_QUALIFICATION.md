@@ -61,7 +61,7 @@ References:
 - https://support.criticallink.com/redmine/projects/gentl_apps/wiki/Running_the_GenTL_producer_in_simulated_mode
 - https://support.criticallink.com/redmine/projects/gentl_apps/wiki/Wiki
 
-This is a plausible CTI-level test route, but platform availability, current GenTL version, simulator package availability and licensing must be confirmed. Do not assume its Windows-oriented Viewer setup means the Producer itself is available for the project's macOS runner.
+This is a plausible CTI-level test route, but platform availability, current GenTL version and simulator package availability must be confirmed. Critical Link's published terms describe a limited, non-transferable license to use its General Software and Third Party Software solely with respect to its Products. That wording is not a generic grant for testing an unrelated camera-control application; do not use this Producer for this project without written permission covering the intended test. Do not assume its Windows-oriented Viewer setup means the Producer itself is available for the project's macOS runner.
 
 ### Aravis fake GigE Vision camera — open-source protocol-level alternative
 

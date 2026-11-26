@@ -306,6 +306,12 @@ The equipment definition now describes installed topology and static capabilitie
 - Make Tile belong to one Slide; permit no physical position and do not interpret ordering/index as coordinates.
 - Define archive/deletion constraints: Sample archival does not cascade-delete slides or image data; a referenced Sample cannot be destructively deleted.
 - Define independent Sample and Slide package persistence. Slide packages retain SampleId and remain independently movable; the Sample record is not duplicated inside the Slide package as another authority.
+- Implement on-demand object materialization: load a Sample, Slide, Tile, document or acquisition aggregate when it is opened or first required by a workflow, not by loading the entire workspace at startup.
+- Retain each active persistent identity as one canonical in-memory object within its workspace/runtime scope; all consumers share that instance while it is in use.
+- Load required related metadata in bounded batches. Do not use database-backed lazy properties, getter-triggered reads, per-command rereads or N+1 relationship loading.
+- Apply changes to the resident object and persist at explicit transaction/save or recovery-checkpoint boundaries. A failed save must retain the dirty in-memory object; it must not be replaced by a stale reload.
+- Release clean objects only after they are no longer referenced by an open document or active workflow. Reopening after release loads the latest durable revision.
+- Keep large image payloads file-backed or tile/frame-decoded through bounded buffers while their document and metadata objects remain resident.
 - Define portable relative payload references and a rebuildable workspace catalog/index.
 - Define deterministic safe storage-key encoding/mapping for opaque IDs; do not use raw IDs as filesystem path segments.
 - Enforce mandatory active slide session in Core.

@@ -263,6 +263,40 @@ struct RuntimeFixture final {
     }
 };
 
+void testStageSnapshotsRequireOwnerThreadBinding() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, referencedPosition(surface, stage), homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+
+    const auto positionBeforeBinding = navigation.positionSnapshot();
+    const auto surfaceBeforeBinding = navigation.workingSurfaceSnapshot();
+    const auto slidePositionBeforeBinding =
+        navigation.currentSlidePosition(id<core::SlideId>("slide-a"));
+    check(!positionBeforeBinding &&
+        positionBeforeBinding.error().code ==
+            application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::OwnerThreadNotBound,
+        "machine-position snapshots are unavailable before the stage owner thread is bound");
+    check(!surfaceBeforeBinding &&
+        surfaceBeforeBinding.error().code ==
+            application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::OwnerThreadNotBound,
+        "working-surface snapshots are unavailable before the stage owner thread is bound");
+    check(!slidePositionBeforeBinding &&
+        slidePositionBeforeBinding.error().code ==
+            application::motion::StageWorkingSurfaceNavigationRuntimeErrorCode::OwnerThreadNotBound,
+        "slide-local projections are unavailable before the stage owner thread is bound");
+
+    take(navigation.bindOwnerThread());
+    check(bool(navigation.positionSnapshot()) &&
+        bool(navigation.workingSurfaceSnapshot()) &&
+        bool(navigation.currentSlidePosition(id<core::SlideId>("slide-a"))),
+        "the bound stage owner can publish value snapshots and slide-local projections");
+}
+
 void testDirectNavigationSupportsAnArbitrarySlideIdentity() {
     RuntimeFixture fixture;
     const auto stage = stageSpecification();
@@ -669,6 +703,7 @@ void testBoundedControlQueueDispatchesOnTheOwnerThread() {
 } // namespace
 
 int main() {
+    testStageSnapshotsRequireOwnerThreadBinding();
     testDirectNavigationSupportsAnArbitrarySlideIdentity();
     testHomeReferencesOnlyXYThenRestoresTheSlideTarget();
     testDeviceReadbackVerifiesBothAxesAndNotOne();

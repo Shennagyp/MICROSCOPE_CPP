@@ -349,7 +349,7 @@ int main() {
         fail("the terminal XY position is available");
     }
 
-    if (localFailures != 0) {
+    if (localFailures != 0 || failures != 0) {
         std::cerr << localFailures << " stage worker integration assertion(s) failed\n";
         return 1;
     }

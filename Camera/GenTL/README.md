@@ -120,14 +120,19 @@ simulator-specific mode. It is registered as
 `GenTLProducerLibrary` -> test-only native C ABI shim -> `ConsumerBridge`
 -> `Producer` -> device/stream -> Common frame projection.
 
-The simulator fixture exposes one deterministic mock camera, GenApi XML,
-one data stream and Mono8 frames. Each delivered frame has a monotonic frame ID
-and timestamp plus a payload whose first byte advances with the sequence; the
-smoke asserts five sequential IDs, increasing timestamps and changing payload.
-Its simulator compile definition only relaxes the mock's fixed discovery-timeout
-check and long-wait cancellation behavior; the normal mock bridge used by the
-existing unit tests retains its original cancellation semantics. The fixture
-is test-only and is not installed or exported.
+The simulator fixture exposes two deterministic mock cameras on one
+interface. Each camera has a distinct device ID, display name, serial number,
+remote-port handle/register space, data-stream handle, event handle, buffer
+ownership and frame-sequence counter. The two-device smoke opens both devices
+and both streams concurrently, writes different values to the same register
+address on each remote port, then interleaves frame retrieval and verifies
+that each stream independently starts at frame ID 1 with its own increasing
+timestamps and sequence-varying Mono8 payload. The ordinary single-device
+smoke assertions continue after this isolation check. The simulator compile
+definition only relaxes the mock's fixed discovery-timeout check and
+long-wait cancellation behavior; the normal mock bridge used by the existing
+unit tests retains its original cancellation semantics. The fixture is
+test-only and is not installed or exported.
 
 This is real dynamic loading of a CTI-shaped GenTL Producer and integration
 coverage of the project's native C++ loader/consumer path. When the official

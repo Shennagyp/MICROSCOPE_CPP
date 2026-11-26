@@ -17,6 +17,12 @@ struct FluorescenceCameraRequirements {
     std::optional<double> minimumFrameRateFramesPerSecond;
     bool preferMonochrome = true;
     bool preferGlobalShutter = true;
+    // Supply all three for a detector-side spectral estimate. The dichroic
+    // transmission and emission-filter transmission are applied to the
+    // fluorophore emission spectrum before weighting camera QE.
+    std::optional<FluorescenceEmissionSpectrum> emissionSpectrum;
+    std::optional<OpticalFilterSpecification> dichroic;
+    std::optional<OpticalFilterSpecification> emissionFilter;
 };
 
 struct CameraSuitabilityReport {
@@ -27,6 +33,7 @@ struct CameraSuitabilityReport {
     std::optional<double> maximumFrameRateFramesPerSecond;
     std::optional<CameraShutterType> shutterType;
     std::optional<CameraSensorColorMode> colorMode;
+    bool completeSpectralWeighting = false;
     std::uint32_t knownPreferenceFailures = 0;
     std::uint32_t unknownPreferenceData = 0;
     Diagnostics warnings;

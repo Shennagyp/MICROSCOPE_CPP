@@ -54,6 +54,10 @@ enum class CameraCapability : std::uint8_t {
     AntiFogHeater,
     HighFullWell,
     HDRConversionGain,
+    GlobalShutter,
+    MonochromeSensor,
+    SensorCCDProgressive,
+    SensorCCDInterlaced,
     Count
 };
 
@@ -106,6 +110,63 @@ private:
     std::bitset<count> supported_{};
 };
 
+// Static sensor technology is model data. Do not infer a rolling shutter
+// merely because a backend did not advertise global-shutter support.
+enum class CameraSensorTechnology : std::uint8_t {
+    CCD,
+    CMOS,
+    ScientificCMOS,
+    Unknown
+};
+
+enum class CameraShutterType : std::uint8_t {
+    Global,
+    Rolling,
+    FrameTransfer,
+    GlobalReset,
+    Unknown
+};
+
+enum class CameraColorMode : std::uint8_t {
+    Monochrome,
+    Color,
+    Unknown
+};
+
+enum class CameraSpecificationProvenance : std::uint8_t {
+    ManufacturerDatasheet,
+    VendorModelDescriptor,
+    UserVerified,
+    Measured,
+    Unknown
+};
+
+struct CameraQuantumEfficiencySample {
+    double wavelengthNanometers = 0.0;
+    // Fraction of incident photons converted to detected electrons: [0, 1].
+    double quantumEfficiency = 0.0;
+};
+
+// Persistable model-level imaging data. Fields remain optional because many
+// SDKs expose only model identity/capability flags, not scientific sensor data.
+// QE samples are wavelength-dependent and must not be replaced by one
+// wavelength-independent "sensitivity" number.
+struct CameraSensorCharacteristics {
+    std::optional<CameraSensorTechnology> technology;
+    std::optional<CameraShutterType> shutterType;
+    std::optional<CameraColorMode> colorMode;
+    std::optional<ImageResolution> activeSensorDimensions;
+    std::optional<double> pixelPitchXMicrometers;
+    std::optional<double> pixelPitchYMicrometers;
+    std::optional<double> readNoiseElectronsRms;
+    std::optional<double> darkCurrentElectronsPerPixelPerSecond;
+    std::optional<double> fullWellCapacityElectrons;
+    std::optional<double> maximumFrameRateFramesPerSecond;
+    std::vector<CameraQuantumEfficiencySample> quantumEfficiency;
+    CameraSpecificationProvenance provenance =
+        CameraSpecificationProvenance::Unknown;
+};
+
 // Backend-neutral discovery information. Backend-specific model flags,
 // transport codes, hardware indices, and accessory limits belong in the
 // backend's derived information type rather than in this contract.
@@ -114,6 +175,10 @@ struct CameraDeviceInfo {
     std::string displayName;
     CameraIdentity identity;
     CameraCapabilities capabilities;
+    // Optional model profile loaded from the persistent camera catalog or
+    // enriched by a backend with authoritative manufacturer/model data.
+    // It is deliberately separate from current feature availability.
+    std::optional<CameraSensorCharacteristics> sensorCharacteristics;
     std::vector<ImageResolution> previewResolutions;
 };
 

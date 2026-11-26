@@ -176,7 +176,8 @@ Consumer GenTLProducerLibrary::createConsumer() {
     return Consumer(
         std::move(owner), this,
         [](const void*, void* producerContext, Operation operation,
-           const std::uint64_t* arguments, std::uint32_t argumentCount) noexcept {
+           const std::uint64_t* arguments,
+           std::uint32_t argumentCount) noexcept -> std::int32_t {
             if (!producerContext) return GenTL::GC_ERR_INVALID_HANDLE;
             const auto* producer =
                 static_cast<const GenTLProducerLibrary*>(producerContext);

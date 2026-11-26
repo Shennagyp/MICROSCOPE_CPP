@@ -104,6 +104,52 @@ QString featureNameText(const camera::CameraFeatureDescriptor& descriptor) {
     return result;
 }
 
+// UI sections describe operator intent, not the SDK's internal feature families.
+// The descriptor group remains intact for backend validation and lifecycle rules.
+std::string featureSectionKey(const camera::CameraFeatureDescriptor& descriptor) {
+    const std::string& name = descriptor.name;
+    const auto has = [&name](std::string_view token) {
+        return name.find(token) != std::string::npos;
+    };
+
+    if (has("Exposure") || has("Gain") || has("AutoExposure"))
+        return "exposure";
+    if (has("Resolution") || has("PixelFormat") || has("Raw") ||
+        has("HardwareROI") || has("Binning") || has("FrameRate") ||
+        has("FrameSpeed") || has("Trigger") || has("Bandwidth"))
+        return "capture";
+    if (has("WhiteBalance") || has("Color") || has("Brightness") ||
+        has("Contrast") || has("Gamma") || has("Saturation") ||
+        has("Hue") || has("Tone") || has("Curve") || has("Demosaic") ||
+        has("Denoise") || has("Sharpen") || has("FlatField") ||
+        has("DarkField") || has("DefectPixel") || has("TestPattern") ||
+        has("Orientation"))
+        return "image";
+    if (has("Sensor") || has("BlackLevel") || has("ConversionGain") ||
+        has("LowNoise") || has("FullWell") || has("Temperature") ||
+        has("Tec") || has("Fan") || has("Heater"))
+        return "sensor";
+    return "advanced";
+}
+
+QString featureSectionText(const std::string& key) {
+    if (key == "capture") return QStringLiteral("Capture");
+    if (key == "exposure") return QStringLiteral("Exposure");
+    if (key == "image") return QStringLiteral("Image appearance");
+    if (key == "sensor") return QStringLiteral("Sensor & hardware");
+    return QStringLiteral("Advanced");
+}
+
+QString amcamResolutionLabel(const std::string& symbol) {
+    const auto separator = symbol.find(':');
+    const std::string dimensions = separator == std::string::npos
+        ? symbol
+        : symbol.substr(separator + 1);
+    QString label = QString::fromStdString(dimensions);
+    label.replace(QStringLiteral("x"), QStringLiteral(" × "));
+    return label;
+}
+
 QString amcamPixelFormatLabel(const std::string& symbol) {
     if (symbol == "0") return QStringLiteral("RAW8");
     if (symbol == "1") return QStringLiteral("RAW10");
@@ -343,8 +389,13 @@ public:
         capabilityGroup_ = new QGroupBox("Model capabilities", controlsContent);
         auto* capabilityLayout = new QVBoxLayout(capabilityGroup_);
         capabilityLayout->setContentsMargins(6, 6, 6, 6);
+        capabilitySummary_ = new QLabel(
+            "Select a camera to inspect its model descriptor and hardware capabilities.",
+            capabilityGroup_);
+        capabilitySummary_->setWordWrap(true);
         capabilityPanel_ =
             new camera::qtwidgets::CameraCapabilityPanel(capabilityGroup_);
+        capabilityLayout->addWidget(capabilitySummary_);
         capabilityLayout->addWidget(capabilityPanel_);
 
         featureTabs_ = new QTabWidget(controlsContent);
@@ -826,6 +877,8 @@ private:
             return;
         if (!deviceId) {
             capabilityPanel_->setCapabilities({});
+            capabilitySummary_->setText(
+                "No camera selected. Select a discovered camera to inspect its model profile.");
             return;
         }
 
@@ -834,10 +887,30 @@ private:
             [&](const amscope::CameraInfo& device) {
                 return device.id == *deviceId;
             });
-        capabilityPanel_->setCapabilities(
-            found == discoveredCameras_.end()
-                ? camera::CameraCapabilities{}
-                : found->capabilities);
+        if (found == discoveredCameras_.end()) {
+            capabilityPanel_->setCapabilities({});
+            capabilitySummary_->setText(
+                "The selected camera is not present in the current discovery snapshot. Refresh discovery.");
+            return;
+        }
+
+        capabilityPanel_->setCapabilities(found->capabilities);
+        const QString model = !found->modelName.empty()
+            ? QString::fromStdString(found->modelName)
+            : (!found->identity.model
+                ? QStringLiteral("Model not reported")
+                : QString::fromStdString(*found->identity.model));
+        if (found->hasModelDescriptor) {
+            capabilitySummary_->setText(
+                QString("%1 · %2 preview modes · model capability flags loaded")
+                    .arg(model)
+                    .arg(static_cast<qulonglong>(found->previewResolutions.size())));
+        } else {
+            capabilitySummary_->setText(
+                QString("%1 · SDK did not provide a model descriptor during discovery. "
+                        "Capability values are Unknown, not assumed Unsupported.")
+                    .arg(model));
+        }
     }
 
     void refreshCameras() {
@@ -1488,9 +1561,15 @@ private:
                     [](const std::string& symbol) {
                         return amcamPixelFormatLabel(symbol).toStdString();
                     });
+            } else if (descriptor.name == "AmcamResolutionIndex") {
+                editor->setEnumerationDisplayNameProvider(
+                    [](const std::string& symbol) {
+                        return amcamResolutionLabel(symbol).toStdString();
+                    });
             }
 
-            auto foundForm = featureForms_.find(descriptor.group);
+            const std::string section = featureSectionKey(descriptor);
+            auto foundForm = featureForms_.find(section);
             if (foundForm == featureForms_.end()) {
                 auto* scroll = new QScrollArea(featureTabs_);
                 scroll->setWidgetResizable(true);
@@ -1499,8 +1578,8 @@ private:
                 form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
                 form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
                 scroll->setWidget(page);
-                featureTabs_->addTab(scroll, featureGroupText(descriptor.group));
-                foundForm = featureForms_.emplace(descriptor.group, form).first;
+                featureTabs_->addTab(scroll, featureSectionText(section));
+                foundForm = featureForms_.emplace(section, form).first;
             }
             foundForm->second->addRow(featureNameText(descriptor), editor);
             featureOrder_.push_back(descriptor.name);
@@ -1944,8 +2023,10 @@ private:
         updateFrameInfoLabel();
     }
 
-    QString featureValueText(const camera::CameraFeatureValue& value) const {
-        return std::visit([](const auto& item) -> QString {
+    QString featureValueText(
+        const camera::CameraFeatureValue& value,
+        const std::string& featureName = {}) const {
+        return std::visit([&featureName](const auto& item) -> QString {
             using T = std::decay_t<decltype(item)>;
             if constexpr (std::is_same_v<T, bool>) {
                 return item ? QStringLiteral("On") : QStringLiteral("Off");
@@ -1956,6 +2037,8 @@ private:
             } else if constexpr (std::is_same_v<T, std::string>) {
                 return QString::fromStdString(item);
             } else if constexpr (std::is_same_v<T, camera::FeatureEnumeration>) {
+                if (featureName == "AmcamResolutionIndex")
+                    return amcamResolutionLabel(item.symbol);
                 return QString::fromStdString(item.symbol);
             } else {
                 QStringList values;
@@ -2106,7 +2189,7 @@ private:
             items.push_back({
                 "feature:" + name,
                 descriptor.displayName,
-                featureValueText(*control.currentValue).toStdString(),
+                featureValueText(*control.currentValue, descriptor.name).toStdString(),
                 descriptor.unit.value_or(std::string{}),
                 std::move(tooltip),
                 editable});
@@ -3289,6 +3372,7 @@ private:
     QLabel* cameraStateIndicator_ = nullptr;
     camera::qtwidgets::CameraControlPanel* cameraControls_ = nullptr;
     QGroupBox* capabilityGroup_ = nullptr;
+    QLabel* capabilitySummary_ = nullptr;
     camera::qtwidgets::CameraCapabilityPanel* capabilityPanel_ = nullptr;
     QComboBox* stillResolutionSelector_ = nullptr;
     QComboBox* stillCaptureModeSelector_ = nullptr;
@@ -3338,7 +3422,7 @@ private:
     QPushButton* softwareTriggerButton_ = nullptr;
     QLabel* triggerStatusLabel_ = nullptr;
     QTabWidget* featureTabs_ = nullptr;
-    std::map<camera::CameraFeatureGroup, QFormLayout*> featureForms_;
+    std::map<std::string, QFormLayout*> featureForms_;
 };
 
 void applyProfessionalStyle(QApplication& application) {

@@ -31,6 +31,7 @@ enum class OpticalElementFunction {
     ExcitationFilter,
     EmissionFilter,
     DichroicMirror,
+    NeutralDensityFilter,
     DarkfieldStop,
     Other
 };
@@ -297,7 +298,12 @@ enum class EquipmentDefinitionError {
     DuplicateLightPathId,
     UnknownLightPathOpticalPath,
     LightPathHasNoImagingRoute,
-    LightPathMultipleCamerasRequireSplitter
+    LightPathMultipleCamerasRequireSplitter,
+    DuplicateFilterSpecification,
+    FilterReferencesUnknownComponent,
+    FilterComponentWrongKind,
+    FilterOpticalFunctionMismatch,
+    FilterCompatibilityMismatch
 };
 
 // Immutable definition of the equipment physically installed in one
@@ -319,13 +325,16 @@ public:
             std::vector<IlluminationSpecification> illuminationSpecifications = {},
             std::vector<StageSpecification> stageSpecifications = {},
             std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications = {},
-            std::vector<LightPath> lightPaths = {});
+            std::vector<LightPath> lightPaths = {},
+            std::vector<OpticalFilterSpecification> filterSpecifications = {});
 
     [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
     [[nodiscard]] const std::vector<EquipmentComponent>& components() const noexcept;
     [[nodiscard]] const std::vector<OpticalConnection>& connections() const noexcept;
     [[nodiscard]] const std::vector<OpticalPath>& opticalPaths() const noexcept;
     [[nodiscard]] const std::vector<LightPath>& lightPaths() const noexcept;
+    [[nodiscard]] const std::vector<OpticalFilterSpecification>&
+    filterSpecifications() const noexcept;
     [[nodiscard]] std::vector<EquipmentComponentId> cameraEndpointIds(
         const LightPathId& lightPathId) const;
     [[nodiscard]] const std::vector<ObjectiveSpecification>&
@@ -353,13 +362,15 @@ private:
         std::vector<IlluminationSpecification> illuminationSpecifications,
         std::vector<StageSpecification> stageSpecifications,
         std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
-        std::vector<LightPath> lightPaths);
+        std::vector<LightPath> lightPaths,
+        std::vector<OpticalFilterSpecification> filterSpecifications);
 
     MicroscopeId microscopeId_;
     std::vector<EquipmentComponent> components_;
     std::vector<OpticalConnection> connections_;
     std::vector<OpticalPath> opticalPaths_;
     std::vector<LightPath> lightPaths_;
+    std::vector<OpticalFilterSpecification> filterSpecifications_;
     std::vector<ObjectiveSpecification> objectiveSpecifications_;
     std::vector<CameraSpecification> cameraSpecifications_;
     std::vector<CondenserSpecification> condenserSpecifications_;

@@ -57,6 +57,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -3558,10 +3559,12 @@ int main(int argc, char* argv[]) {
     applyProfessionalStyle(application);
     PreviewWindow window(uiSmokeMode);
     if (uiSmokeMode) {
+        window.show();
+        application.processEvents();
         QString failure;
         if (!window.verifyUiComposition(&failure)) {
             std::cerr << "Preview UI composition smoke failed: "
-                      << failure.toStdString() << '\\n';
+                      << failure.toStdString() << '\n';
             return EXIT_FAILURE;
         }
         return EXIT_SUCCESS;

@@ -218,6 +218,30 @@ if(BUILD_TESTING)
 
     add_executable(microscope_application_working_surface_navigation_runtime_tests
         tests/StageWorkingSurfaceNavigationRuntimeTests.cpp)
+    add_executable(microscope_application_stage_working_surface_verification_policy_tests
+        tests/StageWorkingSurfaceNavigationVerificationPolicyTests.cpp)
+    target_link_libraries(microscope_application_stage_working_surface_verification_policy_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_stage_working_surface_verification_policy_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_stage_working_surface_verification_policy_tests
+        COMMAND microscope_application_stage_working_surface_verification_policy_tests)
+
+    add_executable(microscope_application_stage_worker_integration_tests
+        tests/StageWorkingSurfaceNavigationWorkerIntegrationTests.cpp)
+    target_link_libraries(microscope_application_stage_worker_integration_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_stage_worker_integration_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_stage_worker_integration_tests
+        COMMAND microscope_application_stage_worker_integration_tests)
+
     target_link_libraries(microscope_application_working_surface_navigation_runtime_tests
         PRIVATE Microscope::Application)
     set_target_properties(microscope_application_working_surface_navigation_runtime_tests PROPERTIES

@@ -461,7 +461,7 @@ public:
         SpecimenLabelKind kind,
         std::optional<SpectralBand> excitationBand = std::nullopt,
         std::optional<SpectralBand> emissionBand = std::nullopt,
-        std::optional<FluorescenceEmissionSpectrum> emissionSpectrum =
+        std::optional<SpectralPowerDistribution> emissionSpectrum =
             std::nullopt,
         std::optional<OpticalCompatibilityId> filterSetCompatibilityId =
             std::nullopt);
@@ -470,7 +470,7 @@ public:
     [[nodiscard]] SpecimenLabelKind kind() const noexcept;
     [[nodiscard]] const std::optional<SpectralBand>& excitationBand() const noexcept;
     [[nodiscard]] const std::optional<SpectralBand>& emissionBand() const noexcept;
-    [[nodiscard]] const std::optional<FluorescenceEmissionSpectrum>&
+    [[nodiscard]] const std::optional<SpectralPowerDistribution>&
     emissionSpectrum() const noexcept;
     [[nodiscard]] const std::optional<OpticalCompatibilityId>&
     filterSetCompatibilityId() const noexcept;
@@ -481,14 +481,14 @@ private:
         SpecimenLabelKind kind,
         std::optional<SpectralBand> excitationBand,
         std::optional<SpectralBand> emissionBand,
-        std::optional<FluorescenceEmissionSpectrum> emissionSpectrum,
+        std::optional<SpectralPowerDistribution> emissionSpectrum,
         std::optional<OpticalCompatibilityId> filterSetCompatibilityId);
 
     std::string name_;
     SpecimenLabelKind kind_;
     std::optional<SpectralBand> excitationBand_;
     std::optional<SpectralBand> emissionBand_;
-    std::optional<FluorescenceEmissionSpectrum> emissionSpectrum_;
+    std::optional<SpectralPowerDistribution> emissionSpectrum_;
     std::optional<OpticalCompatibilityId> filterSetCompatibilityId_;
 };
 

@@ -364,7 +364,14 @@ Resolution is candidate-based, not first-match-based:
 3. Enumerate complete route/component combinations. Validate that every required optical function is present, correctly positioned and compatibility-matched on the candidate paths.
 4. Derive the camera from the imaging path endpoint. Enumerate only that camera's supported output modes. An unrelated camera elsewhere in the microscope is not eligible.
 5. Reject candidates that violate hard constraints. Rank the remaining candidates only by declared preferences, such as a microscope-specific preferred objective or a specimen/task imaging profile.
-6. Return the selected configuration together with the valid alternatives and the reasons/ranking used. If there is no valid candidate, return unsupported diagnostics. If multiple candidates remain equally preferred, return SelectionRequired; do not choose the first item in a vector or rely on component insertion order.
+6. Return a structured outcome and the complete candidate set with the reasons/ranking used:
+   - Resolved: one candidate is the unique winner under the declared hard constraints and preferences.
+   - SelectionRequired: multiple valid candidates remain equally preferred; return the complete alternatives so the caller can ask the user to choose.
+   - InputRequired: an essential criterion is absent and cannot be inferred safely (for example, no objective NA requirement or no applicable imaging intent). Return the exact input fields needed. A null magnification alone is not an input error because the minimum-adequate-magnification rule handles it.
+   - Unsupported: no candidate satisfies the hard requirements; return diagnostics that explain why.
+   Never choose the first item in a vector or rely on component insertion order.
+
+A multi-microscope host evaluates the same high-level request against each target microscope's own equipment-constitution revision. Component IDs are microscope-scoped and are never assumed to be portable between instruments. If no target microscope is specified, the host may return capable microscope alternatives or request a target; it must not reuse a component identity from another instrument. The request's objective constraints (including NA and optional magnification) remain semantic inputs across instruments.
 
 A specimen/task imaging profile may contribute optical preferences without hard-coding sample-specific branches into the resolver. For example, an H&E histopathology profile may recommend a 0.75 NA objective over a 0.4 NA objective when both satisfy the hard request. That recommendation is data-driven and may be overridden by an explicit user choice or a microscope-specific mode binding. It is not a universal rule that every H&E workflow must use the same objective.
 
@@ -389,7 +396,10 @@ The candidate satisfies the sampling policy only when both axes meet:
 
 d_R / p_x >= 2.3 and d_R / p_y >= 2.3.
 
-This is a sampling condition, not a statement that the camera's total width/height pixel count alone establishes resolution. Pixel pitch, selected readout/ROI/binning/resampling mode, total optical magnification, NA and wavelength all matter. The existing CameraOutputMode sensor-to-delivered-pixel mapping is therefore part of objective qualification, and the camera must first be identified from the imaging route. If required wavelength or relay-magnification data are absent, the resolver must report that sampling adequacy is unknown rather than manufacture a pass.
+Equivalently, the required total magnification must satisfy both axes, so M_eff must be at least the larger of:
+2.3 NA P_x s_x / (0.61 lambda) and 2.3 NA P_y s_y / (0.61 lambda).
+
+The resolver then chooses the lowest available objective/relay combination whose total magnification reaches that threshold while satisfying the NA requirement. This is a sampling condition, not a statement that the camera's total width/height pixel count alone establishes resolution. Pixel pitch, selected readout/ROI/binning/resampling mode, total optical magnification, NA and wavelength all matter. The existing CameraOutputMode sensor-to-delivered-pixel mapping is therefore part of objective qualification, and the camera must first be identified from the imaging route. If required wavelength or relay-magnification data are absent, the resolver must report that sampling adequacy is unknown rather than manufacture a pass.
 
 The 2.3 factor is an explicit system policy that may be configured by an imaging requirement; it is not to be confused with the Rayleigh formula itself. Where illumination is broadband, the mode/technique data must define the reference-wavelength policy (for example, a conservative wavelength selected from the declared band). The resolver must not silently treat an entire broadband spectrum as one exact wavelength.
 

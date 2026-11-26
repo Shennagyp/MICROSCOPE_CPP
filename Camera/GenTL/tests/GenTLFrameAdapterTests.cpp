@@ -374,21 +374,37 @@ void testUnknownPixelFormatPreservesIdentity() {
             "Unknown format lost its reported GenTL pixel endianness.");
 }
 
-void testUnsafeLayoutIsRejected() {
+void testImageOffsetAndPaddingArePreservedWithoutCopying() {
     auto source = validMono8Frame();
+    source.payload = {0xEE, 1, 2, 3, 0xA1, 4, 5, 6, 0xA2, 0xFD};
     source.imageOffset = 1;
-    require(!camera::gentl::makeCommonFrame(source),
-            "Non-zero image offset must not be projected.");
+    source.xPadding = 1;
+    source.yPadding = 1;
+    const auto original = source.payload;
+    const auto result = camera::gentl::makeCommonFrame(std::move(source));
+    require(result.has_value(), "Valid padded Mono8 image was rejected.");
+    const auto& frame = **result;
+    require(frame.imageOffsetBytes == 1 && frame.rowPaddingBytes == 1 &&
+                frame.trailingPaddingBytes == 1,
+            "Image offset/padding metadata was not preserved.");
+    require(frame.strideBytes == 4, "Row stride omitted X padding.");
+    require(frame.imageData() == frame.pixels.data() + 1,
+            "imageData() ignored the payload image offset.");
+    require(frame.pixels == original,
+            "Payload bytes were stripped, reordered, or copied into a new layout.");
 
+    source = validMono8Frame();
+    source.imageOffset = source.payload.size() + 1;
+    require(!camera::gentl::makeCommonFrame(source),
+            "Image offset beyond payload must be rejected.");
     source = validMono8Frame();
     source.xPadding = 1;
     require(!camera::gentl::makeCommonFrame(source),
-            "Non-zero X padding must not be projected.");
-
+            "Inconsistent row padding must be rejected.");
     source = validMono8Frame();
-    source.yPadding = 1;
+    source.yPadding = 7;
     require(!camera::gentl::makeCommonFrame(source),
-            "Non-zero Y padding must not be projected.");
+            "Trailing padding beyond payload must be rejected.");
 
     source = validMono8Frame();
     source.containsChunkData = true;
@@ -496,7 +512,7 @@ int main() {
         testRgb8Projection();
         testPfnc16NamespaceMappings();
         testUnknownPixelFormatPreservesIdentity();
-        testUnsafeLayoutIsRejected();
+        testImageOffsetAndPaddingArePreservedWithoutCopying();
         testMissingLayoutMetadataIsRejected();
         testEmptyPayloadIsRejectedForEveryPixelFormat();
         testNonImageAndIncompleteBuffersAreRejected();

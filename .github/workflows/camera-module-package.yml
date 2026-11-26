@@ -131,3 +131,23 @@ jobs:
           build/consumer-amscope/camera_module_amscope_consumer
           build/consumer-genapi/camera_module_genapi_consumer
           QT_QPA_PLATFORM=offscreen build/consumer-qt/camera_module_qt_consumer
+
+      - name: Verify vendor runtime bundling is opt-in
+        if: matrix.architecture == 'arm64'
+        run: |
+          cmake -S Camera -B build/camera-no-vendor-runtime \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DAMSCOPE_VENDOR_MAC_ARCH=x64+arm64 \
+            -DCAMERA_MODULE_BUILD_AMSCOPE=ON \
+            -DCAMERA_MODULE_BUILD_GENTL=OFF \
+            -DCAMERA_MODULE_BUILD_QT=OFF \
+            -DCAMERA_MODULE_BUILD_QT_WIDGETS=OFF \
+            -DCAMERA_MODULE_BUILD_AMSCOPE_QT=OFF \
+            -DCAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF \
+            -DBUILD_TESTING=OFF
+          cmake --build build/camera-no-vendor-runtime --target amscope_driver --config Release --parallel
+          cmake --install build/camera-no-vendor-runtime --prefix build/camera-no-vendor-install
+          test ! -f build/camera-no-vendor-install/lib/libamcam.dylib
+          grep -q "set(CameraModule_Amscope_VENDOR_RUNTIME_INCLUDED FALSE)" \
+            build/camera-no-vendor-install/lib/cmake/CameraModule/CameraModuleConfig.cmake

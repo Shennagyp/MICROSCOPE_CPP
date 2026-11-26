@@ -115,17 +115,6 @@ application::motion::StageWorkingSurfaceNavigationVerificationPolicy verificatio
         2.0, 2.0, 0.5, 0.5, mode));
 }
 
-application::motion::StageWorkingSurfaceNavigationOperationIdentity navigationIds(
-    const char* operation, const char* step, const char* command,
-    const char* restoredStep, const char* restoredCommand) {
-    return {
-        id<core::OperationId>(operation),
-        id<core::StepId>(step),
-        id<core::CommandId>(command),
-        id<core::StepId>(restoredStep),
-        id<core::CommandId>(restoredCommand)};
-}
-
 core::FeedbackEnvelope<core::StageMotionFeedbackPayload> actionCompleted(
     const core::RuntimeDeviceCorrelation& device,
     const core::OperationId& operation, const core::StepId& step,
@@ -191,11 +180,13 @@ public:
     bool rejectNextMove{false};
     std::optional<core::MoveAxesTo> lastMove;
     std::optional<core::HomeAxes> lastHome;
+    std::optional<core::OperationCorrelation> lastOperation;
 
     core::StageMotionSubmissionResult moveAxesTo(
-        const core::StageMotionCommandContext&, const core::MoveAxesTo& command,
+        const core::StageMotionCommandContext& context, const core::MoveAxesTo& command,
         core::IFeedbackIngress<core::StageMotionFeedbackPayload>&) override {
         ++moveToCalls;
+        lastOperation = context.operation();
         lastMove = command;
         if (rejectNextMove) {
             rejectNextMove = false;
@@ -211,9 +202,10 @@ public:
             core::StageMotionSubmissionRejection::UnsupportedOperation);
     }
     core::StageMotionSubmissionResult homeAxes(
-        const core::StageMotionCommandContext&, const core::HomeAxes& command,
+        const core::StageMotionCommandContext& context, const core::HomeAxes& command,
         core::IFeedbackIngress<core::StageMotionFeedbackPayload>&) override {
         ++homeCalls;
+        lastOperation = context.operation();
         lastHome = command;
         return core::StageMotionSubmissionResult::accepted();
     }
@@ -223,6 +215,13 @@ public:
         return core::StageMotionSubmissionResult::accepted();
     }
 };
+
+const core::OperationCorrelation& lastOperation(
+    const RecordingStagePort& port) {
+    if (!port.lastOperation)
+        throw std::runtime_error("stage adapter has no dispatched operation context");
+    return *port.lastOperation;
+}
 
 struct RuntimeFixture final {
     application::runtime::RuntimeWakeSignal wake;

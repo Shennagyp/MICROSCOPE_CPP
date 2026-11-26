@@ -397,4 +397,4 @@ Physical endstop datum evidence is represented separately from encoder and exter
 
 Core can now create a blank workspace from the user's origin and travel extents, then add, replace or remove slide rectangles through immutable snapshots. The rectangle's first endpoint remains a user-supplied slide stop-point coordinate; it is never inferred from the workspace origin.
 
-Interactive pointer-driven drawing/editing, incremental constraint solving while dragging, undo/redo, persisted layout revisions and overlap/clearance policy remain outstanding. The Core currently validates that every solved rectangle fits inside the workspace and that slide identities are unique; it does not yet reject geometric overlap or apply a clearance distance.
+Interactive pointer-driven drawing/editing, incremental constraint solving while dragging, undo/redo, persisted layout revisions and a configurable positive clearance distance remain outstanding. Core validates that every solved rectangle fits inside the workspace, slide identities are unique, and distinct rectangles do not have positive-area overlap. Exact edge/corner contact is allowed; no arbitrary clearance is imposed.

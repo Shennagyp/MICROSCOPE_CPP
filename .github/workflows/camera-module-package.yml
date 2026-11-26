@@ -39,6 +39,35 @@ jobs:
         run: |
           brew install qt@6
           echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
+      - name: Download official GenICam package
+        run: |
+          curl --fail --location --retry 3 \
+            https://www.emva.org/wp-content/uploads/GenICam_Package_2026.07.zip \
+            --output build/GenICam_Package_2026.07.zip
+          echo "e74b8d982c3e7697399b03c254b6e8c596eddf0279959eba7de18734e279b64f  build/GenICam_Package_2026.07.zip" | shasum -a 256 --check
+          mkdir -p build/genicam-package build/genapi-sdk
+          unzip -q build/GenICam_Package_2026.07.zip -d build/genicam-package
+          GENAPI_HEADER="$(find build/genicam-package -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
+          if [ -z "$GENAPI_HEADER" ]; then
+            SDK_ARCHIVE="$(find build/genicam-package -type f | grep -Ei 'Mac64.*SDK.*(zip|tar[.]gz|tgz)' | head -n 1 || true)"
+            test -n "$SDK_ARCHIVE"
+            case "$SDK_ARCHIVE" in
+              *.zip) unzip -q "$SDK_ARCHIVE" -d build/genapi-sdk ;;
+              *.tar.gz|*.tgz) tar -xzf "$SDK_ARCHIVE" -C build/genapi-sdk ;;
+            esac
+            RUNTIME_ARCHIVE="$(find build/genicam-package -type f -name 'GenApi-3.5.1-Mac64_Universal-Runtime.tar.gz' -print -quit)"
+            test -n "$RUNTIME_ARCHIVE"
+            tar -xzf "$RUNTIME_ARCHIVE" -C build/genapi-sdk
+            GENAPI_HEADER="$(find build/genapi-sdk -path '*/library/CPP/include/GenApi/GenApi.h' -print -quit)"
+          fi
+          test -n "$GENAPI_HEADER"
+          GENAPI_ROOT="$(cd "${GENAPI_HEADER%/library/CPP/include/GenApi/GenApi.h}" && pwd)"
+          GENAPI_CMAKE_DIR="$GENAPI_ROOT/cmake/Mac64_Universal"
+          test -f "$GENAPI_ROOT/library/CPP/include/GenApi/GenApi.h"
+          test -f "$GENAPI_CMAKE_DIR/GenApiConfig.cmake"
+          echo "GENAPI_ROOT=$GENAPI_ROOT" >> "$GITHUB_ENV"
+          echo "GENAPI_CMAKE_DIR=$GENAPI_CMAKE_DIR" >> "$GITHUB_ENV"
+
       - name: Configure package
         run: |
           cmake -S Camera -B build/camera-module \
@@ -50,7 +79,9 @@ jobs:
             -DCAMERA_MODULE_BUILD_QT=ON \
             -DCAMERA_MODULE_BUILD_QT_WIDGETS=ON \
             -DCAMERA_MODULE_BUILD_AMSCOPE_QT=ON \
-            -DCAMERA_MODULE_BUILD_GENAPI=OFF \
+            -DCAMERA_MODULE_BUILD_GENAPI=ON \
+            -DGENAPI_ROOT="$GENAPI_ROOT" \
+            -DGenApi_DIR="$GENAPI_CMAKE_DIR" \
             -DBUILD_TESTING=ON
       - name: Build package libraries and tests
         run: cmake --build build/camera-module --config Release --parallel
@@ -65,12 +96,14 @@ jobs:
           cmake -S Camera/tests/consumers/common -B build/consumer-common -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
           cmake -S Camera/tests/consumers/gentl -B build/consumer-gentl -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
           cmake -S Camera/tests/consumers/amscope -B build/consumer-amscope -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
+          cmake -S Camera/tests/consumers/genapi -B build/consumer-genapi -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DGenApi_DIR="$GENAPI_CMAKE_DIR" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
           cmake -S Camera/tests/consumers/qt -B build/consumer-qt -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated"
       - name: Build clean external consumers
         run: |
           cmake --build build/consumer-common --config Release --parallel
           cmake --build build/consumer-gentl --config Release --parallel
           cmake --build build/consumer-amscope --config Release --parallel
+          cmake --build build/consumer-genapi --config Release --parallel
           cmake --build build/consumer-qt --config Release --parallel
 
       - name: Verify installed runtime loading and link paths
@@ -79,8 +112,10 @@ jobs:
           test -f build/camera-relocated/lib/libamcam.dylib
           otool -L build/camera-relocated/lib/libcamera_amscope_driver.dylib
           otool -L build/consumer-amscope/camera_module_amscope_consumer
+          otool -L build/consumer-genapi/camera_module_genapi_consumer
           otool -L build/consumer-qt/camera_module_qt_consumer
           build/consumer-common/camera_module_common_consumer
           build/consumer-gentl/camera_module_gentl_consumer
           build/consumer-amscope/camera_module_amscope_consumer
+          build/consumer-genapi/camera_module_genapi_consumer
           QT_QPA_PLATFORM=offscreen build/consumer-qt/camera_module_qt_consumer

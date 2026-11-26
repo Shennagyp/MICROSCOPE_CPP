@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.21)
+project(CameraModuleGenApiConsumer LANGUAGES CXX)
+find_package(CameraModule 2 CONFIG REQUIRED COMPONENTS GenTLGenApi)
+add_executable(camera_module_genapi_consumer main.cpp)
+target_link_libraries(camera_module_genapi_consumer PRIVATE Camera::GenTLGenApi)

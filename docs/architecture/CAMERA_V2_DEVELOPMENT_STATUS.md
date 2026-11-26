@@ -168,7 +168,7 @@ Historical Core/Qt workflow [#45681878032](https://github.com/Shennagyp/MICROSCO
 No local build or physical-camera test is claimed in this status update. The GenTL/GenApi workflow [#45700046670](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700046670) passed both architectures with the pending-wait cancellation test. The newer `EventKill` fallback change passed Intel x86_64 in [#45700375523](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45700375523); Apple Silicon validation is queued. Vendor CTI and physical-camera validation remain outstanding.
 
 
-## 7. Phase 6 audit checkpoint — 26 November 2026
+## 6. Phase 6 audit checkpoint — 26 November 2026
 
 The initial source-to-test audit is recorded in
 [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
@@ -197,7 +197,7 @@ abstraction or changing the one-session/one-handle lifecycle. The existing
 Phase 1 SDK seam design is lifecycle-focused; extend it only for a specific
 Phase 6 test requirement, and do not reopen Phase 1 wholesale.
 
-## 8. Highest-priority unresolved risks
+## 7. Highest-priority unresolved risks
 
 ### Callback quiescence
 
@@ -213,7 +213,7 @@ The intended seam remains private to implementation/test support. It must preser
 
 MU503 RGB24 and short-rate observations are narrow evidence. They do not prove production RAW layout, all features/accessories, other models, long-duration stability, reconnect recovery or CTI operation. Keep source presence, automated tests, physical tests and owner acceptance as separate evidence categories.
 
-## 9. Next development sequence
+## 8. Next development sequence
 
 1. Validate the real Swift `libGenTLConsumerCAPI.dylib`: pointer marshalling, complete operation mapping, dynamic loading and Swift runtime packaging. The current C++ workflow validates only a mock bridge.
 2. Expand GenApi runtime coverage for malformed XML, unsupported/unknown node types, command completion transitions and failure/recovery paths; keep public access restricted to Root-category features.
@@ -226,7 +226,7 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 9. Complete Phase 8 physical qualification for every declared provider/model combination.
 10. Verify vendor SDK redistribution terms.
 
-## 10. Continuation rules
+## 9. Continuation rules
 
 - Continue Camera source work on `camera-v.2.0`; do not develop the library on the Optika application branch.
 - Use Optika as an application integration/reference line only. Its camera preview already exists; do not restart preview development or merge its GUI/workspace changes into Camera.
@@ -236,7 +236,7 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 - Update this ledger after each meaningful increment with exact source commit, changed files, tests actually run, physical hardware evidence and the next bounded task.
 - Never mark phases complete from source presence or CI alone.
 
-## 11. References
+## 10. References
 
 - [Governing original Camera Module Phase 0–8 roadmap](AMSCOPE_NATIVE_DRIVER_COMPLETION_PLAN.md)
 - [AmScope implementation inventory](AMSCOPE_IMPLEMENTATION_INVENTORY.md)

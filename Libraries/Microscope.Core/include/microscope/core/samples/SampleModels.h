@@ -88,7 +88,8 @@ enum class CameraPerformanceRequirementsError {
     NonPositiveFrameRate,
     NegativeReadNoise,
     NegativeDarkCurrent,
-    NonPositiveFullWell
+    NonPositiveFullWell,
+    InvalidQuantumEfficiency
 };
 
 // These values are suitability requirements. Failure is reported as a warning
@@ -104,7 +105,11 @@ public:
             std::optional<double> maximumDarkCurrentElectronsPerPixelPerSecond =
                 std::nullopt,
             std::optional<double> minimumFullWellCapacityElectrons =
-                std::nullopt);
+                std::nullopt,
+            std::optional<double> minimumMeanQuantumEfficiency =
+                std::nullopt,
+            bool preferMonochrome = false,
+            bool preferGlobalShutter = false);
 
     [[nodiscard]] const std::optional<double>&
     minimumFrameRateFramesPerSecond() const noexcept;
@@ -114,18 +119,28 @@ public:
     maximumDarkCurrentElectronsPerPixelPerSecond() const noexcept;
     [[nodiscard]] const std::optional<double>&
     minimumFullWellCapacityElectrons() const noexcept;
+    [[nodiscard]] const std::optional<double>&
+    minimumMeanQuantumEfficiency() const noexcept;
+    [[nodiscard]] bool preferMonochrome() const noexcept;
+    [[nodiscard]] bool preferGlobalShutter() const noexcept;
 
 private:
     CameraPerformanceRequirements(
         std::optional<double> minimumFrameRateFramesPerSecond,
         std::optional<double> maximumReadNoiseElectronsRms,
         std::optional<double> maximumDarkCurrentElectronsPerPixelPerSecond,
-        std::optional<double> minimumFullWellCapacityElectrons);
+        std::optional<double> minimumFullWellCapacityElectrons,
+        std::optional<double> minimumMeanQuantumEfficiency,
+        bool preferMonochrome,
+        bool preferGlobalShutter);
 
     std::optional<double> minimumFrameRateFramesPerSecond_;
     std::optional<double> maximumReadNoiseElectronsRms_;
     std::optional<double> maximumDarkCurrentElectronsPerPixelPerSecond_;
     std::optional<double> minimumFullWellCapacityElectrons_;
+    std::optional<double> minimumMeanQuantumEfficiency_;
+    bool preferMonochrome_ = false;
+    bool preferGlobalShutter_ = false;
 };
 
 enum class MicroscopyRequirementsError {

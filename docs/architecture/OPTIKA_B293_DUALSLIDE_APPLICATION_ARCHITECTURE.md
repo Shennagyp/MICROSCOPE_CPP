@@ -1,6 +1,6 @@
 # OPTIKA B293 Dual-Slide Application Architecture
 
-> **Authority note (v0.9):** This document is retained for the native macOS application's implementation history and its camera/preview performance constraints. The authoritative platform target is [Microscope Platform Architecture v0.9](MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md), with its [implementation plan](../plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md). Those documents supersede this file wherever ownership, C++ Core/Application boundaries, JSON microscope definitions, operation feedback or frontend independence differ.
+> **Authority note (v1):** This document remains the detailed implementation reference for the existing SwiftUI/AppKit application and its camera/preview performance invariants. The complete product-level ownership and stateful object model is defined by [OPTIKA B293 Application System Architecture v1](OPTIKA_B293_APPLICATION_SYSTEM_ARCHITECTURE_V1.md). Microscope-domain and C++ Core/Application contracts are defined by [Microscope Platform Architecture v0.9](MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md). The stage-specific model is defined by [Stage Working Surface and Axis Reference v2](STAGE_WORKING_SURFACE_AND_AXIS_REFERENCE_V2.md).
 
 
 **Status:** Historical native-application architecture and implementation reference; superseded for platform target ownership by the Microscope Platform Architecture v0.9  

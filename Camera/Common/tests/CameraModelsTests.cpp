@@ -49,6 +49,15 @@ void testCapabilityKnowledge() {
     require(capabilities.supports(CameraCapability::SoftwareTrigger),
             "capability can be updated when a newer discovery snapshot arrives");
 
+    capabilities.set(CameraCapability::GlobalShutter, true);
+    require(capabilities.status(CameraCapability::GlobalShutter) ==
+                CapabilityStatus::Supported,
+            "global shutter is exposed as a standard camera capability");
+    capabilities.set(CameraCapability::MonochromeSensor, false);
+    require(capabilities.status(CameraCapability::MonochromeSensor) ==
+                CapabilityStatus::Unsupported,
+            "known color sensor is distinguishable from an unknown color mode");
+
     capabilities.set(CameraCapability::Count, true);
     require(capabilities.status(CameraCapability::Count) ==
                 CapabilityStatus::Unknown,
@@ -84,6 +93,36 @@ void testBackendNeutralDiscoveryModel() {
             "model identity is independent of backend-specific model flags");
     require(device.identity.firmwareVersion.has_value(),
             "optional firmware identity can be populated by capable backends");
+
+    CameraSensorCharacteristics sensor;
+    sensor.technology = CameraSensorTechnology::ScientificCMOS;
+    sensor.shutterType = CameraShutterType::Rolling;
+    sensor.colorMode = CameraColorMode::Monochrome;
+    sensor.activeSensorDimensions = ImageResolution{2048, 2048};
+    sensor.pixelPitchXMicrometers = 6.5;
+    sensor.pixelPitchYMicrometers = 6.5;
+    sensor.readNoiseElectronsRms = 1.2;
+    sensor.darkCurrentElectronsPerPixelPerSecond = 0.01;
+    sensor.fullWellCapacityElectrons = 30000.0;
+    sensor.maximumFrameRateFramesPerSecond = 100.0;
+    sensor.quantumEfficiency = {
+        CameraQuantumEfficiencySample{450.0, 0.82},
+        CameraQuantumEfficiencySample{550.0, 0.91},
+        CameraQuantumEfficiencySample{650.0, 0.74}};
+    sensor.provenance = CameraSpecificationProvenance::ManufacturerDatasheet;
+    device.sensorCharacteristics = sensor;
+
+    require(device.sensorCharacteristics.has_value(),
+            "model-level sensor characteristics can enrich runtime discovery");
+    require(device.sensorCharacteristics->quantumEfficiency.size() == 3 &&
+            device.sensorCharacteristics->quantumEfficiency[1].wavelengthNanometers == 550.0,
+            "fluorescence QE remains a wavelength-dependent curve");
+    require(device.sensorCharacteristics->shutterType ==
+                CameraShutterType::Rolling,
+            "rolling shutter is represented explicitly rather than inferred from global-shutter absence");
+    require(device.sensorCharacteristics->provenance ==
+                CameraSpecificationProvenance::ManufacturerDatasheet,
+            "persisted camera model data retains its evidence provenance");
 }
 
 } // namespace

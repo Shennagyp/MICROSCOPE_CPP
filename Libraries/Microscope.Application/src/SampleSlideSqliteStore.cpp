@@ -1481,6 +1481,73 @@ SampleSlideSqliteStore::loadSampleTypeRevisionUnlocked(
         SampleSlideStoreError>::success(std::move(decoded));
 }
 
+core::Result<
+    std::vector<core::SampleType>,
+    SampleSlideStoreError> SampleSlideSqliteStore::loadCurrentSampleTypes() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement statement(
+        database_,
+        "SELECT sample_type_id, revision FROM sample_type_current "
+        "ORDER BY sample_type_id");
+    if (!statement.prepared()) {
+        return core::Result<
+            std::vector<core::SampleType>,
+            SampleSlideStoreError>::failure(makeError(
+                StoreErrorCode::SqliteOperationFailed, database_));
+    }
+
+    std::vector<core::SampleType> sampleTypes;
+    int step = SQLITE_ROW;
+    while ((step = statement.step()) == SQLITE_ROW) {
+        const auto* idText = sqlite3_column_text(statement.get(), 0);
+        const int idBytes = sqlite3_column_bytes(statement.get(), 0);
+        const sqlite3_int64 revisionRaw =
+            sqlite3_column_int64(statement.get(), 1);
+        if (idText == nullptr || idBytes <= 0 || revisionRaw <= 0) {
+            return core::Result<
+                std::vector<core::SampleType>,
+                SampleSlideStoreError>::failure(makeError(
+                    StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+
+        const std::string rawId(
+            reinterpret_cast<const char*>(idText),
+            static_cast<std::size_t>(idBytes));
+        auto id = core::SampleTypeId::create(rawId);
+        if (!id) {
+            return core::Result<
+                std::vector<core::SampleType>,
+                SampleSlideStoreError>::failure(makeError(
+                    StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+
+        auto loaded = loadSampleTypeRevisionUnlocked(
+            id.value(), static_cast<std::uint64_t>(revisionRaw));
+        if (!loaded || !loaded.value()) {
+            return core::Result<
+                std::vector<core::SampleType>,
+                SampleSlideStoreError>::failure(
+                    loaded
+                        ? makeError(
+                              StoreErrorCode::InvalidPersistedRecord,
+                              database_,
+                              "A current SampleType pointer references a missing revision.")
+                        : loaded.error());
+        }
+        sampleTypes.push_back(std::move(*loaded.value()));
+    }
+
+    if (step != SQLITE_DONE) {
+        return core::Result<
+            std::vector<core::SampleType>,
+            SampleSlideStoreError>::failure(makeError(
+                StoreErrorCode::SqliteOperationFailed, database_));
+    }
+    return core::Result<
+        std::vector<core::SampleType>,
+        SampleSlideStoreError>::success(std::move(sampleTypes));
+}
+
 core::Status<SampleSlideStoreError>
 SampleSlideSqliteStore::saveSlideRevision(
     const core::Slide& slide,
@@ -1607,6 +1674,73 @@ SampleSlideSqliteStore::saveSlideRevision(
             StoreErrorCode::SqliteOperationFailed, database_));
     }
     return core::Status<SampleSlideStoreError>::success();
+}
+
+core::Result<
+    std::vector<PersistedSlideWithSampleType>,
+    SampleSlideStoreError>
+SampleSlideSqliteStore::loadCurrentSlidesWithPinnedSampleTypes() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    Statement statement(
+        database_,
+        "SELECT slide_id, revision FROM slide_current ORDER BY slide_id");
+    if (!statement.prepared()) {
+        return core::Result<
+            std::vector<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::failure(makeError(
+                StoreErrorCode::SqliteOperationFailed, database_));
+    }
+
+    std::vector<PersistedSlideWithSampleType> slides;
+    int step = SQLITE_ROW;
+    while ((step = statement.step()) == SQLITE_ROW) {
+        const auto* idText = sqlite3_column_text(statement.get(), 0);
+        const int idBytes = sqlite3_column_bytes(statement.get(), 0);
+        const sqlite3_int64 revisionRaw =
+            sqlite3_column_int64(statement.get(), 1);
+        if (idText == nullptr || idBytes <= 0 || revisionRaw <= 0) {
+            return core::Result<
+                std::vector<PersistedSlideWithSampleType>,
+                SampleSlideStoreError>::failure(makeError(
+                StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+
+        const std::string rawId(
+            reinterpret_cast<const char*>(idText),
+            static_cast<std::size_t>(idBytes));
+        auto id = core::SlideId::create(rawId);
+        if (!id) {
+            return core::Result<
+                std::vector<PersistedSlideWithSampleType>,
+                SampleSlideStoreError>::failure(makeError(
+                    StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+
+        auto loaded = loadSlideWithPinnedSampleTypeUnlocked(
+            id.value(), static_cast<std::uint64_t>(revisionRaw));
+        if (!loaded || !loaded.value()) {
+            return core::Result<
+                std::vector<PersistedSlideWithSampleType>,
+                SampleSlideStoreError>::failure(
+                    loaded
+                        ? makeError(
+                              StoreErrorCode::InvalidPersistedRecord,
+                              database_,
+                              "A current Slide pointer references a missing Slide or SampleType revision.")
+                        : loaded.error());
+        }
+        slides.push_back(std::move(*loaded.value()));
+    }
+
+    if (step != SQLITE_DONE) {
+        return core::Result<
+            std::vector<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::failure(makeError(
+                StoreErrorCode::SqliteOperationFailed, database_));
+    }
+    return core::Result<
+        std::vector<PersistedSlideWithSampleType>,
+        SampleSlideStoreError>::success(std::move(slides));
 }
 
 core::Result<

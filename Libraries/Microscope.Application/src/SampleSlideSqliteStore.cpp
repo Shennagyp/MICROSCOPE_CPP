@@ -1604,6 +1604,85 @@ core::Result<
 }
 
 core::Result<
+    std::optional<PersistedSlideWithSampleType>,
+    SampleSlideStoreError>
+SampleSlideSqliteStore::loadSlideWithPinnedSampleType(
+    const core::SlideId& slideId,
+    std::uint64_t slideRevision) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return loadSlideWithPinnedSampleTypeUnlocked(slideId, slideRevision);
+}
+
+core::Result<
+    std::optional<PersistedSlideWithSampleType>,
+    SampleSlideStoreError>
+SampleSlideSqliteStore::loadCurrentSlideWithPinnedSampleType(
+    const core::SlideId& slideId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::optional<std::uint64_t> current;
+    if (!readCurrentRevision(
+            database_,
+            "slide_current",
+            "slide_id",
+            slideId.value(),
+            current)) {
+        return core::Result<
+            std::optional<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::failure(makeError(
+                StoreErrorCode::SqliteOperationFailed, database_));
+    }
+    if (!current) {
+        return core::Result<
+            std::optional<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::success(std::nullopt);
+    }
+    return loadSlideWithPinnedSampleTypeUnlocked(slideId, *current);
+}
+
+core::Result<
+    std::optional<PersistedSlideWithSampleType>,
+    SampleSlideStoreError>
+SampleSlideSqliteStore::loadSlideWithPinnedSampleTypeUnlocked(
+    const core::SlideId& slideId,
+    std::uint64_t slideRevision) {
+    auto slideResult = loadSlideRevisionUnlocked(slideId, slideRevision);
+    if (!slideResult) {
+        return core::Result<
+            std::optional<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::failure(slideResult.error());
+    }
+    if (!slideResult.value()) {
+        return core::Result<
+            std::optional<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::success(std::nullopt);
+    }
+
+    const auto& slide = *slideResult.value();
+    auto sampleTypeResult = loadSampleTypeRevisionUnlocked(
+        slide.sampleTypeId(), slide.sampleTypeRevision());
+    if (!sampleTypeResult) {
+        return core::Result<
+            std::optional<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::failure(sampleTypeResult.error());
+    }
+    if (!sampleTypeResult.value()) {
+        return core::Result<
+            std::optional<PersistedSlideWithSampleType>,
+            SampleSlideStoreError>::failure(makeError(
+                StoreErrorCode::InvalidPersistedRecord,
+                database_,
+                "A persisted Slide references a missing exact SampleType revision."));
+    }
+
+    return core::Result<
+        std::optional<PersistedSlideWithSampleType>,
+        SampleSlideStoreError>::success(
+            PersistedSlideWithSampleType{
+                std::move(*slideResult.value()),
+                std::move(*sampleTypeResult.value())});
+}
+
+core::Result<
     std::optional<core::Slide>,
     SampleSlideStoreError>
 SampleSlideSqliteStore::loadSlideRevisionUnlocked(

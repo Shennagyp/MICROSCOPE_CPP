@@ -196,7 +196,7 @@ void testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeo
 
     const auto projection =
         CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
-            installedSpecification, enriched.deviceInfo);
+            installedSpecification, enriched);
 
     check(static_cast<bool>(projection),
           "creates a Core camera specification from the installed spec and exact model discovery");
@@ -255,6 +255,43 @@ void testIncompleteIdentityRequiresCandidateSelection() {
           "does not merge an ambiguous candidate's sensor characteristics");
 }
 
+void testProjectionRejectsAmbiguousModelIdentity() {
+    const auto catalog = makeCatalog({
+        makeProfile("Rev-B", true, 1.2),
+        makeProfile("Rev-C", false, 0.9)});
+    auto discovered = makeDiscoveredDevice();
+    discovered.identity.modelVariant.reset();
+    const auto enrichment =
+        CameraModelDiscoveryEnricher::enrich(discovered, catalog);
+
+    const auto activeDimensions =
+        take(microscope::core::PixelDimensions::create(1024, 768));
+    const auto cameraMode = take(microscope::core::CameraOutputMode::create(
+        take<microscope::core::CameraModeId>(
+            microscope::core::CameraModeId::create("ambiguous-camera-mono8")),
+        take(microscope::core::SensorRegionOfInterest::create(0, 0, 1024, 768)),
+        take(microscope::core::PixelBinning::create(1, 1)),
+        activeDimensions,
+        microscope::core::CameraPixelLayout::Monochrome,
+        "Mono8"));
+    const auto installedSpecification = take(
+        microscope::core::CameraSpecification::create(
+            take<microscope::core::EquipmentComponentId>(
+                microscope::core::EquipmentComponentId::create("ambiguous-camera")),
+            activeDimensions,
+            take(microscope::core::PositiveMicrometers::create(5.0)),
+            take(microscope::core::PositiveMicrometers::create(5.0)),
+            {cameraMode}));
+
+    const auto projection =
+        CameraModelDiscoveryEnricher::projectToCoreCameraSpecification(
+            installedSpecification, enrichment);
+    check(!projection &&
+          projection.error().code ==
+              CameraSpecificationProjectionErrorCode::ModelProfileNotResolved,
+          "does not project a camera model profile while variant selection is ambiguous");
+}
+
 void testLiveBackendConflictsAreRetainedAndReported() {
     const auto catalog = makeCatalog({makeProfile("Rev-C", true, 1.2)});
     auto discovered = makeDiscoveredDevice();
@@ -288,6 +325,7 @@ int main() {
     testExactProfileEnrichesMissingSensorFacts();
     testCoreCameraSpecificationProjectionFillsSensorFactsAndRetainsInstalledGeometry();
     testIncompleteIdentityRequiresCandidateSelection();
+    testProjectionRejectsAmbiguousModelIdentity();
     testLiveBackendConflictsAreRetainedAndReported();
 
     if (failures != 0) {

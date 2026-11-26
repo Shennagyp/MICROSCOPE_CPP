@@ -188,6 +188,7 @@ class RecordingStagePort final : public core::IStageMotionPort {
 public:
     unsigned moveToCalls{0};
     unsigned homeCalls{0};
+    bool rejectNextMove{false};
     std::optional<core::MoveAxesTo> lastMove;
     std::optional<core::HomeAxes> lastHome;
 
@@ -196,6 +197,11 @@ public:
         core::IFeedbackIngress<core::StageMotionFeedbackPayload>&) override {
         ++moveToCalls;
         lastMove = command;
+        if (rejectNextMove) {
+            rejectNextMove = false;
+            return core::StageMotionSubmissionResult::rejected(
+                core::StageMotionSubmissionRejection::UnsupportedOperation);
+        }
         return core::StageMotionSubmissionResult::accepted();
     }
     core::StageMotionSubmissionResult moveAxesBy(
@@ -467,6 +473,39 @@ void testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation() {
         "the runtime preserves valid measured evidence for physical recovery");
 }
 
+void testAdapterRejectionClosesOperationWithoutLeavingPendingStep() {
+    RuntimeFixture fixture;
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    RecordingStagePort port;
+    port.rejectNextMove = true;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, referencedPosition(surface, stage), homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    const auto rejected = take(navigation.beginRequest(
+        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
+        navigationIds("rejected-op", "rejected-step", "rejected-cmd",
+            "rejected-home-step", "rejected-home-cmd")));
+    check(rejected.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
+        "an explicit adapter rejection fails the navigation immediately");
+    const auto failedSnapshot = take(fixture.runtime->operationSnapshot(
+        id<core::OperationId>("rejected-op")));
+    check(failedSnapshot.status() == core::OperationStatus::Failed,
+        "a rejected command closes its Pending operation step as a failed operation");
+
+    const auto retried = take(navigation.beginRequest(
+        id<core::SlideId>("slide-a"), {20000.0, 10000.0},
+        navigationIds("retry-op", "retry-step", "retry-cmd",
+            "retry-home-step", "retry-home-cmd")));
+    check(retried.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched,
+        "the failed operation releases the runtime for the next valid request");
+}
+
 void testBoundedControlQueueDispatchesOnTheOwnerThread() {
     RuntimeFixture fixture;
     const auto stage = stageSpecification();
@@ -508,6 +547,7 @@ int main() {
     testDeviceReadbackVerifiesBothAxesAndNotOne();
     testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ();
     testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation();
+    testAdapterRejectionClosesOperationWithoutLeavingPendingStep();
     testBoundedControlQueueDispatchesOnTheOwnerThread();
     if (failures != 0) {
         std::cerr << failures << " working-surface navigation runtime test(s) failed\n";

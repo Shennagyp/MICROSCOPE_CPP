@@ -411,7 +411,7 @@ public:
         // The adapter may have received the command before the submission call
         // failed. Keep the correlation context and invalidate position instead
         // of claiming that the stage stayed still.
-        position_ = position_.invalidateMachineReference();
+        position_ = position_.invalidateXYReference();
         return success(StageWorkingSurfaceNavigationRuntimeDisposition::SubmissionIndeterminate);
     }
 
@@ -445,7 +445,7 @@ public:
 
         if (metadata.kind() == core::FeedbackKind::AdapterFailure &&
             active_ && matchesCommand(feedback, active_->execution.commandContext)) {
-            position_ = position_.invalidateMachineReference();
+            position_ = position_.invalidateXYReference();
             const auto snapshot =
                 operationRuntime_->operationSnapshot(active_->identities.operationId);
             active_.reset();
@@ -790,7 +790,7 @@ private:
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
                     std::nullopt, failed.error());
             }
-            position_ = position_.invalidateMachineReference();
+            position_ = position_.invalidateXYReference();
             active_.reset();
             const auto snapshot = operationRuntime_->operationSnapshot(operationId);
             return success(StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
@@ -813,7 +813,7 @@ private:
             position_, feedback, active_->execution.commandContext,
             homePlan->home, *operationRuntime_);
         if (!reference) {
-            position_ = position_.invalidateMachineReference();
+            position_ = position_.invalidateXYReference();
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::HomeReferenceRejected,
                 std::nullopt, std::nullopt, std::nullopt,
@@ -855,7 +855,7 @@ private:
             return success(StageWorkingSurfaceNavigationRuntimeDisposition::RestoredMoveDispatched);
         }
         if (dispatch == DispatchDisposition::Indeterminate) {
-            position_ = position_.invalidateMachineReference();
+            position_ = position_.invalidateXYReference();
             return success(StageWorkingSurfaceNavigationRuntimeDisposition::SubmissionIndeterminate);
         }
 
@@ -895,7 +895,7 @@ private:
             position_, feedback, active_->execution.commandContext,
             direct->command, errorBudget_, operationRuntime_->feedbackLossLatched());
         if (!reduction) {
-            position_ = position_.invalidateMachineReference();
+            position_ = position_.invalidateXYReference();
             const auto failed = failMoveVerification();
             if (!failed) {
                 return failed;
@@ -912,7 +912,7 @@ private:
                 active_->xObservation->observation,
                 active_->xObservation->source);
             if (!updated) {
-                position_ = position_.invalidateMachineReference();
+                position_ = position_.invalidateXYReference();
                 return failure(
                     StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,

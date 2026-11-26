@@ -106,15 +106,16 @@ int main(int argc, char** argv) {
         fail("Selection change did not report the selected opaque device ID.");
         return EXIT_FAILURE;
     }
-    panel.setDevices({second, first});
-    if (!selectedId || *selectedId != "opaque-device-id-B" ||
-        selector->currentData().toString() != QStringLiteral("opaque-device-id-B")) {
-        fail("Device refresh did not preserve the existing selection.");
-        return EXIT_FAILURE;
-    }
     open->click();
     if (openRequests != 1 || openedDeviceId != "opaque-device-id-B") {
         fail("Open did not report the selected opaque device ID unchanged.");
+        return EXIT_FAILURE;
+    }
+
+    panel.setDevices({first});
+    if (!selectedId || *selectedId != "opaque-device-id-A" ||
+        selector->currentData().toString() != QStringLiteral("opaque-device-id-A")) {
+        fail("Re-enumeration reused a stale opaque device selection.");
         return EXIT_FAILURE;
     }
 

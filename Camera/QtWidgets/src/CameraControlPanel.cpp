@@ -101,7 +101,9 @@ CameraControlPanel::CameraControlPanel(QWidget* parent)
 
 void CameraControlPanel::setDevices(
     std::vector<CameraDeviceInfo> devices) {
-    const auto previousSelection = selectedDeviceId();
+    // Device IDs are opaque enumeration handles, not stable identity across
+    // disconnect/replug. Rebuild selection from the new discovery snapshot;
+    // never carry an old ID forward as if it identified the same camera.
     {
         const QSignalBlocker blocker(deviceSelector_);
         deviceSelector_->clear();
@@ -109,16 +111,6 @@ void CameraControlPanel::setDevices(
             deviceSelector_->addItem(
                 deviceLabel(device),
                 QString::fromStdString(device.id));
-        }
-        if (previousSelection) {
-            const int previousIndex = deviceSelector_->findData(
-                QString::fromStdString(*previousSelection));
-            if (previousIndex >= 0)
-                deviceSelector_->setCurrentIndex(previousIndex);
-        }
-        if (deviceSelector_->currentIndex() < 0 &&
-            deviceSelector_->count() > 0) {
-            deviceSelector_->setCurrentIndex(0);
         }
     }
     updateControls();

@@ -163,6 +163,9 @@ static BUFFER_HANDLE stream_handles[16];
 static size_t stream_buffer_count;
 static BUFFER_HANDLE queued_buffers[16];
 static size_t queued_buffer_count;
+static uint64_t stream_frame_ids[16];
+static uint64_t stream_timestamps_ns[16];
+static uint64_t next_simulator_frame_id = 1;
 static atomic_int event_wait_entered = 0;
 static atomic_int event_unregistered = 0;
 
@@ -440,7 +443,17 @@ int32_t gentl_consumer_invoke(
         size_t index = 0;
         while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
         if (index == stream_buffer_count) return GC_ERR_INVALID_BUFFER;
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        stream_frame_ids[index] = next_simulator_frame_id++;
+        stream_timestamps_ns[index] =
+            UINT64_C(123456789) + stream_frame_ids[index] * UINT64_C(1000000);
+        for (size_t i = 0; i < 16; ++i) {
+            stream_memory[index][i] =
+                (uint8_t)(0x30 + i + (uint8_t)(stream_frame_ids[index] - 1));
+        }
+#else
         for (size_t i = 0; i < 16; ++i) stream_memory[index][i] = (uint8_t)(0x30 + i);
+#endif
         EVENT_NEW_BUFFER_DATA data = {handle, 0};
         memcpy(pointer(arguments[1]), &data, sizeof(data));
         *size = sizeof(data);
@@ -548,11 +561,19 @@ int32_t gentl_consumer_invoke(
             return write_scalar(type, output, size, INFO_DATATYPE_BOOL8, &value, sizeof(value));
         }
         case BUFFER_INFO_FRAMEID: {
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            const uint64_t value = stream_frame_ids[index];
+#else
             const uint64_t value = 42;
+#endif
             return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
         }
         case BUFFER_INFO_TIMESTAMP_NS: {
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            const uint64_t value = stream_timestamps_ns[index];
+#else
             const uint64_t value = 123456789;
+#endif
             return write_scalar(type, output, size, INFO_DATATYPE_UINT64, &value, sizeof(value));
         }
         case BUFFER_INFO_PIXELFORMAT: {

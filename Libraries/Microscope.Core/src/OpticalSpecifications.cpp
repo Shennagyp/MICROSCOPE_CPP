@@ -639,6 +639,62 @@ OpticalFilterSpecification::compatibilityId() const noexcept {
     return compatibilityId_;
 }
 
+FluorescenceEmissionSpectrum::FluorescenceEmissionSpectrum(
+    std::vector<FluorescenceEmissionSample> samples)
+    : samples_(std::move(samples)) {}
+
+Result<
+    FluorescenceEmissionSpectrum,
+    FluorescenceEmissionSpectrumError>
+FluorescenceEmissionSpectrum::create(
+    std::vector<FluorescenceEmissionSample> samples) {
+    if (samples.size() < 2) {
+        return Result<
+            FluorescenceEmissionSpectrum,
+            FluorescenceEmissionSpectrumError>::failure(
+                FluorescenceEmissionSpectrumError::TooFewSamples);
+    }
+
+    double previousWavelength = 0.0;
+    bool hasPositiveEmission = false;
+    for (const auto& sample : samples) {
+        const double wavelength = sample.wavelength.value();
+        if (wavelength <= previousWavelength) {
+            return Result<
+                FluorescenceEmissionSpectrum,
+                FluorescenceEmissionSpectrumError>::failure(
+                    FluorescenceEmissionSpectrumError::WavelengthsNotIncreasing);
+        }
+        if (!std::isfinite(sample.relativeIntensity) ||
+            sample.relativeIntensity < 0.0) {
+            return Result<
+                FluorescenceEmissionSpectrum,
+                FluorescenceEmissionSpectrumError>::failure(
+                    FluorescenceEmissionSpectrumError::InvalidRelativeIntensity);
+        }
+        hasPositiveEmission = hasPositiveEmission ||
+            sample.relativeIntensity > 0.0;
+        previousWavelength = wavelength;
+    }
+
+    if (!hasPositiveEmission) {
+        return Result<
+            FluorescenceEmissionSpectrum,
+            FluorescenceEmissionSpectrumError>::failure(
+                FluorescenceEmissionSpectrumError::NoPositiveEmission);
+    }
+
+    return Result<
+        FluorescenceEmissionSpectrum,
+        FluorescenceEmissionSpectrumError>::success(
+            FluorescenceEmissionSpectrum(std::move(samples)));
+}
+
+const std::vector<FluorescenceEmissionSample>&
+FluorescenceEmissionSpectrum::samples() const noexcept {
+    return samples_;
+}
+
 namespace {
 
 [[nodiscard]] bool isKnownCameraSensorTechnology(

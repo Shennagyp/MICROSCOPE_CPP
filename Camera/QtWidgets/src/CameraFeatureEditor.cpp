@@ -189,6 +189,16 @@ void CameraFeatureEditor::setWriteRequestedHandler(
     updateControls();
 }
 
+void CameraFeatureEditor::setEnumerationDisplayNameProvider(
+    EnumerationDisplayNameProvider provider) {
+    enumerationDisplayNameProvider_ = std::move(provider);
+    rebuildEditor();
+    if (currentValue_ && currentValueValid_) {
+        applyCurrentValue();
+    }
+    updateControls();
+}
+
 const CameraFeatureDescriptor& CameraFeatureEditor::descriptor() const noexcept {
     return descriptor_;
 }
@@ -344,8 +354,15 @@ void CameraFeatureEditor::rebuildEditor() {
         auto* control = new QComboBox(this);
         control->setObjectName(QStringLiteral("cameraFeatureEditorInput"));
         for (const auto& symbol : descriptor_.enumerationValues) {
-            const QString value = QString::fromStdString(symbol);
-            control->addItem(value, value);
+            std::string displayName = enumerationDisplayNameProvider_
+                ? enumerationDisplayNameProvider_(symbol)
+                : symbol;
+            if (displayName.empty()) {
+                displayName = symbol;
+            }
+            control->addItem(
+                QString::fromStdString(displayName),
+                QString::fromStdString(symbol));
         }
         control->setCurrentIndex(-1);
         connect(control, qOverload<int>(&QComboBox::currentIndexChanged),

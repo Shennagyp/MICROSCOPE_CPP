@@ -43,6 +43,13 @@ public:
     void setErrorMessage(std::optional<std::string> message);
     void setWriteRequestedHandler(WriteRequestedHandler handler);
 
+    // Allows a host to provide display labels while preserving the backend's
+    // canonical enumeration symbols as the submitted values.
+    using EnumerationDisplayNameProvider =
+        std::function<std::string(const std::string& symbol)>;
+    void setEnumerationDisplayNameProvider(
+        EnumerationDisplayNameProvider provider);
+
     [[nodiscard]] const CameraFeatureDescriptor& descriptor() const noexcept;
     [[nodiscard]] bool hasCurrentValue() const noexcept;
     [[nodiscard]] bool canWrite() const noexcept;
@@ -63,6 +70,7 @@ private:
     bool pending_ = false;
     std::optional<std::string> errorMessage_;
     WriteRequestedHandler writeRequestedHandler_;
+    EnumerationDisplayNameProvider enumerationDisplayNameProvider_;
 
     QStackedWidget* valueStack_ = nullptr;
     QLabel* placeholder_ = nullptr;

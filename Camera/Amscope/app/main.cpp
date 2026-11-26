@@ -1357,6 +1357,12 @@ private:
                        const camera::CameraFeatureValue& value) {
                     submitFeatureValue(featureName, value);
                 });
+            if (descriptor.name == "AmcamPixelFormat") {
+                editor->setEnumerationDisplayNameProvider(
+                    [](const std::string& symbol) {
+                        return amcamPixelFormatLabel(symbol).toStdString();
+                    });
+            }
 
             auto foundForm = featureForms_.find(descriptor.group);
             if (foundForm == featureForms_.end()) {

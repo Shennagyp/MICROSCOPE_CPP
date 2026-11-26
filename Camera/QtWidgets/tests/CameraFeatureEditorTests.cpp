@@ -209,6 +209,18 @@ int main(int argc, char** argv) {
         fail("Enumeration editor did not show its declared symbols.");
         return EXIT_FAILURE;
     }
+    enumEditor.setEnumerationDisplayNameProvider(
+        [](const std::string& symbol) {
+            return symbol == "Off" ? std::string("Disabled") : symbol;
+        });
+    enumInput = enumEditor.findChild<QComboBox*>(
+        QStringLiteral("cameraFeatureEditorInput"));
+    if (!enumInput || enumInput->itemText(0) != QStringLiteral("Disabled") ||
+        enumInput->itemData(0).toString() != QStringLiteral("Off") ||
+        enumInput->currentData().toString() != QStringLiteral("Off")) {
+        fail("Enumeration display labels changed the canonical submitted symbol.");
+        return EXIT_FAILURE;
+    }
     enumInput->setCurrentIndex(1);
     if (!enumWrite || *enumWrite != "Once") {
         fail("Enumeration editor did not preserve the selected symbol.");

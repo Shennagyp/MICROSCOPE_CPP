@@ -243,7 +243,9 @@ public:
     // Exact manufacturer/model/variant matching only.
     [[nodiscard]] const CameraModelProfile* findExact(
         const CameraIdentity& identity) const {
-        if (!identity.manufacturer || !identity.model) {
+        if (!identity.manufacturer || !identity.model ||
+            detail::normalizeCameraModelText(*identity.manufacturer).empty() ||
+            detail::normalizeCameraModelText(*identity.model).empty()) {
             return nullptr;
         }
 

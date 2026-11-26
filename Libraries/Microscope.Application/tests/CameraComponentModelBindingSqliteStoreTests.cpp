@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <typeinfo>
 #include <utility>
 #include <vector>
 
@@ -29,8 +30,9 @@ TValue take(microscope::core::Result<TValue, TError> result) {
     if (!result) {
         if constexpr (std::is_enum_v<TError>) {
             throw std::runtime_error(
-                "A camera component model binding fixture failed with Result error code " +
-                std::to_string(static_cast<int>(result.error())));
+                "A camera component model binding fixture failed; error type=" +
+                std::string(typeid(TError).name()) +
+                ", code=" + std::to_string(static_cast<int>(result.error())));
         }
         throw std::runtime_error("A camera component model binding fixture failed.");
     }

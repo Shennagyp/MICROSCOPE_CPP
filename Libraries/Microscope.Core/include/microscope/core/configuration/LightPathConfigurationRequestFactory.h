@@ -11,6 +11,7 @@ enum class LightPathConfigurationRequestFactoryError {
     LightPathNotInstalled,
     OperationModeDoesNotContainLightPath,
     CameraResolutionNotResolved,
+    ResolvedCameraOperationModeMismatch,
     ResolvedCameraLightPathMismatch,
     ResolvedCameraNotOnLightPath,
     ResolvedCameraSpecificationMissing,

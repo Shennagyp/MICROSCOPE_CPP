@@ -236,12 +236,12 @@ struct RuntimeFixture final {
         id<core::DeviceId>("stage-device")};
     std::unique_ptr<core::SerializedOperationRuntime<core::StageMotionFeedbackPayload>> runtime;
 
-    RuntimeFixture() {
+    explicit RuntimeFixture(bool openStageSession = true) {
         runtime = take(core::SerializedOperationRuntime<
             core::StageMotionFeedbackPayload>::create(
                 device.microscopeId, device.runtimeId, device.runtimeGeneration, 16, wake));
         take(runtime->bindOwnerThread());
-        take(runtime->openDeviceSession(device));
+        if (openStageSession) take(runtime->openDeviceSession(device));
     }
 
     core::FeedbackProcessingResult<core::StageMotionFeedbackPayload> process(
@@ -477,6 +477,40 @@ void testAdapterRejectionClosesOperationWithoutLeavingPendingStep() {
         "the failed operation releases the runtime for the next valid request");
 }
 
+void testPreDispatchRejectionClosesOperationAndCanRetry() {
+    RuntimeFixture fixture(false);
+    const auto stage = stageSpecification();
+    const auto surface = workingSurface(stage);
+    RecordingStagePort port;
+    auto navigation = take(application::motion::StageWorkingSurfaceNavigationRuntime::create(
+        surface, referencedPosition(surface, stage), homingPolicy(), errorBudget(),
+        verificationPolicy(application::motion::StageWorkingSurfaceNavigationPositionVerificationMode::BoundedCommandEstimate),
+        fixture.device, port, *fixture.runtime));
+    take(navigation.bindOwnerThread());
+
+    const auto rejected = take(navigation.beginRequest(
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    check(rejected.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
+        "a missing device-session binding is reported as a terminal pre-dispatch failure");
+    check(rejected.operationId && rejected.operation &&
+        rejected.operation->status() == core::OperationStatus::Failed,
+        "pre-dispatch failure publishes its internally allocated operation identity and terminal snapshot");
+    check(port.moveToCalls == 0 && port.homeCalls == 0 && !navigation.navigationActive(),
+        "a failed runtime precondition never calls the hardware adapter or leaves navigation active");
+    const auto snapshot = take(fixture.runtime->operationSnapshot(*rejected.operationId));
+    check(snapshot.status() == core::OperationStatus::Failed,
+        "the owning operation runtime retains the failed operation");
+
+    take(fixture.runtime->openDeviceSession(fixture.device));
+    const auto retried = take(navigation.beginRequest(
+        navigationTarget(surface, "slide-a", {20000.0, 10000.0})));
+    check(retried.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched &&
+        port.moveToCalls == 1,
+        "opening the device session permits a fresh operation without reconstructing the stage owner");
+}
+
 void testQueuedTargetIsRejectedAfterSlideRegistrationChanges() {
     RuntimeFixture fixture;
     const auto stage = stageSpecification();
@@ -558,6 +592,7 @@ int main() {
     testInvalidCorrelatedXYObservationFailsMoveAndPreservesFocusZ();
     testMeasuredOffTargetPoseRemainsMeasuredButFailsOperation();
     testAdapterRejectionClosesOperationWithoutLeavingPendingStep();
+    testPreDispatchRejectionClosesOperationAndCanRetry();
     testQueuedTargetIsRejectedAfterSlideRegistrationChanges();
     testBoundedControlQueueDispatchesOnTheOwnerThread();
     if (failures != 0) {

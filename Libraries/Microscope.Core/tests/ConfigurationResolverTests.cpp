@@ -1775,6 +1775,7 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
         1,
         sampleType.id(),
         sampleType.revision(),
+        "BF-CFG-001",
         "Fixed stained smear",
         geometry,
         preparation));
@@ -1822,6 +1823,7 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
         1,
         strictSampleType.id(),
         strictSampleType.revision(),
+        "BF-NA-001",
         "High-NA preparation",
         geometry,
         preparation));
@@ -1845,6 +1847,7 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
         1,
         sampleType.id(),
         sampleType.revision() - 1,
+        "BF-STALE-001",
         "Slide pinned to an older SampleType revision",
         geometry,
         preparation));

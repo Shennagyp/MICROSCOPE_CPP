@@ -1,4 +1,5 @@
 #include "camera/gentl/Producer.h"
+#include "camera/gentl/GenTLFrameAdapter.h"
 
 #include <exception>
 #include <iostream>
@@ -73,8 +74,13 @@ int main(int argc, char** argv) {
                         "The completed buffer does not contain an image.");
                 }
 
+                const auto commonFrame =
+                    camera::gentl::makeCommonFrame(*frame);
+
                 std::cout << "Frame " << (index + 1)
-                          << ": bytes=" << frame->payload.size();
+                          << ": bytes=" << frame->payload.size()
+                          << " common-projection="
+                          << (commonFrame ? "mapped" : "opaque-or-unsupported");
                 if (frame->width) std::cout << " width=" << *frame->width;
                 if (frame->height) std::cout << " height=" << *frame->height;
                 if (frame->pixelFormat) {

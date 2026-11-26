@@ -1,5 +1,9 @@
 add_library(camera_common INTERFACE)
 add_library(Camera::Common ALIAS camera_common)
+set_target_properties(camera_common PROPERTIES EXPORT_NAME Common)
+include(GNUInstallDirs)
+install(TARGETS camera_common EXPORT CameraCommonTargets)
+install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 target_compile_features(camera_common INTERFACE cxx_std_17)
 target_include_directories(camera_common

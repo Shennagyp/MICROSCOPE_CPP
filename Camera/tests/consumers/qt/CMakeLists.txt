@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.21)
+project(CameraModuleQtConsumer LANGUAGES CXX)
+find_package(CameraModule 2 CONFIG REQUIRED COMPONENTS Qt QtWidgets AmscopeQt)
+add_executable(camera_module_qt_consumer main.cpp)
+target_link_libraries(camera_module_qt_consumer PRIVATE Camera::Qt Camera::QtWidgets Amscope::Qt)

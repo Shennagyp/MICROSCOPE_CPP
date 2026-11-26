@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 project(CameraGenTL VERSION 0.1.0 LANGUAGES C CXX)
 
 include(CTest)
+include(GNUInstallDirs)
 
 if(NOT TARGET Camera::Common)
     add_subdirectory(
@@ -21,6 +22,7 @@ add_library(camera_gentl_consumer_bridge STATIC
     include/camera/gentl/GenTLFrameAdapter.h
     include/camera/gentl/GenTL_v1_6.h)
 add_library(Camera::GenTLConsumerBridge ALIAS camera_gentl_consumer_bridge)
+set_target_properties(camera_gentl_consumer_bridge PROPERTIES EXPORT_NAME GenTLConsumerBridge)
 
 target_compile_features(camera_gentl_consumer_bridge PUBLIC cxx_std_17)
 target_include_directories(camera_gentl_consumer_bridge
@@ -35,6 +37,13 @@ set_target_properties(camera_gentl_consumer_bridge PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS OFF)
+
+install(TARGETS camera_gentl_consumer_bridge
+    EXPORT CameraGenTLTargets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 if(BUILD_TESTING)
     add_library(gentl_consumer_bridge_fixture SHARED
@@ -98,6 +107,11 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         "Root of the EMVA GenApi 3.5.1 Mac64_Universal SDK")
 
     find_package(GenApi 3.5.1 EXACT CONFIG QUIET)
+    if(CAMERA_MODULE_PACKAGE_BUILD AND NOT GenApi_FOUND)
+        message(FATAL_ERROR
+            "CameraModule package export with GenApi requires the official "
+            "GenApi 3.5.1 CMake package. Set GenApi_DIR to its config directory.")
+    endif()
 
     set(_camera_genapi_libraries "")
     set(_camera_genapi_include_dirs "")
@@ -179,13 +193,14 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         include/camera/gentl/GenApiFeatureAccess.h
         include/camera/gentl/GenApiCommandAccess.h)
     add_library(Camera::GenTLGenApi ALIAS camera_gentl_genapi)
+    set_target_properties(camera_gentl_genapi PROPERTIES EXPORT_NAME GenTLGenApi)
 
     target_compile_features(camera_gentl_genapi PUBLIC cxx_std_17)
     target_include_directories(camera_gentl_genapi
         PUBLIC
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
             "$<INSTALL_INTERFACE:include>"
-        ${_camera_genapi_include_dirs})
+            "$<BUILD_INTERFACE:${_camera_genapi_include_dirs}>")
     target_link_libraries(camera_gentl_genapi
         PUBLIC Camera::GenTLConsumerBridge Camera::Common ${_camera_genapi_libraries})
     set_target_properties(camera_gentl_genapi PROPERTIES
@@ -193,6 +208,12 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED YES
         CXX_EXTENSIONS OFF)
+
+    install(TARGETS camera_gentl_genapi
+        EXPORT CameraGenTLGenApiTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
     if(BUILD_TESTING)
         add_executable(camera_gentl_genapi_tests

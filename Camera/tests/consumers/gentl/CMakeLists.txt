@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.21)
+project(CameraModuleGenTLConsumer LANGUAGES CXX)
+find_package(CameraModule 2 CONFIG REQUIRED COMPONENTS GenTL)
+add_executable(camera_module_gentl_consumer main.cpp)
+target_link_libraries(camera_module_gentl_consumer PRIVATE Camera::GenTLConsumerBridge)

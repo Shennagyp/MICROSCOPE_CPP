@@ -5,6 +5,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     include(CTest)
 endif()
 
+include(GNUInstallDirs)
+
 if(NOT TARGET Camera::Common)
     add_subdirectory(
         "${CMAKE_CURRENT_LIST_DIR}/../Common"
@@ -27,6 +29,7 @@ add_library(camera_qt_widgets STATIC
     include/camera/qtwidgets/FrameView.h
     include/camera/qtwidgets/ImageInfoBar.h)
 add_library(Camera::QtWidgets ALIAS camera_qt_widgets)
+set_target_properties(camera_qt_widgets PROPERTIES EXPORT_NAME QtWidgets)
 
 target_compile_features(camera_qt_widgets PUBLIC cxx_std_17)
 set_target_properties(camera_qt_widgets PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -100,6 +103,7 @@ endif()
 
 include(GNUInstallDirs)
 install(TARGETS camera_qt_widgets
+    EXPORT CameraQtWidgetsTargets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

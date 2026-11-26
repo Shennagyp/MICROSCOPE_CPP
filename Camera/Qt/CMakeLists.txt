@@ -3,6 +3,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(CameraQt LANGUAGES CXX)
     include(CTest)
 endif()
+include(GNUInstallDirs)
+
 if(NOT TARGET Camera::Common)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../Common"
                      "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
@@ -15,6 +17,7 @@ add_library(camera_qt_core STATIC
     include/camera/qt/FrameStream.h
     include/camera/qt/FrameStreamMailbox.h)
 add_library(Camera::Qt ALIAS camera_qt_core)
+set_target_properties(camera_qt_core PROPERTIES EXPORT_NAME Qt)
 set_target_properties(camera_qt_core PROPERTIES
     AUTOMOC ON
     POSITION_INDEPENDENT_CODE ON)
@@ -39,6 +42,7 @@ endif()
 
 include(GNUInstallDirs)
 install(TARGETS camera_qt_core
+    EXPORT CameraQtTargets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

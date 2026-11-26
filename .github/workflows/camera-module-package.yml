@@ -1,0 +1,78 @@
+name: Camera Module package and external consumers
+on:
+  push:
+    branches: [camera-v.2.0]
+    paths:
+      - "Camera/**"
+      - "docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md"
+      - "docs/architecture/NEXT_AI_HANDOFF.md"
+      - ".github/workflows/camera-module-package.yml"
+  pull_request:
+    branches: [camera-v.2.0]
+    paths:
+      - "Camera/**"
+      - "docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md"
+      - "docs/architecture/NEXT_AI_HANDOFF.md"
+      - ".github/workflows/camera-module-package.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: camera-module-package-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package-consumers:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple Silicon arm64
+            runner: macos-15
+            architecture: arm64
+            vendor_architecture: x64+arm64
+          - name: Intel x86_64
+            runner: macos-15-intel
+            architecture: x86_64
+            vendor_architecture: x64+x86
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout
+      - name: Install Qt 6
+        run: |
+          brew install qt@6
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix qt@6)" >> "$GITHUB_ENV"
+      - name: Configure package
+        run: |
+          cmake -S Camera -B build/camera-module \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture }}" \
+            -DAMSCOPE_VENDOR_MAC_ARCH="${{ matrix.vendor_architecture }}" \
+            -DCAMERA_MODULE_BUILD_AMSCOPE=ON \
+            -DCAMERA_MODULE_BUILD_GENTL=ON \
+            -DCAMERA_MODULE_BUILD_QT=ON \
+            -DCAMERA_MODULE_BUILD_QT_WIDGETS=ON \
+            -DCAMERA_MODULE_BUILD_AMSCOPE_QT=ON \
+            -DCAMERA_MODULE_BUILD_GENAPI=OFF \
+            -DBUILD_TESTING=ON
+      - name: Build package libraries and tests
+        run: cmake --build build/camera-module --config Release --parallel
+      - name: Run package tests
+        run: ctest --test-dir build/camera-module -C Release --output-on-failure
+      - name: Install and relocate package
+        run: |
+          cmake --install build/camera-module --prefix build/camera-install
+          cmake -E copy_directory build/camera-install build/camera-relocated
+      - name: Configure clean external consumers
+        run: |
+          cmake -S Camera/tests/consumers/common -B build/consumer-common -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated"
+          cmake -S Camera/tests/consumers/gentl -B build/consumer-gentl -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated"
+          cmake -S Camera/tests/consumers/amscope -B build/consumer-amscope -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated"
+          cmake -S Camera/tests/consumers/qt -B build/consumer-qt -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated"
+      - name: Build clean external consumers
+        run: |
+          cmake --build build/consumer-common --config Release --parallel
+          cmake --build build/consumer-gentl --config Release --parallel
+          cmake --build build/consumer-amscope --config Release --parallel
+          cmake --build build/consumer-qt --config Release --parallel

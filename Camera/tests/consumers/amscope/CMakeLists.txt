@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.21)
+project(CameraModuleAmscopeConsumer LANGUAGES CXX)
+find_package(CameraModule 2 CONFIG REQUIRED COMPONENTS Amscope)
+add_executable(camera_module_amscope_consumer main.cpp)
+target_link_libraries(camera_module_amscope_consumer PRIVATE Amscope::Driver)

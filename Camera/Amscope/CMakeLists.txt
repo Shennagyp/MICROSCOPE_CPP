@@ -76,6 +76,7 @@ add_library(amscope_driver SHARED
     ../Common/include/camera/CameraModels.h
     ../Common/include/camera/CameraFrames.h)
 add_library(Amscope::Driver ALIAS amscope_driver)
+set_target_properties(amscope_driver PROPERTIES EXPORT_NAME Driver)
 
 target_compile_features(amscope_driver PUBLIC cxx_std_17)
 target_include_directories(amscope_driver
@@ -204,9 +205,11 @@ endif()
 
 if(AMSCOPE_BUILD_QT_ADAPTER OR AMSCOPE_BUILD_PREVIEW_APP)
     find_package(Qt6 6.2 REQUIRED COMPONENTS Core)
-    add_subdirectory(
-        "${CMAKE_CURRENT_LIST_DIR}/../Qt"
-        "${CMAKE_CURRENT_BINARY_DIR}/camera_qt")
+    if(NOT TARGET Camera::Qt)
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../Qt"
+            "${CMAKE_CURRENT_BINARY_DIR}/camera_qt")
+    endif()
 endif()
 
 if(AMSCOPE_BUILD_QT_ADAPTER)
@@ -216,7 +219,8 @@ if(AMSCOPE_BUILD_QT_ADAPTER)
     add_library(Amscope::Qt ALIAS amscope_qt)
     set_target_properties(amscope_qt PROPERTIES
         AUTOMOC ON
-        OUTPUT_NAME "camera_amscope_qt")
+        OUTPUT_NAME "camera_amscope_qt"
+        EXPORT_NAME Qt)
     target_compile_features(amscope_qt PUBLIC cxx_std_17)
     target_include_directories(amscope_qt
         PUBLIC
@@ -240,9 +244,11 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
     endif()
 
     find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
-    add_subdirectory(
-        "${CMAKE_CURRENT_LIST_DIR}/../QtWidgets"
-        "${CMAKE_CURRENT_BINARY_DIR}/camera_qt_widgets")
+    if(NOT TARGET Camera::QtWidgets)
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../QtWidgets"
+            "${CMAKE_CURRENT_BINARY_DIR}/camera_qt_widgets")
+    endif()
 
     add_executable(amscope_preview app/main.cpp)
     target_compile_features(amscope_preview PRIVATE cxx_std_17)
@@ -268,19 +274,23 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
 endif()
 
 include(GNUInstallDirs)
-install(TARGETS amscope_driver LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(TARGETS amscope_driver
+    EXPORT AmscopeDriverTargets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES "${AMSCOPE_VENDOR_LIBRARY}"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}" RENAME "libamcam.dylib")
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../Common/include/"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 if(AMSCOPE_BUILD_QT_ADAPTER)
     install(DIRECTORY legacy/qt/include/
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
     install(TARGETS amscope_qt
+        EXPORT AmscopeQtTargets
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 endif()
 
 if(AMSCOPE_BUILD_PREVIEW_APP)

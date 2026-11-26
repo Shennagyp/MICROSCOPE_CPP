@@ -277,12 +277,24 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 8. Next development sequence
 
-1. Continue Phase 6 now on `camera-v.2.0`: finalize the provider-specific GenTL discovery decision and vector-descriptor requirement assessment, then select the next provider-neutral coverage gap.
-2. Keep the GenApi negative/failure test slice at commit `ea356d5` as CI-verified. Do not restart Phase 5.
-3. Keep AmScope provider-level feature/command coverage explicitly blocked by the AmScope freeze; do not change AmScope source/tests/contracts to address it.
-4. Keep Phase 4 visual/workspace acceptance pending and the physical MU503 test postponed; neither blocks the current Phase 6 software work. Do not claim Phase 4 accepted.
-5. After Phase 6, export native, GenTL and optional Qt CMake packages and verify clean external consumers under Phase 7.
-6. Complete Phase 8 physical qualification for every declared provider/model combination and verify vendor SDK redistribution terms.
+1. The provider-neutral GenTL/GenApi portion of Phase 6 is complete for the
+   current public contract. Discovery routing, GenApi unsupported/failure
+   paths and recovery are covered by cross-architecture CI. The GenTL
+   discovery-projection and vector-descriptor decisions are recorded.
+2. The remaining Phase 6 gaps are AmScope provider-level feature, command and
+   model-mapping tests. They are blocked by the explicit AmScope freeze. Do not
+   change AmScope source, tests, contracts or behavior.
+3. Hold at this Phase 6 boundary until the owner changes the AmScope freeze or
+   explicitly directs Phase 7. Do not invent more provider-neutral work or
+   reopen the completed GenTL integration.
+4. Keep Phase 4 visual/workspace acceptance pending and the physical MU503
+   test postponed; neither blocks the current Phase 6 software work. Do not
+   claim Phase 4 accepted.
+5. After Phase 6 is unblocked/closed by owner direction, export native, GenTL
+   and optional Qt CMake packages and verify clean external consumers under
+   Phase 7.
+6. Complete Phase 8 physical qualification for every declared provider/model
+   combination and verify vendor SDK redistribution terms.
 
 ## 9. Continuation rules
 

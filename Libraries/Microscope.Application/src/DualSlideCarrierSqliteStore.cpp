@@ -8,6 +8,7 @@
 #include <cstring>
 #include <limits>
 #include <utility>
+#include <vector>
 
 namespace microscope::application::persistence {
 namespace {
@@ -72,7 +73,8 @@ public:
 
     ~Transaction() {
         if (active_) {
-            execute(database_, "ROLLBACK");
+            const bool rolledBack = execute(database_, "ROLLBACK");
+            (void)rolledBack;
         }
     }
 
@@ -1333,8 +1335,7 @@ DualSlideCarrierSqliteStore::loadRevisionUnlocked(
         (leftId && rightId && *leftId == *rightId) ||
         format != kPayloadFormatVersion ||
         blob == nullptr || blobBytes <= 0 ||
-        static_cast<std::size_t>(blobBytes) > kMaximumPayloadBytes ||
-        statement.step() != SQLITE_DONE) {
+        static_cast<std::size_t>(blobBytes) > kMaximumPayloadBytes) {
         return core::Result<
             std::optional<PersistedDualSlideCarrierState>,
             DualSlideCarrierStoreError>::failure(makeError(
@@ -1343,9 +1344,23 @@ DualSlideCarrierSqliteStore::loadRevisionUnlocked(
                 "The stored carrier record columns, payload version or length are invalid."));
     }
 
+    // SQLite column pointers are statement-owned and become invalid at the next
+    // step/reset/finalize. Own the bounded payload before advancing to DONE.
+    std::vector<std::uint8_t> payload(
+        static_cast<std::size_t>(blobBytes));
+    std::memcpy(payload.data(), blob, payload.size());
+    if (statement.step() != SQLITE_DONE) {
+        return core::Result<
+            std::optional<PersistedDualSlideCarrierState>,
+            DualSlideCarrierStoreError>::failure(makeError(
+                ErrorCode::InvalidPersistedRecord,
+                database_,
+                "The carrier revision query returned an unexpected additional row or SQLite error."));
+    }
+
     auto decoded = decodeCarrier(
-        blob,
-        static_cast<std::size_t>(blobBytes),
+        payload.data(),
+        payload.size(),
         installedSpecification,
         database_);
     if (!decoded) {

@@ -582,19 +582,113 @@ OpticalFilterSpecification::compatibilityId() const noexcept {
     return compatibilityId_;
 }
 
+namespace {
+
+[[nodiscard]] bool isKnownCameraSensorTechnology(
+    CameraSensorTechnology value) noexcept {
+    switch (value) {
+    case CameraSensorTechnology::CCD:
+    case CameraSensorTechnology::CMOS:
+    case CameraSensorTechnology::ScientificCMOS:
+    case CameraSensorTechnology::Unknown:
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool isKnownCameraShutterType(
+    CameraShutterType value) noexcept {
+    switch (value) {
+    case CameraShutterType::Global:
+    case CameraShutterType::Rolling:
+    case CameraShutterType::FrameTransfer:
+    case CameraShutterType::GlobalReset:
+    case CameraShutterType::Unknown:
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool isKnownCameraSensorColorMode(
+    CameraSensorColorMode value) noexcept {
+    switch (value) {
+    case CameraSensorColorMode::Monochrome:
+    case CameraSensorColorMode::Color:
+    case CameraSensorColorMode::Unknown:
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool isKnownCameraSpecificationProvenance(
+    CameraSpecificationProvenance value) noexcept {
+    switch (value) {
+    case CameraSpecificationProvenance::ManufacturerDatasheet:
+    case CameraSpecificationProvenance::VendorModelDescriptor:
+    case CameraSpecificationProvenance::UserVerified:
+    case CameraSpecificationProvenance::Measured:
+    case CameraSpecificationProvenance::Unknown:
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool validCameraSensorCharacteristics(
+    const CameraSensorCharacteristics& sensor) noexcept {
+    const auto validNonNegative = [](const std::optional<double>& value) {
+        return !value || (std::isfinite(*value) && *value >= 0.0);
+    };
+    const auto validPositive = [](const std::optional<double>& value) {
+        return !value || (std::isfinite(*value) && *value > 0.0);
+    };
+
+    if ((sensor.technology &&
+         !isKnownCameraSensorTechnology(*sensor.technology)) ||
+        (sensor.shutterType &&
+         !isKnownCameraShutterType(*sensor.shutterType)) ||
+        (sensor.colorMode &&
+         !isKnownCameraSensorColorMode(*sensor.colorMode)) ||
+        !isKnownCameraSpecificationProvenance(sensor.provenance) ||
+        !validNonNegative(sensor.readNoiseElectronsRms) ||
+        !validNonNegative(sensor.darkCurrentElectronsPerPixelPerSecond) ||
+        !validPositive(sensor.fullWellCapacityElectrons) ||
+        !validPositive(sensor.maximumFrameRateFramesPerSecond) ||
+        (sensor.provenanceReference &&
+         sensor.provenanceReference->empty())) {
+        return false;
+    }
+
+    double previousWavelength = 0.0;
+    for (const auto& sample : sensor.quantumEfficiency) {
+        if (!std::isfinite(sample.wavelengthNanometers) ||
+            sample.wavelengthNanometers <= previousWavelength ||
+            !std::isfinite(sample.quantumEfficiency) ||
+            sample.quantumEfficiency < 0.0 ||
+            sample.quantumEfficiency > 1.0) {
+            return false;
+        }
+        previousWavelength = sample.wavelengthNanometers;
+    }
+    return true;
+}
+
+} // namespace
+
 CameraSpecification::CameraSpecification(
     EquipmentComponentId componentId,
     PixelDimensions activeSensorDimensions,
     PositiveMicrometers pixelPitchX,
     PositiveMicrometers pixelPitchY,
     std::vector<CameraOutputMode> outputModes,
-    std::optional<ExposureTimeRange> exposureTimeRange)
+    std::optional<ExposureTimeRange> exposureTimeRange,
+    std::optional<CameraSensorCharacteristics> sensorCharacteristics)
     : componentId_(std::move(componentId)),
       activeSensorDimensions_(activeSensorDimensions),
       pixelPitchX_(pixelPitchX),
       pixelPitchY_(pixelPitchY),
       outputModes_(std::move(outputModes)),
-      exposureTimeRange_(std::move(exposureTimeRange)) {}
+      exposureTimeRange_(std::move(exposureTimeRange)),
+      sensorCharacteristics_(std::move(sensorCharacteristics)) {}
 
 Result<
     CameraSpecification,
@@ -604,12 +698,21 @@ Result<
         PositiveMicrometers pixelPitchX,
         PositiveMicrometers pixelPitchY,
         std::vector<CameraOutputMode> outputModes,
-        std::optional<ExposureTimeRange> exposureTimeRange) {
+        std::optional<ExposureTimeRange> exposureTimeRange,
+        std::optional<CameraSensorCharacteristics> sensorCharacteristics) {
     if (outputModes.empty()) {
         return Result<
             CameraSpecification,
             CameraSpecificationError>::failure(
                 CameraSpecificationError::NoOutputModes);
+    }
+
+    if (sensorCharacteristics &&
+        !validCameraSensorCharacteristics(*sensorCharacteristics)) {
+        return Result<
+            CameraSpecification,
+            CameraSpecificationError>::failure(
+                CameraSpecificationError::InvalidSensorCharacteristics);
     }
 
     std::set<CameraModeId> modeIds;
@@ -642,7 +745,8 @@ Result<
                 pixelPitchX,
                 pixelPitchY,
                 std::move(outputModes),
-                std::move(exposureTimeRange)));
+                std::move(exposureTimeRange),
+                std::move(sensorCharacteristics)));
 }
 
 const EquipmentComponentId& CameraSpecification::componentId() const noexcept {
@@ -668,6 +772,11 @@ const std::vector<CameraOutputMode>& CameraSpecification::outputModes() const no
 const std::optional<ExposureTimeRange>&
 CameraSpecification::exposureTimeRange() const noexcept {
     return exposureTimeRange_;
+}
+
+const std::optional<CameraSensorCharacteristics>&
+CameraSpecification::sensorCharacteristics() const noexcept {
+    return sensorCharacteristics_;
 }
 
 } // namespace microscope::core

@@ -127,6 +127,36 @@ void testOperationModeRejectsSettingsFromAnotherRevisionOrMicroscope() {
           "does not attach another microscope's LightPath settings");
 }
 
+void testOperationModeRejectsMixedEquipmentDefinitionRevisions() {
+    auto revisionNine = makeSetting(
+        "mode-mixed-equipment-revisions", 1, "transmitted-light",
+        "cal-mixed-revision-a", "white-led-source", "white-led-channel", 4.0);
+    auto revisionTen = take(LightPathModeSetting::create(
+        makeId<MicroscopeId>("optika-microscope"),
+        10,
+        makeId<OperationModeId>("mode-mixed-equipment-revisions"),
+        1,
+        makeId<LightPathId>("darkfield-light"),
+        makeId<CalibrationRevisionId>("cal-mixed-revision-b"),
+        makeId<EquipmentComponentId>("white-led-source"),
+        makeId<IlluminationChannelId>("white-led-channel"),
+        {makeId<EquipmentComponentId>("objective-40x"),
+         makeId<EquipmentComponentId>("condenser-darkfield")},
+        8.0));
+
+    const auto mode = OperationMode::create(
+        makeId<MicroscopeId>("optika-microscope"),
+        makeId<OperationModeId>("mode-mixed-equipment-revisions"),
+        1,
+        "Mixed equipment revision",
+        ContrastMethod::Brightfield,
+        {revisionNine, revisionTen});
+    check(!mode &&
+          mode.error() ==
+              OperationModeError::LightPathSettingEquipmentRevisionMismatch,
+          "does not combine LightPath settings calibrated against different equipment revisions");
+}
+
 void testOperationModeRejectsDuplicateLightPathSettingsAndEmptyModes() {
     const auto setting = makeSetting(
         "mode-4x-brightfield", 1, "transmitted-light", "cal-4x-1",
@@ -159,6 +189,7 @@ void testOperationModeRejectsDuplicateLightPathSettingsAndEmptyModes() {
 int main() {
     testOperationModeOwnsModeSpecificLightPathSettings();
     testOperationModeRejectsSettingsFromAnotherRevisionOrMicroscope();
+    testOperationModeRejectsMixedEquipmentDefinitionRevisions();
     testOperationModeRejectsDuplicateLightPathSettingsAndEmptyModes();
 
     if (failures != 0) {

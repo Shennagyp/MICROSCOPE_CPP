@@ -68,6 +68,11 @@ target_compile_options(optika_b293_dualslide_app PRIVATE
     "$<$<COMPILE_LANGUAGE:Swift>:5>"
 )
 target_link_libraries(optika_b293_dualslide_app PRIVATE
+    # Keep the SwiftUI frontend on the same backend-neutral microscope
+    # platform contracts as the v0.9 application. Qt remains an independent
+    # optional frontend and is not linked into this native application.
+    Microscope::Application
+    Microscope::Core
     Amscope::Driver
     "${OPTIKA_SWIFTUI_FRAMEWORK}"
     "${OPTIKA_APPKIT_FRAMEWORK}"

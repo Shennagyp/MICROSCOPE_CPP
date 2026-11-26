@@ -65,6 +65,132 @@ void appendDiagnostic(
     return found == values.end() ? nullptr : &*found;
 }
 
+void assessPreparation(
+    Diagnostics& diagnostics,
+    const SpecimenPreparationRequirements& requirements,
+    const SpecimenPreparation& preparation,
+    const SpecimenId& specimenId) {
+    if (!requirements.allowedMethods().empty() &&
+        std::find(
+            requirements.allowedMethods().begin(),
+            requirements.allowedMethods().end(),
+            preparation.method()) == requirements.allowedMethods().end()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.preparation.method_not_allowed",
+            "The actual specimen preparation method is not allowed by this SampleType.",
+            "Specimen",
+            specimenId.value());
+    }
+
+    if (!requirements.allowedFixationStates().empty() &&
+        std::find(
+            requirements.allowedFixationStates().begin(),
+            requirements.allowedFixationStates().end(),
+            preparation.fixationState()) ==
+            requirements.allowedFixationStates().end()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.preparation.fixation_state_not_allowed",
+            "The actual specimen fixation state is not allowed by this SampleType.",
+            "Specimen",
+            specimenId.value());
+    }
+
+    const auto assessThickness = [&](
+        const std::optional<double>& actual,
+        const std::optional<double>& minimum,
+        const std::optional<double>& maximum,
+        const char* unknownCode,
+        const char* belowCode,
+        const char* aboveCode,
+        const char* measurementName) {
+        if (!minimum && !maximum) {
+            return;
+        }
+        if (!actual) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Warning,
+                unknownCode,
+                std::string("The specimen ") + measurementName +
+                    " is not recorded; the SampleType's preparation tolerance cannot be evaluated.",
+                "Specimen",
+                specimenId.value());
+            return;
+        }
+        if (minimum && *actual < *minimum) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                belowCode,
+                std::string("The specimen ") + measurementName +
+                    " is below the SampleType minimum.",
+                "Specimen",
+                specimenId.value());
+        }
+        if (maximum && *actual > *maximum) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                aboveCode,
+                std::string("The specimen ") + measurementName +
+                    " exceeds the SampleType maximum.",
+                "Specimen",
+                specimenId.value());
+        }
+    };
+
+    assessThickness(
+        preparation.sectionThicknessMicrometers(),
+        requirements.minimumSectionThicknessMicrometers(),
+        requirements.maximumSectionThicknessMicrometers(),
+        "sample.preparation.section_thickness_unknown",
+        "sample.preparation.section_thickness_below_minimum",
+        "sample.preparation.section_thickness_above_maximum",
+        "section thickness");
+
+    assessThickness(
+        preparation.coverglassThicknessMicrometers(),
+        requirements.minimumCoverglassThicknessMicrometers(),
+        requirements.maximumCoverglassThicknessMicrometers(),
+        "sample.preparation.coverglass_thickness_unknown",
+        "sample.preparation.coverglass_thickness_below_minimum",
+        "sample.preparation.coverglass_thickness_above_maximum",
+        "coverglass thickness");
+
+    if (requirements.requireMountingMedium() &&
+        !preparation.mountingMediumName()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.preparation.mounting_medium_required",
+            "This SampleType requires a recorded mounting medium, but none is present on the Specimen preparation record.",
+            "Specimen",
+            specimenId.value());
+    }
+
+    for (const auto requiredKind : requirements.requiredLabelKinds()) {
+        const bool found = std::any_of(
+            preparation.labels().begin(),
+            preparation.labels().end(),
+            [requiredKind](const SpecimenLabel& label) {
+                return label.kind() == requiredKind;
+            });
+        if (!found) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.preparation.required_label_missing",
+                "The Specimen is missing a label class required by its SampleType.",
+                "Specimen",
+                specimenId.value());
+        }
+    }
+}
+
 void assessTechnique(
     Diagnostics& diagnostics,
     const MicroscopyRequirements& requirements,
@@ -1208,6 +1334,14 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
             "Specimen",
             specimen.id().value());
         return SampleMicroscopyAssessment(std::move(diagnostics));
+    }
+
+    if (sampleType.preparationRequirements()) {
+        assessPreparation(
+            diagnostics,
+            *sampleType.preparationRequirements(),
+            specimen.preparation(),
+            specimen.id());
     }
 
     const auto& request = configuration.request();

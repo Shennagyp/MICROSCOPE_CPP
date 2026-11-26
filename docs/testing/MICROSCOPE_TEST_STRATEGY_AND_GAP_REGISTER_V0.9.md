@@ -131,7 +131,7 @@ Covers the port dispatch boundary for `MoveAxesTo`, `MoveAxesBy`, `HomeAxes` and
 | Stage Application | Owner-thread navigation runtime, request queue, worker integration, XY command dispatch and feedback verification | Physical controller adapter; runtime cancellation/stop/timeout lifecycle; bridge from native composition |
 | Stage hardware | Abstract `IStageMotionPort` contract only | No concrete controller/driver implementation was found in this branch |
 | Acquisition | Existing camera preview/frame delivery and image-save UI | No complete persisted AcquisitionPlan/AcquisitionRun/AcquisitionField domain and execution pipeline |
-| Slide/SampleType | Existing source has a Sample/Specimen/SlideType model | The agreed model has not been migrated: remove Sample/SampleId and SlideType/SlideTypeId, put SampleTypeId/revision directly on Slide, retain optional OriginLabId |
+| Slide/SampleType | Versioned SampleType requirement definitions; Slide directly pins SampleTypeId/revision and owns geometry, observed preparation facts and optional OriginLabId; no Sample or SlideType entity | Durable SampleType revision-history lookup/persistence, migration of stored data and native workspace integration are not implemented |
 | Native application composition | Camera, optics Swift models/coordinators, workspace/gallery | Swift composition does not yet construct/use the C++ stage owner/runtime or a physical stage adapter |
 | HIL/application acceptance | None established by this test change | Real stage, focus, objective/filter/illumination hardware; native composition; persistence/recovery; operational safety acceptance |
 
@@ -180,11 +180,20 @@ The next implementation slices must add tests at the layer that owns the behavio
 - Test actual settings/readbacks versus requested settings, frame integrity, missing frames, duplicate delivery and interrupted acquisition.
 - Test camera disconnect/reconnect and partial multi-camera/synchronized capture only when the corresponding controller capabilities are implemented.
 
-### SampleType and Slide migration
-- Test one SampleType revision referenced by many independent Slides.
-- Test Slide actual preparation facts against the pinned SampleType requirements.
-- Test optional OriginLabId round-trip without a Lab entity.
-- Test no SampleId and no SlideTypeId dependency at public API, persistence and assessor boundaries.
+### SampleType and Slide contract
+Implemented in the Core model and test sources:
+- SampleType carries versioned microscopy requirements and optional reusable slide-preparation requirements.
+- Each Slide directly stores SampleTypeId and the exact SampleType revision, plus its own geometry, observed preparation facts and optional OriginLabId.
+- Multiple independent Slides can reference the same SampleType revision; no Sample entity, SampleId, SlideType or SlideTypeId exists in the revised Core contract.
+- The assessor accepts a Slide directly, rejects a mismatched pinned SampleType revision, and evaluates actual Slide preparation facts against the SampleType requirements.
+- Unit coverage checks independent Slides, absent optional OriginLabId, version pinning, incomplete observed facts, invalid preparation ranges, and fluorescent-label metadata.
+- Integration coverage follows LightPath selection through resolved microscope configuration into SampleType/Slide assessment; valid, off-spec and stale-revision cases are represented.
+
+Still outstanding:
+- Durable persistence and historical lookup of the exact SampleType revision pinned by each Slide. The current SampleTypeCatalog represents current definitions; it is not a historical revision store.
+- Application/native workspace loading and editing of Slides and SampleType definitions.
+- A migration strategy for any previously persisted Sample/Specimen/SlideType data; no persistence schema migration is included in this change.
+- No patient identity, Sample instance identity or patient relationship is part of this microscope model.
 
 ## 7. Execution policy and result reporting
 

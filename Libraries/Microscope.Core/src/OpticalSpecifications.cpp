@@ -577,6 +577,63 @@ OpticalFilterSpecification::spectralResponse() const noexcept {
     return spectralResponse_;
 }
 
+std::optional<double> OpticalFilterSpecification::transmissionAt(
+    double wavelengthNanometers) const noexcept {
+    if (!std::isfinite(wavelengthNanometers) ||
+        spectralResponse_.size() < 2 ||
+        wavelengthNanometers < spectralResponse_.front().wavelength.value() ||
+        wavelengthNanometers > spectralResponse_.back().wavelength.value()) {
+        return std::nullopt;
+    }
+
+    for (std::size_t index = 0; index + 1 < spectralResponse_.size(); ++index) {
+        const auto& lower = spectralResponse_[index];
+        const auto& upper = spectralResponse_[index + 1];
+        const double lowerWavelength = lower.wavelength.value();
+        const double upperWavelength = upper.wavelength.value();
+        if (wavelengthNanometers >= lowerWavelength &&
+            wavelengthNanometers <= upperWavelength) {
+            const double fraction =
+                (wavelengthNanometers - lowerWavelength) /
+                (upperWavelength - lowerWavelength);
+            return lower.transmissionFraction +
+                fraction * (upper.transmissionFraction -
+                            lower.transmissionFraction);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<double> OpticalFilterSpecification::reflectionAt(
+    double wavelengthNanometers) const noexcept {
+    if (!std::isfinite(wavelengthNanometers) ||
+        spectralResponse_.size() < 2 ||
+        wavelengthNanometers < spectralResponse_.front().wavelength.value() ||
+        wavelengthNanometers > spectralResponse_.back().wavelength.value()) {
+        return std::nullopt;
+    }
+
+    for (std::size_t index = 0; index + 1 < spectralResponse_.size(); ++index) {
+        const auto& lower = spectralResponse_[index];
+        const auto& upper = spectralResponse_[index + 1];
+        const double lowerWavelength = lower.wavelength.value();
+        const double upperWavelength = upper.wavelength.value();
+        if (wavelengthNanometers >= lowerWavelength &&
+            wavelengthNanometers <= upperWavelength) {
+            if (!lower.reflectionFraction || !upper.reflectionFraction) {
+                return std::nullopt;
+            }
+            const double fraction =
+                (wavelengthNanometers - lowerWavelength) /
+                (upperWavelength - lowerWavelength);
+            return *lower.reflectionFraction +
+                fraction * (*upper.reflectionFraction -
+                            *lower.reflectionFraction);
+        }
+    }
+    return std::nullopt;
+}
+
 const std::optional<OpticalCompatibilityId>&
 OpticalFilterSpecification::compatibilityId() const noexcept {
     return compatibilityId_;

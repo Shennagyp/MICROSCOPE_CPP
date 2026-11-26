@@ -124,6 +124,15 @@ if(BUILD_TESTING)
     set_tests_properties(camera_gentl_inrepo_simulator_smoke PROPERTIES
         TIMEOUT 120)
 
+    foreach(_sequence_case IN ITEMS gap duplicate out-of-order ambiguous)
+        add_test(NAME camera_gentl_simulator_sequence_${_sequence_case}
+            COMMAND camera_gentl_simulator_smoke
+                "$<TARGET_FILE:gentl_test_simulator_cti>"
+                "0" "--sequence-${_sequence_case}")
+        set_tests_properties(camera_gentl_simulator_sequence_${_sequence_case}
+            PROPERTIES TIMEOUT 120)
+    endforeach()
+
     add_executable(camera_gentl_producer_catalog_tests
         tests/ProducerCatalogTests.cpp)
     target_compile_features(camera_gentl_producer_catalog_tests PRIVATE cxx_std_17)

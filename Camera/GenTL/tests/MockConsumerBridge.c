@@ -200,6 +200,7 @@ static size_t queued_buffer_count;
 static uint64_t stream_frame_ids[16];
 static uint64_t stream_timestamps_ns[16];
 static uint64_t next_simulator_frame_ids[2] = {1, 1};
+static uint64_t simulator_last_frame_ids[2];
 static uint64_t simulator_delivered_buffers[2];
 static uint64_t simulator_buffer_underruns[2];
 static uint64_t simulator_frames_started[2];
@@ -578,9 +579,32 @@ int32_t gentl_consumer_invoke(
         if (index == stream_buffer_count || stream_owners[index] != owner)
             return GC_ERR_INVALID_BUFFER;
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
-        stream_frame_ids[index] = next_simulator_frame_ids[event]++;
+        uint64_t frameId = next_simulator_frame_ids[event]++;
+        const char* sequenceMode = getenv("MOCK_GENTL_SIMULATOR_SEQUENCE_MODE");
+        if (sequenceMode && simulator_delivered_buffers[event] == 2) {
+            if (strcmp(sequenceMode, "gap") == 0) {
+                frameId += 2;
+                next_simulator_frame_ids[event] += 2;
+            } else if (strcmp(sequenceMode, "duplicate") == 0) {
+                frameId = simulator_last_frame_ids[event];
+                if (next_simulator_frame_ids[event] > 1)
+                    --next_simulator_frame_ids[event];
+            } else if (strcmp(sequenceMode, "out-of-order") == 0) {
+                frameId = simulator_last_frame_ids[event] > 1
+                    ? simulator_last_frame_ids[event] - 1 : 1;
+                if (next_simulator_frame_ids[event] > 1)
+                    --next_simulator_frame_ids[event];
+            } else if (strcmp(sequenceMode, "ambiguous") == 0) {
+                frameId = simulator_last_frame_ids[event] > 1
+                    ? simulator_last_frame_ids[event] - 1 : 1;
+                if (next_simulator_frame_ids[event] > 1)
+                    --next_simulator_frame_ids[event];
+            }
+        }
+        simulator_last_frame_ids[event] = frameId;
+        stream_frame_ids[index] = frameId;
         stream_timestamps_ns[index] =
-            UINT64_C(123456789) + stream_frame_ids[index] * UINT64_C(1000000);
+            UINT64_C(123456789) + frameId * UINT64_C(1000000);
         ++simulator_delivered_buffers[event];
         ++simulator_frames_started[event];
         for (size_t i = 0; i < 16; ++i) {
@@ -678,9 +702,12 @@ int32_t gentl_consumer_invoke(
         const int32_t command = (int32_t)arguments[1];
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
         const int stream = stream_index((DS_HANDLE)pointer(arguments[0]));
-        if (command == STREAM_INFO_TLTYPE)
+        if (command == STREAM_INFO_TLTYPE) {
+            const char* transport = getenv("MOCK_GENTL_SIMULATOR_TLTYPE");
             return write_info_string((INFO_DATATYPE*)pointer(arguments[2]),
-                pointer(arguments[3]), (size_t*)pointer(arguments[4]), "MockGenTL");
+                pointer(arguments[3]), (size_t*)pointer(arguments[4]),
+                transport && *transport ? transport : "MockGenTL");
+        }
         if (command == STREAM_INFO_NUM_DELIVERED)
             return write_scalar((INFO_DATATYPE*)pointer(arguments[2]),
                 pointer(arguments[3]), (size_t*)pointer(arguments[4]),

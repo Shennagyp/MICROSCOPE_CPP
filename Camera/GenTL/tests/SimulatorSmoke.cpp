@@ -101,12 +101,14 @@ int main(int argc, char** argv) {
         std::cerr
             << "Usage: camera_gentl_simulator_smoke "
             << "<vendor-producer.cti> [device-index] "
-            << "[--verify-two-device-isolation]\n";
+            << "[--verify-two-device-isolation|--sequence-gap|--sequence-duplicate|"
+               "--sequence-out-of-order|--sequence-ambiguous]\n";
         return 64;
     }
 
     std::size_t selectedDeviceIndex = 0;
     bool verifyMultiDeviceIsolation = false;
+    std::string sequenceMode;
     if (argc >= 3) {
         const std::string option = argv[2];
         if (option == "--verify-two-device-isolation") {
@@ -122,12 +124,25 @@ int main(int argc, char** argv) {
         }
     }
     if (argc == 4) {
-        if (std::string(argv[3]) != "--verify-two-device-isolation") {
+        const std::string option = argv[3];
+        if (option == "--verify-two-device-isolation") {
+            verifyMultiDeviceIsolation = true;
+        } else if (option == "--sequence-gap") {
+            sequenceMode = "gap";
+        } else if (option == "--sequence-duplicate") {
+            sequenceMode = "duplicate";
+        } else if (option == "--sequence-out-of-order") {
+            sequenceMode = "out-of-order";
+            setenv("MOCK_GENTL_SIMULATOR_TLTYPE", "GEV", 1);
+        } else if (option == "--sequence-ambiguous") {
+            sequenceMode = "ambiguous";
+        } else {
             std::cerr << "Unknown simulator smoke option.\n";
             return 67;
         }
-        verifyMultiDeviceIsolation = true;
     }
+    if (!sequenceMode.empty())
+        setenv("MOCK_GENTL_SIMULATOR_SEQUENCE_MODE", sequenceMode.c_str(), 1);
 
     try {
         auto producer = camera::gentl::Producer::open(argv[1]);
@@ -271,8 +286,14 @@ int main(int argc, char** argv) {
                 statistics.integrity.observedBuffers != requiredFrames ||
                 statistics.integrity.completeImages != requiredFrames ||
                 statistics.integrity.incompleteBuffers != 0 ||
-                statistics.integrity.sequenceGaps != 0 ||
-                statistics.integrity.missingFrames != 0 ||
+                statistics.integrity.sequenceGaps != (sequenceMode == "gap" ? 1u : 0u) ||
+                statistics.integrity.missingFrames != (sequenceMode == "gap" ? 2u : 0u) ||
+                statistics.integrity.duplicateFrameIds !=
+                    (sequenceMode == "duplicate" ? 1u : 0u) ||
+                statistics.integrity.outOfOrderFrameIds !=
+                    (sequenceMode == "out-of-order" ? 1u : 0u) ||
+                statistics.integrity.ambiguousSequenceTransitions !=
+                    (sequenceMode == "ambiguous" ? 1u : 0u) ||
                 statistics.integrity.frameWaitTimeouts != 1 ||
                 statistics.integrity.bufferStarvationEvents != 2) {
                 throw std::runtime_error(
@@ -286,6 +307,8 @@ int main(int argc, char** argv) {
                       << " missing-frames=" << statistics.integrity.missingFrames
                       << " queued=" << *statistics.queuedBuffers << '\n';
             unsetenv("MOCK_GENTL_SIMULATOR_UNDERRUNS");
+            unsetenv("MOCK_GENTL_SIMULATOR_SEQUENCE_MODE");
+            unsetenv("MOCK_GENTL_SIMULATOR_TLTYPE");
             stream.stop();
         }
 

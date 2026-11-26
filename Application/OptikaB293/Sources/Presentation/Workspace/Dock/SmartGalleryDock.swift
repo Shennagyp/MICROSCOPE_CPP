@@ -11,9 +11,11 @@ struct NativeSmartGalleryDock: View {
                     Text("CAPTURES")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(OptikaPalette.secondaryText)
-                    Text(gallery.captures.count == 80
-                         ? "Latest 80 captures"
-                         : "\(gallery.captures.count) captures")
+                    Text(gallery.isLoadingCaptures
+                         ? "Loading captures…"
+                         : (gallery.captures.count == 80
+                            ? "Latest 80 captures"
+                            : "\(gallery.captures.count) captures"))
                         .font(.system(size: 13, weight: .semibold))
                 }
 
@@ -51,7 +53,11 @@ struct NativeSmartGalleryDock: View {
 
             Divider()
 
-            if gallery.captures.isEmpty {
+            if gallery.isLoadingCaptures {
+                ProgressView("Loading captures…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(16)
+            } else if gallery.captures.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "photo.on.rectangle.angled")
                         .font(.system(size: 28, weight: .light))
@@ -68,7 +74,7 @@ struct NativeSmartGalleryDock: View {
                 .padding(16)
             } else {
                 ScrollView(.vertical, showsIndicators: true) {
-                    VStack(spacing: 8) {
+                    LazyVStack(spacing: 8) {
                         ForEach(gallery.captures) { item in
                             captureRow(item)
                         }
@@ -110,7 +116,8 @@ struct NativeSmartGalleryDock: View {
         } label: {
             HStack(spacing: 9) {
                 Group {
-                    if let image = NSImage(data: item.thumbnailData) {
+                    if let thumbnailData = item.thumbnailData,
+                       let image = NSImage(data: thumbnailData) {
                         Image(nsImage: image)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -157,6 +164,9 @@ struct NativeSmartGalleryDock: View {
         }
         .buttonStyle(PlainButtonStyle())
         .help("Open capture in the default image viewer")
+        .onAppear {
+            gallery.ensureThumbnailLoaded(for: item)
+        }
         .contextMenu {
             Button {
                 gallery.reveal(item)
@@ -176,6 +186,9 @@ struct NativeSmartGalleryDock: View {
                 }
             }
         }
+    }
+    .onAppear {
+        gallery.activate()
     }
 }
 

@@ -109,21 +109,23 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
         take(PositiveMicrometers::create(6.5)),
         {cameraMode}));
 
-    const auto imagingPathId = makeId<OpticalPathId>("camera-main-imaging-path");
-    const auto imagingPath = take(OpticalPath::create(
-        imagingPathId,
-        {take(OpticalPathStep::create(
-             objectiveId, std::nullopt, objectiveOutput)),
-         take(OpticalPathStep::create(
-             cameraId, cameraInput, std::nullopt))},
-        OpticalPathRole::Imaging));
-    const auto lightPath = take(LightPath::create(
-        makeId<LightPathId>("camera-main-light-path"),
-        "Camera main",
-        {imagingPathId}));
-
+    std::vector<OpticalPath> opticalPaths;
+    std::vector<LightPath> lightPaths;
     std::vector<CameraSpecification> cameraSpecifications;
     if (includeCameraSpecification) {
+        const auto imagingPathId =
+            makeId<OpticalPathId>("camera-main-imaging-path");
+        opticalPaths.push_back(take(OpticalPath::create(
+            imagingPathId,
+            {take(OpticalPathStep::create(
+                 objectiveId, std::nullopt, objectiveOutput)),
+             take(OpticalPathStep::create(
+                 cameraId, cameraInput, std::nullopt))},
+            OpticalPathRole::Imaging)));
+        lightPaths.push_back(take(LightPath::create(
+            makeId<LightPathId>("camera-main-light-path"),
+            "Camera main",
+            {imagingPathId})));
         cameraSpecifications.push_back(cameraSpecification);
     }
 
@@ -131,14 +133,14 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
         microscopeId,
         {objectiveComponent, cameraComponent},
         {connection},
-        {imagingPath},
+        std::move(opticalPaths),
         {},
         std::move(cameraSpecifications),
         {},
         {},
         {},
         {},
-        {lightPath},
+        std::move(lightPaths),
         {},
         equipmentRevision));
 }

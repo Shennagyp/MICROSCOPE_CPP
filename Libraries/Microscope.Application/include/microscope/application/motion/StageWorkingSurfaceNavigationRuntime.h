@@ -374,24 +374,42 @@ private:
                     : StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched);
         }
 
-        if (dispatch == DispatchDisposition::Rejected) {
-            // A known adapter/runtime rejection means no command was accepted.
-            // Close the pending step and operation instead of orphaning Running work.
-            auto failed = operationRuntime_->recordPreDispatchFailure(
-                active_->identities.operationId,
-                active_->execution.commandContext.operation().stepId);
-            if (!failed) {
+        if (dispatch == DispatchDisposition::PreDispatchRejected ||
+            dispatch == DispatchDisposition::AdapterRejected) {
+            // RuntimeDispatchRejected occurs before the port is called, so the
+            // Pending step is failed here. AdapterRejected is already recorded
+            // by StageMotionCommandDispatcher and must never be recorded twice.
+            const auto operationId = active_->identities.operationId;
+            if (dispatch == DispatchDisposition::PreDispatchRejected) {
+                auto failed = operationRuntime_->recordPreDispatchFailure(
+                    operationId,
+                    active_->execution.commandContext.operation().stepId);
+                if (!failed) {
+                    return failure(
+                        StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
+                        std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+                        std::nullopt, failed.error());
+                }
+            }
+
+            const auto stepStatus = operationRuntime_->stepStatus(
+                operationId, active_->execution.commandContext.operation().stepId);
+            const auto operationSnapshot = operationRuntime_->operationSnapshot(operationId);
+            if (!stepStatus || !operationSnapshot ||
+                stepStatus.value() != core::StepStatus::Failed ||
+                operationSnapshot.value().status() != core::OperationStatus::Failed) {
                 return failure(
                     StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
                     std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                    std::nullopt, failed.error());
+                    std::nullopt,
+                    !stepStatus ? std::optional<core::SerializedOperationRuntimeError>(stepStatus.error())
+                    : !operationSnapshot ? std::optional<core::SerializedOperationRuntimeError>(operationSnapshot.error())
+                    : std::nullopt);
             }
-            const auto snapshot = operationRuntime_->operationSnapshot(
-                active_->identities.operationId);
+
             active_.reset();
             return success(StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
-                           snapshot ? std::optional<core::OperationSnapshot>(snapshot.value())
-                                    : std::nullopt);
+                           std::move(operationSnapshot).value());
         }
 
         // Submission outcome is indeterminate: the adapter may have received
@@ -600,7 +618,12 @@ private:
         std::optional<CorrelatedAxisObservation> yObservation;
     };
 
-    enum class DispatchDisposition { Accepted, Rejected, Indeterminate };
+    enum class DispatchDisposition {
+        Accepted,
+        PreDispatchRejected,
+        AdapterRejected,
+        Indeterminate
+    };
 
     StageWorkingSurfaceNavigationRuntime(
         core::StageWorkingSurface2D surface,
@@ -758,20 +781,21 @@ private:
         const StageWorkingSurfaceNavigationExecution& execution) const noexcept {
         const auto* error = std::get_if<StageMotionDispatchError>(&execution.dispatch);
         if (error != nullptr) {
-            return error->code ==
-                       StageMotionDispatchErrorCode::AdapterSubmissionOutcomeUnknown ||
-                   error->code ==
-                       StageMotionDispatchErrorCode::RuntimeRejectedSubmissionResult
-                ? DispatchDisposition::Indeterminate
-                : DispatchDisposition::Rejected;
+            switch (error->code) {
+            case StageMotionDispatchErrorCode::RuntimeDispatchRejected:
+                return DispatchDisposition::PreDispatchRejected;
+            case StageMotionDispatchErrorCode::AdapterSubmissionOutcomeUnknown:
+            case StageMotionDispatchErrorCode::RuntimeRejectedSubmissionResult:
+                return DispatchDisposition::Indeterminate;
+            }
+            return DispatchDisposition::Indeterminate;
         }
         const auto* receipt =
             std::get_if<StageMotionDispatchReceipt>(&execution.dispatch);
-        if (receipt == nullptr ||
-            receipt->submission.status() == core::StageMotionSubmissionStatus::Rejected) {
-            return DispatchDisposition::Rejected;
-        }
-        return DispatchDisposition::Accepted;
+        if (receipt == nullptr) return DispatchDisposition::Indeterminate;
+        return receipt->submission.status() == core::StageMotionSubmissionStatus::Rejected
+            ? DispatchDisposition::AdapterRejected
+            : DispatchDisposition::Accepted;
     }
 
     [[nodiscard]] static double toMicrometers(

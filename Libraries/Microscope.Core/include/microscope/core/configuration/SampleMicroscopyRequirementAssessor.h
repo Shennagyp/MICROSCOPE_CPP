@@ -1,6 +1,7 @@
 #pragma once
 
 #include "microscope/core/configuration/Configuration.h"
+#include "microscope/core/configuration/OperationMode.h"
 #include "microscope/core/diagnostics/Diagnostic.h"
 #include "microscope/core/equipment/OpticalTopology.h"
 #include "microscope/core/samples/SampleModels.h"
@@ -30,7 +31,8 @@ public:
         const SampleType& sampleType,
         const Sample& sample,
         const Specimen& specimen,
-        const ResolvedConfiguration& configuration);
+        const ResolvedConfiguration& configuration,
+        const OperationMode* operationMode = nullptr);
 };
 
 } // namespace microscope::core

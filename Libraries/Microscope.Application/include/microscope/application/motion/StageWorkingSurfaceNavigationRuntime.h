@@ -461,7 +461,7 @@ public:
                 StageWorkingSurfaceNavigationRuntimeErrorCode::PositionFeedbackRejected,
                 std::nullopt, std::nullopt, std::nullopt,
                 positionReduction.error().code,
-                positionReduction.error().positionStateError,
+                positionReduction.error().positionError,
                 positionReduction.error().runtimeError);
         }
         position_ = std::move(positionReduction).value().position;
@@ -527,7 +527,7 @@ public:
         return operationRuntime_->feedbackLossLatched();
     }
 
-    // Carrier occupancy and registrations may change only between navigation
+    // Slide registrations and workspace extents may change only between navigation
     // operations. A new registration revision automatically invalidates any
     // previously captured SlideNavigationTarget2D.
     [[nodiscard]] core::Result<bool, StageWorkingSurfaceNavigationRuntimeError> replaceWorkingSurface(
@@ -818,7 +818,7 @@ private:
                 StageWorkingSurfaceNavigationRuntimeErrorCode::HomeReferenceRejected,
                 std::nullopt, std::nullopt, std::nullopt,
                 reference.error().code,
-                reference.error().positionStateError,
+                reference.error().positionError,
                 reference.error().runtimeError);
         }
         position_ = reference.value().position;
@@ -1124,7 +1124,7 @@ private:
                yError <= verificationPolicy_.yTargetToleranceMicrometers();
     }
 
-        core::StageWorkingSurface2D surface_;
+    core::StageWorkingSurface2D surface_;
     core::StagePosition3D position_;
     core::StageXYHomingPolicy homingPolicy_;
     StageMotionErrorBudget errorBudget_;

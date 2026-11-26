@@ -604,13 +604,15 @@ int32_t gentl_consumer_invoke(
         simulator_last_frame_ids[event] = frameId;
         stream_frame_ids[index] = frameId;
         stream_timestamps_ns[index] =
-            UINT64_C(123456789) + frameId * UINT64_C(1000000);
-        ++simulator_delivered_buffers[event];
-        ++simulator_frames_started[event];
+            UINT64_C(123456789) +
+            (simulator_delivered_buffers[event] + 1) * UINT64_C(1000000);
         for (size_t i = 0; i < 16; ++i) {
             stream_memory[index][i] =
-                (uint8_t)(0x30 + i + (uint8_t)(stream_frame_ids[index] - 1));
+                (uint8_t)(0x30 + i +
+                    (uint8_t)simulator_delivered_buffers[event]);
         }
+        ++simulator_delivered_buffers[event];
+        ++simulator_frames_started[event];
 #else
         for (size_t i = 0; i < 16; ++i) stream_memory[index][i] = (uint8_t)(0x30 + i);
 #endif

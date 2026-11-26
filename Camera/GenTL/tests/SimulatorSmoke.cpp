@@ -222,9 +222,12 @@ int main(int argc, char** argv) {
                         "The deterministic simulator returned an unexpected payload size.");
                 }
                 if (!frame->frameId || !frame->timestampNanoseconds ||
-                    *frame->frameId != index + sequenceOffset + 1 ||
-                    (index > 0 && (*frame->frameId != previousFrameId + 1 ||
-                        *frame->timestampNanoseconds <= previousTimestampNanoseconds))) {
+                    (sequenceMode.empty() &&
+                     *frame->frameId != index + sequenceOffset + 1) ||
+                    (index > 0 &&
+                     ((sequenceMode.empty() &&
+                       *frame->frameId != previousFrameId + 1) ||
+                      *frame->timestampNanoseconds <= previousTimestampNanoseconds))) {
                     throw std::runtime_error(
                         "Frame IDs or timestamps were not reported consistently.");
                 }

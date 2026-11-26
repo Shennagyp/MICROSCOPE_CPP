@@ -163,8 +163,9 @@ private:
             if (value < previous) {
                 // Without a declared wrap policy this could be a reset, wrap,
                 // or reordered delivery. Do not guess which or count a gap.
+                // Retain the last forward baseline so a later expected ID is
+                // not misreported as another gap after this ambiguous sample.
                 increment(snapshot_.ambiguousSequenceTransitions);
-                previousSequence_ = value;
                 return;
             }
             recordForwardDistance(value - previous);

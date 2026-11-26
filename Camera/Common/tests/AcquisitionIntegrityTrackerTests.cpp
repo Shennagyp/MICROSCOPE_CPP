@@ -51,6 +51,11 @@ int main() {
         require(stats.ambiguousSequenceTransitions == 1,
                 "an unknown backwards transition is not misreported as a gap");
         require(stats.missingFrames == 0, "ambiguous transitions do not invent losses");
+        tracker.recordBuffer(8, camera::FrameDeliveryStatus::CompleteImage);
+        const auto afterAmbiguous = tracker.snapshot();
+        require(afterAmbiguous.sequenceGaps == 0 &&
+                    afterAmbiguous.missingFrames == 0,
+                "a later expected ID must not create a false gap after ambiguity");
     }
 
     {

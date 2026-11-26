@@ -180,8 +180,7 @@ Result<
                 ObjectiveRequirementsError::InvertedMagnificationRange);
     }
     if (minimumNumericalAperture &&
-        (*minimumNumericalAperture <= 0.0 ||
-         *minimumNumericalAperture > 1.7)) {
+        *minimumNumericalAperture <= 0.0) {
         return Result<
             ObjectiveMicroscopyRequirements,
             ObjectiveRequirementsError>::failure(
@@ -604,11 +603,11 @@ Result<Sample, SampleError> Sample::create(
     }
     if (materialDescription.find('\0') != std::string::npos) {
         return Result<Sample, SampleError>::failure(
-            SampleError::InvalidBiologicalEntity);
+            SampleError::InvalidMaterialDescription);
     }
     if (!hasText(materialDescription)) {
         return Result<Sample, SampleError>::failure(
-            SampleError::EmptyBiologicalEntity);
+            SampleError::EmptyMaterialDescription);
     }
     if (!validOptionalText(organismScientificName)) {
         return Result<Sample, SampleError>::failure(

@@ -172,7 +172,7 @@ Fixture makeFixture() {
         {cameraMode},
         take(ExposureTimeRange::create(
             take(PositiveMicroseconds::create(100.0)),
-            take(PositiveMicroseconds::create(1000000.0)))));
+            take(PositiveMicroseconds::create(1000000.0))))));
     const auto spectrum = take(SpectralBand::create(
         take(PositiveNanometers::create(400.0)),
         take(PositiveNanometers::create(700.0))));

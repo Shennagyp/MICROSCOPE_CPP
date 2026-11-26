@@ -223,12 +223,26 @@ LightPathCameraResolution LightPathCameraResolver::resolve(
             std::nullopt, {}, std::move(diagnostics));
     }
 
-    if (operationMode.findLightPathSetting(lightPathId) == nullptr) {
+    const auto* modeSetting =
+        operationMode.findLightPathSetting(lightPathId);
+    if (modeSetting == nullptr) {
         appendDiagnostic(
             diagnostics,
             DiagnosticSeverity::Error,
             "light_path_camera.path_not_configured_by_mode",
             "The selected operation mode does not contain a setting for this LightPath.",
+            lightPathId.value());
+        return LightPathCameraResolution(
+            LightPathCameraResolutionStatus::Unsupported,
+            std::nullopt, {}, std::move(diagnostics));
+    }
+
+    if (modeSetting->equipmentDefinitionRevision() != equipment.revision()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "light_path_camera.equipment_revision_mismatch",
+            "The selected OperationMode LightPath setting was calibrated against a different microscope equipment-definition revision.",
             lightPathId.value());
         return LightPathCameraResolution(
             LightPathCameraResolutionStatus::Unsupported,

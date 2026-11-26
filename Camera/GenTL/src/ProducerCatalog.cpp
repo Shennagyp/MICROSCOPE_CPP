@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <exception>
+#include <iterator>
 #include <set>
 #include <system_error>
 

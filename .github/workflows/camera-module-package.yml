@@ -95,7 +95,7 @@ jobs:
       - name: Configure clean external consumers
         run: |
           cmake -S Camera/tests/consumers/common -B build/consumer-common -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
-          cmake -S Camera/tests/consumers/gentl -B build/consumer-gentl -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
+          cmake -S Camera/tests/consumers/gentl -B build/consumer-gentl -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE -DCMAKE_DISABLE_FIND_PACKAGE_GenApi=TRUE
           cmake -S Camera/tests/consumers/amscope -B build/consumer-amscope -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
           cmake -S Camera/tests/consumers/genapi -B build/consumer-genapi -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated" -DGenApi_DIR="$GENAPI_CMAKE_DIR" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=TRUE
           cmake -S Camera/tests/consumers/qt -B build/consumer-qt -DCMAKE_PREFIX_PATH="$PWD/build/camera-relocated"

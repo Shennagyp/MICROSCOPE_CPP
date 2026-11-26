@@ -267,7 +267,8 @@ Use `AMSCOPE_IMPLEMENTATION_INVENTORY.md` and `Camera/Amscope/README.md` as the 
 **Status: ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026).** The package entry
 point, namespaced exports, component-aware config/version files, clean
 Common/GenTL/GenApi/AmScope/Qt consumer fixtures and vendor-runtime opt-in
-are committed in `camera-v.2.0`. Cross-architecture package CI is pending. See
+are committed in `camera-v.2.0`. Baseline package CI #45777949772 passed on
+both architectures; the default-off vendor-runtime gate CI is pending. See
 [Camera/README.md](../../Camera/README.md) and the canonical
 [Camera v2.0 status ledger](CAMERA_V2_DEVELOPMENT_STATUS.md).
 

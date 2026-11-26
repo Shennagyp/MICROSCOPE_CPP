@@ -475,6 +475,12 @@ void testAdapterRejectionClosesOperationWithoutLeavingPendingStep() {
     check(retried.disposition ==
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched,
         "the failed operation releases the runtime for the next valid request");
+    auto retryCompletion = fixture.process(
+        actionCompleted(fixture.device, lastOperation(port)));
+    auto retryResult = take(navigation.processFeedback(retryCompletion));
+    check(retryResult.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted,
+        "the retry reaches a terminal operation state");
 }
 
 void testRestoredMoveAdapterRejectionClosesHomedOperation() {
@@ -523,6 +529,12 @@ void testRestoredMoveAdapterRejectionClosesHomedOperation() {
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched &&
         port.moveToCalls == 2,
         "a new request uses the already referenced XY axes and does not home them again");
+    auto retryCompletion = fixture.process(
+        actionCompleted(fixture.device, lastOperation(port)));
+    auto retryResult = take(navigation.processFeedback(retryCompletion));
+    check(retryResult.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted,
+        "the move after partial completion can finish normally");
 }
 
 void testPreDispatchRejectionClosesOperationAndCanRetry() {
@@ -557,6 +569,12 @@ void testPreDispatchRejectionClosesOperationAndCanRetry() {
         application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::MoveDispatched &&
         port.moveToCalls == 1,
         "opening the device session permits a fresh operation without reconstructing the stage owner");
+    auto retryCompletion = fixture.process(
+        actionCompleted(fixture.device, lastOperation(port)));
+    auto retryResult = take(navigation.processFeedback(retryCompletion));
+    check(retryResult.disposition ==
+        application::motion::StageWorkingSurfaceNavigationRuntimeDisposition::NavigationCompleted,
+        "the recovered stage owner completes the retried move");
 }
 
 void testQueuedTargetIsRejectedAfterSlideRegistrationChanges() {

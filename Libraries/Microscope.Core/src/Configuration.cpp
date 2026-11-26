@@ -43,6 +43,7 @@ namespace {
 [[nodiscard]] bool isKnownOpticalElementFunction(
     OpticalElementFunction value) noexcept {
     switch (value) {
+    case OpticalElementFunction::BeamSplitter:
     case OpticalElementFunction::PhasePlate:
     case OpticalElementFunction::PhaseAnnulus:
     case OpticalElementFunction::Polarizer:
@@ -90,6 +91,19 @@ template <typename TValue>
                 [&componentId](const OpticalPathStep& step) {
                     return step.componentId() == componentId;
                 });
+        });
+}
+
+[[nodiscard]] bool containsImagingCameraEndpoint(
+    const std::vector<const OpticalPath*>& paths,
+    const EquipmentComponentId& cameraComponentId) {
+    return std::any_of(
+        paths.begin(),
+        paths.end(),
+        [&cameraComponentId](const OpticalPath* path) {
+            return path->role() == OpticalPathRole::Imaging &&
+                   !path->steps().empty() &&
+                   path->steps().back().componentId() == cameraComponentId;
         });
 }
 
@@ -982,10 +996,16 @@ ConfigurationResolution ConfigurationResolver::resolve(
             request.condenserComponentId(),
             "configuration.condenser.not_on_selected_paths",
             "The selected condenser is not traversed by any selected optical path.");
-        requireOnSelectedPaths(
-            request.cameraComponentId(),
-            "configuration.camera.not_on_selected_paths",
-            "The selected camera is not traversed by any selected optical path.");
+        if (!containsImagingCameraEndpoint(
+                selectedPaths,
+                request.cameraComponentId())) {
+            appendError(
+                diagnostics,
+                "configuration.camera.not_connected_to_selected_imaging_path",
+                "The selected camera is not the terminal camera endpoint of any selected Imaging optical path.",
+                "EquipmentComponent",
+                request.cameraComponentId().value());
+        }
         requireOnSelectedPaths(
             request.illuminationComponentId(),
             "configuration.illumination.not_on_selected_paths",

@@ -428,13 +428,14 @@ A higher NA can improve the diffraction-limited lateral resolution, but it does 
 
 For the supported widefield cases, use the following Rayleigh lateral-resolution models, with all wavelength and distance quantities expressed in consistent units:
 
-- **Transmitted (diascopic) widefield:** (r_{lat} = 1.22\lambda_{em}/(NA_{obj}+NA_{cond})). Use the condenser NA actually selected for the imaging configuration, not merely the condenser's maximum capability.
-- **Reflected/episcopic widefield, including conventional epifluorescence:** (r_{lat} = 0.61\lambda_{em}/NA_{obj}), because the objective also acts as the condenser.
+- **Transmitted (diascopic) widefield brightfield:** (r_{lat} = 1.22\lambda_{illum}/(NA_{obj}+NA_{cond})). Use the condenser NA actually selected for the imaging configuration, not merely the condenser's maximum capability. Here (\lambda_{illum}) is the illumination wavelength used by this optical-resolution convention; it is not a fluorescence emission wavelength.
+- **Reflected/episcopic widefield reflectance:** (r_{lat} = 0.61\lambda/NA_{obj}) under the stated widefield Rayleigh approximation, because the objective supplies both illumination and collection cones. Here (\lambda) is the relevant image-forming wavelength under the declared reflectance model.
+- **Epi-fluorescence:** do not substitute the reflectance formula using only (\lambda_{em}). Fluorescence image formation depends on both excitation and emission wavelengths and their combined point-spread/transfer functions, as well as the illumination/collection pupils and spectral detection band. Use an explicit fluorescence modality model; until one is implemented for the relevant acquisition mode, report sampling adequacy as unknown rather than treating fluorescence as reflected brightfield.
 
 For phase contrast in transmitted light, the condenser annulus defines an annular illumination pupil. The effective illumination NA used by the resolution model must therefore come from the installed and selected annulus/condenser arrangement, not from the condenser's maximum aperture marking alone. Other techniques may require their own pupil/transfer-function model; if the Core does not yet implement that model, sampling is unknown rather than being declared equivalent to ordinary brightfield.
 - **Confocal:** do not reuse the widefield formula blindly. Resolution depends on the confocal modality, excitation wavelength and pinhole/Airy-unit setting; a modality-specific model is required before the resolver can claim sampling adequacy.
 
-These are optical-resolution estimates under the named model and assumptions, not guarantees of real-world image quality. Aberrations, misalignment, specimen preparation, refractive-index mismatch, focus, objective correction and detector noise can reduce achieved performance. The stored model and returned rationale must identify which criterion and reference wavelength were used. For broadband illumination/detection, the mode must define its reference-wavelength policy; the resolver must not treat an entire spectrum as one exact wavelength.
+These are optical-resolution estimates under the named model and assumptions, not guarantees of real-world image quality. Aberrations, misalignment, specimen preparation, refractive-index mismatch, focus, objective correction and detector noise can reduce achieved performance. The stored model and returned rationale must identify which criterion and reference wavelength(s) were used. For fluorescence, retain excitation and emission wavelength/band information separately. For broadband illumination/detection, the mode must define its reference-wavelength policy; the resolver must not treat an entire spectrum as one exact wavelength.
 
 For a camera-based widefield route, define:
 
@@ -455,7 +456,7 @@ Equivalently, the minimum total image-forming magnification is:
 
 (M_{eff} \ge \max(2.3 a_x s_x/r_{lat},\;2.3 a_y s_y/r_{lat})).
 
-For reflected/episcopic widefield this becomes, per axis, (M_{eff} \ge 2.3 a s NA_{obj}/(0.61\lambda_{em})). For transmitted widefield it becomes (M_{eff} \ge 2.3 a s (NA_{obj}+NA_{cond})/(1.22\lambda_{em})). The resolver chooses the lowest available objective/relay combination that satisfies the selected model, both sensor axes, the requested NA and all other hard constraints.
+For reflected widefield reflectance this becomes, per axis, (M_{eff} \ge 2.3 a s NA_{obj}/(0.61\lambda)). For transmitted widefield brightfield it becomes (M_{eff} \ge 2.3 a s (NA_{obj}+NA_{cond})/(1.22\lambda_{illum})). Epi-fluorescence must use its declared excitation/emission modality model rather than either shortcut. The resolver chooses the lowest available objective/relay combination that satisfies the selected model, both sensor axes, the requested NA and all other hard constraints.
 
 The 2.3 value is a sampling-policy factor, not a new Rayleigh constant and not the camera's total pixel count. Nikon's microscopy calculator describes 2.3–4 samples per optical resolution distance as a commonly recommended high-resolution range; Hamamatsu recommends at least two and typically 2.5–3 pixels for high-resolution microscopy. The system default may be 2.3 because that is the selected project policy, but it should remain an explicit imaging requirement/policy rather than being confused with the physical Rayleigh criterion.
 

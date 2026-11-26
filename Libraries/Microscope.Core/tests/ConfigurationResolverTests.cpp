@@ -230,7 +230,8 @@ ConfigurationFixture makeConfigurationFixture() {
                   dicPrismTwoInput, dicPrismTwoOutput),
          pathStep(makeId<EquipmentComponentId>("analyzer"),
                   analyzerInput, analyzerOutput),
-         pathStep(cameraId, cameraInput, std::nullopt)})));
+         pathStep(cameraId, cameraInput, std::nullopt)},
+        OpticalPathRole::Imaging)));
 
     paths.push_back(take(OpticalPath::create(
         illuminationPathId,
@@ -240,7 +241,8 @@ ConfigurationFixture makeConfigurationFixture() {
                   polarizerInput, polarizerOutput),
          pathStep(makeId<EquipmentComponentId>("dic-prism-one"),
                   dicPrismOneInput, dicPrismOneOutput),
-         pathStep(objectiveId, objectiveInput, std::nullopt)})));
+         pathStep(objectiveId, objectiveInput, std::nullopt)},
+        OpticalPathRole::Illumination)));
 
     paths.push_back(take(OpticalPath::create(
         imagingPathId,
@@ -249,7 +251,8 @@ ConfigurationFixture makeConfigurationFixture() {
                   dicPrismTwoInput, dicPrismTwoOutput),
          pathStep(makeId<EquipmentComponentId>("analyzer"),
                   analyzerInput, analyzerOutput),
-         pathStep(cameraId, cameraInput, std::nullopt)})));
+         pathStep(cameraId, cameraInput, std::nullopt)},
+        OpticalPathRole::Imaging)));
 
     const auto objectiveSpecification = take(ObjectiveSpecification::create(
         objectiveId,
@@ -1415,6 +1418,25 @@ void testResolverEnforcesPathCompatibilityAndIlluminationChannel() {
           "rejects an installed or requested objective not allowed by the profile");
 }
 
+void testResolverRejectsCameraNotConnectedToSelectedImagingPath() {
+    const auto fixture = makeConfigurationFixture();
+    const auto request = makeRequest(
+        fixture,
+        {fixture.illuminationPathId},
+        fixture.cameraModeId);
+
+    const auto resolution = ConfigurationResolver::resolve(
+        fixture.equipment,
+        fixture.profiles,
+        request);
+
+    check(!resolution.isResolved() &&
+          hasDiagnosticCode(
+              resolution,
+              "configuration.camera.not_connected_to_selected_imaging_path"),
+          "rejects a camera that is not the terminal endpoint of a selected Imaging route");
+}
+
 void testProfileRequiredComponentMustBeOnSelectedPaths() {
     const auto fixture = makeConfigurationFixture();
     const auto missingRequiredComponent =
@@ -1465,6 +1487,7 @@ int main() {
     testResolverRejectsUnavailableCameraMode();
     testResolverReportsProfileConflictAndMissingPath();
     testResolverEnforcesPathCompatibilityAndIlluminationChannel();
+    testResolverRejectsCameraNotConnectedToSelectedImagingPath();
     testProfileRequiredComponentMustBeOnSelectedPaths();
 
     if (failures != 0) {

@@ -124,6 +124,7 @@ enum class StageWorkingSurfaceNavigationRuntimeDisposition {
     AwaitingPositionFeedback,
     NavigationCompleted,
     NavigationFailed,
+    NavigationPartiallyCompleted,
     SubmissionIndeterminate,
     FeedbackLossDetected,
     PositionUpdated,
@@ -991,9 +992,12 @@ private:
         const auto stepStatus = operationRuntime_->stepStatus(
             operation.operationId, operation.stepId);
         const auto snapshot = operationRuntime_->operationSnapshot(operationId);
+        const bool terminalFailure = snapshot &&
+            (snapshot.value().status() == core::OperationStatus::Failed ||
+             snapshot.value().status() == core::OperationStatus::PartiallyCompleted);
         if (!stepStatus || !snapshot ||
             stepStatus.value() != core::StepStatus::Failed ||
-            snapshot.value().status() != core::OperationStatus::Failed) {
+            !terminalFailure) {
             return failure(
                 StageWorkingSurfaceNavigationRuntimeErrorCode::DispatchRejected,
                 std::nullopt, std::nullopt, std::nullopt, std::nullopt,
@@ -1003,9 +1007,12 @@ private:
                 : std::nullopt);
         }
 
+        const auto disposition =
+            snapshot.value().status() == core::OperationStatus::PartiallyCompleted
+                ? StageWorkingSurfaceNavigationRuntimeDisposition::NavigationPartiallyCompleted
+                : StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed;
         active_.reset();
-        return success(StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
-                       std::move(snapshot).value());
+        return success(disposition, std::move(snapshot).value());
     }
 
     [[nodiscard]] Result processMoveCompletion(const FeedbackResult& feedback) {
@@ -1204,8 +1211,12 @@ private:
                 std::nullopt, failed.error());
         }
         const auto snapshot = operationRuntime_->operationSnapshot(operation.operationId);
+        const auto disposition = snapshot &&
+            snapshot.value().status() == core::OperationStatus::PartiallyCompleted
+                ? StageWorkingSurfaceNavigationRuntimeDisposition::NavigationPartiallyCompleted
+                : StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed;
         active_.reset();
-        return success(StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
+        return success(disposition,
                        snapshot ? std::optional<core::OperationSnapshot>(snapshot.value())
                                 : std::nullopt);
     }

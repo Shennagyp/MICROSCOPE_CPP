@@ -94,17 +94,6 @@ if(BUILD_TESTING)
     add_test(NAME camera_gentl_frame_adapter_tests
         COMMAND camera_gentl_frame_adapter_tests)
 
-    add_executable(camera_gentl_producer_catalog_tests
-        tests/ProducerCatalogTests.cpp)
-    target_compile_features(camera_gentl_producer_catalog_tests PRIVATE cxx_std_17)
-    target_link_libraries(camera_gentl_producer_catalog_tests
-        PRIVATE Camera::GenTLConsumerBridge)
-    add_test(NAME camera_gentl_producer_catalog_tests
-        COMMAND camera_gentl_producer_catalog_tests
-            "$<TARGET_FILE:gentl_test_simulator_cti>")
-    set_tests_properties(camera_gentl_producer_catalog_tests PROPERTIES
-        TIMEOUT 120)
-
     add_executable(camera_gentl_simulator_smoke
         tests/SimulatorSmoke.cpp)
     target_compile_features(camera_gentl_simulator_smoke PRIVATE cxx_std_17)
@@ -133,6 +122,17 @@ if(BUILD_TESTING)
             "$<TARGET_FILE:gentl_test_simulator_cti>"
             "--verify-two-device-isolation")
     set_tests_properties(camera_gentl_inrepo_simulator_smoke PROPERTIES
+        TIMEOUT 120)
+
+    add_executable(camera_gentl_producer_catalog_tests
+        tests/ProducerCatalogTests.cpp)
+    target_compile_features(camera_gentl_producer_catalog_tests PRIVATE cxx_std_17)
+    target_link_libraries(camera_gentl_producer_catalog_tests
+        PRIVATE Camera::GenTLConsumerBridge)
+    add_test(NAME camera_gentl_producer_catalog_tests
+        COMMAND camera_gentl_producer_catalog_tests
+            "$<TARGET_FILE:gentl_test_simulator_cti>")
+    set_tests_properties(camera_gentl_producer_catalog_tests PROPERTIES
         TIMEOUT 120)
 
     set(CAMERA_GENTL_SIMULATOR_CTI "" CACHE FILEPATH

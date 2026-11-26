@@ -290,10 +290,10 @@ inline std::optional<CameraModelProfile> CameraModelProfile::create(
     std::uint64_t profileRevision,
     std::string sourceReference) {
     if (profileRevision == 0 ||
-        key.manufacturer.find('\\0') != std::string::npos ||
-        key.model.find('\\0') != std::string::npos ||
-        (key.variant && key.variant->find('\\0') != std::string::npos) ||
-        sourceReference.find('\\0') != std::string::npos ||
+        key.manufacturer.find('\0') != std::string::npos ||
+        key.model.find('\0') != std::string::npos ||
+        (key.variant && key.variant->find('\0') != std::string::npos) ||
+        sourceReference.find('\0') != std::string::npos ||
         detail::normalizeCameraModelText(key.manufacturer).empty() ||
         detail::normalizeCameraModelText(key.model).empty() ||
         (key.variant && detail::normalizeCameraModelText(*key.variant).empty()) ||

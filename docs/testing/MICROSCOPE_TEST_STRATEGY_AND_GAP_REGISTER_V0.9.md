@@ -19,17 +19,25 @@ Do not rename a Core unit test a system test. Do not describe a mock or simulate
 
 ## 2. Current test inventory
 
-The branch contains the following registered CTest source groups:
+The branch contains these registered test groups in the subproject CMake files:
 
-| Test group | Current coverage |
-|---|---|
-| Microscope.Core | 22 unit/contract targets |
-| Microscope.Application | 17 component/workflow targets |
-| Camera subprojects | Native/common/Qt and AmScope-specific contract targets |
+| Test group | Registered targets | Build condition |
+|---|---:|---|
+| Microscope.Core | 22 | Root build |
+| Microscope.Application | 17 | Root build |
+| Camera.Common | 5 | Root build |
+| Camera.Amscope | 7 | `OPTIKA_BUILD_AMSCOPE=ON` |
+| Camera.Qt | 1 | Qt-enabled AmScope build |
+| Camera.QtWidgets | 3 | Qt-enabled AmScope build |
+| Native OPTIKA B293 app | 6 | `OPTIKA_BUILD_NATIVE_APP=ON`, macOS, Swift and Objective-C++ |
+
+The root default enables Camera.Amscope and leaves the native app disabled. The always-added root baseline is 44 registered targets (22 Core + 17 Application + 5 Camera.Common). Optional subprojects add their registered targets when their build conditions are met.
+
+The six native-app tests cover automatic resolution policy, workspace/dock behavior, microscope calibration data, image geometry and preview frame-rate measurement. They do **not** currently exercise `NativeCameraController`, `OptikaB293Composition` or actual device command orchestration.
 
 The Core/Application groups cover equipment topology, configuration compatibility, camera suitability, mode/calibration contracts, stage geometry and navigation, operation/feedback lifecycle, SQLite stores, camera model discovery enrichment and serialized runtime integration.
 
-The AmScope tests remain separate and must be preserved. They cover the current camera implementation, not the missing stage or optical hardware adapters.
+The AmScope tests remain separate and must be preserved. They cover the camera backend, session/frame primitives and Qt request/stream components; they do not cover the complete native `NativeCameraController` owner or the missing stage/optical hardware adapters.
 
 ## 3. Workflow integrations added or strengthened
 
@@ -107,7 +115,7 @@ The expanded runtime suite explicitly challenges:
 
 Covers the port dispatch boundary for `MoveAxesTo`, `MoveAxesBy`, `HomeAxes` and controlled `StopAxes`, including accepted/rejected/throwing submission semantics and stale device sessions.
 
-**Important:** dispatching a controlled stop is not the same as cancelling and verifying an active navigation. The current stage-navigation owner does not yet expose a complete cancel/stop lifecycle.
+**Important:** dispatching a controlled stop is not the same as cancelling and verifying an active navigation. The current stage-navigation owner does not expose a complete cancel/stop lifecycle, does not allocate a correlated stop operation for an active move, and has no timeout/deadline mechanism to reconcile a command that never completes.
 
 ## 4. Implementation coverage versus missing evidence
 
@@ -137,7 +145,8 @@ The stage **physical controller subsystem is not complete**. There is no concret
 - Configured velocity, acceleration, jerk, motor/drive limits and controller-level soft/hard limits.
 - Concrete homing procedure selection and controller switch/encoder-index handling for each installed axis.
 - Focus-Z command/reference execution integrated with the native application.
-- Active navigation cancellation, controlled-stop verification, timeout handling and late-completion reconciliation.
+- Active navigation cancellation, controlled-stop verification, timeout/deadline handling and late-completion reconciliation.
+- Preservation/exposure of controller-fault kind and affected axis in the public terminal operation result; the current navigation runtime terminalizes a correlated adapter failure but does not retain the typed fault detail in its update.
 - Device disconnect/reconnect behavior against a real controller.
 - Hardware-in-the-loop tests of accuracy, repeatability, backlash, travel bounds, limit switches and stop latency.
 

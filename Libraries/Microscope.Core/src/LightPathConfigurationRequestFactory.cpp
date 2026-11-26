@@ -152,7 +152,15 @@ LightPathConfigurationRequestFactory::create(
     return Result<
         ConfigurationRequest,
         LightPathConfigurationRequestFactoryError>::success(
-            std::move(request).value());
+            ConfigurationRequest(
+                std::move(request).value(),
+                LightPathConfigurationBinding{
+                    selected.operationModeId,
+                    selected.operationModeRevision,
+                    selected.lightPathId,
+                    selected.cameraComponentId,
+                    selected.cameraModeId},
+                cameraResolution.diagnostics()));
 }
 
 } // namespace microscope::core

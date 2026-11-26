@@ -41,6 +41,18 @@ void appendDiagnostic(
     return found == values.end() ? nullptr : &*found;
 }
 
+[[nodiscard]] const CondenserSpecification* findCondenser(
+    const MicroscopeEquipmentDefinition& equipment,
+    const EquipmentComponentId& componentId) {
+    const auto& values = equipment.condenserSpecifications();
+    const auto found = std::find_if(
+        values.begin(), values.end(),
+        [&componentId](const CondenserSpecification& value) {
+            return value.componentId() == componentId;
+        });
+    return found == values.end() ? nullptr : &*found;
+}
+
 [[nodiscard]] const CameraSpecification* findCamera(
     const MicroscopeEquipmentDefinition& equipment,
     const EquipmentComponentId& componentId) {
@@ -197,6 +209,238 @@ void assessObjective(
                     "The specimen coverglass thickness differs from the selected objective's design thickness by more than the SampleType tolerance.",
                     "EquipmentComponent",
                     objective.componentId().value());
+            }
+        }
+    }
+}
+
+void assessCondenser(
+    Diagnostics& diagnostics,
+    const CondenserMicroscopyRequirements& requirements,
+    const CondenserSpecification& condenser) {
+    if (requirements.minimumApertureNA() &&
+        condenser.maximumApertureNA() < *requirements.minimumApertureNA()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.condenser_aperture_below_minimum",
+            "The installed condenser cannot reach the minimum aperture NA required by this SampleType.",
+            "EquipmentComponent",
+            condenser.componentId().value());
+    }
+    if (requirements.maximumApertureNA() &&
+        condenser.minimumApertureNA() > *requirements.maximumApertureNA()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.condenser_aperture_above_maximum",
+            "The installed condenser's minimum aperture NA exceeds the maximum permitted by this SampleType.",
+            "EquipmentComponent",
+            condenser.componentId().value());
+    }
+    if (!requirements.allowedDesigns().empty() &&
+        std::find(
+            requirements.allowedDesigns().begin(),
+            requirements.allowedDesigns().end(),
+            condenser.design()) == requirements.allowedDesigns().end()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.condenser_design_incompatible",
+            "The selected condenser design is not allowed by this SampleType.",
+            "EquipmentComponent",
+            condenser.componentId().value());
+    }
+    if (!requirements.allowedImmersionMedia().empty() &&
+        std::find(
+            requirements.allowedImmersionMedia().begin(),
+            requirements.allowedImmersionMedia().end(),
+            condenser.immersionMedium()) ==
+            requirements.allowedImmersionMedia().end()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.condenser_immersion_incompatible",
+            "The selected condenser immersion medium is not allowed by this SampleType.",
+            "EquipmentComponent",
+            condenser.componentId().value());
+    }
+}
+
+void assessIllumination(
+    Diagnostics& diagnostics,
+    const MicroscopeEquipmentDefinition& equipment,
+    const IlluminationMicroscopyRequirements& requirements,
+    const ConfigurationRequest& request,
+    const OperationMode* operationMode) {
+    const auto& binding = request.lightPathBinding();
+    if (!binding) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.light_path_mode_binding_missing",
+            "This SampleType has specimen-plane illumination constraints, but the resolved configuration is not bound to a selected LightPath and OperationMode revision.");
+        return;
+    }
+
+    if (operationMode == nullptr) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.operation_mode_missing",
+            "An OperationMode is required to evaluate the calibrated specimen-plane irradiance target.");
+        return;
+    }
+
+    if (operationMode->microscopeId() != equipment.microscopeId() ||
+        operationMode->id() != binding->operationModeId ||
+        operationMode->revision() != binding->operationModeRevision ||
+        binding->equipmentDefinitionRevision != equipment.revision()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.operation_mode_revision_mismatch",
+            "The supplied OperationMode does not match the microscope, equipment revision and OperationMode revision captured by the resolved camera configuration.");
+        return;
+    }
+
+    const auto* setting =
+        operationMode->findLightPathSetting(binding->lightPathId);
+    if (setting == nullptr ||
+        setting->equipmentDefinitionRevision() != equipment.revision()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.light_path_mode_setting_missing",
+            "The selected OperationMode has no valid calibrated setting for the selected LightPath and equipment revision.",
+            "LightPath",
+            binding->lightPathId.value());
+        return;
+    }
+
+    if (setting->illuminationComponentId() != request.illuminationComponentId() ||
+        setting->illuminationChannelId() != request.illuminationChannelId()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.light_path_illumination_selection_mismatch",
+            "The resolved configuration illumination source/channel differs from the source/channel calibrated by the selected OperationMode.",
+            "LightPath",
+            binding->lightPathId.value());
+        return;
+    }
+
+    const double target =
+        setting->targetIrradianceMicrowattsPerSquareMillimeter();
+    if (requirements.minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() &&
+        target <
+            *requirements.minimumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.specimen_irradiance_below_minimum",
+            "The selected OperationMode's calibrated specimen-plane irradiance target is below the SampleType minimum.",
+            "LightPath",
+            binding->lightPathId.value());
+    }
+    if (requirements.maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter() &&
+        target >
+            *requirements.maximumSpecimenPlaneIrradianceMicrowattsPerSquareMillimeter()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.specimen_irradiance_above_maximum",
+            "The selected OperationMode's calibrated specimen-plane irradiance target exceeds the SampleType maximum.",
+            "LightPath",
+            binding->lightPathId.value());
+    }
+
+    const auto& illuminationSpecifications = equipment.illuminationSpecifications();
+    const auto source = std::find_if(
+        illuminationSpecifications.begin(),
+        illuminationSpecifications.end(),
+        [&request](const IlluminationSpecification& value) {
+            return value.componentId() == request.illuminationComponentId();
+        });
+    if (source == illuminationSpecifications.end()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.illumination_specification_missing",
+            "The selected illumination source has no installed IlluminationSpecification.",
+            "EquipmentComponent",
+            request.illuminationComponentId().value());
+        return;
+    }
+
+    const auto& channels = source->channels();
+    const auto channel = std::find_if(
+        channels.begin(), channels.end(),
+        [&request](const IlluminationChannel& value) {
+            return value.id() == request.illuminationChannelId();
+        });
+    if (channel == channels.end()) {
+        appendDiagnostic(
+            diagnostics,
+            DiagnosticSeverity::Error,
+            "sample.microscopy.illumination_channel_missing",
+            "The selected illumination source has no matching IlluminationChannel.",
+            "IlluminationChannel",
+            request.illuminationChannelId().value());
+        return;
+    }
+
+    if (requirements.requireContinuouslyAdjustableSource()) {
+        if (channel->controlKind() == IlluminationControlKind::Fixed) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.continuous_illumination_control_required",
+                "The SampleType requires continuously adjustable illumination, but the selected source channel is fixed.",
+                "IlluminationChannel",
+                request.illuminationChannelId().value());
+        } else if (channel->controlKind() != IlluminationControlKind::Continuous) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Warning,
+                "sample.microscopy.illumination_control_capability_unknown",
+                "The selected source channel does not declare continuous control; its adjustable behavior is unknown.",
+                "IlluminationChannel",
+                request.illuminationChannelId().value());
+        }
+    }
+
+    if (requirements.requiredSpectralBand()) {
+        if (!channel->spectralPowerDistribution()) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Warning,
+                "sample.microscopy.illumination_spectrum_unknown",
+                "The selected source channel has no spectral power distribution; its availability in the SampleType spectral band is unknown.",
+                "IlluminationChannel",
+                request.illuminationChannelId().value());
+        } else {
+            bool coverage = false;
+            const bool hasPower = sourceBandHasPositivePower(
+                *channel->spectralPowerDistribution(),
+                *requirements.requiredSpectralBand(),
+                coverage);
+            if (!coverage) {
+                appendDiagnostic(
+                    diagnostics,
+                    DiagnosticSeverity::Warning,
+                    "sample.microscopy.illumination_spectrum_coverage_incomplete",
+                    "The selected source spectrum does not cover the complete required spectral band. No extrapolation was performed.",
+                    "IlluminationChannel",
+                    request.illuminationChannelId().value());
+            } else if (!hasPower) {
+                appendDiagnostic(
+                    diagnostics,
+                    DiagnosticSeverity::Error,
+                    "sample.microscopy.illumination_spectrum_missing_band",
+                    "The selected source spectrum has no declared power in the SampleType's required spectral band.",
+                    "IlluminationChannel",
+                    request.illuminationChannelId().value());
             }
         }
     }
@@ -922,7 +1166,8 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
     const SampleType& sampleType,
     const Sample& sample,
     const Specimen& specimen,
-    const ResolvedConfiguration& configuration) {
+    const ResolvedConfiguration& configuration,
+    const OperationMode* operationMode) {
     Diagnostics diagnostics;
 
     if (configuration.microscopeId() != equipment.microscopeId()) {
@@ -984,6 +1229,32 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
                 *objective,
                 specimen.preparation());
         }
+    }
+
+    if (requirements.condenser()) {
+        const auto* condenser = findCondenser(
+            equipment, request.condenserComponentId());
+        if (condenser == nullptr) {
+            appendDiagnostic(
+                diagnostics,
+                DiagnosticSeverity::Error,
+                "sample.microscopy.condenser_specification_missing",
+                "The selected condenser has no installed CondenserSpecification.",
+                "EquipmentComponent",
+                request.condenserComponentId().value());
+        } else {
+            assessCondenser(
+                diagnostics, *requirements.condenser(), *condenser);
+        }
+    }
+
+    if (requirements.illumination()) {
+        assessIllumination(
+            diagnostics,
+            equipment,
+            *requirements.illumination(),
+            request,
+            operationMode);
     }
 
     if (requirements.camera()) {

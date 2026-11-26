@@ -350,16 +350,29 @@ private:
             identities.operationId, identities.initialStepId,
             identities.initialCommandId, *port_, *operationRuntime_);
         if (!execution) {
+            // Execution construction failed before an adapter command could be
+            // submitted. Close the Pending step and publish the terminal snapshot
+            // so the internally allocated operation remains observable.
             auto preDispatchFailure = operationRuntime_->recordPreDispatchFailure(
                 identities.operationId, identities.initialStepId);
-            return failure(
-                StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
-                std::nullopt, execution.error().code, std::nullopt, std::nullopt,
-                std::nullopt,
-                preDispatchFailure
-                    ? execution.error().runtimeError
-                    : std::optional<core::SerializedOperationRuntimeError>(
-                        preDispatchFailure.error()));
+            if (!preDispatchFailure) {
+                return failure(
+                    StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
+                    std::nullopt, execution.error().code, std::nullopt, std::nullopt,
+                    std::nullopt, preDispatchFailure.error());
+            }
+            auto snapshot = operationRuntime_->operationSnapshot(identities.operationId);
+            if (!snapshot || snapshot.value().status() != core::OperationStatus::Failed) {
+                return failure(
+                    StageWorkingSurfaceNavigationRuntimeErrorCode::ExecutionRejected,
+                    std::nullopt, execution.error().code, std::nullopt, std::nullopt,
+                    std::nullopt,
+                    snapshot ? std::nullopt
+                        : std::optional<core::SerializedOperationRuntimeError>(snapshot.error()));
+            }
+            return success(
+                StageWorkingSurfaceNavigationRuntimeDisposition::NavigationFailed,
+                std::move(snapshot).value());
         }
 
         active_.emplace(ActiveNavigation{

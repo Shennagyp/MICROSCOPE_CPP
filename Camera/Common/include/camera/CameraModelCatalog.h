@@ -97,7 +97,9 @@ public:
     [[nodiscard]] static std::optional<CameraModelProfile> create(
         CameraModelKey key,
         CameraCapabilities capabilities,
-        CameraSensorCharacteristics sensorCharacteristics);
+        CameraSensorCharacteristics sensorCharacteristics,
+        std::uint64_t profileRevision = 1,
+        std::string sourceReference = {});
 
     [[nodiscard]] const CameraModelKey& key() const noexcept {
         return key_;
@@ -109,19 +111,31 @@ public:
     sensorCharacteristics() const noexcept {
         return sensorCharacteristics_;
     }
+    [[nodiscard]] std::uint64_t profileRevision() const noexcept {
+        return profileRevision_;
+    }
+    [[nodiscard]] const std::string& sourceReference() const noexcept {
+        return sourceReference_;
+    }
 
 private:
     CameraModelProfile(
         CameraModelKey key,
         CameraCapabilities capabilities,
-        CameraSensorCharacteristics sensorCharacteristics)
+        CameraSensorCharacteristics sensorCharacteristics,
+        std::uint64_t profileRevision,
+        std::string sourceReference)
         : key_(std::move(key)),
           capabilities_(capabilities),
-          sensorCharacteristics_(std::move(sensorCharacteristics)) {}
+          sensorCharacteristics_(std::move(sensorCharacteristics)),
+          profileRevision_(profileRevision),
+          sourceReference_(std::move(sourceReference)) {}
 
     CameraModelKey key_;
     CameraCapabilities capabilities_;
     CameraSensorCharacteristics sensorCharacteristics_;
+    std::uint64_t profileRevision_;
+    std::string sourceReference_;
 };
 
 // In-memory typed representation of the persistable camera model catalog.
@@ -130,10 +144,14 @@ private:
 class CameraModelCatalog final {
 public:
     [[nodiscard]] static std::optional<CameraModelCatalog> create(
-        std::vector<CameraModelProfile> profiles);
+        std::vector<CameraModelProfile> profiles,
+        std::uint64_t catalogRevision = 1);
 
     [[nodiscard]] const std::vector<CameraModelProfile>& profiles() const noexcept {
         return profiles_;
+    }
+    [[nodiscard]] std::uint64_t revision() const noexcept {
+        return revision_;
     }
 
     // Exact manufacturer/model/variant matching only. No fuzzy match and no
@@ -157,28 +175,40 @@ public:
     }
 
 private:
-    explicit CameraModelCatalog(std::vector<CameraModelProfile> profiles)
-        : profiles_(std::move(profiles)) {}
+    CameraModelCatalog(
+        std::vector<CameraModelProfile> profiles,
+        std::uint64_t revision)
+        : profiles_(std::move(profiles)),
+          revision_(revision) {}
 
     std::vector<CameraModelProfile> profiles_;
+    std::uint64_t revision_;
 };
 
 inline std::optional<CameraModelProfile> CameraModelProfile::create(
     CameraModelKey key,
     CameraCapabilities capabilities,
-    CameraSensorCharacteristics sensorCharacteristics) {
-    if (detail::normalizeCameraModelText(key.manufacturer).empty() ||
+    CameraSensorCharacteristics sensorCharacteristics,
+    std::uint64_t profileRevision,
+    std::string sourceReference) {
+    if (profileRevision == 0 ||
+        detail::normalizeCameraModelText(key.manufacturer).empty() ||
         detail::normalizeCameraModelText(key.model).empty() ||
         (key.variant && detail::normalizeCameraModelText(*key.variant).empty()) ||
         !detail::validSensorCharacteristics(sensorCharacteristics)) {
         return std::nullopt;
     }
     return CameraModelProfile(
-        std::move(key), capabilities, std::move(sensorCharacteristics));
+        std::move(key), capabilities, std::move(sensorCharacteristics),
+        profileRevision, std::move(sourceReference));
 }
 
 inline std::optional<CameraModelCatalog> CameraModelCatalog::create(
-    std::vector<CameraModelProfile> profiles) {
+    std::vector<CameraModelProfile> profiles,
+    std::uint64_t catalogRevision) {
+    if (catalogRevision == 0) {
+        return std::nullopt;
+    }
     for (std::size_t left = 0; left < profiles.size(); ++left) {
         for (std::size_t right = left + 1; right < profiles.size(); ++right) {
             if (detail::sameCameraModelKey(
@@ -187,7 +217,7 @@ inline std::optional<CameraModelCatalog> CameraModelCatalog::create(
             }
         }
     }
-    return CameraModelCatalog(std::move(profiles));
+    return CameraModelCatalog(std::move(profiles), catalogRevision);
 }
 
 } // namespace camera

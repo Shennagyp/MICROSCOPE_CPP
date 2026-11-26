@@ -23,7 +23,7 @@ private:
 
 class SampleMicroscopyRequirementAssessor final {
 public:
-    // Evaluates one prepared specimen against its exact SampleType revision
+    // Evaluates one prepared Slide against its exact SampleType revision
     // and a previously resolved microscope configuration. It does not mutate
     // the configuration or choose different equipment.
     [[nodiscard]] static SampleMicroscopyAssessment assess(

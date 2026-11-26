@@ -179,7 +179,7 @@ std::vector<std::uint8_t> makeLegacySlidePayloadV1() {
     bytes.push_back(0U); // no OriginLabId
     appendReal(bytes, 75000.0);
     appendReal(bytes, 25000.0);
-    appendU32(bytes, static_cast<std::uint32_t>(SpecimenPreparationMethod::Unknown));
+    appendU32(bytes, static_cast<std::uint32_t>(SpecimenPreparationMethod::FreshUnfixed));
     appendU32(bytes, static_cast<std::uint32_t>(SpecimenFixationState::Unknown));
     bytes.push_back(0U); // no section thickness
     bytes.push_back(0U); // no coverglass thickness
@@ -783,6 +783,10 @@ void testLegacySlidePayloadV1RestoresWithoutInventingCodeOrStain() {
         check(loaded.value()->stains().empty(),
               "does not invent stain identity for a historical Slide");
         check(loaded.value()->name() == "Legacy slide name" &&
+              loaded.value()->preparation().method() ==
+                  SpecimenPreparationMethod::FreshUnfixed &&
+              loaded.value()->preparation().fixationState() ==
+                  SpecimenFixationState::Unknown &&
               loaded.value()->geometry().widthMicrometers() == 75000.0 &&
               loaded.value()->geometry().heightMicrometers() == 25000.0,
               "preserves historical name and physical geometry");
@@ -796,7 +800,7 @@ void testLegacySlidePayloadV1RestoresWithoutInventingCodeOrStain() {
         "Legacy slide name",
         take(SlideGeometry::create(75000.0, 25000.0)),
         take(SlidePreparation::create(
-            SpecimenPreparationMethod::Unknown,
+            SpecimenPreparationMethod::FreshUnfixed,
             SpecimenFixationState::Unknown))));
     const auto attemptedLegacyWrite = store->saveSlideRevision(nextLegacyRevision, 1);
     check(!attemptedLegacyWrite &&
@@ -804,6 +808,7 @@ void testLegacySlidePayloadV1RestoresWithoutInventingCodeOrStain() {
               SampleSlideStoreErrorCode::SlideCodeRequired,
           "requires an explicit code before a legacy Slide can be written as a new revision");
 
+    store.reset();
     removeDatabaseFiles(path);
 }
 

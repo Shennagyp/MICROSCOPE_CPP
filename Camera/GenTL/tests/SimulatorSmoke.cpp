@@ -268,7 +268,7 @@ int main(int argc, char** argv) {
                       << " underruns=" << *statistics.producerBufferUnderruns
                       << " host-timeouts=" << statistics.integrity.frameWaitTimeouts
                       << " missing-frames=" << statistics.integrity.missingFrames
-                      << " queued=" << *statistics.queuedBuffers << '\\n';
+                      << " queued=" << *statistics.queuedBuffers << '\n';
             unsetenv("MOCK_GENTL_SIMULATOR_UNDERRUNS");
             stream.stop();
         }

@@ -244,3 +244,7 @@ The first-party, test-only CTI simulator is now implemented in source:
 - It currently represents one deterministic mock camera and repeated Mono8 frames; it is not vendor interoperability evidence.
 
 **Next:** inspect the CI result for the exact source commit. If it fails, diagnose from workflow logs only; do not run local builds/tests/debuggers. If it passes, record that the in-repository CTI integration path is validated, then decide whether to obtain written vendor permission and a current external CTI for separate interoperability testing. Do not modify AmScope, the Optika app, Phase 4/5, or physical-camera gates.
+
+### Latest source increment — GenApi through CTI simulator
+
+The GenApi integration executable now receives both the native C ABI shim path and the CTI path. CMake points it at `gentl_test_simulator.cti`, so its existing comprehensive GenApi feature and command tests execute through `GenTLProducerLibrary` dynamic loading rather than the direct mock bridge. The new source commit is `27f9880947e088eb4640ca3aea609a040e0727fd`; workflows #45794717388 and #45794717279 are validating it. Do not claim this increment passed until both workflow results are complete. This is still in-repo integration evidence only.

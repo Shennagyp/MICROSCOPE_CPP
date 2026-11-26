@@ -78,6 +78,7 @@ int main(int argc, char** argv) {
 
             constexpr std::size_t requiredFrames = 5;
             std::uint64_t previousFrameId = 0;
+            std::uint64_t previousTimestampNanoseconds = 0;
             for (std::size_t index = 0; index < requiredFrames; ++index) {
                 const auto frame = stream.nextFrame(5000);
                 if (!frame) {
@@ -95,7 +96,8 @@ int main(int argc, char** argv) {
                 }
                 if (!frame->frameId || !frame->timestampNanoseconds ||
                     *frame->frameId != index + 1 ||
-                    (index > 0 && *frame->frameId != previousFrameId + 1)) {
+                    (index > 0 && (*frame->frameId != previousFrameId + 1 ||
+                        *frame->timestampNanoseconds <= previousTimestampNanoseconds))) {
                     throw std::runtime_error(
                         "Frame IDs or timestamps were not reported consistently.");
                 }
@@ -104,6 +106,7 @@ int main(int argc, char** argv) {
                         "Frame payload did not advance with the simulated frame sequence.");
                 }
                 previousFrameId = *frame->frameId;
+                previousTimestampNanoseconds = *frame->timestampNanoseconds;
                 if (frame->imagePresent && !*frame->imagePresent) {
                     throw std::runtime_error(
                         "The completed buffer does not contain an image.");

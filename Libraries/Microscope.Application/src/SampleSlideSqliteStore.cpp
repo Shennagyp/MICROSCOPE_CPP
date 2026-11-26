@@ -1140,6 +1140,50 @@ SampleSlideSqliteStore::initializeSchema() {
                 REFERENCES slide_revision (slide_id, revision)
         );
 
+        CREATE TRIGGER IF NOT EXISTS sample_type_revision_sequential_insert
+        BEFORE INSERT ON sample_type_revision
+        WHEN NEW.revision != COALESCE((
+            SELECT revision FROM sample_type_current
+            WHERE sample_type_id = NEW.sample_type_id
+        ), 0) + 1
+        BEGIN SELECT RAISE(ABORT, 'SampleType revisions must be appended sequentially'); END;
+
+        CREATE TRIGGER IF NOT EXISTS slide_revision_sequential_insert
+        BEFORE INSERT ON slide_revision
+        WHEN NEW.revision != COALESCE((
+            SELECT revision FROM slide_current
+            WHERE slide_id = NEW.slide_id
+        ), 0) + 1
+        BEGIN SELECT RAISE(ABORT, 'Slide revisions must be appended sequentially'); END;
+
+        CREATE TRIGGER IF NOT EXISTS sample_type_current_initial_revision
+        BEFORE INSERT ON sample_type_current
+        WHEN NEW.revision != 1
+        BEGIN SELECT RAISE(ABORT, 'Initial SampleType revision must be one'); END;
+
+        CREATE TRIGGER IF NOT EXISTS sample_type_current_monotonic
+        BEFORE UPDATE ON sample_type_current
+        WHEN NEW.revision != OLD.revision + 1
+        BEGIN SELECT RAISE(ABORT, 'SampleType current revision must advance by one'); END;
+
+        CREATE TRIGGER IF NOT EXISTS sample_type_current_no_delete
+        BEFORE DELETE ON sample_type_current
+        BEGIN SELECT RAISE(ABORT, 'SampleType current pointer cannot be deleted'); END;
+
+        CREATE TRIGGER IF NOT EXISTS slide_current_initial_revision
+        BEFORE INSERT ON slide_current
+        WHEN NEW.revision != 1
+        BEGIN SELECT RAISE(ABORT, 'Initial Slide revision must be one'); END;
+
+        CREATE TRIGGER IF NOT EXISTS slide_current_monotonic
+        BEFORE UPDATE ON slide_current
+        WHEN NEW.revision != OLD.revision + 1
+        BEGIN SELECT RAISE(ABORT, 'Slide current revision must advance by one'); END;
+
+        CREATE TRIGGER IF NOT EXISTS slide_current_no_delete
+        BEFORE DELETE ON slide_current
+        BEGIN SELECT RAISE(ABORT, 'Slide current pointer cannot be deleted'); END;
+
         CREATE TRIGGER IF NOT EXISTS sample_type_revision_no_update
         BEFORE UPDATE ON sample_type_revision
         BEGIN SELECT RAISE(ABORT, 'SampleType revisions are immutable'); END;

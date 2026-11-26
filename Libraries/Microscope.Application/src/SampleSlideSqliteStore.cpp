@@ -244,7 +244,9 @@ public:
 
     template <typename TEnum>
     void enumerations(const std::vector<TEnum>& values) {
-        u32(static_cast<std::uint32_t>(values.size()));
+        if (!count(values.size())) {
+            return;
+        }
         for (const auto value : values) {
             enumeration(value);
         }
@@ -955,6 +957,10 @@ void writeOptionalBand(
     return revision > 0 && revision <= kMaximumSqliteInteger;
 }
 
+[[nodiscard]] bool isConstraintViolation(sqlite3* database) noexcept {
+    return (sqlite3_extended_errcode(database) & 0xff) == SQLITE_CONSTRAINT;
+}
+
 [[nodiscard]] bool readCurrentRevision(
     sqlite3* database,
     const char* table,
@@ -989,17 +995,23 @@ void writeOptionalBand(
     const char* sql,
     const std::string& firstId,
     std::uint64_t revision,
-    const std::optional<std::string>& secondId = std::nullopt) {
+    bool& exists) {
     Statement statement(database, sql);
     if (!statement.prepared() ||
         !statement.bindText(1, firstId) ||
         !statement.bindInt64(2, revision)) {
         return false;
     }
-    if (secondId && !statement.bindText(3, *secondId)) {
-        return false;
+    const int step = statement.step();
+    if (step == SQLITE_ROW) {
+        exists = true;
+        return true;
     }
-    return statement.step() == SQLITE_ROW;
+    if (step == SQLITE_DONE) {
+        exists = false;
+        return true;
+    }
+    return false;
 }
 
 } // namespace
@@ -1232,10 +1244,16 @@ SampleSlideSqliteStore::saveSampleTypeRevision(
         !insert.bindText(1, sampleType.id().value()) ||
         !insert.bindInt64(2, sampleType.revision()) ||
         !insert.bindInt(3, static_cast<int>(kPayloadFormatVersion)) ||
-        !insert.bindBlob(4, payload) ||
-        insert.step() != SQLITE_DONE) {
+        !insert.bindBlob(4, payload)) {
         return failureStatus(makeError(
-            StoreErrorCode::DuplicateSampleTypeRevision,
+            StoreErrorCode::SqliteOperationFailed, database_));
+    }
+    if (insert.step() != SQLITE_DONE) {
+        const auto code = isConstraintViolation(database_)
+            ? StoreErrorCode::DuplicateSampleTypeRevision
+            : StoreErrorCode::SqliteOperationFailed;
+        return failureStatus(makeError(
+            code,
             database_,
             "Could not append the immutable SampleType revision."));
     }
@@ -1387,12 +1405,17 @@ SampleSlideSqliteStore::saveSlideRevision(
             StoreErrorCode::SqliteOperationFailed, database_));
     }
 
-    const bool sampleTypeExists = rowExists(
-        database_,
-        "SELECT 1 FROM sample_type_revision "
-        "WHERE sample_type_id = ? AND revision = ?",
-        slide.sampleTypeId().value(),
-        slide.sampleTypeRevision());
+    bool sampleTypeExists = false;
+    if (!rowExists(
+            database_,
+            "SELECT 1 FROM sample_type_revision "
+            "WHERE sample_type_id = ? AND revision = ?",
+            slide.sampleTypeId().value(),
+            slide.sampleTypeRevision(),
+            sampleTypeExists)) {
+        return failureStatus(makeError(
+            StoreErrorCode::SqliteOperationFailed, database_));
+    }
     if (!sampleTypeExists) {
         return failureStatus(makeError(
             StoreErrorCode::SlideSampleTypeRevisionNotFound,
@@ -1435,10 +1458,16 @@ SampleSlideSqliteStore::saveSlideRevision(
         !insert.bindText(3, slide.sampleTypeId().value()) ||
         !insert.bindInt64(4, slide.sampleTypeRevision()) ||
         !insert.bindInt(5, static_cast<int>(kPayloadFormatVersion)) ||
-        !insert.bindBlob(6, payload) ||
-        insert.step() != SQLITE_DONE) {
+        !insert.bindBlob(6, payload)) {
         return failureStatus(makeError(
-            StoreErrorCode::DuplicateSlideRevision,
+            StoreErrorCode::SqliteOperationFailed, database_));
+    }
+    if (insert.step() != SQLITE_DONE) {
+        const auto code = isConstraintViolation(database_)
+            ? StoreErrorCode::DuplicateSlideRevision
+            : StoreErrorCode::SqliteOperationFailed;
+        return failureStatus(makeError(
+            code,
             database_,
             "Could not append the immutable Slide revision."));
     }

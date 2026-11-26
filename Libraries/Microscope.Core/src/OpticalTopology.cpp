@@ -493,8 +493,10 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     std::vector<StageSpecification> stageSpecifications,
     std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
     std::vector<LightPath> lightPaths,
-    std::vector<OpticalFilterSpecification> filterSpecifications)
+    std::vector<OpticalFilterSpecification> filterSpecifications,
+    std::uint64_t revision)
     : microscopeId_(std::move(microscopeId)),
+      revision_(revision),
       components_(std::move(components)),
       connections_(std::move(connections)),
       opticalPaths_(std::move(opticalPaths)),
@@ -521,7 +523,15 @@ Result<
         std::vector<StageSpecification> stageSpecifications,
         std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
         std::vector<LightPath> lightPaths,
-        std::vector<OpticalFilterSpecification> filterSpecifications) {
+        std::vector<OpticalFilterSpecification> filterSpecifications,
+        std::uint64_t revision) {
+    if (revision == 0) {
+        return Result<
+            MicroscopeEquipmentDefinition,
+            EquipmentDefinitionError>::failure(
+                EquipmentDefinitionError::ZeroRevision);
+    }
+
     if (components.empty()) {
         return Result<
             MicroscopeEquipmentDefinition,
@@ -1000,11 +1010,16 @@ Result<
                 std::move(stageSpecifications),
                 std::move(dualSlideCarrierSpecifications),
                 std::move(lightPaths),
-                std::move(filterSpecifications)));
+                std::move(filterSpecifications),
+                revision));
 }
 
 const MicroscopeId& MicroscopeEquipmentDefinition::microscopeId() const noexcept {
     return microscopeId_;
+}
+
+std::uint64_t MicroscopeEquipmentDefinition::revision() const noexcept {
+    return revision_;
 }
 
 const std::vector<EquipmentComponent>&

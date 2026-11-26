@@ -124,7 +124,8 @@ private:
 enum class IlluminationChannelError {
     InvalidControlKind,
     MissingContinuousRange,
-    UnexpectedContinuousRange
+    UnexpectedContinuousRange,
+    InvalidSpectralPowerDistribution
 };
 
 // A physical source may expose multiple independently identified spectral

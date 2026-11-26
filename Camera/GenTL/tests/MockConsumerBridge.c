@@ -411,12 +411,20 @@ int32_t gentl_consumer_invoke(
         return GC_ERR_INVALID_INDEX;
     case 28: {
         if (argument_count != 6 || arguments[0] != 0x2222) return GC_ERR_INVALID_HANDLE;
+        const char* id = (const char*)pointer(arguments[1]);
+        const int index = strcmp(id, "device0") == 0 ? 0 :
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            (strcmp(id, "device1") == 0 ? 1 : -1);
+#else
+            -1;
+#endif
+        if (index < 0) return GC_ERR_INVALID_PARAMETER;
         const char* value = 0;
         switch ((DEVICE_INFO_CMD)arguments[2]) {
-        case DEVICE_INFO_DISPLAYNAME: value = "Mock Camera"; break;
+        case DEVICE_INFO_DISPLAYNAME: value = index == 0 ? "Mock Camera 0" : "Mock Camera 1"; break;
         case DEVICE_INFO_VENDOR: value = "Mock Vendor"; break;
         case DEVICE_INFO_MODEL: value = "Mock Model"; break;
-        case DEVICE_INFO_SERIAL_NUMBER: value = "MOCK-0001"; break;
+        case DEVICE_INFO_SERIAL_NUMBER: value = index == 0 ? "MOCK-0001" : "MOCK-0002"; break;
         default: return GC_ERR_NOT_AVAILABLE;
         }
         return write_info_string((INFO_DATATYPE*)pointer(arguments[3]),

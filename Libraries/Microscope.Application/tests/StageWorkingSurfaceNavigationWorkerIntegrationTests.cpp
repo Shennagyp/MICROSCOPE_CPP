@@ -176,7 +176,7 @@ public:
         pendingContext.reset();
         pendingIngress = nullptr;
         if (ingress == nullptr) {
-            throw std::runtime_error(\"the accepted stage command lost its feedback ingress\");
+            throw std::runtime_error("the accepted stage command lost its feedback ingress");
         }
         return ingress->submit(std::move(envelope));
     }

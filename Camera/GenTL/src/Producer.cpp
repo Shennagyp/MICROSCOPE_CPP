@@ -1499,7 +1499,7 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
             Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle),
             "DSQueueBuffer(requeue)");
 
-        const bool multipartContainsImage = frame.isComposite.value_or(false) &&
+        const bool multipartContainsImage = multipartPayload &&
             std::any_of(frame.parts.begin(), frame.parts.end(),
                 [](const DataStreamPart& part) {
                     return part.dataType == GenTL::PART_DATATYPE_2D_IMAGE &&

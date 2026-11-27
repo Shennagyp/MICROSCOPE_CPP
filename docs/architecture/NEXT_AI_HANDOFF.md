@@ -146,13 +146,15 @@ dock, status-bar, Output and capability-panel composition plus dock-state
 save/restore. Only human visual inspection and current-revision physical
 MU503 UI smoke remain; CI is not a substitute.
 
-Owner direction on 26 November 2026: postpone the physical MU503 test and
-proceed with Phase 7 packaging. Phase 4 remains pending acceptance, not
-accepted. Phase 6 remains open at the frozen AmScope provider-test boundary;
-its provider-neutral GenTL/GenApi work is complete for the current public
-contract. See [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md)
-for the recorded audit. Do not repeat the inventory or reopen Phase 5.
-AmScope provider work is now authorized only for Common frame-layout/acquisition-integrity integration. Preserve its vendor-specific lifecycle, callback/event queue, frame-pool leases, cache-flush and SDK ownership semantics.
+Owner direction on 26 November 2026 postponed the physical MU503 test and
+proceeded with Phase 7 packaging. Phase 4 remains pending acceptance, not
+accepted. The statement below that Phase 6 was blocked by the AmScope freeze
+was accurate on 26 November only. On 27 November, the owner superseded that
+freeze for the limited Common frame-layout/acquisition-integrity integration
+into AmScope/Amcam. See [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md)
+for the historical audit and supersession note. Do not repeat the inventory
+or reopen Phase 5. Preserve the existing AmScope vendor lifecycle, callback/event
+queue, frame-pool leases, cache-flush and SDK ownership semantics.
 
 
 Phase 4 includes CameraFeatureEditor in the preview feature tabs,
@@ -166,12 +168,12 @@ postponed the physical MU503 UI smoke. Do not mark Phase 4 accepted.
 
 The Phase 6 audit is retained in
 [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md).
-Provider-neutral GenTL/GenApi coverage and the discovery/vector decisions are
-complete for the current public contract. AmScope provider-level feature,
-command and model tests remain blocked by the explicit AmScope freeze. The
-owner authorized Phase 7 on 26 November 2026; this does not waive or complete
-Phase 6. Do not repeat the inventory, reopen Phase 5 or modify AmScope
-provider source, tests, public contracts or runtime behavior.
+Its freeze statements are historical and superseded on 27 November 2026 for
+the limited Common frame-layout/acquisition-integrity integration into
+AmScope/Amcam. Phase 6 is active for that work; preserve the vendor-specific
+lifecycle, callback/event queue, frame-pool leases, cache flush and SDK
+ownership semantics. Do not repeat the completed GenTL/GenApi inventory or
+reopen Phase 5.
 
 ## 6. GenTL implementation note — not permission to reopen Phase 5
 

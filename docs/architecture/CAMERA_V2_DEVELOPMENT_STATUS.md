@@ -440,7 +440,10 @@ a CTI Producer.
 
 This simulator track supplements GenTL software integration only. It does not
 close installed physical-camera smoke, AmScope physical tests, Phase 4 visual
-acceptance, Phase 6 frozen AmScope provider tests, or redistribution gates.
+acceptance, independent CTI interoperability or redistribution gates. The
+AmScope freeze referenced in the original simulator plan was superseded on
+27 November 2026 for the limited Common-contract integration described in the
+current WSI continuation overlay.
 See [CAMERA_V2_SIMULATOR_QUALIFICATION.md](CAMERA_V2_SIMULATOR_QUALIFICATION.md).
 
 

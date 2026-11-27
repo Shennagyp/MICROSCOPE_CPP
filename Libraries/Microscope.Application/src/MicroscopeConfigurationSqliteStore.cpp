@@ -927,6 +927,9 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
     return core::Status<MicroscopeConfigurationStoreError>::success();
 }
 
+core::Result<
+    std::optional<core::OperationMode>,
+    MicroscopeConfigurationStoreError>
 MicroscopeConfigurationSqliteStore::loadCurrentOperationMode(
     const core::MicroscopeId& microscopeId,
     const core::OperationModeId& operationModeId) {

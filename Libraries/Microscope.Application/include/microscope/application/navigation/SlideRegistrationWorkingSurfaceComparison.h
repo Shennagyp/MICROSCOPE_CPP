@@ -36,12 +36,14 @@ public:
         core::SlideCorner measuredCorner) const noexcept;
     [[nodiscard]] const std::array<SlideRectangleCorner2D, 4>&
     mappings() const noexcept;
+    [[nodiscard]] bool measuredXMapsToWorkingSurfaceX() const noexcept;
 
 private:
     explicit SlideCornerCorrespondence(
-        std::array<SlideRectangleCorner2D, 4>) noexcept;
+        std::array<SlideRectangleCorner2D, 4>, bool) noexcept;
 
     std::array<SlideRectangleCorner2D, 4> mappings_;
+    bool measuredXMapsToWorkingSurfaceX_;
 };
 
 enum class SlideRegistrationWorkingSurfaceComparisonError {
@@ -91,6 +93,7 @@ public:
     workingSurfaceRevision() const noexcept;
     [[nodiscard]] bool revisionsAligned() const noexcept;
     [[nodiscard]] bool carrierHorizontalAxisMapsToWorkingSurfaceX() const noexcept;
+    [[nodiscard]] bool physicalSlideXMapsToWorkingSurfaceX() const noexcept;
 
     [[nodiscard]] double physicalXExtentMicrometers() const noexcept;
     [[nodiscard]] double physicalYExtentMicrometers() const noexcept;
@@ -116,6 +119,7 @@ private:
         core::SlideRegistration,
         core::SlideRectangleDefinition2D,
         bool,
+        bool,
         std::array<SlideCornerReconciliation, 4>,
         double,
         double) noexcept;
@@ -125,6 +129,7 @@ private:
     core::SlideRegistration physicalRegistration_;
     core::SlideRectangleDefinition2D workingSurfaceRectangle_;
     bool horizontalMapsToWorkingSurfaceX_;
+    bool physicalSlideXMapsToWorkingSurfaceX_;
     std::array<SlideCornerReconciliation, 4> corners_;
     double maximumCornerDiscrepancy_;
     double rmsCornerDiscrepancy_;

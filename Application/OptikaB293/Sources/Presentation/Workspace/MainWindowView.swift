@@ -26,69 +26,73 @@ struct MainWindowView: View {
                 maximumDockWidth
             )
 
-            NativeDualPreviewSurface(
-                frameFeed: model.frameFeed,
-                model: model,
-                microscope: microscope,
-                resolutionCoordinator: resolutionCoordinator,
-                workspace: workspace,
-                activeSlide: workspace.activeSlide,
-                measurementCalibration: microscope.measurementCalibration,
-                onCapture: { slide, image in
-                    gallery.capture(image, for: slide)
-                }
-            )
-            .frame(
-                minWidth: previewMinimumWidth,
-                maxWidth: .infinity,
-                maxHeight: .infinity
-            )
-            .clipped()
-            // The panel is a true overlay: it is not an HStack child and
-            // therefore never takes width away from or resizes the preview.
-            .overlay(alignment: .trailing) {
-                if workspace.isWorkspaceDockVisible {
-                    HStack(spacing: 0) {
-                        NativeWorkspaceDockResizeDivider(
-                            dockWidth: dockWidth,
-                            maximumWidth: maximumDockWidth,
-                            onResize: {
-                                workspace.updateWorkspaceDockWidth(
-                                    $0,
-                                    maximum: maximumDockWidth
-                                )
-                            },
-                            onResizeEnded: {
-                                workspace.persistWorkspaceDockWidth()
-                            }
-                        )
-                        .frame(width: dockDividerWidth)
-                        .frame(maxHeight: .infinity)
-
-                        NativeWorkspaceDock(
-                            model: model,
-                            workspace: workspace,
-                            microscope: microscope,
-                            resolutionCoordinator: resolutionCoordinator,
-                            gallery: gallery,
-                            onClose: { workspace.closeWorkspaceDock() }
-                        )
-                        .frame(width: dockWidth)
-                        .frame(maxHeight: .infinity)
-                        .shadow(
-                            color: Color.black.opacity(0.28),
-                            radius: 16,
-                            x: -5,
-                            y: 0
-                        )
+            HStack(spacing: 0) {
+                NativeDualPreviewSurface(
+                    frameFeed: model.frameFeed,
+                    model: model,
+                    microscope: microscope,
+                    resolutionCoordinator: resolutionCoordinator,
+                    workspace: workspace,
+                    activeSlide: workspace.activeSlide,
+                    measurementCalibration: microscope.measurementCalibration,
+                    onCapture: { slide, image in
+                        gallery.capture(image, for: slide)
                     }
-                    // Keep the floating panel immediately left of the
-                    // floating launcher rail, without reserving rail space.
-                    .padding(.trailing, railWidth)
-                    .padding(.vertical, 12)
-                    .zIndex(1)
+                )
+                .frame(
+                    minWidth: previewMinimumWidth,
+                    maxWidth: .infinity,
+                    maxHeight: .infinity
+                )
+                .clipped()
+
+                if workspace.isWorkspaceDockVisible {
+                    NativeWorkspaceDockResizeDivider(
+                        dockWidth: dockWidth,
+                        maximumWidth: maximumDockWidth,
+                        onResize: {
+                            workspace.updateWorkspaceDockWidth(
+                                $0,
+                                maximum: maximumDockWidth
+                            )
+                        },
+                        onResizeEnded: {
+                            workspace.persistWorkspaceDockWidth()
+                        }
+                    )
+                    .frame(width: dockDividerWidth)
+                    .frame(maxHeight: .infinity)
+
+                    NativeWorkspaceDock(
+                        model: model,
+                        workspace: workspace,
+                        microscope: microscope,
+                        resolutionCoordinator: resolutionCoordinator,
+                        gallery: gallery,
+                        onClose: { workspace.closeWorkspaceDock() }
+                    )
+                    .frame(width: dockWidth)
+                    .frame(maxHeight: .infinity)
+                    .shadow(
+                        color: Color.black.opacity(0.20),
+                        radius: 12,
+                        x: -4,
+                        y: 0
+                    )
+
+                    // This trailing gutter belongs to the open dock layout.
+                    // The launcher rail itself is overlaid below and never
+                    // participates in the HStack's width calculation.
+                    Color.clear
+                        .frame(width: railWidth)
+                        .allowsHitTesting(false)
                 }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
+            // Only the dock buttons float above the workspace. The dock
+            // content remains in the HStack and therefore uses real layout
+            // width when opened.
             .overlay(alignment: .trailing) {
                 NativeWorkspaceDockTabRail(workspace: workspace)
                     .frame(width: railWidth)

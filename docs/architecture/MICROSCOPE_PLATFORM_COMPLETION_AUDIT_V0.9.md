@@ -101,7 +101,7 @@ The hardware is now genuinely modeled. The missing layer is the authoritative pe
 - A microscope-level composition root and use-case facade. There is no complete runtime that owns the equipment definition, device sessions, observed component state, mounted slides, current configuration and active operations together.
 - A revisioned `MicroscopeSnapshot` (or equivalent) for the UI. Current RuntimeSnapshot/OperationView are not a complete microscope-state projection.
 - JSON loading for equipment definitions and configuration profiles.
-- A way to enumerate all current OperationModes from persistence; the configuration store loads a mode by ID but has no current-mode listing API. ConfigurationProfileCatalog also has no application persistence/loading path.
+- ConfigurationProfileCatalog still has no application persistence/loading path. Current OperationMode enumeration is now implemented through `MicroscopeConfigurationSqliteStore::loadCurrentOperationModes(microscopeId)`; it returns one current revision per ID in stable order and scopes results to one microscope.
 - A central SQLite migration/database owner. The dual-slide store currently relies on the SampleSlide store having initialized the shared database schema first.
 - Concrete stage-controller and optical-component adapters. `IStageMotionPort` is a contract, not a driver.
 - Complete cancellation/deadline/timeout handling, verified-idle semantics and late-completion reconciliation in the stage operation lifecycle.
@@ -158,7 +158,7 @@ The existing preview, feature controls and workspace shell can remain as present
 
 ## 4. Completion order
 
-1. Keep the three-platform CI baseline green; verify the canonical-geometry adapter commit before proceeding.
+1. Keep the three-platform CI baseline green; verify the canonical-geometry adapter and current-OperationMode enumeration changes before proceeding.
 2. Define and test the explicit relationship between physical four-corner carrier registration and the CAD working-surface placement. Do not flatten affine registration, measured corner provenance, fit residuals or calibration revisions into the orthogonal CAD rectangle.
 3. Import the camera-v2.0 Camera package as a controlled subtree. Exclude AcquisitionIntegrityTracker and Qt components; fix ProducerCatalog ownership documentation; add one backend-neutral provider/session API over AmScope and GenTL.
 4. Add authoritative equipment-definition JSON loading and revision persistence. Add mode/profile enumeration/loading and a central database migration owner.

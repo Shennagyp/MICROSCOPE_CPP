@@ -83,6 +83,7 @@ The target graph is not yet implemented. ImageProcessing remains a separate proj
 4. There is no Tile or acquisition-record model. The current domain contains Slide, not the `Slide -> Tile` acquisition relationship.
 5. Equipment definitions are revisioned in memory, but there is no authoritative JSON loader or persisted equipment-definition repository. Calibration and carrier records refer to equipment revisions; those revisions must be reloadable and verifiable after restart.
 6. Configuration resolution produces desired state and a transition DAG. It does not read a complete observed microscope state, skip already-satisfied changes, issue optical device commands or verify physical completion.
+7. Stage-axis accumulated error and homing-required state exist in Core, but there is no explicit persistence/restart contract for them. On restart, the runtime must not treat a stale saved position as observed truth; define whether the axis must be re-homed or whether a controller can re-establish a verified reference.
 
 The hardware is now genuinely modeled. The missing layer is the authoritative persisted definition plus live observations and execution—not another rewrite of the topology model.
 
@@ -150,8 +151,8 @@ The native app builds, but its domain responsibilities are not yet thin presenta
 
 - The bridging header imports the AmScope native bridge, not a Microscope.Application bridge.
 - Swift owns microscope configuration persistence through UserDefaults.
-- Automatic resolution and objective/exposure coordination remain Swift-side.
-- The capture gallery uses a global AmScope capture directory rather than a selected physical-slide folder and Tile record.
+- Automatic resolution and objective/exposure coordination remain Swift-side. The current Rayleigh policy uses a wavelength band and a target sampling factor, but derives mode scaling from a provisional full-field width/height ratio. Move this policy to Core and use the camera output mode's explicit per-axis sensor-pixel mapping; do not infer X/Y sampling from output dimensions alone.
+- The capture gallery uses a global AmScope capture directory rather than a selected physical-slide folder and Tile record. `NativeSlideID` identifies a presentation pane, not the physical `SlideId`.
 
 The existing preview, feature controls and workspace shell can remain as presentation. Do not add more UI behavior until the C++ application API owns the domain workflows and the UI consumes immutable snapshots/events.
 
@@ -164,7 +165,8 @@ The existing preview, feature controls and workspace shell can remain as present
 5. Compose a microscope-level Application runtime and UI-facing snapshots/events. Integrate SampleType + Stain -> recommended OperationMode -> explicit selection -> desired/observed state reconciliation.
 6. Implement and test concrete stage and optical component adapters. Preserve stage error accumulation/homing behavior; complete cancellation, timeout, verified-idle and late-completion handling.
 7. Add the Slide -> Tile acquisition contract and single-tile capture/persistence workflow. Keep image bytes in file/asset storage, not in Core; keep ImageProcessing separate.
-8. Replace Swift domain logic with a thin native bridge to Microscope.Application.
+8. Move Rayleigh-based automatic-resolution policy and objective/exposure orchestration behind Core/Application contracts, using the explicit per-axis camera output mapping.
+9. Replace Swift domain logic with a thin native bridge to Microscope.Application.
 
 ## 5. UI-readiness acceptance gate
 

@@ -1,7 +1,7 @@
 # Controller
 
 The C++ Controller capability lives beside `Camera/`. It contains backend-neutral
-mechanical models and motion contracts. Vendor/controller-specific implementations
+mechanical models and motion contracts. `MicroscopeInstance` owns the live `Stage`; the `Stage` owns its installed axes, configurations, slots, active configuration, driver and runtime position. Vendor/controller-specific implementations
 will be separate drivers and must not leak protocol or pulse-generation details
 into the common Stage model.
 

@@ -1,4 +1,5 @@
 #include "controller/stage/Stage.h"
+#include "controller/MicroscopeInstance.h"
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -126,12 +127,30 @@ void testRotationActivation(){
  check(d->rotaryMoves.size()==1&&std::abs(d->rotaryMoves[0][0].angle-0.25)<1e-12,
        "rotation command expressed in radians");
 }
+
+void testMicroscopeInstanceOwnsStage() {
+ auto driver=std::make_shared<FakeDriver>();
+ StageConfigurationId slides=cid("slides"),petri=cid("petri");
+ StageSlotId s2=sid("slide-slot-2");
+ auto specification=fixture(slides,petri,s2);
+ auto stage=take(Stage::create(std::move(specification),driver,slides));
+ auto microscopeId=take(core::MicroscopeId::create("optika-b293-instance"));
+ MicroscopeInstance instance(std::move(microscopeId),std::move(stage));
+ check(instance.stage().specification().configurations().size()==2,
+       "MicroscopeInstance owns one Stage with its variable configurations");
+ check(static_cast<bool>(instance.stage().home()),
+       "the Stage is operated through its owning MicroscopeInstance");
+ check(instance.id().value()=="optika-b293-instance",
+       "MicroscopeInstance preserves its stable microscope identity");
+}
+
 }
 int main(){
  testModelAndConfigurationCardinality();
  testMovementAndCurrentSlot();
  testRefreshPosition();
  testRotationActivation();
+ testMicroscopeInstanceOwnsStage();
  if(failures){std::cerr<<failures<<" Controller Stage test(s) failed.\n";return 1;}
  std::cout<<"All Controller Stage tests passed.\n";return 0;
 }

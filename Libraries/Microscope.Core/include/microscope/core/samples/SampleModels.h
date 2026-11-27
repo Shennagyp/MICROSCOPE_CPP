@@ -2,7 +2,7 @@
 
 #include "microscope/core/equipment/MicroscopyTechniques.h"
 #include "microscope/core/equipment/IlluminationSpecifications.h"
-#include "microscope/core/equipment/SlideGeometry.h"
+#include "microscope/core/samples/SlideGeometry.h"
 
 #include <cstdint>
 #include <optional>

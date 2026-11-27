@@ -1,4 +1,5 @@
 #include "microscope/core/configuration/LightPathCalibration.h"
+#include "microscope/core/configuration/OperationMode.h"
 
 #include <cmath>
 #include <iostream>
@@ -179,6 +180,88 @@ void testCalibrationBindingRejectsChangedOpticalConfiguration() {
           "rejects reuse of a calibration belonging to a different microscope");
 }
 
+void testOperationModeHardwareConfigurationIsSeparateAndRevisionBound() {
+    const auto mode = take(OperationMode::create(
+        id<MicroscopeId>("hardware-config-microscope"),
+        id<OperationModeId>("mode-with-two-lightpaths"),
+        4,
+        "Brightfield",
+        ContrastMethod::Brightfield));
+
+    const auto settingA = take(LightPathModeSetting::create(
+        mode.microscopeId(), 12, mode.id(), mode.revision(),
+        id<LightPathId>("transmitted-light"),
+        id<CalibrationRevisionId>("cal-transmitted-r4"),
+        id<EquipmentComponentId>("white-led"),
+        id<IlluminationChannelId>("white-channel"),
+        {id<EquipmentComponentId>("objective-4x")}, 9.0));
+    const auto settingB = take(LightPathModeSetting::create(
+        mode.microscopeId(), 12, mode.id(), mode.revision(),
+        id<LightPathId>("epi-light"),
+        id<CalibrationRevisionId>("cal-epi-r4"),
+        id<EquipmentComponentId>("epi-led"),
+        id<IlluminationChannelId>("epi-channel"),
+        {id<EquipmentComponentId>("objective-10x")}, 4.0));
+
+    const auto hardware = take(OperationModeHardwareConfiguration::create(
+        mode, {settingA, settingB}));
+    check(hardware.microscopeId() == mode.microscopeId() &&
+          hardware.operationModeId() == mode.id() &&
+          hardware.operationModeRevision() == mode.revision() &&
+          hardware.equipmentDefinitionRevision() == 12,
+          "binds hardware realization to the exact microscope, mode and equipment revisions");
+    check(hardware.lightPathSettings().size() == 2 &&
+          hardware.findLightPathSetting(id<LightPathId>("epi-light")) != nullptr,
+          "stores and looks up independent per-LightPath settings");
+
+    const auto empty = OperationModeHardwareConfiguration::create(mode, {});
+    check(!empty && empty.error() ==
+              OperationModeHardwareConfigurationError::EmptyLightPathSettings,
+          "rejects an empty hardware realization object");
+
+    const auto staleSetting = take(LightPathModeSetting::create(
+        mode.microscopeId(), 12, mode.id(), mode.revision() - 1,
+        id<LightPathId>("stale-light"),
+        id<CalibrationRevisionId>("cal-stale"),
+        id<EquipmentComponentId>("white-led"),
+        id<IlluminationChannelId>("white-channel"), {}, 2.0));
+    const auto staleModeRevision =
+        OperationModeHardwareConfiguration::create(mode, {staleSetting});
+    check(!staleModeRevision && staleModeRevision.error() ==
+              OperationModeHardwareConfigurationError::OperationModeRevisionMismatch,
+          "rejects settings from a different OperationMode revision");
+
+    const auto wrongModeSetting = take(LightPathModeSetting::create(
+        mode.microscopeId(), 12, id<OperationModeId>("other-mode"), mode.revision(),
+        id<LightPathId>("other-mode-light"),
+        id<CalibrationRevisionId>("cal-other-mode"),
+        id<EquipmentComponentId>("white-led"),
+        id<IlluminationChannelId>("white-channel"), {}, 2.0));
+    const auto wrongMode =
+        OperationModeHardwareConfiguration::create(mode, {wrongModeSetting});
+    check(!wrongMode && wrongMode.error() ==
+              OperationModeHardwareConfigurationError::OperationModeIdentityMismatch,
+          "rejects settings assigned to another mode identity");
+
+    const auto mixedEquipmentSetting = take(LightPathModeSetting::create(
+        mode.microscopeId(), 13, mode.id(), mode.revision(),
+        id<LightPathId>("mixed-equipment-light"),
+        id<CalibrationRevisionId>("cal-mixed-equipment"),
+        id<EquipmentComponentId>("white-led"),
+        id<IlluminationChannelId>("white-channel"), {}, 2.0));
+    const auto mixedEquipment =
+        OperationModeHardwareConfiguration::create(mode, {settingA, mixedEquipmentSetting});
+    check(!mixedEquipment && mixedEquipment.error() ==
+              OperationModeHardwareConfigurationError::EquipmentDefinitionRevisionMismatch,
+          "rejects settings captured from different equipment revisions");
+
+    const auto duplicate =
+        OperationModeHardwareConfiguration::create(mode, {settingA, settingA});
+    check(!duplicate && duplicate.error() ==
+              OperationModeHardwareConfigurationError::DuplicateLightPath,
+          "rejects duplicate LightPath settings");
+}
+
 void testCalibrationRejectsInvalidCurves() {
     const auto common = std::tuple{
         makeId<CalibrationRevisionId>("bad-calibration"),
@@ -222,6 +305,7 @@ void testCalibrationRejectsInvalidCurves() {
 int main() {
     testModeSettingUsesExactCalibrationAndInterpolatesIrradiance();
     testCalibrationBindingRejectsChangedOpticalConfiguration();
+    testOperationModeHardwareConfigurationIsSeparateAndRevisionBound();
     testCalibrationRejectsInvalidCurves();
 
     if (failures != 0) {

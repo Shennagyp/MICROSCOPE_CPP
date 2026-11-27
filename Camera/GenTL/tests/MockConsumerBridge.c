@@ -566,10 +566,13 @@ int32_t gentl_consumer_invoke(
             !simulator_stream_acquiring[event]) return GC_ERR_TIMEOUT;
         if (getenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT"))
             return GC_ERR_TIMEOUT;
-        if (const char* configured = getenv("MOCK_GENTL_SIMULATOR_INTERRUPT_AFTER")) {
+        const char* configuredInterrupt =
+            getenv("MOCK_GENTL_SIMULATOR_INTERRUPT_AFTER");
+        if (configuredInterrupt) {
             char* end = 0;
-            const unsigned long long threshold = strtoull(configured, &end, 10);
-            if (end != configured && *end == '\\0' &&
+            const unsigned long long threshold =
+                strtoull(configuredInterrupt, &end, 10);
+            if (end != configuredInterrupt && *end == '\0' &&
                 simulator_delivered_buffers[event] >= (uint64_t)threshold) {
                 // Model a transport/Producer acquisition interruption without
                 // inventing a buffer underrun. The consumer must stop and reopen.

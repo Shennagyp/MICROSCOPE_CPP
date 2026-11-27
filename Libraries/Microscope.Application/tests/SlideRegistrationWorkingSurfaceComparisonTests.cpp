@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -223,6 +224,16 @@ void exactDirectAxisComparisonPreservesCalibrationEvidence() {
         value.registrationAcceptedMaximumFitResidualMicrometers() == 1.0 &&
         value.registrationCornerFitResidualsMicrometers()[0] < 1e-9,
         "retains the registration fit residuals and the accepted residual limit");
+
+    const auto mappedFromRetainedRegistration =
+        value.physicalRegistration().toStage({37'500.0, 12'500.0});
+    check(mappedFromRetainedRegistration &&
+        std::abs(mappedFromRetainedRegistration.value().horizontalMicrometers - 42'500.0) < 1e-9 &&
+        std::abs(mappedFromRetainedRegistration.value().transverseMicrometers - 32'500.0) < 1e-9,
+        "retains the original affine registration and its slide-to-stage mapping methods");
+    check(value.workingSurfaceRectangle().drawnOppositeEndpoint().xMicrometers == 75'001.0 &&
+        value.workingSurfaceRectangle().drawnOppositeEndpoint().yMicrometers == 20'001.0,
+        "retains the original CAD drawing handle and constrained rectangle model");
 }
 
 void reportsDifferencesAndIndependentRevisionIdentity() {

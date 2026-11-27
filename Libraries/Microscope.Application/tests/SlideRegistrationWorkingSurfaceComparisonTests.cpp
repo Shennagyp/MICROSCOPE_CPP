@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -254,6 +255,58 @@ void reportsDifferencesAndIndependentRevisionIdentity() {
         "reports maximum and RMS discrepancy without modifying physical calibration");
 }
 
+void reportsGeometryDifferencesSeparatelyFromCornerRegistration() {
+    const auto stageSpecification = stage();
+    const auto measured = registration(
+        "slide-geometry", DualSlideSlot::Left, "slide-geometry-cal-v1");
+    const auto carrier = carrierWith(
+        stageSpecification, "x", "y", measured);
+    const auto surface = workingSurface(
+        stageSpecification,
+        "slide-geometry",
+        "slide-geometry-layout-v2",
+        5'000.0,
+        20'000.0,
+        75'020.0,
+        24'980.0);
+
+    const auto comparison = SlideRegistrationWorkingSurfaceComparison::compare(
+        carrier, surface, id<SlideId>("slide-geometry"), topLeftIsStopPoint());
+    check(static_cast<bool>(comparison),
+        "returns a comparison when CAD dimensions differ from the physical slide geometry");
+    if (!comparison) return;
+
+    check(std::abs(comparison.value().workingSurfaceMinusPhysicalXExtentMicrometers() - 20.0) < 1e-9 &&
+        std::abs(comparison.value().workingSurfaceMinusPhysicalYExtentMicrometers() + 20.0) < 1e-9,
+        "reports CAD-minus-physical extent deltas instead of rejecting or rewriting either geometry");
+    check(std::abs(comparison.value().maximumCornerDiscrepancyMicrometers() - 20.0) < 1e-9,
+        "reports the geometric corner mismatch independently from the registration fit residual");
+}
+
+void distinguishesLoadedButUnregisteredSlide() {
+    const auto stageSpecification = stage();
+    const auto specification = take(DualSlideCarrierSpecification::create(
+        stageSpecification,
+        id<StageAxisId>("x"),
+        id<StageAxisId>("y"),
+        CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
+    const auto left = take(SlideSlotState::create(
+        DualSlideSlot::Left, id<SlideId>("slide-unregistered")));
+    const auto right = take(SlideSlotState::create(
+        DualSlideSlot::Right, std::nullopt));
+    const auto carrier = take(DualSlideCarrierState::create(
+        specification, left, right));
+    const auto surface = workingSurface(
+        stageSpecification, "slide-unregistered", "slide-unregistered-layout-v1");
+
+    const auto comparison = SlideRegistrationWorkingSurfaceComparison::compare(
+        carrier, surface, id<SlideId>("slide-unregistered"), topLeftIsStopPoint());
+    check(!comparison &&
+        comparison.error() ==
+            SlideRegistrationWorkingSurfaceComparisonError::SlideNotRegistered,
+        "distinguishes a physically loaded slide with no four-corner registration");
+}
+
 void mapsSwappedCarrierAxesIntoWorkingSurfaceCoordinates() {
     const auto stageSpecification = stage();
     const auto measured = registration(
@@ -339,6 +392,8 @@ int main() {
         correspondenceRequiresOneCyclicBijection();
         exactDirectAxisComparisonPreservesCalibrationEvidence();
         reportsDifferencesAndIndependentRevisionIdentity();
+        reportsGeometryDifferencesSeparatelyFromCornerRegistration();
+        distinguishesLoadedButUnregisteredSlide();
         mapsSwappedCarrierAxesIntoWorkingSurfaceCoordinates();
         rejectsMismatchedPhysicalIdentitiesAndMissingGeometry();
     } catch (const std::exception& error) {

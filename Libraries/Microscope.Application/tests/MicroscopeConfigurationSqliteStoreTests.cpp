@@ -251,6 +251,21 @@ void testCalibrationAndOperationModePersistence() {
         const auto intentOnlyMode = makeMode("mode-contrast-intent-only", 1);
         check(store->saveOperationMode(intentOnlyMode, 0).isSuccess(),
               "persists a contrast-intent OperationMode without any calibration");
+
+        const auto listedModes = store->loadCurrentOperationModes(microscopeId);
+        check(listedModes && listedModes.value().size() == 2,
+              "enumerates all current OperationModes for one microscope");
+        if (listedModes) {
+            check(listedModes.value().size() == 2 &&
+                  listedModes.value()[0].id().value() == "mode-4x-brightfield" &&
+                  listedModes.value()[0].revision() == 2 &&
+                  listedModes.value()[1].id().value() == "mode-contrast-intent-only",
+                  "returns only current revisions in stable identity order");
+        }
+        const auto modesForOtherMicroscope = store->loadCurrentOperationModes(
+            makeId<MicroscopeId>("another-microscope"));
+        check(modesForOtherMicroscope && modesForOtherMicroscope.value().empty(),
+              "does not leak OperationModes across microscope identities");
         const auto loadedIntentOnly = store->loadCurrentOperationMode(
             microscopeId, intentOnlyMode.id());
         check(loadedIntentOnly && loadedIntentOnly.value().has_value(),

@@ -3,14 +3,16 @@
 #include "microscope/core/configuration/Configuration.h"
 #include "microscope/core/configuration/LightPathCameraResolver.h"
 #include "microscope/core/configuration/OperationMode.h"
+#include "microscope/core/configuration/LightPathCalibration.h"
 
 namespace microscope::core {
 
 enum class LightPathConfigurationRequestFactoryError {
     MicroscopeMismatch,
     LightPathNotInstalled,
-    OperationModeDoesNotContainLightPath,
-    OperationModeEquipmentRevisionMismatch,
+    OperationModeHardwareConfigurationMismatch,
+    LightPathSettingNotFound,
+    HardwareConfigurationEquipmentRevisionMismatch,
     CameraResolutionNotResolved,
     ResolvedCameraOperationModeMismatch,
     ResolvedCameraLightPathMismatch,
@@ -31,6 +33,7 @@ public:
         LightPathConfigurationRequestFactoryError> create(
             const MicroscopeEquipmentDefinition& equipment,
             const OperationMode& operationMode,
+            const OperationModeHardwareConfiguration& hardwareConfiguration,
             const LightPathId& lightPathId,
             const LightPathCameraResolution& cameraResolution,
             ConfigurationProfileId profileId,

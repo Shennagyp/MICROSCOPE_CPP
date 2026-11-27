@@ -403,7 +403,7 @@ void assessIllumination(
     const MicroscopeEquipmentDefinition& equipment,
     const IlluminationMicroscopyRequirements& requirements,
     const ConfigurationRequest& request,
-    const OperationMode* operationMode) {
+    const OperationModeHardwareConfiguration* hardwareConfiguration) {
     const auto& binding = request.lightPathBinding();
     if (!binding) {
         appendDiagnostic(
@@ -414,36 +414,37 @@ void assessIllumination(
         return;
     }
 
-    if (operationMode == nullptr) {
+    if (hardwareConfiguration == nullptr) {
         appendDiagnostic(
             diagnostics,
             DiagnosticSeverity::Error,
-            "sample.microscopy.operation_mode_missing",
-            "An OperationMode is required to evaluate the calibrated specimen-plane irradiance target.");
+            "sample.microscopy.operation_mode_hardware_configuration_missing",
+            "A separate calibrated hardware configuration is required to evaluate the specimen-plane irradiance target.");
         return;
     }
 
-    if (operationMode->microscopeId() != equipment.microscopeId() ||
-        operationMode->id() != binding->operationModeId ||
-        operationMode->revision() != binding->operationModeRevision ||
+    if (hardwareConfiguration->microscopeId() != equipment.microscopeId() ||
+        hardwareConfiguration->operationModeId() != binding->operationModeId ||
+        hardwareConfiguration->operationModeRevision() != binding->operationModeRevision ||
+        hardwareConfiguration->equipmentDefinitionRevision() != equipment.revision() ||
         binding->equipmentDefinitionRevision != equipment.revision()) {
         appendDiagnostic(
             diagnostics,
             DiagnosticSeverity::Error,
-            "sample.microscopy.operation_mode_revision_mismatch",
-            "The supplied OperationMode does not match the microscope, equipment revision and OperationMode revision captured by the resolved camera configuration.");
+            "sample.microscopy.operation_mode_hardware_configuration_mismatch",
+            "The supplied hardware configuration does not match the microscope, equipment revision and OperationMode revision captured by the resolved request.");
         return;
     }
 
     const auto* setting =
-        operationMode->findLightPathSetting(binding->lightPathId);
+        hardwareConfiguration->findLightPathSetting(binding->lightPathId);
     if (setting == nullptr ||
         setting->equipmentDefinitionRevision() != equipment.revision()) {
         appendDiagnostic(
             diagnostics,
             DiagnosticSeverity::Error,
-            "sample.microscopy.light_path_mode_setting_missing",
-            "The selected OperationMode has no valid calibrated setting for the selected LightPath and equipment revision.",
+            "sample.microscopy.light_path_hardware_setting_missing",
+            "The separate hardware configuration has no calibrated setting for the selected LightPath and equipment revision.",
             "LightPath",
             binding->lightPathId.value());
         return;
@@ -1305,7 +1306,7 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
     const SampleType& sampleType,
     const Slide& slide,
     const ResolvedConfiguration& configuration,
-    const OperationMode* operationMode) {
+    const OperationModeHardwareConfiguration* hardwareConfiguration) {
     Diagnostics diagnostics;
 
     if (configuration.microscopeId() != equipment.microscopeId()) {
@@ -1389,7 +1390,7 @@ SampleMicroscopyAssessment SampleMicroscopyRequirementAssessor::assess(
             equipment,
             *requirements.illumination(),
             request,
-            operationMode);
+            hardwareConfiguration);
     }
 
     if (requirements.camera()) {

@@ -49,6 +49,7 @@ Result<
 LightPathConfigurationRequestFactory::create(
     const MicroscopeEquipmentDefinition& equipment,
     const OperationMode& operationMode,
+    const OperationModeHardwareConfiguration& hardwareConfiguration,
     const LightPathId& lightPathId,
     const LightPathCameraResolution& cameraResolution,
     ConfigurationProfileId profileId,
@@ -73,18 +74,27 @@ LightPathConfigurationRequestFactory::create(
                 LightPathConfigurationRequestFactoryError::LightPathNotInstalled);
     }
 
-    const auto* modeSetting = operationMode.findLightPathSetting(lightPathId);
+    if (hardwareConfiguration.microscopeId() != operationMode.microscopeId() ||
+        hardwareConfiguration.operationModeId() != operationMode.id() ||
+        hardwareConfiguration.operationModeRevision() != operationMode.revision()) {
+        return Result<
+            ConfigurationRequest,
+            LightPathConfigurationRequestFactoryError>::failure(
+                LightPathConfigurationRequestFactoryError::OperationModeHardwareConfigurationMismatch);
+    }
+    if (hardwareConfiguration.equipmentDefinitionRevision() != equipment.revision()) {
+        return Result<
+            ConfigurationRequest,
+            LightPathConfigurationRequestFactoryError>::failure(
+                LightPathConfigurationRequestFactoryError::HardwareConfigurationEquipmentRevisionMismatch);
+    }
+    const auto* modeSetting =
+        hardwareConfiguration.findLightPathSetting(lightPathId);
     if (modeSetting == nullptr) {
         return Result<
             ConfigurationRequest,
             LightPathConfigurationRequestFactoryError>::failure(
-                LightPathConfigurationRequestFactoryError::OperationModeDoesNotContainLightPath);
-    }
-    if (modeSetting->equipmentDefinitionRevision() != equipment.revision()) {
-        return Result<
-            ConfigurationRequest,
-            LightPathConfigurationRequestFactoryError>::failure(
-                LightPathConfigurationRequestFactoryError::OperationModeEquipmentRevisionMismatch);
+                LightPathConfigurationRequestFactoryError::LightPathSettingNotFound);
     }
 
     if (!cameraResolution.isResolved() || !cameraResolution.selected()) {

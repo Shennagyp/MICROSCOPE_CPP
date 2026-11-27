@@ -9,6 +9,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 struct sqlite3;
 
@@ -81,6 +82,13 @@ public:
         MicroscopeConfigurationStoreError> loadCurrentOperationMode(
             const core::MicroscopeId& microscopeId,
             const core::OperationModeId& operationModeId);
+
+    // Enumerates one current revision per mode for a microscope, ordered by
+    // stable OperationModeId. Historical revisions are never returned here.
+    [[nodiscard]] core::Result<
+        std::vector<core::OperationMode>,
+        MicroscopeConfigurationStoreError> loadCurrentOperationModes(
+            const core::MicroscopeId& microscopeId);
 
     // Loads the optional calibrated realization associated with this exact
     // current OperationMode revision. No value means no realization is saved.

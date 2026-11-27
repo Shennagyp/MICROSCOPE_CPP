@@ -459,8 +459,30 @@ void testImageOffsetAndPaddingArePreservedWithoutCopying() {
 
     source = validMono8Frame();
     source.isComposite = true;
-    require(!camera::gentl::makeCommonFrame(source),
-            "Composite buffers must not be projected.");
+    source.parts.push_back(camera::gentl::DataStreamPart{
+        1, 3, UINT64_C(1), UINT64_C(0x01080001),
+        UINT64_C(1), 3, 1, 0, 0, 0, 1, 0, 0});
+    const auto multipart = camera::gentl::makeCommonFrame(std::move(source));
+    require(multipart.has_value() && (*multipart)->isMultipart,
+            "Composite payload must be represented as multipart, not a raster.");
+    require((*multipart)->pixelFormat == camera::PixelFormat::Unknown &&
+                (*multipart)->width == 0 && (*multipart)->height == 0,
+            "Composite payload must not be misrepresented as one raster.");
+    require((*multipart)->parts.size() == 1 &&
+                (*multipart)->parts.front().offsetBytes == 1 &&
+                (*multipart)->parts.front().byteSize == 3,
+            "Multipart part byte range was not preserved.");
+    require((*multipart)->pixels == std::vector<std::uint8_t>(
+                {1, 2, 3, 4, 5, 6}),
+            "Multipart payload bytes were modified.");
+
+    source = validMono8Frame();
+    source.isComposite = true;
+    source.parts.push_back(camera::gentl::DataStreamPart{
+        5, 2, UINT64_C(1), UINT64_C(0x01080001),
+        UINT64_C(1), 3, 1, 0, 0, 0, 1, 0, 0});
+    require(!camera::gentl::makeCommonFrame(std::move(source)),
+            "A multipart part extending beyond the payload must be rejected.");
 
     source = validMono8Frame();
     source.deliveredImageHeight = 1;

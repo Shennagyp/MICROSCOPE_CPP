@@ -95,7 +95,6 @@ void testSampleTypeHardConstraintsPrecedeStainRecommendations() {
     const auto sampleType = makeSampleType(
         "sample-type-hard-brightfield",
         {{ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Required},
-         {ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Supported},
          {ContrastMethod::PhaseContrast, MicroscopyTechniqueConstraintKind::Supported},
          {ContrastMethod::Darkfield, MicroscopyTechniqueConstraintKind::Prohibited}});
     const auto slide = makeSlide(sampleType, "slide-hard-brightfield", {
@@ -124,9 +123,7 @@ void testSampleTypeHardConstraintsPrecedeStainRecommendations() {
 void testSampleTypePreferenceOutranksStainAdvisoryPreference() {
     const auto sampleType = makeSampleType(
         "sample-type-preferred-phase",
-        {{ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Supported},
-         {ContrastMethod::PhaseContrast, MicroscopyTechniqueConstraintKind::Supported},
-         {ContrastMethod::PhaseContrast, MicroscopyTechniqueConstraintKind::Preferred}});
+        {{ContrastMethod::PhaseContrast, MicroscopyTechniqueConstraintKind::Preferred}});
     const auto slide = makeSlide(sampleType, "slide-preferred-phase", {
         makeStain("stain-he", "Hematoxylin and eosin",
                   {ContrastMethod::Brightfield})});

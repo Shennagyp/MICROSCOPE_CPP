@@ -13,18 +13,21 @@ struct MainWindowView: View {
     var body: some View {
         GeometryReader { geometry in
             let previewMinimumWidth = OptikaLayout.dualPreviewMinimumWidth
-            let railWidth = NativeWorkspaceDockTabRail.width
+            let launcherWidth = NativeWorkspaceDockTabRail.width
             let maximumDockWidth = min(
                 OptikaLayout.workspaceDockMaximumWidth,
                 max(
                     OptikaLayout.workspaceDockMinimumWidth,
-                    geometry.size.width - previewMinimumWidth - dockDividerWidth - railWidth
+                    geometry.size.width - previewMinimumWidth - dockDividerWidth
                 )
             )
             let dockWidth = min(
                 max(workspace.workspaceDockWidth, OptikaLayout.workspaceDockMinimumWidth),
                 maximumDockWidth
             )
+            let launcherTrailingInset = workspace.isWorkspaceDockVisible
+                ? dockWidth + dockDividerWidth
+                : 0
 
             HStack(spacing: 0) {
                 NativeDualPreviewSurface(
@@ -79,24 +82,17 @@ struct MainWindowView: View {
                         x: -4,
                         y: 0
                     )
-
-                    // This trailing gutter belongs to the open dock layout.
-                    // The launcher rail itself is overlaid below and never
-                    // participates in the HStack's width calculation.
-                    Color.clear
-                        .frame(width: railWidth)
-                        .allowsHitTesting(false)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
-            // Only the dock buttons float above the workspace. The dock
-            // content remains in the HStack and therefore uses real layout
-            // width when opened.
+            // The dock panel participates in layout. Only its launch buttons
+            // float, positioned over the preview at the preview/dock boundary.
             .overlay(alignment: .trailing) {
                 NativeWorkspaceDockTabRail(workspace: workspace)
-                    .frame(width: railWidth)
+                    .frame(width: launcherWidth)
                     .frame(maxHeight: .infinity)
+                    .padding(.trailing, launcherTrailingInset)
                     .zIndex(2)
             }
         }

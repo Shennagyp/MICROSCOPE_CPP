@@ -156,8 +156,9 @@ void correspondenceRequiresOneCyclicBijection() {
         SlideRectangleCorner2D::OppositeCorner,
         SlideRectangleCorner2D::WidthEdgeEnd,
         SlideRectangleCorner2D::StopPoint});
-    check(static_cast<bool>(rotated),
-        "accepts a cyclically rotated corner correspondence");
+    check(static_cast<bool>(rotated) &&
+        !rotated.value().measuredXMapsToWorkingSurfaceX(),
+        "accepts a cyclically rotated correspondence and identifies the swapped local extent axes");
 
     auto reflected = SlideCornerCorrespondence::create({
         SlideRectangleCorner2D::StopPoint,
@@ -207,6 +208,8 @@ void exactDirectAxisComparisonPreservesCalibrationEvidence() {
         "reports aligned physical-registration and working-surface revisions");
     check(value.carrierHorizontalAxisMapsToWorkingSurfaceX(),
         "records the direct horizontal-to-X stage-axis mapping");
+    check(value.physicalSlideXMapsToWorkingSurfaceX(),
+        "records that the standard corner correspondence preserves the slide-local X/Y extent axes");
     check(value.corners().size() == 4 &&
         value.maximumCornerDiscrepancyMicrometers() < 1e-9 &&
         value.rmsCornerDiscrepancyMicrometers() < 1e-9,
@@ -234,6 +237,19 @@ void exactDirectAxisComparisonPreservesCalibrationEvidence() {
     check(value.workingSurfaceRectangle().drawnOppositeEndpoint().xMicrometers == 5'001.0 &&
         value.workingSurfaceRectangle().drawnOppositeEndpoint().yMicrometers == 20'001.0,
         "retains the original CAD drawing handle and constrained rectangle model");
+
+    const auto rotatedCorrespondence = take(SlideCornerCorrespondence::create({
+        SlideRectangleCorner2D::LengthEdgeEnd,
+        SlideRectangleCorner2D::OppositeCorner,
+        SlideRectangleCorner2D::WidthEdgeEnd,
+        SlideRectangleCorner2D::StopPoint}));
+    const auto rotatedComparison = SlideRegistrationWorkingSurfaceComparison::compare(
+        carrier, surface, id<SlideId>("slide-direct"), rotatedCorrespondence);
+    check(rotatedComparison &&
+        !rotatedComparison.value().physicalSlideXMapsToWorkingSurfaceX() &&
+        rotatedComparison.value().workingSurfaceMinusPhysicalXExtentMicrometers() == -50'000.0 &&
+        rotatedComparison.value().workingSurfaceMinusPhysicalYExtentMicrometers() == 50'000.0,
+        "swaps the corresponding CAD dimensions when the explicit corner mapping rotates local axes");
 }
 
 void reportsDifferencesAndIndependentRevisionIdentity() {

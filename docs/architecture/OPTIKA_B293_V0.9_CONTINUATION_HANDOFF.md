@@ -2,7 +2,7 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Prepared commit:** `dd1528af3548ce8ce70571c65b2cde3e6099ec02` (before this handoff document is committed)  
+**Latest source/test commit:** `eb255d7b86c9687fd24f991e93d40598c87cc2b3`  
 **Verification:** source and test changes are authored; the updated branch has not yet been advanced and CI has not yet run for this change set.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
@@ -37,7 +37,7 @@ No Slide payload version bump or schema migration was needed for these existing 
 
 `OperatingModeRecommender` returns a ranked candidate set with evidence:
 - SampleType Required/Supported/Prohibited technique constraints determine eligibility.
-- SampleType Preferred technique evidence outranks Stain suitability recommendations.
+- SampleType Preferred techniques are admissible candidates (including alongside a Supported set) and outrank Stain suitability recommendations.
 - Stain advice only contributes when SampleType provides technique context; a Stain alone cannot select a mode.
 - Equal top-ranked candidates remain ambiguous. The recommender does not automatically change hardware or claim the whole microscope configuration is compatible.
 

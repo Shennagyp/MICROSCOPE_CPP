@@ -7,9 +7,12 @@
 #include <fstream>
 #include <initializer_list>
 #include <iterator>
+#include <iomanip>
+#include <locale>
 #include <limits>
 #include <map>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -462,12 +465,13 @@ bool numberValue(
     if (value.kind != JsonValue::Kind::Number) {
         return fail(error, ErrorCode::WrongType, path, "Expected a JSON number.");
     }
-    const auto result = std::from_chars(
-        value.text.data(), value.text.data() + value.text.size(),
-        output, std::chars_format::general);
-    if (result.ec != std::errc{} ||
-        result.ptr != value.text.data() + value.text.size() ||
-        !std::isfinite(output)) {
+    // Floating std::from_chars is not consistently available for older macOS
+    // deployment targets. A classic-locale stream preserves JSON's decimal
+    // syntax without consulting or mutating the process-global C locale.
+    std::istringstream numberStream(value.text);
+    numberStream.imbue(std::locale::classic());
+    numberStream >> std::noskipws >> output;
+    if (numberStream.fail() || !numberStream.eof() || !std::isfinite(output)) {
         return fail(error, ErrorCode::InvalidValue, path,
             "Number is not representable as a finite double.");
     }

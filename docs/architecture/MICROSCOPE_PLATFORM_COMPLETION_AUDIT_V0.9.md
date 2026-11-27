@@ -77,8 +77,8 @@ The target graph is not yet implemented. Swift is the owner of the application-l
 
 **Structural work still required**
 
-1. `SampleModels.h` imports `DualSlideNavigation.h` to obtain `SlideGeometry`. `OpticalTopology.h` also imports navigation to obtain `DualSlideCarrierSpecification`. These are dependency-direction inversions: sample and installed-equipment definitions should not depend on the navigation runtime header.
-2. `StageWorkingSurface2D` defines a separate `SlideGeometry2D`. Establish one canonical physical slide-geometry value, or document a deliberate distinction between slide dimensions and working-surface placement.
+1. **Completed in the current implementation:** `SlideGeometry` now belongs to the sample domain, and `DualSlideCarrierSpecification` belongs to equipment. `SampleModels.h` and `OpticalTopology.h` no longer import `DualSlideNavigation.h`. Navigation now owns the conversion from a registered slide-local target to a stage motion command. The extraction preserves the existing four-corner registration and axis-unit conversion behavior. CI validation for this refactor is pending.
+2. `StageWorkingSurface2D` still defines a separate `SlideGeometry2D`. Reconcile it with sample-domain `SlideGeometry` or document a deliberate distinction, preserving the working-surface local-axis and CAD semantics.
 3. The fixed physical `DualSlideCarrierState` (Left/Right slots and four-corner affine registration) and the newer `StageWorkingSurface2D` placement model are not yet joined by an explicit, lossless mapping. Do not replace the measured four-corner registration with a simpler drawn rectangle.
 4. There is no Core Tile/acquisition-record model. This is not currently classified as a missing platform feature: the established Swift application owns acquisition workflow and image/tile organization. Add a Core Tile value only if microscope-domain semantics (for example, stage-space tile identity or registration) must be shared independently of the Swift application; do not duplicate image/tile persistence merely to mirror the UI workflow.
 5. Equipment definitions are revisioned in memory, but there is no authoritative JSON loader or persisted equipment-definition repository. Calibration and carrier records refer to equipment revisions; those revisions must be reloadable and verifiable after restart.
@@ -159,7 +159,7 @@ The existing preview, feature controls and workspace shell can remain as present
 ## 4. Completion order
 
 1. Keep the three-platform CI baseline green.
-2. Fix Core ownership boundaries: extract shared SlideGeometry and static DualSlideCarrierSpecification from navigation; reconcile the two slide-geometry types and the physical-carrier/working-surface mapping.
+2. Continue Core ownership cleanup: reconcile sample-domain `SlideGeometry` with `StageWorkingSurface2D::SlideGeometry2D`, then define and test a lossless mapping between physical four-corner carrier registration and working-surface placement.
 3. Import the camera-v2.0 Camera package as a controlled subtree. Exclude AcquisitionIntegrityTracker and Qt components; fix ProducerCatalog ownership documentation; add one backend-neutral provider/session API over AmScope and GenTL.
 4. Add authoritative equipment-definition JSON loading and revision persistence. Add mode/profile enumeration/loading and a central database migration owner.
 5. Compose a microscope-level Application runtime and UI-facing snapshots/events. Integrate SampleType + Stain -> recommended OperationMode -> explicit selection -> desired/observed state reconciliation.

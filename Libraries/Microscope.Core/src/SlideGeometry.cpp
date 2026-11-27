@@ -1,4 +1,4 @@
-#include "microscope/core/equipment/SlideGeometry.h"
+#include "microscope/core/samples/SlideGeometry.h"
 
 #include <cmath>
 

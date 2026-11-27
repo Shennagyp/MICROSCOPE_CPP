@@ -24,6 +24,9 @@ namespace {
             candidateIsSupported |= constraint.method == candidate;
             break;
         case MicroscopyTechniqueConstraintKind::Preferred:
+            // Preferred is an explicitly allowed technique as well as a
+            // ranking signal; it remains eligible alongside a Supported set.
+            candidateIsSupported |= constraint.method == candidate;
             break;
         case MicroscopyTechniqueConstraintKind::Prohibited:
             if (constraint.method == candidate) {

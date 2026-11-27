@@ -208,8 +208,11 @@ void assessTechnique(
             hasSupportedSet = true;
             selectedIsSupported |= constraint.method == selectedMethod;
         } else if (constraint.kind == MicroscopyTechniqueConstraintKind::Preferred) {
+            // Preferred is an allowed technique with a positive ranking signal.
+            // It remains eligible when the SampleType also declares a Supported set.
             hasPreferredSet = true;
             selectedIsPreferred |= constraint.method == selectedMethod;
+            selectedIsSupported |= constraint.method == selectedMethod;
         } else if (constraint.kind == MicroscopyTechniqueConstraintKind::Prohibited &&
                    constraint.method == selectedMethod) {
             appendDiagnostic(

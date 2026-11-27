@@ -123,7 +123,8 @@ void testSampleTypeHardConstraintsPrecedeStainRecommendations() {
 void testSampleTypePreferenceOutranksStainAdvisoryPreference() {
     const auto sampleType = makeSampleType(
         "sample-type-preferred-phase",
-        {{ContrastMethod::PhaseContrast, MicroscopyTechniqueConstraintKind::Preferred}});
+        {{ContrastMethod::Brightfield, MicroscopyTechniqueConstraintKind::Supported},
+         {ContrastMethod::PhaseContrast, MicroscopyTechniqueConstraintKind::Preferred}});
     const auto slide = makeSlide(sampleType, "slide-preferred-phase", {
         makeStain("stain-he", "Hematoxylin and eosin",
                   {ContrastMethod::Brightfield})});
@@ -136,7 +137,7 @@ void testSampleTypePreferenceOutranksStainAdvisoryPreference() {
          makeMode("mode-phase", ContrastMethod::PhaseContrast)}));
 
     check(recommendations.candidates().size() == 2,
-          "both supported contrast modes remain eligible");
+          "both explicitly supported and preferred contrast modes remain eligible");
     check(recommendations.unambiguousRecommendation() &&
           recommendations.unambiguousRecommendation()->operationModeId ==
               id<OperationModeId>("mode-phase"),

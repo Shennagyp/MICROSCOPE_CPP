@@ -67,7 +67,7 @@ public:
         }
         return sqlite3_bind_text(
             statement_, index, value.data(),
-            static_cast<int>(value.size()), SQLITE_TRANSIENT) != SQLITE_OK;
+            static_cast<int>(value.size()), SQLITE_TRANSIENT) == SQLITE_OK;
     }
 
     bool bindText(int index, const std::string& value) {

@@ -62,6 +62,10 @@ struct NativeWorkspaceDock: View {
     }
 }
 
+/// Floating launch controls for the workspace docks.
+///
+/// The buttons are independent surfaces. There is deliberately no
+/// full-height rail background, separator, or enclosing bar.
 struct NativeWorkspaceDockTabRail: View {
     @ObservedObject var workspace: NativeWorkspaceModel
 
@@ -69,21 +73,13 @@ struct NativeWorkspaceDockTabRail: View {
     private let tabHeight: CGFloat = OptikaLayout.dockTabHeight
 
     var body: some View {
-        VStack(spacing: 5) {
-            Spacer(minLength: 0)
+        VStack(spacing: 10) {
             dockTabButton(.cameraControls)
             dockTabButton(.smartGallery)
-            Spacer(minLength: 0)
         }
         .padding(.vertical, 8)
         .frame(width: Self.width)
-        .frame(maxHeight: .infinity)
-        .background(OptikaPalette.controlSurface)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(OptikaPalette.separator)
-                .frame(width: 1)
-        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func dockTabButton(_ tab: NativeWorkspaceDockTab) -> some View {
@@ -109,23 +105,31 @@ struct NativeWorkspaceDockTabRail: View {
                     .frame(width: 13, height: 88)
             }
             .frame(width: Self.width - 8, height: tabHeight)
-            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(RoundedRectangle(cornerRadius: 9))
             .background(
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: 9)
                     .fill(
                         isOpen
                             ? OptikaPalette.accentSelectionFill
                             : (isSelected
                                 ? OptikaPalette.inactiveSelectionFill
-                                : OptikaPalette.clear)
+                                : OptikaPalette.controlSurface)
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: 9)
                     .stroke(
-                        isOpen ? OptikaPalette.accent.opacity(0.65) : OptikaPalette.clear,
-                        lineWidth: 1
+                        isOpen
+                            ? OptikaPalette.accent.opacity(0.7)
+                            : OptikaPalette.separator.opacity(0.8),
+                        lineWidth: 0.8
                     )
+            )
+            .shadow(
+                color: Color.black.opacity(0.24),
+                radius: 8,
+                x: -3,
+                y: 3
             )
         }
         .buttonStyle(PlainButtonStyle())

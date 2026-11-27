@@ -124,10 +124,7 @@ bool readCurrentRevision(
         "SELECT revision FROM microscope_equipment_definition_current "
         "WHERE microscope_id = ?1");
     if (!statement.prepared() ||
-        sqlite3_bind_text(statement.get(), 1,
-            microscopeId.value().data(),
-            static_cast<int>(microscopeId.value().size()),
-            SQLITE_TRANSIENT) != SQLITE_OK) {
+        !statement.bindText(1, microscopeId.value())) {
         return false;
     }
     const int step = statement.step();
@@ -344,10 +341,7 @@ EquipmentDefinitionSqliteStore::saveCurrentDefinition(
         "INSERT INTO microscope_equipment_definition_revision "
         "(microscope_id, revision, document_json) VALUES (?1, ?2, ?3)");
     if (!insertRevision.prepared() ||
-        sqlite3_bind_text(insertRevision.get(), 1,
-            microscopeId.value().data(),
-            static_cast<int>(microscopeId.value().size()),
-            SQLITE_TRANSIENT) != SQLITE_OK ||
+        !insertRevision.bindText(1, microscopeId.value()) ||
         !insertRevision.bindInt64(2, nextRevision) ||
         !insertRevision.bindText(3, sourceDocument) ||
         insertRevision.step() != SQLITE_DONE) {
@@ -361,10 +355,7 @@ EquipmentDefinitionSqliteStore::saveCurrentDefinition(
             "WHERE microscope_id = ?2 AND revision = ?3");
         if (!updateCurrent.prepared() ||
             !updateCurrent.bindInt64(1, nextRevision) ||
-            sqlite3_bind_text(updateCurrent.get(), 2,
-                microscopeId.value().data(),
-                static_cast<int>(microscopeId.value().size()),
-                SQLITE_TRANSIENT) != SQLITE_OK ||
+            !updateCurrent.bindText(2, microscopeId.value()) ||
             !updateCurrent.bindInt64(3, expectedCurrentRevision) ||
             updateCurrent.step() != SQLITE_DONE ||
             sqlite3_changes(database_) != 1) {
@@ -376,10 +367,7 @@ EquipmentDefinitionSqliteStore::saveCurrentDefinition(
             "INSERT INTO microscope_equipment_definition_current "
             "(microscope_id, revision) VALUES (?1, ?2)");
         if (!insertCurrent.prepared() ||
-            sqlite3_bind_text(insertCurrent.get(), 1,
-                microscopeId.value().data(),
-                static_cast<int>(microscopeId.value().size()),
-                SQLITE_TRANSIENT) != SQLITE_OK ||
+            !insertCurrent.bindText(1, microscopeId.value()) ||
             !insertCurrent.bindInt64(2, nextRevision) ||
             insertCurrent.step() != SQLITE_DONE) {
             return core::Result<std::uint64_t, Error>::failure(
@@ -402,10 +390,7 @@ EquipmentDefinitionSqliteStore::loadCurrentDefinition(
         "SELECT revision FROM microscope_equipment_definition_current "
         "WHERE microscope_id = ?1");
     if (!statement.prepared() ||
-        sqlite3_bind_text(statement.get(), 1,
-            microscopeId.value().data(),
-            static_cast<int>(microscopeId.value().size()),
-            SQLITE_TRANSIENT) != SQLITE_OK) {
+        !statement.bindText(1, microscopeId.value())) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
             makeError(ErrorCode::SqliteOperationFailed, database_));
     }
@@ -447,10 +432,7 @@ EquipmentDefinitionSqliteStore::loadRevisionUnlocked(
         "SELECT document_json FROM microscope_equipment_definition_revision "
         "WHERE microscope_id = ?1 AND revision = ?2");
     if (!statement.prepared() ||
-        sqlite3_bind_text(statement.get(), 1,
-            microscopeId.value().data(),
-            static_cast<int>(microscopeId.value().size()),
-            SQLITE_TRANSIENT) != SQLITE_OK ||
+        !statement.bindText(1, microscopeId.value()) ||
         !statement.bindInt64(2, revision)) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
             makeError(ErrorCode::SqliteOperationFailed, database_));

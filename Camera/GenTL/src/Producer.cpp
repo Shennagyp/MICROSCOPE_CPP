@@ -1499,16 +1499,23 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
             Operation::dsQueueBuffer, streamHandle, eventData.BufferHandle),
             "DSQueueBuffer(requeue)");
 
+        const bool multipartContainsImage = frame.isComposite.value_or(false) &&
+            std::any_of(frame.parts.begin(), frame.parts.end(),
+                [](const DataStreamPart& part) {
+                    return part.dataType == GenTL::PART_DATATYPE_2D_IMAGE &&
+                           part.byteSize != 0;
+                });
+        const bool regularImagePayload =
+            frame.payloadType == GenTL::PAYLOAD_TYPE_IMAGE &&
+            frame.imagePresent.value_or(false);
         const auto deliveryStatus =
             (frame.incomplete || frame.dataLargerThanBuffer.value_or(false))
                 ? camera::FrameDeliveryStatus::Incomplete
-                : (!frame.imagePresent.value_or(false) ||
-                   !frame.payloadType ||
-                   *frame.payloadType != GenTL::PAYLOAD_TYPE_IMAGE)
-                    ? camera::FrameDeliveryStatus::NonImagePayload
-                    : frame.payload.empty()
-                        ? camera::FrameDeliveryStatus::InvalidPayload
-                        : camera::FrameDeliveryStatus::CompleteImage;
+                : frame.payload.empty()
+                    ? camera::FrameDeliveryStatus::InvalidPayload
+                    : (regularImagePayload || multipartContainsImage)
+                        ? camera::FrameDeliveryStatus::CompleteImage
+                        : camera::FrameDeliveryStatus::NonImagePayload;
         state->integrity.recordBuffer(frame.frameId, deliveryStatus);
     } catch (...) {
         std::lock_guard<std::mutex> guard(context->mutex);

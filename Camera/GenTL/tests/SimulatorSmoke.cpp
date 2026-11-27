@@ -348,9 +348,9 @@ int main(int argc, char** argv) {
                 statistics.buffersAwaitingDelivery != 0 ||
                 statistics.integrity.observedBuffers != requiredFrames ||
                 statistics.integrity.completeImages !=
-                    (multipartMode ? 0U : requiredFrames -
+                    (multipartMode ? 1U : requiredFrames -
                     ((deliveryMode == "incomplete" || deliveryMode == "empty") ? 1U : 0U)) ||
-                statistics.integrity.nonImagePayloads != (multipartMode ? 1U : 0U) ||
+                statistics.integrity.nonImagePayloads != 0 ||
                 statistics.integrity.incompleteBuffers !=
                     (deliveryMode == "incomplete" ? 1U : 0U) ||
                 statistics.integrity.invalidPayloads !=

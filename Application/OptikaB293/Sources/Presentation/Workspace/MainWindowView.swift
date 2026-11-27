@@ -26,61 +26,75 @@ struct MainWindowView: View {
                 maximumDockWidth
             )
 
-            HStack(spacing: 0) {
-                NativeDualPreviewSurface(
-                    frameFeed: model.frameFeed,
-                    model: model,
-                    microscope: microscope,
-                    resolutionCoordinator: resolutionCoordinator,
-                    workspace: workspace,
-                    activeSlide: workspace.activeSlide,
-                    measurementCalibration: microscope.measurementCalibration,
-                    onCapture: { slide, image in
-                        gallery.capture(image, for: slide)
-                    }
-                )
-                .frame(
-                    minWidth: previewMinimumWidth,
-                    maxWidth: .infinity,
-                    maxHeight: .infinity
-                )
-                .clipped()
-
-                if workspace.isWorkspaceDockVisible {
-                    NativeWorkspaceDockResizeDivider(
-                        dockWidth: dockWidth,
-                        maximumWidth: maximumDockWidth,
-                        onResize: {
-                            workspace.updateWorkspaceDockWidth(
-                                $0,
-                                maximum: maximumDockWidth
-                            )
-                        },
-                        onResizeEnded: {
-                            workspace.persistWorkspaceDockWidth()
-                        }
-                    )
-                    .frame(width: dockDividerWidth)
-                    .frame(maxHeight: .infinity)
-
-                    NativeWorkspaceDock(
-                        model: model,
-                        workspace: workspace,
-                        microscope: microscope,
-                        resolutionCoordinator: resolutionCoordinator,
-                        gallery: gallery,
-                        onClose: { workspace.closeWorkspaceDock() }
-                    )
-                    .frame(width: dockWidth)
-                    .frame(maxHeight: .infinity)
+            NativeDualPreviewSurface(
+                frameFeed: model.frameFeed,
+                model: model,
+                microscope: microscope,
+                resolutionCoordinator: resolutionCoordinator,
+                workspace: workspace,
+                activeSlide: workspace.activeSlide,
+                measurementCalibration: microscope.measurementCalibration,
+                onCapture: { slide, image in
+                    gallery.capture(image, for: slide)
                 }
+            )
+            .frame(
+                minWidth: previewMinimumWidth,
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+            .clipped()
+            // The panel is a true overlay: it is not an HStack child and
+            // therefore never takes width away from or resizes the preview.
+            .overlay(alignment: .trailing) {
+                if workspace.isWorkspaceDockVisible {
+                    HStack(spacing: 0) {
+                        NativeWorkspaceDockResizeDivider(
+                            dockWidth: dockWidth,
+                            maximumWidth: maximumDockWidth,
+                            onResize: {
+                                workspace.updateWorkspaceDockWidth(
+                                    $0,
+                                    maximum: maximumDockWidth
+                                )
+                            },
+                            onResizeEnded: {
+                                workspace.persistWorkspaceDockWidth()
+                            }
+                        )
+                        .frame(width: dockDividerWidth)
+                        .frame(maxHeight: .infinity)
 
+                        NativeWorkspaceDock(
+                            model: model,
+                            workspace: workspace,
+                            microscope: microscope,
+                            resolutionCoordinator: resolutionCoordinator,
+                            gallery: gallery,
+                            onClose: { workspace.closeWorkspaceDock() }
+                        )
+                        .frame(width: dockWidth)
+                        .frame(maxHeight: .infinity)
+                        .shadow(
+                            color: Color.black.opacity(0.28),
+                            radius: 16,
+                            x: -5,
+                            y: 0
+                        )
+                    }
+                    // Keep the floating panel immediately left of the
+                    // floating launcher rail, without reserving rail space.
+                    .padding(.trailing, railWidth)
+                    .padding(.vertical, 12)
+                    .zIndex(1)
+                }
+            }
+            .overlay(alignment: .trailing) {
                 NativeWorkspaceDockTabRail(workspace: workspace)
                     .frame(width: railWidth)
                     .frame(maxHeight: .infinity)
+                    .zIndex(2)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .clipped()
         }
         .frame(
             minWidth: OptikaLayout.minimumWindowWidth,

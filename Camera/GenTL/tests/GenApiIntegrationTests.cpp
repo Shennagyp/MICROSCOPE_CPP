@@ -178,6 +178,14 @@ int main(int argc, char** argv) {
             require(std::holds_alternative<std::monostate>(writableResult),
                     "GenApi IRegister write failed.");
 
+            auto writableReadback =
+                access.registers().readRegister("WritableRegister");
+            auto* writableReadbackBytes =
+                std::get_if<std::vector<std::uint8_t>>(&writableReadback);
+            require(writableReadbackBytes &&
+                        *writableReadbackBytes == writableBytes,
+                    "IRegister write did not preserve the exact byte sequence on readback.");
+
             auto unsupportedRegisterRead =
                 access.features().readFeature("RawRegister");
             auto* unsupportedRegisterReadError =
@@ -446,6 +454,31 @@ int main(int argc, char** argv) {
             auto* isCompleted = std::get_if<bool>(&completedResult);
             require(isCompleted && *isCompleted,
                     "GenApi command completion did not transition to done.");
+        }
+
+        {
+            auto limitedDevice = producer.openDevice(devices.front());
+            camera::gentl::GenApiDeviceAccess limited(
+                std::move(limitedDevice), 2);
+
+            auto oversizedRead =
+                limited.registers().readRegister("WritableRegister");
+            auto* oversizedReadError =
+                std::get_if<camera::CameraRegisterAccessError>(&oversizedRead);
+            require(oversizedReadError &&
+                        oversizedReadError->code ==
+                            camera::CameraRegisterAccessError::Code::TransferLimitExceeded,
+                    "IRegister read exceeded the configured transfer-size limit.");
+
+            const std::vector<std::uint8_t> oversizedWrite{0x01, 0x02, 0x03, 0x04};
+            auto oversizedWriteResult =
+                limited.registers().writeRegister("WritableRegister", oversizedWrite);
+            auto* oversizedWriteError =
+                std::get_if<camera::CameraRegisterAccessError>(&oversizedWriteResult);
+            require(oversizedWriteError &&
+                        oversizedWriteError->code ==
+                            camera::CameraRegisterAccessError::Code::TransferLimitExceeded,
+                    "IRegister write exceeded the configured transfer-size limit.");
         }
 
         {

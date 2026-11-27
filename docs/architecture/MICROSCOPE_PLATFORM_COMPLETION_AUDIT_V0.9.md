@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-27  
 **Application branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Application code baseline:** `6b8a4ad4e176a80dd911b3c9be135ef4441aa045`  
+**Application code baseline:** `8cc64e2aafbb964f9956b74b7b56d236c801a543`  
 **Platform CI:** [run 45929942838](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45929942838) — Ubuntu GCC, macOS Clang and Windows MSVC passed. The macOS job includes the native Optika application build and tests.
 
 This audit distinguishes implemented domain contracts from executable hardware workflows. A model, resolver or transition plan is not evidence that a physical device can be commanded and verified.
@@ -95,7 +95,7 @@ The hardware is now genuinely modeled. The missing layer is the authoritative pe
 - Versioned Slide persistence and exact revision checks.
 - Runtime handles, operation projections, bounded feedback ingress, wake signaling and serialized runtime-worker primitives.
 - Stage navigation runtime and working-surface navigation runtime with feedback correlation, position verification and fault handling.
-- Physical-registration/CAD-placement comparison with explicit corner correspondence, axis identity checks, per-corner discrepancy reporting and retained calibration evidence. Its cross-model test target is included in the current platform CI run [45951302308](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45951302308).
+- Physical-registration/CAD-placement comparison with explicit corner correspondence, axis identity checks, per-corner discrepancy reporting and retained calibration evidence. Its cross-model test target is included in the current platform CI run [45951509031](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45951509031).
 
 **Missing for a UI-facing application library**
 

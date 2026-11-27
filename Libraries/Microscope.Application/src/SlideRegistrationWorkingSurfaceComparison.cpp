@@ -278,6 +278,11 @@ SlideRegistrationWorkingSurfaceComparison::compare(
                    reconciledCorners[1].discrepancyMicrometers),
         std::hypot(reconciledCorners[2].discrepancyMicrometers,
                    reconciledCorners[3].discrepancyMicrometers)) / 2.0;
+    if (!std::isfinite(rmsDiscrepancy)) {
+        return core::Result<SlideRegistrationWorkingSurfaceComparison,
+            SlideRegistrationWorkingSurfaceComparisonError>::failure(
+                SlideRegistrationWorkingSurfaceComparisonError::NonFiniteDiscrepancy);
+    }
 
     const auto& physicalGeometry = registration->geometry();
     const auto& workingGeometry = rectangle->geometry().canonicalGeometry();

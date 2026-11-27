@@ -2,11 +2,11 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Latest source/test commit:** `6f1b9253530cb7c7c718064a3eea4e01b89bbf6a`  
-**Architecture audit commit:** `62f6c298b27be96283c0c8c25291d30531ad7307`  
-**Verification:** [platform CI run 45943921361](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45943921361) passed Ubuntu GCC, macOS Clang and Windows MSVC for the preceding Core/Application baseline. The new registration/working-surface comparison and its tests are in the current change set; their three-platform workflow is pending.  
+**Latest source/test commit:** `f1a3bdae3473a45a790fd9854371e0283974749a`  
+**Architecture audit commit:** `f805698f7466bc2ae101157447c4c2235c74c8a1`  
+**Verification:** [platform CI run 45943921361](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45943921361) passed the preceding Core/Application/native-app baseline on Ubuntu GCC, macOS Clang and Windows MSVC. Comparison + CAD persistence code and tests are in [run 45952613208](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45952613208), currently pending.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.  
-**Current C++ implementation:** `6f1b9253530cb7c7c718064a3eea4e01b89bbf6a`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, this change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison`. It binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, correspondence-aware geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. The comparison owns immutable copies of the original `SlideRegistration` and CAD rectangle, retaining the affine mapping methods and CAD draw/constraint data. It remaps dimension comparisons when the explicit corner cycle rotates the local axes. It is not a motion command. CI run [45951730921](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45951730921) is queued for this corrected change set.
+**Current C++ implementation:** `f1a3bdae3473a45a790fd9854371e0283974749a`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, the change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison` and `StageWorkingSurfaceSqliteStore`. The comparison binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, correspondence-aware geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. Its immutable snapshot preserves the original affine mapping and CAD handle/constraint data. The SQLite store persists CAD surface boundaries, axis identities, slide rectangle constraints and explicit corner mappings in append-only equipment-revision-bound snapshots; it uses an optimistic current-revision check and reloads through the installed `StageSpecification`. Physical measured corners remain exclusively in `DualSlideCarrierSqliteStore`. CI run [45952613208](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45952613208) is pending.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 
@@ -81,31 +81,38 @@ The fixed two-slot carrier and the CAD working surface remain separate Core mode
 - Physical-registration and CAD-layout revisions are reported independently. A mismatch sets `revisionsAligned() == false`; it does not prevent a diagnostic comparison.
 - A comparison is not a recalibration, does not rewrite either source model and does not create a motion command.
 
-The correspondence and working-surface layout do not yet have a revisioned persistence path. That is the next task after the comparison passes CI. Keep the physical carrier registration store authoritative for measured corner evidence; persist the CAD layout/correspondence separately and bind them by physical `SlideId`, stage component/axis identity and explicit revision lineage.
+### CAD working-surface persistence
+
+`StageWorkingSurfaceSqliteStore` persists the CAD model separately from the physical carrier-registration store.
+
+- The revision key is scoped by `MicroscopeId`, equipment-definition revision and stage component identity.
+- The parent revision stores stage X/Y axis IDs and the working-surface minimum/maximum boundaries.
+- One immutable child row per CAD slide stores its physical `SlideId`, the CAD rectangle's revision ID, stop-point coordinates, original drawn handle, length-axis assignment, constrained length/width, and the explicit four-corner correspondence.
+- Correspondence values use stable explicit SQLite tags and are rebuilt through `SlideCornerCorrespondence::create`; corrupted or non-cyclic mappings are rejected.
+- Save requires exactly one binding for every rectangle, validates the layout against the supplied installed `StageSpecification`, and uses `expectedCurrentRevision` with a SQLite write transaction. Parent/child historical rows cannot be updated/deleted; the current pointer advances monotonically.
+- Load reconstructs rectangles and validates current stage axes, coordinate units and travel ranges before returning the snapshot. An equipment/stage mismatch is not silently remapped.
+
+This store does not persist or duplicate physical corner measurements. Those remain owned by `DualSlideCarrierSqliteStore`. The Application comparison joins the two stores after loading using physical `SlideId`, stage component/axis identity and explicit corner correspondence. The new store and cross-model tests are in CI run [45952613208](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45952613208), which is still pending.
 
 ## Verification
 
-The following source/test corrections are included in the verified code baseline:
+The following source/test corrections are included in the preceding verified code baseline:
 
 - Updated optical topology tests to the current intent/hardware-realization split. Camera discovery tests no longer require saved LightPath calibration.
 - Updated sample microscopy assessment tests to pass `OperationModeHardwareConfiguration`, not `OperationMode`.
 - Fixed the missing return type on `MicroscopeConfigurationSqliteStore::loadCurrentOperationMode`.
 - Corrected PreviewFrameRateMeter test timestamps to satisfy the meter's 0.5-second sampling interval and one-second stale threshold.
 
-The complete three-platform matrix passed on the current code baseline:
-- Core standalone and Core tests.
-- Application standalone and Application tests.
-- Root platform-only build and tests.
-- Native Optika app build/tests on macOS.
+The preceding complete three-platform matrix passed on Core/Application/native-app source baseline `9f7b4f708c15b6635d8f67276d493a33e06ba7ad` in run [45943921361](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45943921361). The later comparison feature reached passing Core/Application/root build and test stages on Ubuntu and macOS; Windows also passed Core and Application build/tests before its root stage. The current CAD persistence change is being validated by run [45952613208](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45952613208). Do not claim that current commit is verified until all jobs finish.
 
-This verifies the software build/test baseline, not physical microscope hardware execution.
+CI verifies software build/tests, not physical microscope hardware execution.
 
 ## Remaining work
 
 The complete library audit and dependency-ordered completion plan are maintained in [Microscope Platform Completion Audit v0.9](MICROSCOPE_PLATFORM_COMPLETION_AUDIT_V0.9.md).
 
 Immediate next work is not more UI:
-1. Verify the registration/working-surface comparison on all three CI platforms. Then add a revisioned persistence path for the CAD working-surface layout and its explicit per-slide corner correspondence. Keep physical carrier calibration records separate.
+1. Verify the comparison + CAD layout persistence on all three CI platforms, including the native Optika build. Fix compiler/test failures before further schema work.
 2. Add authoritative equipment-definition JSON loading and revision persistence, ConfigurationProfileCatalog persistence/loading, and a central database migration owner with shared connection/transaction semantics.
 3. Build the microscope-level Application composition root, observed-state snapshot and configuration reconciler.
 4. Complete stage/optical hardware adapters and operation cancellation/timeout/late-completion semantics.

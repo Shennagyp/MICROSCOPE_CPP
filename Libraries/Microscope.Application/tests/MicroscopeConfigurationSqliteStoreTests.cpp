@@ -75,17 +75,20 @@ LightPathModeSetting makeModeSetting(
         targetIrradiance));
 }
 
-OperationMode makeMode(
-    const char* modeId,
-    std::uint64_t revision,
-    std::vector<LightPathModeSetting> settings) {
+OperationMode makeMode(const char* modeId, std::uint64_t revision) {
     return take(OperationMode::create(
         makeId<MicroscopeId>("persisted-microscope"),
         makeId<OperationModeId>(modeId),
         revision,
         revision == 1 ? "4× Brightfield" : "4× Brightfield updated",
-        ContrastMethod::Brightfield,
-        std::move(settings)));
+        ContrastMethod::Brightfield));
+}
+
+OperationModeHardwareConfiguration makeHardwareConfiguration(
+    const OperationMode& mode,
+    std::vector<LightPathModeSetting> settings) {
+    return take(OperationModeHardwareConfiguration::create(
+        mode, std::move(settings)));
 }
 
 void testCalibrationAndOperationModePersistence() {
@@ -144,11 +147,10 @@ void testCalibrationAndOperationModePersistence() {
                   MicroscopeConfigurationStoreErrorCode::DuplicateCalibrationRevision,
               "rejects mutation/reuse of an existing calibration revision");
 
-        const auto mode1 = makeMode(
-            "mode-4x-brightfield",
-            1,
-            {makeModeSetting(calibration1, 8.0)});
-        const auto savedMode1 = store->saveOperationMode(mode1, 0);
+        const auto mode1 = makeMode("mode-4x-brightfield", 1);
+        const auto hardware1 = makeHardwareConfiguration(
+            mode1, {makeModeSetting(calibration1, 8.0)});
+        const auto savedMode1 = store->saveOperationMode(mode1, 0, &hardware1);
         check(savedMode1.isSuccess(),
               "persists the first editable OperationMode revision");
 
@@ -162,15 +164,19 @@ void testCalibrationAndOperationModePersistence() {
             check(loaded.revision() == 1 &&
                   loaded.contrastMethod() == ContrastMethod::Brightfield,
                   "restores OperationMode identity, revision and contrast method");
-            check(loaded.lightPathSettings().size() == 1,
-                  "restores per-LightPath mode settings");
-            const auto* setting =
-                loaded.findLightPathSetting(makeId<LightPathId>("transmitted-light"));
-            check(setting != nullptr,
-                  "restores the mode's selected LightPath setting");
-            check(setting &&
-                  setting->targetIrradianceMicrowattsPerSquareMillimeter() == 8.0,
-                  "restores the mode-specific specimen-plane irradiance target");
+            const auto loadedHardware =
+                store->loadOperationModeHardwareConfiguration(loaded);
+            check(loadedHardware && loadedHardware.value().has_value(),
+                  "loads calibrated hardware realization separately from contrast intent");
+            if (loadedHardware && loadedHardware.value()) {
+                const auto* setting = loadedHardware.value()->findLightPathSetting(
+                    makeId<LightPathId>("transmitted-light"));
+                check(setting != nullptr,
+                      "restores the realization's LightPath setting");
+                check(setting &&
+                      setting->targetIrradianceMicrowattsPerSquareMillimeter() == 8.0,
+                      "restores calibrated specimen-plane irradiance");
+            }
         }
 
         const auto calibration2 = makeCalibration(
@@ -182,17 +188,16 @@ void testCalibrationAndOperationModePersistence() {
         check(store->saveCalibration(calibration2).isSuccess(),
               "stores a new calibration revision for the edited mode");
 
-        const auto mode2 = makeMode(
-            "mode-4x-brightfield",
-            2,
-            {makeModeSetting(calibration2, 5.0)});
-        const auto staleSave = store->saveOperationMode(mode2, 0);
+        const auto mode2 = makeMode("mode-4x-brightfield", 2);
+        const auto hardware2 = makeHardwareConfiguration(
+            mode2, {makeModeSetting(calibration2, 5.0)});
+        const auto staleSave = store->saveOperationMode(mode2, 0, &hardware2);
         check(!staleSave.isSuccess() &&
               staleSave.error().code ==
                   MicroscopeConfigurationStoreErrorCode::RevisionConflict,
               "rejects a stale OperationMode writer");
 
-        const auto savedMode2 = store->saveOperationMode(mode2, 1);
+        const auto savedMode2 = store->saveOperationMode(mode2, 1, &hardware2);
         check(savedMode2.isSuccess(),
               "commits the new OperationMode revision against the expected current revision");
 
@@ -203,15 +208,21 @@ void testCalibrationAndOperationModePersistence() {
               loadedMode2.value()->revision() == 2,
               "makes the new operation mode revision current after commit");
         if (loadedMode2 && loadedMode2.value()) {
-            const auto* setting = loadedMode2.value()->findLightPathSetting(
-                makeId<LightPathId>("transmitted-light"));
-            check(setting &&
-                  setting->targetIrradianceMicrowattsPerSquareMillimeter() == 5.0,
-                  "persists a different calibrated intensity target for the revised mode");
-            check(setting &&
-                  setting->calibrationRevisionId() ==
-                      makeId<CalibrationRevisionId>("calibration-4x-bf-rev-2"),
-                  "binds the revised mode to its exact new calibration revision");
+            const auto loadedHardware =
+                store->loadOperationModeHardwareConfiguration(*loadedMode2.value());
+            check(loadedHardware && loadedHardware.value().has_value(),
+                  "loads revised hardware realization separately");
+            if (loadedHardware && loadedHardware.value()) {
+                const auto* setting = loadedHardware.value()->findLightPathSetting(
+                    makeId<LightPathId>("transmitted-light"));
+                check(setting &&
+                      setting->targetIrradianceMicrowattsPerSquareMillimeter() == 5.0,
+                      "persists revised calibrated irradiance");
+                check(setting &&
+                      setting->calibrationRevisionId() ==
+                          makeId<CalibrationRevisionId>("calibration-4x-bf-rev-2"),
+                      "binds realization to exact calibration revision");
+            }
         }
 
         const auto wrongCalibrationBinding = take(LightPathModeSetting::create(
@@ -227,15 +238,29 @@ void testCalibrationAndOperationModePersistence() {
              makeId<EquipmentComponentId>("condenser-abbe"),
              makeId<EquipmentComponentId>("nd-filter-medium")},
             4.0));
-        const auto invalidMode = makeMode(
-            "mode-4x-brightfield",
-            3,
-            {wrongCalibrationBinding});
-        const auto invalidSave = store->saveOperationMode(invalidMode, 2);
+        const auto invalidMode = makeMode("mode-4x-brightfield", 3);
+        const auto invalidHardware = makeHardwareConfiguration(
+            invalidMode, {wrongCalibrationBinding});
+        const auto invalidSave = store->saveOperationMode(
+            invalidMode, 2, &invalidHardware);
         check(!invalidSave.isSuccess() &&
               invalidSave.error().code ==
                   MicroscopeConfigurationStoreErrorCode::CalibrationBindingMismatch,
-              "rejects a mode setting that references a calibration from another mode revision");
+              "rejects a hardware realization setting that references a calibration from another mode revision");
+
+        const auto intentOnlyMode = makeMode("mode-contrast-intent-only", 1);
+        check(store->saveOperationMode(intentOnlyMode, 0).isSuccess(),
+              "persists a contrast-intent OperationMode without any calibration");
+        const auto loadedIntentOnly = store->loadCurrentOperationMode(
+            microscopeId, intentOnlyMode.id());
+        check(loadedIntentOnly && loadedIntentOnly.value().has_value(),
+              "loads an intent-only OperationMode");
+        if (loadedIntentOnly && loadedIntentOnly.value()) {
+            const auto absentHardware =
+                store->loadOperationModeHardwareConfiguration(*loadedIntentOnly.value());
+            check(absentHardware && !absentHardware.value(),
+                  "represents absent hardware realization separately from valid mode intent");
+        }
     }
 
     std::error_code ignored;

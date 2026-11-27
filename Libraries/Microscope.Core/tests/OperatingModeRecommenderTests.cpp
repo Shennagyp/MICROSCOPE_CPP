@@ -32,41 +32,20 @@ TId id(const char* value) { return take(TId::create(value)); }
 OperationMode makeMode(const char* modeId, ContrastMethod method) {
     const auto microscopeId = id<MicroscopeId>("recommendation-microscope");
     const auto typedModeId = id<OperationModeId>(modeId);
-    const auto pathValue = std::string(modeId) + "-path";
-    const auto calibrationValue = std::string(modeId) + "-calibration";
-    const auto setting = take(LightPathModeSetting::create(
-        microscopeId,
-        4,
-        typedModeId,
-        1,
-        id<LightPathId>(pathValue.c_str()),
-        id<CalibrationRevisionId>(calibrationValue.c_str()),
-        id<EquipmentComponentId>("white-led"),
-        id<IlluminationChannelId>("white-channel"),
-        {id<EquipmentComponentId>("objective-10x"),
-         id<EquipmentComponentId>("condenser-abbe")},
-        10.0));
     return take(OperationMode::create(
-        microscopeId, typedModeId, 1, modeId, method, {setting}));
+        microscopeId, typedModeId, 1, modeId, method));
 }
 
 OperationMode makeModeForMicroscope(
     const char* microscopeValue,
     const char* modeValue,
     ContrastMethod method) {
-    const auto microscopeId = id<MicroscopeId>(microscopeValue);
-    const auto modeId = id<OperationModeId>(modeValue);
-    const auto pathValue = std::string(modeValue) + "-path";
-    const auto calibrationValue = std::string(modeValue) + "-calibration";
-    const auto setting = take(LightPathModeSetting::create(
-        microscopeId, 4, modeId, 1,
-        id<LightPathId>(pathValue.c_str()),
-        id<CalibrationRevisionId>(calibrationValue.c_str()),
-        id<EquipmentComponentId>("white-led"),
-        id<IlluminationChannelId>("white-channel"),
-        {id<EquipmentComponentId>("objective-10x")}, 10.0));
     return take(OperationMode::create(
-        microscopeId, modeId, 1, modeValue, method, {setting}));
+        id<MicroscopeId>(microscopeValue),
+        id<OperationModeId>(modeValue),
+        1,
+        modeValue,
+        method));
 }
 
 SampleType makeSampleType(

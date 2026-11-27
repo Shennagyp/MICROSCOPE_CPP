@@ -81,6 +81,10 @@ public:
             const SlideCornerCorrespondence& correspondence);
 
     [[nodiscard]] const core::SlideId& slideId() const noexcept;
+    [[nodiscard]] const core::SlideRegistration&
+    physicalRegistration() const noexcept;
+    [[nodiscard]] const core::SlideRectangleDefinition2D&
+    workingSurfaceRectangle() const noexcept;
     [[nodiscard]] const core::CalibrationRevisionId&
     physicalRegistrationRevision() const noexcept;
     [[nodiscard]] const core::CalibrationRevisionId&

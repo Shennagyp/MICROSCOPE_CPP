@@ -188,6 +188,18 @@ if(BUILD_TESTING)
         NAME microscope_application_equipment_definition_store_tests
         COMMAND microscope_application_equipment_definition_store_tests)
 
+    add_executable(microscope_application_equipment_definition_store_tests
+        tests/EquipmentDefinitionSqliteStoreTests.cpp)
+    target_link_libraries(microscope_application_equipment_definition_store_tests
+        PRIVATE Microscope::Application SQLite::SQLite3)
+    set_target_properties(microscope_application_equipment_definition_store_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_equipment_definition_store_tests
+        COMMAND microscope_application_equipment_definition_store_tests)
+
     add_executable(microscope_application_contract_tests
         tests/ApplicationContractTests.cpp)
     target_link_libraries(microscope_application_contract_tests

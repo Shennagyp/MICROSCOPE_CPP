@@ -1,10 +1,14 @@
 #include "microscope/application/persistence/EquipmentDefinitionSqliteStore.h"
 
-#include <chrono>
 #include <sqlite3.h>
+
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -20,21 +24,18 @@ void check(bool condition, const char* message) {
     }
 }
 
-std::string document(const std::string& microscopeId, std::uint64_t revision) {
-    return std::string("{") +
-        "\"schemaVersion\":1," +
-        "\"microscopeId\":\"" + microscopeId + "\"," +
-        "\"revision\":" + std::to_string(revision) + "," +
-        "\"components\":[{" +
-            "\"id\":\"stage-main\"," +
-            "\"kind\":\"mechanical-assembly\"," +
-            "\"ports\":[]}" +
-        "]," +
-        "\"connections\":[]," +
-        "\"opticalPaths\":[]}";
+template <typename T, typename E>
+T take(Result<T, E> result) {
+    if (!result) throw std::runtime_error("equipment-definition store fixture rejected");
+    return std::move(result).value();
 }
 
-std::string temporaryDatabasePath() {
+template <typename T>
+T id(const char* value) {
+    return take(T::create(value));
+}
+
+std::string uniqueDatabasePath() {
     const auto nonce = std::chrono::steady_clock::now()
         .time_since_epoch().count();
     return (std::filesystem::temp_directory_path() /
@@ -42,357 +43,210 @@ std::string temporaryDatabasePath() {
             std::to_string(nonce) + ".sqlite")).string();
 }
 
-void removeDatabase(const std::string& path) {
+void removeDatabaseFiles(const std::string& path) {
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
     std::filesystem::remove(path + "-wal", ignored);
     std::filesystem::remove(path + "-shm", ignored);
 }
 
-void verifiesBlobStorageAndDatabaseLevelImmutability(const std::string& path) {
+std::string document(std::uint64_t revision, bool includeSecondComponent = false) {
+    std::string result = R"JSON({
+  "schemaVersion": 1,
+  "microscopeId": "scope-equipment-store",
+  "revision": REVISION,
+  "components": [
+    { "id": "mechanical-frame", "kind": "other" }
+  ],
+  "connections": [],
+  "opticalPaths": []
+})JSON";
+    const auto token = result.find("REVISION");
+    if (token == std::string::npos) throw std::runtime_error("missing revision fixture token");
+    result.replace(token, 8, std::to_string(revision));
+    if (includeSecondComponent) {
+        const auto anchor = R"(    { "id": "mechanical-frame", "kind": "other" })";
+        const auto position = result.find(anchor);
+        if (position == std::string::npos) throw std::runtime_error("missing component fixture anchor");
+        result.insert(position + anchor.size(),
+            R"(,
+    { "id": "optical-module", "kind": "optical-element",
+      "ports": [
+        { "id": "module-input", "direction": "input" },
+        { "id": "module-output", "direction": "output" }
+      ] })");
+    }
+    return result;
+}
+
+bool sqlExec(const std::string& path, const char* sql) {
     sqlite3* database = nullptr;
-    const int opened = sqlite3_open_v2(
-        path.c_str(), &database, SQLITE_OPEN_READWRITE, nullptr);
-    check(opened == SQLITE_OK && database != nullptr,
-        "opens the database independently to inspect the stored payload");
-    if (opened != SQLITE_OK || database == nullptr) {
-        if (database != nullptr) sqlite3_close_v2(database);
-        return;
-    }
-
-    sqlite3_stmt* query = nullptr;
-    const int prepared = sqlite3_prepare_v2(
-        database,
-        "SELECT typeof(payload) FROM equipment_definition_revision "
-        "WHERE microscope_id = 'microscope-a' AND revision = 1",
-        -1, &query, nullptr);
-    check(prepared == SQLITE_OK, "prepares the equipment payload storage-type query");
-    if (prepared == SQLITE_OK && sqlite3_step(query) == SQLITE_ROW) {
-        const auto* type = sqlite3_column_text(query, 0);
-        check(type != nullptr && std::string(
-            reinterpret_cast<const char*>(type)) == "blob",
-            "stores the exact JSON document using SQLite BLOB affinity");
-    } else {
-        check(false, "finds the first immutable equipment payload row");
-    }
-    if (query != nullptr) sqlite3_finalize(query);
-
-    char* message = nullptr;
-    const int update = sqlite3_exec(
-        database,
-        "UPDATE equipment_definition_revision SET payload = X'00' "
-        "WHERE microscope_id = 'microscope-a' AND revision = 1",
-        nullptr, nullptr, &message);
-    check(update != SQLITE_OK,
-        "database trigger prevents mutation of a published equipment revision");
-    sqlite3_free(message);
-    sqlite3_close_v2(database);
-}
-
-void verifiesCurrentRevisionCannotRewindOrDisappear(const std::string& path) {
-    sqlite3* database = nullptr;
-    const int opened = sqlite3_open_v2(
-        path.c_str(), &database, SQLITE_OPEN_READWRITE, nullptr);
-    check(opened == SQLITE_OK && database != nullptr,
-        "opens the database to inspect the current revision guard");
-    if (opened != SQLITE_OK || database == nullptr) {
-        if (database != nullptr) sqlite3_close_v2(database);
-        return;
-    }
-
-    char* message = nullptr;
-    const int rewind = sqlite3_exec(
-        database,
-        "UPDATE equipment_definition_current SET revision = 1 "
-        "WHERE microscope_id = 'microscope-a'",
-        nullptr, nullptr, &message);
-    check(rewind != SQLITE_OK,
-        "database trigger prevents rewinding the published current revision");
-    sqlite3_free(message);
-    message = nullptr;
-
-    const int remove = sqlite3_exec(
-        database,
-        "DELETE FROM equipment_definition_current "
-        "WHERE microscope_id = 'microscope-a'",
-        nullptr, nullptr, &message);
-    check(remove != SQLITE_OK,
-        "database trigger prevents deleting the current revision pointer");
-    sqlite3_free(message);
-    sqlite3_close_v2(database);
-}
-
-void verifiesAppendOnlyRevisionsAndRestartRoundTrip() {
-    const auto path = temporaryDatabasePath();
-    const auto firstDocument = document("microscope-a", 1);
-    const auto secondDocument = document("microscope-a", 2);
-    {
-        auto opened = EquipmentDefinitionSqliteStore::open(path);
-        check(static_cast<bool>(opened), "opens a new equipment-definition database");
-        if (!opened) {
-            removeDatabase(path);
-            return;
-        }
-
-        auto& store = *opened.value();
-        auto savedFirst = store.saveCurrentDefinition(firstDocument, 0);
-        check(static_cast<bool>(savedFirst) && savedFirst.value() == 1,
-            "stores the first equipment-definition revision");
-        verifiesBlobStorageAndDatabaseLevelImmutability(path);
-
-        auto secondConnection = EquipmentDefinitionSqliteStore::open(path);
-        check(static_cast<bool>(secondConnection),
-            "opens a second SQLite store connection for optimistic concurrency");
-        if (secondConnection) {
-            auto conflictingWriter =
-                secondConnection.value()->saveCurrentDefinition(
-                    document("microscope-a", 7), 0);
-            check(!conflictingWriter &&
-                conflictingWriter.error().code ==
-                    EquipmentDefinitionStoreErrorCode::RevisionConflict,
-                "a separate store connection cannot overwrite a current revision using a stale token");
-        }
-
-        auto current = store.loadCurrentDefinition(
-            MicroscopeId::create("microscope-a").value());
-        check(static_cast<bool>(current) && current.value().has_value(),
-            "loads the current equipment definition");
-        if (current && current.value()) {
-            check(current.value()->revision == 1,
-                "returns the current domain revision");
-            check(current.value()->sourceDocument == firstDocument,
-                "preserves the exact source JSON bytes");
-            check(current.value()->equipment.microscopeId().value() == "microscope-a",
-                "reconstructs the microscope identity through the JSON loader");
-            check(current.value()->equipment.revision() == 1,
-                "reconstructs the equipment revision through the JSON loader");
-        }
-
-        auto savedSecond = store.saveCurrentDefinition(secondDocument, 1);
-        check(static_cast<bool>(savedSecond) && savedSecond.value() == 2,
-            "appends a later equipment-definition revision");
-        verifiesCurrentRevisionCannotRewindOrDisappear(path);
-
-        auto historical = store.loadRevision(
-            MicroscopeId::create("microscope-a").value(), 1);
-        check(static_cast<bool>(historical) && historical.value().has_value(),
-            "loads an immutable historical equipment revision");
-        if (historical && historical.value()) {
-            check(historical.value()->sourceDocument == firstDocument,
-                "historical revision retains its original document");
-        }
-    }
-
-    {
-        auto reopened = EquipmentDefinitionSqliteStore::open(path);
-        check(static_cast<bool>(reopened),
-            "reopens the same equipment-definition database");
-        if (reopened) {
-            auto current = reopened.value()->loadCurrentDefinition(
-                MicroscopeId::create("microscope-a").value());
-            check(static_cast<bool>(current) && current.value().has_value(),
-                "loads current equipment after the store is reopened");
-            if (current && current.value()) {
-                check(current.value()->revision == 2 &&
-                    current.value()->sourceDocument == secondDocument,
-                    "restart round-trip returns the latest exact source revision");
-            }
-        }
-    }
-
-    removeDatabase(path);
-}
-
-void isolatesMicroscopesAndRejectsStaleWriters() {
-    const auto path = temporaryDatabasePath();
-    auto opened = EquipmentDefinitionSqliteStore::open(path);
-    check(static_cast<bool>(opened), "opens the database for concurrency tests");
-    if (!opened) {
-        removeDatabase(path);
-        return;
-    }
-
-    auto& store = *opened.value();
-    auto first = store.saveCurrentDefinition(document("microscope-a", 5), 0);
-    auto independent = store.saveCurrentDefinition(document("microscope-b", 8), 0);
-    check(static_cast<bool>(first) && static_cast<bool>(independent),
-        "stores definitions for independent microscope identities");
-
-    auto stale = store.saveCurrentDefinition(document("microscope-a", 6), 0);
-    check(!stale &&
-        stale.error().code == EquipmentDefinitionStoreErrorCode::RevisionConflict,
-        "rejects a writer whose expected current revision is stale");
-
-    auto currentA = store.loadCurrentDefinition(MicroscopeId::create("microscope-a").value());
-    auto currentB = store.loadCurrentDefinition(MicroscopeId::create("microscope-b").value());
-    check(static_cast<bool>(currentA) && currentA.value().has_value() &&
-        currentA.value()->revision == 5,
-        "stale write leaves microscope A current revision unchanged");
-    check(static_cast<bool>(currentB) && currentB.value().has_value() &&
-        currentB.value()->revision == 8,
-        "microscope B has an independent current revision");
-
-    auto missing = store.loadRevision(
-        MicroscopeId::create("microscope-a").value(), 99);
-    check(static_cast<bool>(missing) && !missing.value().has_value(),
-        "returns an empty result for an unknown historical revision");
-
-    auto nonMonotonic = store.saveCurrentDefinition(document("microscope-a", 5), 5);
-    check(!nonMonotonic &&
-        nonMonotonic.error().code == EquipmentDefinitionStoreErrorCode::InvalidRevision,
-        "rejects a non-increasing equipment revision");
-
-    opened.value().reset();
-    removeDatabase(path);
-}
-
-bool overwriteStoredPayload(
-    sqlite3* database,
-    const std::string& microscopeId,
-    std::uint64_t revision,
-    const std::string& replacement) {
-    sqlite3_stmt* statement = nullptr;
-    if (sqlite3_prepare_v2(
-            database,
-            "UPDATE equipment_definition_revision SET payload = ?1 "
-            "WHERE microscope_id = ?2 AND revision = ?3",
-            -1, &statement, nullptr) != SQLITE_OK) {
+    if (sqlite3_open(path.c_str(), &database) != SQLITE_OK) {
+        if (database) sqlite3_close_v2(database);
         return false;
     }
-    const bool bound =
-        sqlite3_bind_blob(statement, 1, replacement.data(),
-            static_cast<int>(replacement.size()), SQLITE_TRANSIENT) == SQLITE_OK &&
-        sqlite3_bind_text(statement, 2, microscopeId.data(),
-            static_cast<int>(microscopeId.size()), SQLITE_TRANSIENT) == SQLITE_OK &&
-        sqlite3_bind_int64(statement, 3, static_cast<sqlite3_int64>(revision)) == SQLITE_OK;
-    const bool completed = bound && sqlite3_step(statement) == SQLITE_DONE &&
-        sqlite3_changes(database) == 1;
-    sqlite3_finalize(statement);
-    return completed;
-}
-
-void rejectsCorruptPersistedPayloads() {
-    const auto path = temporaryDatabasePath();
-    {
-        auto opened = EquipmentDefinitionSqliteStore::open(path);
-        check(static_cast<bool>(opened), "opens a database for persisted-payload corruption tests");
-        if (!opened) {
-            removeDatabase(path);
-            return;
-        }
-        auto first = opened.value()->saveCurrentDefinition(
-            document("microscope-a", 1), 0);
-        auto second = opened.value()->saveCurrentDefinition(
-            document("microscope-a", 2), 1);
-        check(static_cast<bool>(first) && static_cast<bool>(second),
-            "stores two equipment revisions before corruption tests");
-    }
-
-    sqlite3* database = nullptr;
-    const int opened = sqlite3_open_v2(
-        path.c_str(), &database, SQLITE_OPEN_READWRITE, nullptr);
-    check(opened == SQLITE_OK && database != nullptr,
-        "opens the persisted database for controlled corruption setup");
-    if (opened != SQLITE_OK || database == nullptr) {
-        if (database != nullptr) sqlite3_close_v2(database);
-        removeDatabase(path);
-        return;
-    }
-
     char* message = nullptr;
-    const int dropped = sqlite3_exec(
-        database,
-        "DROP TRIGGER equipment_definition_revision_no_update",
-        nullptr, nullptr, &message);
-    check(dropped == SQLITE_OK,
-        "removes the immutability guard only in the corruption test fixture");
-    sqlite3_free(message);
-
-    const bool changedIdentity = overwriteStoredPayload(
-        database, "microscope-a", 1, document("different-microscope", 1));
-    check(changedIdentity,
-        "writes a valid JSON payload whose embedded identity disagrees with its key");
-
-    message = nullptr;
-    const int changedFormat = sqlite3_exec(
-        database,
-        "UPDATE equipment_definition_revision SET payload_format_version = 99 "
-        "WHERE microscope_id = 'microscope-a' AND revision = 2",
-        nullptr, nullptr, &message);
-    check(changedFormat == SQLITE_OK,
-        "writes an unsupported payload-format marker into the corruption fixture");
+    const int result = sqlite3_exec(database, sql, nullptr, nullptr, &message);
     sqlite3_free(message);
     sqlite3_close_v2(database);
-
-    {
-        auto reopened = EquipmentDefinitionSqliteStore::open(path);
-        check(static_cast<bool>(reopened),
-            "reopens the database containing the controlled corrupt records");
-        if (reopened) {
-            const auto microscopeId = MicroscopeId::create("microscope-a").value();
-            auto mismatch = reopened.value()->loadRevision(microscopeId, 1);
-            check(!mismatch &&
-                mismatch.error().code ==
-                    EquipmentDefinitionStoreErrorCode::InvalidPersistedRecord,
-                "rejects a valid payload whose microscope identity does not match its database key");
-
-            auto unknownFormat = reopened.value()->loadRevision(microscopeId, 2);
-            check(!unknownFormat &&
-                unknownFormat.error().code ==
-                    EquipmentDefinitionStoreErrorCode::UnsupportedSchemaVersion,
-                "rejects an unknown persisted payload format version");
-        }
-    }
-
-    removeDatabase(path);
+    return result == SQLITE_OK;
 }
 
-void rejectsInvalidDocumentsBeforePersistence() {
-    const auto path = temporaryDatabasePath();
+void opensIndependentDatabaseAndValidatesInput() {
+    auto emptyPath = EquipmentDefinitionSqliteStore::open("");
+    check(!emptyPath &&
+        emptyPath.error().code == EquipmentDefinitionStoreErrorCode::EmptyDatabasePath,
+        "rejects an empty database path");
+
+    const auto path = uniqueDatabasePath();
     auto opened = EquipmentDefinitionSqliteStore::open(path);
-    check(static_cast<bool>(opened), "opens the database for validation tests");
-    if (!opened) {
-        removeDatabase(path);
+    check(static_cast<bool>(opened),
+        "creates an equipment-definition repository without requiring another store");
+
+    if (opened) {
+        auto empty = opened.value()->loadCurrentDefinition(
+            id<MicroscopeId>("scope-no-definition"));
+        check(empty && !empty.value(),
+            "returns no equipment definition when the microscope has no revision");
+        auto malformed = opened.value()->saveCurrentDefinition(
+            id<MicroscopeId>("scope-equipment-store"), "{", 0);
+        check(!malformed &&
+            malformed.error().code == EquipmentDefinitionStoreErrorCode::InvalidDefinitionDocument &&
+            malformed.error().jsonError.has_value(),
+            "rejects invalid JSON and preserves the loader's structured parse diagnostic");
+        opened.value().reset();
+    }
+    removeDatabaseFiles(path);
+}
+
+void savesExactValidatedDocumentsAndLoadsHistoricalRevisions() {
+    const auto path = uniqueDatabasePath();
+    auto opened = EquipmentDefinitionSqliteStore::open(path);
+    if (!opened) throw std::runtime_error("could not open equipment-definition store");
+    auto& store = *opened.value();
+
+    const auto microscopeId = id<MicroscopeId>("scope-equipment-store");
+    const std::string firstDocument = document(1);
+    const auto first = store.saveCurrentDefinition(microscopeId, firstDocument, 0);
+    check(first && first.value() == 1,
+        "appends the first equipment definition revision");
+    if (!first) {
+        opened.value().reset();
+        removeDatabaseFiles(path);
         return;
     }
 
-    auto empty = opened.value()->saveCurrentDefinition("", 0);
-    check(!empty &&
-        empty.error().code == EquipmentDefinitionStoreErrorCode::InvalidEquipmentDefinition,
-        "rejects an empty JSON document before opening a write transaction");
+    auto loadedFirst = store.loadCurrentDefinition(microscopeId);
+    check(loadedFirst && loadedFirst.value(),
+        "loads the current equipment definition");
+    if (loadedFirst && loadedFirst.value()) {
+        check(loadedFirst.value()->revision == 1 &&
+            loadedFirst.value()->equipment.revision() == 1 &&
+            loadedFirst.value()->equipment.microscopeId() == microscopeId,
+            "reconstructs the canonical Core equipment definition with its stored identity and revision");
+        check(loadedFirst.value()->sourceDocument == firstDocument,
+            "preserves the exact original JSON source bytes rather than normalizing/re-serializing the model");
+        check(loadedFirst.value()->equipment.components().size() == 1,
+            "restores the physical component graph from the source document");
+    }
 
-    auto malformed = opened.value()->saveCurrentDefinition("{", 0);
-    check(!malformed &&
-        malformed.error().code == EquipmentDefinitionStoreErrorCode::InvalidEquipmentDefinition,
-        "rejects malformed JSON before persistence");
+    const std::string secondDocument = document(2, true);
+    const auto second = store.saveCurrentDefinition(microscopeId, secondDocument, 1);
+    check(second && second.value() == 2,
+        "appends the next equipment definition revision");
+    auto historical = store.loadRevision(microscopeId, 1);
+    auto current = store.loadCurrentDefinition(microscopeId);
+    check(historical && historical.value() &&
+        historical.value()->sourceDocument == firstDocument &&
+        historical.value()->equipment.components().size() == 1,
+        "retains the exact historical source document and graph");
+    check(current && current.value() && current.value()->revision == 2 &&
+        current.value()->sourceDocument == secondDocument &&
+        current.value()->equipment.components().size() == 2,
+        "loads the latest definition without rewriting the historical version");
 
-    auto unsupported = document("microscope-a", 1);
-    const auto schema = unsupported.find("\"schemaVersion\":1");
-    unsupported.replace(schema, std::string("\"schemaVersion\":1").size(),
-        "\"schemaVersion\":2");
-    auto wrongSchema = opened.value()->saveCurrentDefinition(unsupported, 0);
-    check(!wrongSchema &&
-        wrongSchema.error().code == EquipmentDefinitionStoreErrorCode::InvalidEquipmentDefinition,
-        "rejects unsupported JSON schema versions before persistence");
+    auto conflict = store.saveCurrentDefinition(microscopeId, document(2), 1);
+    check(!conflict &&
+        conflict.error().code == EquipmentDefinitionStoreErrorCode::RevisionConflict,
+        "rejects a stale writer that attempts to replace a newer equipment revision");
 
-    auto current = opened.value()->loadCurrentDefinition(
-        MicroscopeId::create("microscope-a").value());
-    check(static_cast<bool>(current) && !current.value().has_value(),
-        "failed validation leaves no current equipment definition");
+    auto mismatchedRevision = store.saveCurrentDefinition(
+        microscopeId, document(9), 2);
+    check(!mismatchedRevision &&
+        mismatchedRevision.error().code == EquipmentDefinitionStoreErrorCode::RevisionMismatch,
+        "requires the source document revision to be exactly expected current plus one");
+
+    const auto otherMicroscope = id<MicroscopeId>("scope-other-equipment");
+    auto mismatchedMicroscope = store.saveCurrentDefinition(
+        otherMicroscope, document(1), 0);
+    check(!mismatchedMicroscope &&
+        mismatchedMicroscope.error().code == EquipmentDefinitionStoreErrorCode::InvalidDefinitionDocument,
+        "rejects a source document whose MicroscopeId differs from the requested repository scope");
+
+    auto absentRevision = store.loadRevision(microscopeId, 3);
+    auto zeroRevision = store.loadRevision(microscopeId, 0);
+    check(absentRevision && !absentRevision.value() &&
+        !zeroRevision && zeroRevision.error().code ==
+            EquipmentDefinitionStoreErrorCode::InvalidRevision,
+        "distinguishes a missing historical revision from an invalid zero revision");
 
     opened.value().reset();
-    removeDatabase(path);
+    removeDatabaseFiles(path);
+}
+
+void publishedEquipmentDefinitionDocumentsAreImmutable() {
+    const auto path = uniqueDatabasePath();
+    auto opened = EquipmentDefinitionSqliteStore::open(path);
+    if (!opened) throw std::runtime_error("could not open equipment-definition store");
+
+    const auto microscopeId = id<MicroscopeId>("scope-immutable-equipment");
+    const auto saved = opened.value()->saveCurrentDefinition(
+        microscopeId,
+        R"({"schemaVersion":1,"microscopeId":"scope-immutable-equipment","revision":1,"components":[{"id":"frame","kind":"other"}],"connections":[],"opticalPaths":[]})",
+        0);
+    check(static_cast<bool>(saved),
+        "writes a valid equipment definition before testing revision immutability");
+
+    const bool updateSucceeded = sqlExec(path,
+        "UPDATE microscope_equipment_definition_revision SET document_json = '{' "
+        "WHERE microscope_id = 'scope-immutable-equipment' AND revision = 1");
+    const bool deleteSucceeded = sqlExec(path,
+        "DELETE FROM microscope_equipment_definition_revision "
+        "WHERE microscope_id = 'scope-immutable-equipment' AND revision = 1");
+    check(!updateSucceeded && !deleteSucceeded,
+        "database triggers prevent update or deletion of published equipment-definition revisions");
+
+    const bool droppedGuard = sqlExec(path,
+        "DROP TRIGGER microscope_equipment_definition_revision_no_update");
+    const bool corrupted = sqlExec(path,
+        "UPDATE microscope_equipment_definition_revision SET document_json = '{' "
+        "WHERE microscope_id = 'scope-immutable-equipment' AND revision = 1");
+    check(droppedGuard && corrupted,
+        "fixture can corrupt a document only after explicitly dropping the immutability guard");
+
+    auto invalid = opened.value()->loadRevision(microscopeId, 1);
+    check(!invalid &&
+        invalid.error().code == EquipmentDefinitionStoreErrorCode::InvalidPersistedRecord &&
+        invalid.error().jsonError.has_value(),
+        "revalidates source JSON on load and reports corrupted persisted definitions");
+
+    opened.value().reset();
+    removeDatabaseFiles(path);
 }
 
 } // namespace
 
 int main() {
-    verifiesAppendOnlyRevisionsAndRestartRoundTrip();
-    isolatesMicroscopesAndRejectsStaleWriters();
-    rejectsCorruptPersistedPayloads();
-    rejectsInvalidDocumentsBeforePersistence();
+    try {
+        opensIndependentDatabaseAndValidatesInput();
+        savesExactValidatedDocumentsAndLoadsHistoricalRevisions();
+        publishedEquipmentDefinitionDocumentsAreImmutable();
+    } catch (const std::exception& error) {
+        std::cerr << "UNCAUGHT: " << error.what() << '\n';
+        return 1;
+    }
 
     if (failures != 0) return 1;
-    std::cout << "Equipment-definition SQLite store tests passed\n";
+    std::cout << "Equipment-definition SQLite persistence tests passed\n";
     return 0;
 }

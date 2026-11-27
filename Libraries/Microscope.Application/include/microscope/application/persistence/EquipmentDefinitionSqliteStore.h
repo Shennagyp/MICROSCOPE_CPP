@@ -1,6 +1,6 @@
 #pragma once
 
-#include "microscope/core/equipment/OpticalTopology.h"
+#include "microscope/application/configuration/EquipmentDefinitionJsonLoader.h"
 #include "microscope/core/result/Result.h"
 
 #include <cstdint>
@@ -20,10 +20,10 @@ enum class EquipmentDefinitionStoreErrorCode {
     SchemaMigrationFailed,
     UnsupportedSchemaVersion,
     InvalidRevision,
+    RevisionMismatch,
     RevisionConflict,
-    RevisionAlreadyExists,
-    PayloadTooLarge,
-    InvalidEquipmentDefinition,
+    DocumentTooLarge,
+    InvalidDefinitionDocument,
     InvalidPersistedRecord,
     SqliteOperationFailed
 };
@@ -32,21 +32,19 @@ struct EquipmentDefinitionStoreError final {
     EquipmentDefinitionStoreErrorCode code;
     int nativeCode = 0;
     std::string detail;
+    std::optional<configuration::EquipmentDefinitionJsonError> jsonError;
 };
 
 struct PersistedEquipmentDefinition final {
     std::uint64_t revision = 0;
-    // Exact UTF-8 JSON document that passed EquipmentDefinitionJsonLoader.
-    // It remains available for diagnostics/export and is the durable source
-    // used to reconstruct the Core graph.
     std::string sourceDocument;
     core::MicroscopeEquipmentDefinition equipment;
 };
 
-// Stores immutable equipment-definition revisions. SQLite stores the
-// validated source JSON as a BLOB; loading always re-runs the strict JSON
-// decoder and Core factories. This deliberately avoids a second serializer
-// for the equipment graph and never persists runtime state or calibration.
+// Stores each validated equipment definition as its original versioned JSON
+// source document. The loader reconstructs the canonical Core graph on both
+// save and load; the database does not maintain a second, partial equipment
+// schema. Revisions are append-only and scoped by the Core MicroscopeId.
 class EquipmentDefinitionSqliteStore final {
 public:
     [[nodiscard]] static core::Result<
@@ -60,12 +58,12 @@ public:
     EquipmentDefinitionSqliteStore(EquipmentDefinitionSqliteStore&&) = delete;
     EquipmentDefinitionSqliteStore& operator=(EquipmentDefinitionSqliteStore&&) = delete;
 
-    // The equipment identity and revision are read from the validated
-    // document. expectedCurrentRevision is zero for a new microscope and must
-    // match the current persisted revision. New revisions must increase
-    // monotonically; historical rows are immutable.
+    // The document must contain the expected MicroscopeId and exactly
+    // expectedCurrentRevision + 1. expectedCurrentRevision is zero for a
+    // microscope whose first equipment-definition revision is being saved.
     [[nodiscard]] core::Result<std::uint64_t, EquipmentDefinitionStoreError>
     saveCurrentDefinition(
+        const core::MicroscopeId& microscopeId,
         std::string_view sourceDocument,
         std::uint64_t expectedCurrentRevision);
 

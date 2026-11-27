@@ -1,10 +1,8 @@
 #include "microscope/application/persistence/EquipmentDefinitionSqliteStore.h"
-#include "microscope/application/configuration/EquipmentDefinitionJsonLoader.h"
 
 #include <sqlite3.h>
 
 #include <limits>
-#include <string>
 #include <utility>
 
 namespace microscope::application::persistence {
@@ -13,19 +11,28 @@ namespace {
 using Error = EquipmentDefinitionStoreError;
 using ErrorCode = EquipmentDefinitionStoreErrorCode;
 
-constexpr sqlite3_int64 kStoreSchemaVersion = 1;
-constexpr sqlite3_int64 kPayloadFormatVersion = 1;
+constexpr sqlite3_int64 kSchemaVersion = 1;
 constexpr std::uint64_t kMaximumSqliteInteger =
     static_cast<std::uint64_t>(std::numeric_limits<sqlite3_int64>::max());
-constexpr std::size_t kMaximumPayloadBytes =
-    configuration::EquipmentDefinitionJsonLoader::kMaximumDocumentBytes;
 
-Error makeError(ErrorCode code, sqlite3* database, std::string detail = {}) {
+Error makeError(
+    ErrorCode code,
+    sqlite3* database,
+    std::string detail = {}) {
     if (detail.empty() && database != nullptr) detail = sqlite3_errmsg(database);
     return Error{
         code,
-        database == nullptr ? SQLITE_MISUSE : sqlite3_errcode(database),
-        std::move(detail)};
+        database == nullptr ? 0 : sqlite3_errcode(database),
+        std::move(detail),
+        std::nullopt};
+}
+
+Error makeJsonError(configuration::EquipmentDefinitionJsonError error) {
+    return Error{
+        ErrorCode::InvalidDefinitionDocument,
+        0,
+        error.detail,
+        std::move(error)};
 }
 
 bool execute(sqlite3* database, const char* sql) {
@@ -38,8 +45,7 @@ bool execute(sqlite3* database, const char* sql) {
 class Statement final {
 public:
     Statement(sqlite3* database, const char* sql) : database_(database) {
-        prepared_ =
-            sqlite3_prepare_v2(database_, sql, -1, &statement_, nullptr) == SQLITE_OK;
+        prepared_ = sqlite3_prepare_v2(database_, sql, -1, &statement_, nullptr) == SQLITE_OK;
     }
 
     ~Statement() {
@@ -53,30 +59,25 @@ public:
     sqlite3_stmt* get() const noexcept { return statement_; }
     int step() { return sqlite3_step(statement_); }
 
-    bool bindText(int index, const std::string& value) {
-        if (value.empty() || value.find('\\0') != std::string::npos ||
+    bool bindText(int index, std::string_view value) {
+        if (value.empty() ||
+            value.size() > configuration::EquipmentDefinitionJsonLoader::kMaximumDocumentBytes ||
             value.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
             return false;
         }
         return sqlite3_bind_text(
-            statement_, index, value.data(), static_cast<int>(value.size()),
-            SQLITE_TRANSIENT) == SQLITE_OK;
+            statement_, index, value.data(),
+            static_cast<int>(value.size()), SQLITE_TRANSIENT) != SQLITE_OK;
+    }
+
+    bool bindText(int index, const std::string& value) {
+        return bindText(index, std::string_view(value));
     }
 
     bool bindInt64(int index, std::uint64_t value) {
         if (value > kMaximumSqliteInteger) return false;
         return sqlite3_bind_int64(
             statement_, index, static_cast<sqlite3_int64>(value)) == SQLITE_OK;
-    }
-
-    bool bindBlob(int index, std::string_view value) {
-        if (value.empty() || value.size() > kMaximumPayloadBytes ||
-            value.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-            return false;
-        }
-        return sqlite3_bind_blob(
-            statement_, index, value.data(), static_cast<int>(value.size()),
-            SQLITE_TRANSIENT) == SQLITE_OK;
     }
 
 private:
@@ -111,25 +112,31 @@ private:
     bool active_ = false;
 };
 
+bool validRevision(std::uint64_t revision) noexcept {
+    return revision > 0 && revision <= kMaximumSqliteInteger;
+}
+
 bool readCurrentRevision(
     sqlite3* database,
-    const std::string& microscopeId,
+    const core::MicroscopeId& microscopeId,
     std::optional<std::uint64_t>& revision) {
     Statement statement(database,
-        "SELECT revision FROM equipment_definition_current "
+        "SELECT revision FROM microscope_equipment_definition_current "
         "WHERE microscope_id = ?1");
-    if (!statement.prepared() || !statement.bindText(1, microscopeId)) return false;
-
+    if (!statement.prepared() ||
+        sqlite3_bind_text(statement.get(), 1,
+            microscopeId.value().data(),
+            static_cast<int>(microscopeId.value().size()),
+            SQLITE_TRANSIENT) != SQLITE_OK) {
+        return false;
+    }
     const int step = statement.step();
     if (step == SQLITE_DONE) {
         revision.reset();
         return true;
     }
     if (step != SQLITE_ROW ||
-        sqlite3_column_type(statement.get(), 0) != SQLITE_INTEGER) {
-        return false;
-    }
-
+        sqlite3_column_type(statement.get(), 0) != SQLITE_INTEGER) return false;
     const sqlite3_int64 value = sqlite3_column_int64(statement.get(), 0);
     if (value <= 0 || statement.step() != SQLITE_DONE) return false;
     revision = static_cast<std::uint64_t>(value);
@@ -150,16 +157,17 @@ EquipmentDefinitionSqliteStore::open(const std::string& databasePath) {
     if (databasePath.empty()) {
         return core::Result<std::unique_ptr<EquipmentDefinitionSqliteStore>, Error>::failure(
             Error{ErrorCode::EmptyDatabasePath, SQLITE_MISUSE,
-                "The equipment-definition database path is empty."});
+                "The equipment-definition database path is empty.", std::nullopt});
     }
 
     sqlite3* database = nullptr;
     const int opened = sqlite3_open_v2(
         databasePath.c_str(), &database,
-        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nullptr);
+        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+        nullptr);
     if (opened != SQLITE_OK) {
         auto error = makeError(ErrorCode::DatabaseOpenFailed, database,
-            "Could not open the equipment-definition database.");
+            "Could not open the equipment-definition SQLite database.");
         if (database != nullptr) sqlite3_close_v2(database);
         return core::Result<std::unique_ptr<EquipmentDefinitionSqliteStore>, Error>::failure(
             std::move(error));
@@ -181,89 +189,94 @@ EquipmentDefinitionSqliteStore::open(const std::string& databasePath) {
         return core::Result<std::unique_ptr<EquipmentDefinitionSqliteStore>, Error>::failure(
             initialized.error());
     }
-
     return core::Result<std::unique_ptr<EquipmentDefinitionSqliteStore>, Error>::success(
         std::move(store));
 }
 
 core::Status<Error> EquipmentDefinitionSqliteStore::initializeSchema() {
     const char* schema = R"SQL(
-        CREATE TABLE IF NOT EXISTS equipment_definition_store_metadata (
+        CREATE TABLE IF NOT EXISTS microscope_equipment_definition_metadata (
             singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
             schema_version INTEGER NOT NULL
         );
 
-        INSERT OR IGNORE INTO equipment_definition_store_metadata
-            (singleton, schema_version) VALUES (1, 1);
-
-        CREATE TABLE IF NOT EXISTS equipment_definition_revision (
+        CREATE TABLE IF NOT EXISTS microscope_equipment_definition_revision (
             microscope_id TEXT NOT NULL,
             revision INTEGER NOT NULL CHECK (revision > 0),
-            payload_format_version INTEGER NOT NULL,
-            payload BLOB NOT NULL,
+            document_json TEXT NOT NULL,
             PRIMARY KEY (microscope_id, revision)
         );
 
-        CREATE TABLE IF NOT EXISTS equipment_definition_current (
+        CREATE TABLE IF NOT EXISTS microscope_equipment_definition_current (
             microscope_id TEXT PRIMARY KEY,
             revision INTEGER NOT NULL CHECK (revision > 0),
             FOREIGN KEY (microscope_id, revision)
-                REFERENCES equipment_definition_revision (microscope_id, revision)
-                ON UPDATE RESTRICT ON DELETE RESTRICT
+                REFERENCES microscope_equipment_definition_revision (
+                    microscope_id, revision
+                )
         );
 
-        CREATE TRIGGER IF NOT EXISTS equipment_definition_revision_no_update
-        BEFORE UPDATE ON equipment_definition_revision
-        BEGIN
-            SELECT RAISE(ABORT, 'equipment definition revisions are immutable');
-        END;
+        CREATE TRIGGER IF NOT EXISTS microscope_equipment_definition_revision_sequential_insert
+        BEFORE INSERT ON microscope_equipment_definition_revision
+        WHEN NEW.revision != COALESCE((
+            SELECT revision FROM microscope_equipment_definition_current
+            WHERE microscope_id = NEW.microscope_id
+        ), 0) + 1
+        BEGIN SELECT RAISE(ABORT, 'Equipment-definition revisions must be appended sequentially'); END;
 
-        CREATE TRIGGER IF NOT EXISTS equipment_definition_revision_no_delete
-        BEFORE DELETE ON equipment_definition_revision
-        BEGIN
-            SELECT RAISE(ABORT, 'equipment definition revisions are immutable');
-        END;
+        CREATE TRIGGER IF NOT EXISTS microscope_equipment_definition_revision_no_update
+        BEFORE UPDATE ON microscope_equipment_definition_revision
+        BEGIN SELECT RAISE(ABORT, 'Equipment-definition revisions are immutable'); END;
 
-        CREATE TRIGGER IF NOT EXISTS equipment_definition_current_no_rewind
-        BEFORE UPDATE ON equipment_definition_current
-        WHEN NEW.revision <= OLD.revision
-        BEGIN
-            SELECT RAISE(ABORT, 'current equipment definition revision must increase');
-        END;
+        CREATE TRIGGER IF NOT EXISTS microscope_equipment_definition_revision_no_delete
+        BEFORE DELETE ON microscope_equipment_definition_revision
+        BEGIN SELECT RAISE(ABORT, 'Equipment-definition revisions are immutable'); END;
 
-        CREATE TRIGGER IF NOT EXISTS equipment_definition_current_no_delete
-        BEFORE DELETE ON equipment_definition_current
-        BEGIN
-            SELECT RAISE(ABORT, 'current equipment definition pointer cannot be deleted');
-        END;
+        CREATE TRIGGER IF NOT EXISTS microscope_equipment_definition_current_initial
+        BEFORE INSERT ON microscope_equipment_definition_current
+        WHEN NEW.revision != 1
+        BEGIN SELECT RAISE(ABORT, 'Initial equipment-definition revision must be one'); END;
 
+        CREATE TRIGGER IF NOT EXISTS microscope_equipment_definition_current_monotonic
+        BEFORE UPDATE ON microscope_equipment_definition_current
+        WHEN NEW.revision != OLD.revision + 1
+        BEGIN SELECT RAISE(ABORT, 'Equipment-definition current revision must advance by one'); END;
+
+        CREATE TRIGGER IF NOT EXISTS microscope_equipment_definition_current_no_delete
+        BEFORE DELETE ON microscope_equipment_definition_current
+        BEGIN SELECT RAISE(ABORT, 'Equipment-definition current pointer cannot be deleted'); END;
     )SQL";
 
     if (!execute(database_, schema)) {
-        return core::Status<Error>::failure(makeError(
-            ErrorCode::SchemaMigrationFailed, database_,
-            "Could not create the equipment-definition revision schema."));
+        return core::Status<Error>::failure(
+            makeError(ErrorCode::SchemaMigrationFailed, database_));
     }
 
-    Statement metadata(database_,
-        "SELECT schema_version FROM equipment_definition_store_metadata "
+    Statement insertMetadata(database_,
+        "INSERT OR IGNORE INTO microscope_equipment_definition_metadata "
+        "(singleton, schema_version) VALUES (1, 1)");
+    if (!insertMetadata.prepared() || insertMetadata.step() != SQLITE_DONE) {
+        return core::Status<Error>::failure(
+            makeError(ErrorCode::SchemaMigrationFailed, database_));
+    }
+
+    Statement readMetadata(database_,
+        "SELECT schema_version FROM microscope_equipment_definition_metadata "
         "WHERE singleton = 1");
-    if (!metadata.prepared() || metadata.step() != SQLITE_ROW ||
-        sqlite3_column_type(metadata.get(), 0) != SQLITE_INTEGER) {
-        return core::Status<Error>::failure(makeError(
-            ErrorCode::SchemaMigrationFailed, database_,
-            "Could not read equipment-definition schema metadata."));
+    if (!readMetadata.prepared() || readMetadata.step() != SQLITE_ROW ||
+        sqlite3_column_type(readMetadata.get(), 0) != SQLITE_INTEGER) {
+        return core::Status<Error>::failure(
+            makeError(ErrorCode::SchemaMigrationFailed, database_));
     }
-
-    const sqlite3_int64 version = sqlite3_column_int64(metadata.get(), 0);
-    if (metadata.step() != SQLITE_DONE) {
-        return core::Status<Error>::failure(makeError(
-            ErrorCode::SchemaMigrationFailed, database_));
+    const auto version = sqlite3_column_int64(readMetadata.get(), 0);
+    if (readMetadata.step() != SQLITE_DONE) {
+        return core::Status<Error>::failure(
+            makeError(ErrorCode::SchemaMigrationFailed, database_));
     }
-    if (version != kStoreSchemaVersion) {
-        return core::Status<Error>::failure(makeError(
-            ErrorCode::UnsupportedSchemaVersion, database_,
-            "The equipment-definition store schema version is unsupported."));
+    if (version != kSchemaVersion) {
+        return core::Status<Error>::failure(
+            makeError(ErrorCode::UnsupportedSchemaVersion, database_,
+                "The equipment-definition database schema version is unsupported."));
     }
 
     return core::Status<Error>::success();
@@ -271,118 +284,147 @@ core::Status<Error> EquipmentDefinitionSqliteStore::initializeSchema() {
 
 core::Result<std::uint64_t, Error>
 EquipmentDefinitionSqliteStore::saveCurrentDefinition(
+    const core::MicroscopeId& microscopeId,
     std::string_view sourceDocument,
     std::uint64_t expectedCurrentRevision) {
-    if (sourceDocument.size() > kMaximumPayloadBytes) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::PayloadTooLarge, database_,
-            "The equipment-definition JSON payload exceeds the configured limit."));
+    if (sourceDocument.empty()) {
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::InvalidDefinitionDocument, database_,
+                "Equipment-definition JSON document is empty."));
+    }
+    if (sourceDocument.size() >
+        configuration::EquipmentDefinitionJsonLoader::kMaximumDocumentBytes) {
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::DocumentTooLarge, database_,
+                "Equipment-definition JSON document exceeds the configured size limit."));
     }
     if (expectedCurrentRevision >= kMaximumSqliteInteger) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::InvalidRevision, database_,
-            "The expected equipment-definition revision is outside SQLite's integer range."));
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::InvalidRevision, database_));
     }
 
-    auto decoded = configuration::EquipmentDefinitionJsonLoader::parse(sourceDocument);
-    if (!decoded) {
-        const auto& parseError = decoded.error();
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::InvalidEquipmentDefinition, database_,
-            "Equipment definition rejected at " + parseError.path + ": " +
-                parseError.detail));
+    auto parsed = configuration::EquipmentDefinitionJsonLoader::parse(sourceDocument);
+    if (!parsed) {
+        auto error = makeJsonError(parsed.error());
+        return core::Result<std::uint64_t, Error>::failure(std::move(error));
     }
 
-    auto equipment = std::move(decoded).value();
-    const std::string microscopeId = equipment.microscopeId().value();
-    const std::uint64_t revision = equipment.revision();
-    if (revision == 0 || revision > kMaximumSqliteInteger ||
-        revision <= expectedCurrentRevision) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::InvalidRevision, database_,
-            "The new equipment-definition revision must be positive, representable and greater than the expected current revision."));
+    if (parsed.value().microscopeId() != microscopeId) {
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::InvalidDefinitionDocument, database_,
+                "The JSON microscopeId does not match the requested persistence identity."));
+    }
+
+    const std::uint64_t nextRevision = expectedCurrentRevision + 1U;
+    if (parsed.value().revision() != nextRevision) {
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::RevisionMismatch, database_,
+                "The JSON equipment revision must equal expectedCurrentRevision + 1."));
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
     Transaction transaction(database_);
     if (!transaction.active()) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::SqliteOperationFailed, database_,
-            "Could not begin the equipment-definition write transaction."));
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::SqliteOperationFailed, database_));
     }
 
-    std::optional<std::uint64_t> currentRevision;
-    if (!readCurrentRevision(database_, microscopeId, currentRevision)) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::SqliteOperationFailed, database_,
-            "Could not read the current equipment-definition revision."));
+    std::optional<std::uint64_t> actualCurrent;
+    if (!readCurrentRevision(database_, microscopeId, actualCurrent)) {
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::SqliteOperationFailed, database_));
     }
-    const std::uint64_t actualCurrent = currentRevision.value_or(0);
-    if (actualCurrent != expectedCurrentRevision) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::RevisionConflict, database_,
-            "The equipment definition changed since the supplied expected revision."));
+    if (actualCurrent.value_or(0) != expectedCurrentRevision) {
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::RevisionConflict, database_,
+                "The microscope equipment definition changed since it was loaded."));
     }
 
-    Statement insert(database_,
-        "INSERT INTO equipment_definition_revision "
-        "(microscope_id, revision, payload_format_version, payload) "
-        "VALUES (?1, ?2, ?3, ?4)");
-    if (!insert.prepared() || !insert.bindText(1, microscopeId) ||
-        !insert.bindInt64(2, revision) ||
-        !insert.bindInt64(3, static_cast<std::uint64_t>(kPayloadFormatVersion)) ||
-        !insert.bindBlob(4, sourceDocument)) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::SqliteOperationFailed, database_,
-            "Could not prepare the equipment-definition payload insert."));
-    }
-    if (insert.step() != SQLITE_DONE) {
-        const int code = sqlite3_errcode(database_);
-        const auto errorCode = code == SQLITE_CONSTRAINT
-            ? ErrorCode::RevisionAlreadyExists : ErrorCode::SqliteOperationFailed;
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            errorCode, database_,
-            "Could not append the immutable equipment-definition revision."));
+    Statement insertRevision(database_,
+        "INSERT INTO microscope_equipment_definition_revision "
+        "(microscope_id, revision, document_json) VALUES (?1, ?2, ?3)");
+    if (!insertRevision.prepared() ||
+        sqlite3_bind_text(insertRevision.get(), 1,
+            microscopeId.value().data(),
+            static_cast<int>(microscopeId.value().size()),
+            SQLITE_TRANSIENT) != SQLITE_OK ||
+        !insertRevision.bindInt64(2, nextRevision) ||
+        !insertRevision.bindText(3, sourceDocument) ||
+        insertRevision.step() != SQLITE_DONE) {
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::SqliteOperationFailed, database_));
     }
 
-    Statement updateCurrent(database_,
-        "INSERT INTO equipment_definition_current (microscope_id, revision) "
-        "VALUES (?1, ?2) "
-        "ON CONFLICT(microscope_id) DO UPDATE SET revision = excluded.revision");
-    if (!updateCurrent.prepared() ||
-        !updateCurrent.bindText(1, microscopeId) ||
-        !updateCurrent.bindInt64(2, revision) ||
-        updateCurrent.step() != SQLITE_DONE) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::SqliteOperationFailed, database_,
-            "Could not publish the new current equipment-definition revision."));
+    if (actualCurrent) {
+        Statement updateCurrent(database_,
+            "UPDATE microscope_equipment_definition_current SET revision = ?1 "
+            "WHERE microscope_id = ?2 AND revision = ?3");
+        if (!updateCurrent.prepared() ||
+            !updateCurrent.bindInt64(1, nextRevision) ||
+            sqlite3_bind_text(updateCurrent.get(), 2,
+                microscopeId.value().data(),
+                static_cast<int>(microscopeId.value().size()),
+                SQLITE_TRANSIENT) != SQLITE_OK ||
+            !updateCurrent.bindInt64(3, expectedCurrentRevision) ||
+            updateCurrent.step() != SQLITE_DONE ||
+            sqlite3_changes(database_) != 1) {
+            return core::Result<std::uint64_t, Error>::failure(
+                makeError(ErrorCode::SqliteOperationFailed, database_));
+        }
+    } else {
+        Statement insertCurrent(database_,
+            "INSERT INTO microscope_equipment_definition_current "
+            "(microscope_id, revision) VALUES (?1, ?2)");
+        if (!insertCurrent.prepared() ||
+            sqlite3_bind_text(insertCurrent.get(), 1,
+                microscopeId.value().data(),
+                static_cast<int>(microscopeId.value().size()),
+                SQLITE_TRANSIENT) != SQLITE_OK ||
+            !insertCurrent.bindInt64(2, nextRevision) ||
+            insertCurrent.step() != SQLITE_DONE) {
+            return core::Result<std::uint64_t, Error>::failure(
+                makeError(ErrorCode::SqliteOperationFailed, database_));
+        }
     }
 
     if (!transaction.commit()) {
-        return core::Result<std::uint64_t, Error>::failure(makeError(
-            ErrorCode::SqliteOperationFailed, database_,
-            "Could not commit the equipment-definition revision."));
+        return core::Result<std::uint64_t, Error>::failure(
+            makeError(ErrorCode::SqliteOperationFailed, database_));
     }
-
-    return core::Result<std::uint64_t, Error>::success(revision);
+    return core::Result<std::uint64_t, Error>::success(nextRevision);
 }
 
 core::Result<std::optional<PersistedEquipmentDefinition>, Error>
 EquipmentDefinitionSqliteStore::loadCurrentDefinition(
     const core::MicroscopeId& microscopeId) {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    std::optional<std::uint64_t> revision;
-    if (!readCurrentRevision(database_, microscopeId.value(), revision)) {
+    Statement statement(database_,
+        "SELECT revision FROM microscope_equipment_definition_current "
+        "WHERE microscope_id = ?1");
+    if (!statement.prepared() ||
+        sqlite3_bind_text(statement.get(), 1,
+            microscopeId.value().data(),
+            static_cast<int>(microscopeId.value().size()),
+            SQLITE_TRANSIENT) != SQLITE_OK) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
-            makeError(ErrorCode::InvalidPersistedRecord, database_,
-                "The current equipment-definition pointer is malformed."));
+            makeError(ErrorCode::SqliteOperationFailed, database_));
     }
-    if (!revision) {
+    const int step = statement.step();
+    if (step == SQLITE_DONE) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::success(
             std::nullopt);
     }
-    return loadRevisionUnlocked(microscopeId, *revision);
+    if (step != SQLITE_ROW ||
+        sqlite3_column_type(statement.get(), 0) != SQLITE_INTEGER) {
+        return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
+            makeError(ErrorCode::InvalidPersistedRecord, database_));
+    }
+    const sqlite3_int64 revision = sqlite3_column_int64(statement.get(), 0);
+    if (revision <= 0 || statement.step() != SQLITE_DONE) {
+        return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
+            makeError(ErrorCode::InvalidPersistedRecord, database_));
+    }
+    return loadRevisionUnlocked(microscopeId, static_cast<std::uint64_t>(revision));
 }
 
 core::Result<std::optional<PersistedEquipmentDefinition>, Error>
@@ -390,10 +432,9 @@ EquipmentDefinitionSqliteStore::loadRevision(
     const core::MicroscopeId& microscopeId,
     std::uint64_t revision) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (revision == 0 || revision > kMaximumSqliteInteger) {
+    if (!validRevision(revision)) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
-            makeError(ErrorCode::InvalidRevision, database_,
-                "The requested equipment-definition revision is invalid."));
+            makeError(ErrorCode::InvalidRevision, database_));
     }
     return loadRevisionUnlocked(microscopeId, revision);
 }
@@ -403,11 +444,13 @@ EquipmentDefinitionSqliteStore::loadRevisionUnlocked(
     const core::MicroscopeId& microscopeId,
     std::uint64_t revision) {
     Statement statement(database_,
-        "SELECT payload_format_version, payload "
-        "FROM equipment_definition_revision "
+        "SELECT document_json FROM microscope_equipment_definition_revision "
         "WHERE microscope_id = ?1 AND revision = ?2");
     if (!statement.prepared() ||
-        !statement.bindText(1, microscopeId.value()) ||
+        sqlite3_bind_text(statement.get(), 1,
+            microscopeId.value().data(),
+            static_cast<int>(microscopeId.value().size()),
+            SQLITE_TRANSIENT) != SQLITE_OK ||
         !statement.bindInt64(2, revision)) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
             makeError(ErrorCode::SqliteOperationFailed, database_));
@@ -419,59 +462,48 @@ EquipmentDefinitionSqliteStore::loadRevisionUnlocked(
             std::nullopt);
     }
     if (step != SQLITE_ROW ||
-        sqlite3_column_type(statement.get(), 0) != SQLITE_INTEGER ||
-        sqlite3_column_type(statement.get(), 1) != SQLITE_BLOB) {
+        sqlite3_column_type(statement.get(), 0) != SQLITE_TEXT) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
-            makeError(ErrorCode::InvalidPersistedRecord, database_,
-                "The equipment-definition payload columns have invalid SQLite types."));
+            makeError(ErrorCode::InvalidPersistedRecord, database_));
     }
 
-    const sqlite3_int64 formatVersion = sqlite3_column_int64(statement.get(), 0);
-    const int payloadSize = sqlite3_column_bytes(statement.get(), 1);
-    const auto* payload = static_cast<const char*>(
-        sqlite3_column_blob(statement.get(), 1));
-    if (formatVersion != kPayloadFormatVersion) {
-        return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
-            makeError(ErrorCode::UnsupportedSchemaVersion, database_,
-                "The equipment-definition payload format version is unsupported."));
-    }
-    if (payload == nullptr || payloadSize <= 0 ||
-        static_cast<std::size_t>(payloadSize) > kMaximumPayloadBytes) {
+    const auto* data = sqlite3_column_text(statement.get(), 0);
+    const int byteCount = sqlite3_column_bytes(statement.get(), 0);
+    if (data == nullptr || byteCount <= 0 ||
+        static_cast<std::size_t>(byteCount) >
+            configuration::EquipmentDefinitionJsonLoader::kMaximumDocumentBytes) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
             makeError(ErrorCode::InvalidPersistedRecord, database_,
-                "The equipment-definition BLOB is empty or exceeds its size limit."));
+                "Stored equipment-definition document is empty or exceeds the size limit."));
     }
 
-    // sqlite3_column_blob() is valid only while this statement remains on the
-    // current row. Copy the bytes before stepping or finalizing the statement.
-    std::string sourceDocument(payload, static_cast<std::size_t>(payloadSize));
+    // Copy SQLite's column data before stepping/finalizing the statement.
+    std::string sourceDocument(
+        reinterpret_cast<const char*>(data), static_cast<std::size_t>(byteCount));
     if (statement.step() != SQLITE_DONE) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
             makeError(ErrorCode::InvalidPersistedRecord, database_,
-                "The equipment-definition revision query returned more than one row."));
+                "An equipment-definition revision key returned multiple rows."));
     }
 
-    auto decoded = configuration::EquipmentDefinitionJsonLoader::parse(sourceDocument);
-    if (!decoded) {
-        const auto& parseError = decoded.error();
+    auto parsed = configuration::EquipmentDefinitionJsonLoader::parse(sourceDocument);
+    if (!parsed) {
+        auto error = makeError(ErrorCode::InvalidPersistedRecord, database_,
+            "Persisted equipment-definition JSON failed schema or Core validation.");
+        error.jsonError = parsed.error();
+        return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
+            std::move(error));
+    }
+    if (parsed.value().microscopeId() != microscopeId ||
+        parsed.value().revision() != revision) {
         return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
             makeError(ErrorCode::InvalidPersistedRecord, database_,
-                "Stored equipment definition is invalid at " + parseError.path + ": " +
-                    parseError.detail));
+                "Persisted equipment document identity/revision does not match its database key."));
     }
 
-    auto equipment = std::move(decoded).value();
-    if (equipment.microscopeId() != microscopeId || equipment.revision() != revision) {
-        return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::failure(
-            makeError(ErrorCode::InvalidPersistedRecord, database_,
-                "Stored equipment identity or revision does not match its SQLite key."));
-    }
-
-    std::optional<PersistedEquipmentDefinition> result;
-    result.emplace(PersistedEquipmentDefinition{
-        revision, std::move(sourceDocument), std::move(equipment)});
     return core::Result<std::optional<PersistedEquipmentDefinition>, Error>::success(
-        std::move(result));
+        PersistedEquipmentDefinition{
+            revision, std::move(sourceDocument), std::move(parsed).value()});
 }
 
 } // namespace microscope::application::persistence

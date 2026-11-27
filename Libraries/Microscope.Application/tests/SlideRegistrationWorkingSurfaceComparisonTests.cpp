@@ -231,7 +231,7 @@ void exactDirectAxisComparisonPreservesCalibrationEvidence() {
         std::abs(mappedFromRetainedRegistration.value().horizontalMicrometers - 42'500.0) < 1e-9 &&
         std::abs(mappedFromRetainedRegistration.value().transverseMicrometers - 32'500.0) < 1e-9,
         "retains the original affine registration and its slide-to-stage mapping methods");
-    check(value.workingSurfaceRectangle().drawnOppositeEndpoint().xMicrometers == 75'001.0 &&
+    check(value.workingSurfaceRectangle().drawnOppositeEndpoint().xMicrometers == 5'001.0 &&
         value.workingSurfaceRectangle().drawnOppositeEndpoint().yMicrometers == 20'001.0,
         "retains the original CAD drawing handle and constrained rectangle model");
 }

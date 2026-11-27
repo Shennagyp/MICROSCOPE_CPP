@@ -33,6 +33,11 @@ struct StageDriverError final {
     StageDriverErrorCode code=StageDriverErrorCode::Other;
     std::string detail;
 };
+
+struct StageOperationError final {
+    StageModelError code=StageModelError::DriverFailure;
+    std::optional<StageDriverError> driverError;
+};
 class IStageDriver;
 
 class NanometreRange final {
@@ -211,10 +216,6 @@ struct StagePositionSnapshot final {
     StagePositionEvidence evidence=StagePositionEvidence::Unknown;
     bool xyKnown() const noexcept;
     bool xyzKnown() const noexcept;
-};
-struct StageOperationError final {
-    StageModelError code=StageModelError::DriverFailure;
-    std::optional<StageDriverError> driverError;
 };
 
 class Stage final {

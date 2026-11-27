@@ -2,9 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Latest source/test commit:** `bbc426463866950883248ebff8dbf04c71051412`  
-**Architecture audit commit:** `c1dcd22567f9d9746bb73119d8da5a8041cbcbd1`  
-**Verification:** [platform CI run 45943921361](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45943921361) passed the preceding Core/Application/native-app baseline on Ubuntu GCC, macOS Clang and Windows MSVC. Comparison + CAD persistence code and tests are in [run 45952613208](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45952613208), currently pending.  
+**Latest source/test commit:** `d828f4d8857a82f4fba6ec562516b58ac35c1118`  
+**Architecture audit commit:** `c43a12577220ea0318112eb2c88e75bd1c559b9f`  
+**Verification:** [run 45954245119](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45954245119) passed the ConfigurationProfileCatalog SQLite store on Ubuntu GCC, macOS Clang and Windows MSVC. [Run 45953056200](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45953056200) passed the CAD comparison/working-surface persistence change across the same platform matrix. The strict JSON equipment loader reached passing Ubuntu and macOS jobs, but its workflow was cancelled during subsequent commits before a complete three-platform result. The new equipment-definition SQLite store, tests and CMake registration are queued in [run 45957906429](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45957906429); do not mark this new store verified until that exact source commit has completed all applicable jobs.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.  
 **Current C++ implementation:** `bbc426463866950883248ebff8dbf04c71051412`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, the change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison` and `StageWorkingSurfaceSqliteStore`. The comparison binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, correspondence-aware geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. Its immutable snapshot preserves the original affine mapping and CAD handle/constraint data. The SQLite store persists CAD surface boundaries, axis identities, slide rectangle constraints and explicit corner mappings in append-only equipment-revision-bound snapshots; it uses an optimistic current-revision check and reloads through the installed `StageSpecification`. Physical measured corners remain exclusively in `DualSlideCarrierSqliteStore`. CI run [45953056200](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45953056200) is pending.
 
@@ -69,6 +69,19 @@ The request factory consumes the separate hardware configuration and validates i
 
 Existing SQL child tables are reused; the separation is semantic and does not require a database schema migration. Existing rows remain associated with their exact mode revision.
 
+## Equipment-definition JSON and SQLite persistence
+
+The static equipment-definition boundary is now implemented in two layers:
+
+- `EquipmentDefinitionJsonLoader` accepts schema version 1 and reconstructs the entire `MicroscopeEquipmentDefinition` through Core factories. It rejects invalid UTF-8, duplicate keys, unknown fields, unsupported schema versions, oversized/deep documents, malformed values and invalid physical topology. The input is static equipment data only; runtime observations, device sessions, calibration measurements and acquisition state are intentionally excluded.
+- `EquipmentDefinitionSqliteStore` persists the exact validated UTF-8 JSON source document as a SQLite BLOB. The database key is the embedded `MicroscopeId` plus the Core equipment revision. Revisions are immutable, a current pointer is advanced with an expected-current-revision check inside `BEGIN IMMEDIATE`, and a new revision must increase monotonically.
+- Loads copy the BLOB while the SQLite statement is still positioned on its row, then re-run the strict loader. The store verifies that the reconstructed microscope identity and revision match the database key before returning the definition. This preserves the original document for diagnostics/export without maintaining a second serializer for the equipment graph.
+- Store metadata/schema version and payload format version are explicit. This is a per-store schema owner, not the central database migration owner; the other stores still own their individual SQLite schema metadata.
+
+The new store test target covers exact source-document round-trip after reopening, current/historical revision loading, independent microscope identities, stale-writer conflict, monotonicity, and invalid-document rejection. The test target is registered in the Application CMake project. The three-platform CI run is pending as linked above.
+
+The ConfigurationProfileCatalog store is also implemented and verified: it persists immutable catalog revisions scoped to microscope and exact equipment-definition revision, uses explicit little-endian payload tags for enums/units, reconstructs values through Core factories, and loads both current and historical revisions. Its successful platform run is 45954245119.
+
 ## Physical carrier registration and CAD working-surface comparison
 
 The fixed two-slot carrier and the CAD working surface remain separate Core models. The Application comparison joins them only for a specific physical `SlideId` and an explicit `SlideCornerCorrespondence`.
@@ -112,12 +125,13 @@ CI verifies software build/tests, not physical microscope hardware execution.
 The complete library audit and dependency-ordered completion plan are maintained in [Microscope Platform Completion Audit v0.9](MICROSCOPE_PLATFORM_COMPLETION_AUDIT_V0.9.md).
 
 Immediate next work is not more UI:
-1. Verify the comparison + CAD layout persistence on all three CI platforms, including the native Optika build. Fix compiler/test failures before further schema work.
-2. Add authoritative equipment-definition JSON loading and revision persistence, ConfigurationProfileCatalog persistence/loading, and a central database migration owner with shared connection/transaction semantics.
-3. Build the microscope-level Application composition root, observed-state snapshot and configuration reconciler.
-4. Complete stage/optical hardware adapters and operation cancellation/timeout/late-completion semantics.
-5. Integrate the camera-v2.0 module only after the C++ platform baseline is established, as a controlled subtree rather than a wholesale branch merge. Exclude AcquisitionIntegrityTracker and Qt adapters/preview; preserve the Common abstraction over AmScope and GenTL.
-6. Integrate the existing Swift acquisition coordinator with authoritative physical `SlideId`, camera sessions and stage/optical services. Keep capture orchestration, image/tile organization, persistence and gallery lifecycle in Swift; do not introduce a duplicate C++ acquisition workflow.
+1. Verify the equipment-definition JSON + SQLite store on Ubuntu GCC, Windows MSVC, macOS Clang and the native Optika build; fix compiler/test failures before further persistence work.
+2. Implement a central SQLite database owner with shared connection ownership, ordered migrations and real cross-store transaction semantics. Do not substitute an orchestrator that merely opens independent stores and cannot make initialization atomic.
+3. Build the microscope-level Application composition root, revision-bound equipment owner and UI-facing immutable microscope snapshot.
+4. Implement observed-state reconciliation for optical/configuration hardware: skip already-satisfied settings, execute only required actions, preserve operation identity/deadlines and verify resulting state.
+5. Complete concrete stage-controller and optical-component adapters, including cancellation, timeout, late-completion and verified-idle semantics.
+6. Integrate camera-v2.0 only after the C++ platform contract is stable, as a controlled subtree rather than a wholesale branch merge. Exclude AcquisitionIntegrityTracker and Qt adapters/preview; preserve Common abstraction over AmScope and GenTL.
+7. Integrate the existing Swift acquisition coordinator with authoritative physical `SlideId`, camera sessions and stage/optical services. Keep capture orchestration, image/tile organization, persistence and gallery lifecycle in Swift; do not introduce a duplicate C++ acquisition workflow.
 
 ## Preservation constraints
 

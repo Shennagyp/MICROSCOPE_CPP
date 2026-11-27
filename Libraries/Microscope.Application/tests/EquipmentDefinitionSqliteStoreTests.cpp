@@ -246,6 +246,107 @@ void isolatesMicroscopesAndRejectsStaleWriters() {
     removeDatabase(path);
 }
 
+bool overwriteStoredPayload(
+    sqlite3* database,
+    const std::string& microscopeId,
+    std::uint64_t revision,
+    const std::string& replacement) {
+    sqlite3_stmt* statement = nullptr;
+    if (sqlite3_prepare_v2(
+            database,
+            "UPDATE equipment_definition_revision SET payload = ?1 "
+            "WHERE microscope_id = ?2 AND revision = ?3",
+            -1, &statement, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    const bool bound =
+        sqlite3_bind_blob(statement, 1, replacement.data(),
+            static_cast<int>(replacement.size()), SQLITE_TRANSIENT) == SQLITE_OK &&
+        sqlite3_bind_text(statement, 2, microscopeId.data(),
+            static_cast<int>(microscopeId.size()), SQLITE_TRANSIENT) == SQLITE_OK &&
+        sqlite3_bind_int64(statement, 3, static_cast<sqlite3_int64>(revision)) == SQLITE_OK;
+    const bool completed = bound && sqlite3_step(statement) == SQLITE_DONE &&
+        sqlite3_changes(database) == 1;
+    sqlite3_finalize(statement);
+    return completed;
+}
+
+void rejectsCorruptPersistedPayloads() {
+    const auto path = temporaryDatabasePath();
+    {
+        auto opened = EquipmentDefinitionSqliteStore::open(path);
+        check(static_cast<bool>(opened), "opens a database for persisted-payload corruption tests");
+        if (!opened) {
+            removeDatabase(path);
+            return;
+        }
+        auto first = opened.value()->saveCurrentDefinition(
+            document("microscope-a", 1), 0);
+        auto second = opened.value()->saveCurrentDefinition(
+            document("microscope-a", 2), 1);
+        check(static_cast<bool>(first) && static_cast<bool>(second),
+            "stores two equipment revisions before corruption tests");
+    }
+
+    sqlite3* database = nullptr;
+    const int opened = sqlite3_open_v2(
+        path.c_str(), &database, SQLITE_OPEN_READWRITE, nullptr);
+    check(opened == SQLITE_OK && database != nullptr,
+        "opens the persisted database for controlled corruption setup");
+    if (opened != SQLITE_OK || database == nullptr) {
+        if (database != nullptr) sqlite3_close_v2(database);
+        removeDatabase(path);
+        return;
+    }
+
+    char* message = nullptr;
+    const int dropped = sqlite3_exec(
+        database,
+        "DROP TRIGGER equipment_definition_revision_no_update",
+        nullptr, nullptr, &message);
+    check(dropped == SQLITE_OK,
+        "removes the immutability guard only in the corruption test fixture");
+    sqlite3_free(message);
+
+    const bool changedIdentity = overwriteStoredPayload(
+        database, "microscope-a", 1, document("different-microscope", 1));
+    check(changedIdentity,
+        "writes a valid JSON payload whose embedded identity disagrees with its key");
+
+    message = nullptr;
+    const int changedFormat = sqlite3_exec(
+        database,
+        "UPDATE equipment_definition_revision SET payload_format_version = 99 "
+        "WHERE microscope_id = 'microscope-a' AND revision = 2",
+        nullptr, nullptr, &message);
+    check(changedFormat == SQLITE_OK,
+        "writes an unsupported payload-format marker into the corruption fixture");
+    sqlite3_free(message);
+    sqlite3_close_v2(database);
+
+    {
+        auto reopened = EquipmentDefinitionSqliteStore::open(path);
+        check(static_cast<bool>(reopened),
+            "reopens the database containing the controlled corrupt records");
+        if (reopened) {
+            const auto microscopeId = MicroscopeId::create("microscope-a").value();
+            auto mismatch = reopened.value()->loadRevision(microscopeId, 1);
+            check(!mismatch &&
+                mismatch.error().code ==
+                    EquipmentDefinitionStoreErrorCode::InvalidPersistedRecord,
+                "rejects a valid payload whose microscope identity does not match its database key");
+
+            auto unknownFormat = reopened.value()->loadRevision(microscopeId, 2);
+            check(!unknownFormat &&
+                unknownFormat.error().code ==
+                    EquipmentDefinitionStoreErrorCode::UnsupportedSchemaVersion,
+                "rejects an unknown persisted payload format version");
+        }
+    }
+
+    removeDatabase(path);
+}
+
 void rejectsInvalidDocumentsBeforePersistence() {
     const auto path = temporaryDatabasePath();
     auto opened = EquipmentDefinitionSqliteStore::open(path);
@@ -288,6 +389,7 @@ void rejectsInvalidDocumentsBeforePersistence() {
 int main() {
     verifiesAppendOnlyRevisionsAndRestartRoundTrip();
     isolatesMicroscopesAndRejectsStaleWriters();
+    rejectsCorruptPersistedPayloads();
     rejectsInvalidDocumentsBeforePersistence();
 
     if (failures != 0) return 1;

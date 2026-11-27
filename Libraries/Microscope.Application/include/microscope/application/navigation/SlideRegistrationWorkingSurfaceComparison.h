@@ -122,6 +122,7 @@ private:
         double,
         double,
         double,
+        double,
         std::array<double, 4>) noexcept;
 
     core::SlideId slideId_;

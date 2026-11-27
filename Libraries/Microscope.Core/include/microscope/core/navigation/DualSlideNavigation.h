@@ -1,5 +1,7 @@
 #pragma once
 #include "microscope/core/equipment/StageSpecifications.h"
+#include "microscope/core/equipment/DualSlideCarrierSpecification.h"
+#include "microscope/core/equipment/SlideGeometry.h"
 #include "microscope/core/runtime/Feedback.h"
 #include "microscope/core/motion/StageMotionPort.h"
 #include "microscope/core/motion/StageAxisPositionState.h"
@@ -13,53 +15,6 @@ namespace microscope::core {
 enum class DualSlideSlot { Left, Right };
 enum class SlideNavigationCommandError { InvalidStageCoordinate, OutsideStageTravel, SlideNotInCarrier, SlideNotRegistered, RegistrationChanged };
 struct StagePlanePoint;
-enum class CarrierHorizontalDirection {
-    PositiveStageXFromLeftToRight,
-    NegativeStageXFromLeftToRight
-};
-
-enum class DualSlideCarrierSpecificationError {
-    SamePlaneAxis, MissingHorizontalAxis, MissingTransverseAxis,
-    NonLinearPlaneAxis, NonPhysicalPlaneAxisUnit, InvalidHorizontalDirection
-};
-class DualSlideCarrierSpecification final {
-public:
-    static Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError> create(
-        const StageSpecification&, StageAxisId horizontalAxisId,
-        StageAxisId transverseAxisId, CarrierHorizontalDirection);
-    const EquipmentComponentId& stageComponentId() const noexcept;
-    const StageAxisId& horizontalAxisId() const noexcept;
-    const StageAxisId& transverseAxisId() const noexcept;
-    AxisCoordinateUnit horizontalUnit() const noexcept;
-    AxisCoordinateUnit transverseUnit() const noexcept;
-    CarrierHorizontalDirection horizontalDirection() const noexcept;
-    Result<MoveAxesTo, SlideNavigationCommandError> moveTo(const StagePlanePoint&) const;
-private:
-    DualSlideCarrierSpecification(EquipmentComponentId,StageAxisId,StageAxisId,CarrierHorizontalDirection,
-        AxisCoordinateUnit,AxisCoordinateUnit,AxisOperatingRange,AxisOperatingRange);
-    EquipmentComponentId stageComponentId_;
-    StageAxisId horizontalAxisId_;
-    StageAxisId transverseAxisId_;
-    CarrierHorizontalDirection direction_;
-    AxisCoordinateUnit horizontalUnit_;
-    AxisCoordinateUnit transverseUnit_;
-    AxisOperatingRange horizontalRange_;
-    AxisOperatingRange transverseRange_;
-};
-
-enum class SlideGeometryError { NonFiniteDimension, NonPositiveDimension };
-class SlideGeometry final {
-public:
-    static Result<SlideGeometry,SlideGeometryError> create(double widthMicrometers,double heightMicrometers);
-    double widthMicrometers() const noexcept;
-    double heightMicrometers() const noexcept;
-    bool contains(double xMicrometers,double yMicrometers) const noexcept;
-private:
-    SlideGeometry(double,double);
-    double width_;
-    double height_;
-};
-
 struct SlideLocalPoint final { double xMicrometers; double yMicrometers; };
 class DualSlideCarrierState;
 class SlideNavigationTarget final {

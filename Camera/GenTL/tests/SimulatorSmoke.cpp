@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
             << "<vendor-producer.cti> [device-index] "
             << "[--verify-two-device-isolation|--sequence-gap|--sequence-duplicate|"
                "--sequence-out-of-order|--sequence-ambiguous|"
-               "--incomplete-frame|--empty-frame]\n";
+               "--incomplete-frame|--empty-frame|--sustained-acquisition]\n";
         return 64;
     }
 
@@ -111,6 +111,7 @@ int main(int argc, char** argv) {
     bool verifyMultiDeviceIsolation = false;
     std::string sequenceMode;
     std::string deliveryMode;
+    bool sustainedMode = false;
     if (argc >= 3) {
         const std::string option = argv[2];
         if (option == "--verify-two-device-isolation") {
@@ -142,6 +143,8 @@ int main(int argc, char** argv) {
             deliveryMode = "incomplete";
         } else if (option == "--empty-frame") {
             deliveryMode = "empty";
+        } else if (option == "--sustained-acquisition") {
+            sustainedMode = true;
         } else {
             std::cerr << "Unknown simulator smoke option.\n";
             return 67;
@@ -198,19 +201,25 @@ int main(int argc, char** argv) {
 
         {
             auto stream = device.openDataStream(streamIds.front(), 4);
-            // The simulator injects two producer-reported underruns and one
-            // host wait timeout. These are intentionally distinct counters.
-            if (setenv("MOCK_GENTL_SIMULATOR_UNDERRUNS", "2", 1) != 0)
+            // The ordinary smoke injects two Producer underruns and one
+            // host wait timeout. The sustained case intentionally injects
+            // neither and exercises repeated acquisition-buffer recycling.
+            const char* injectedUnderruns = sustainedMode ? "0" : "2";
+            if (setenv("MOCK_GENTL_SIMULATOR_UNDERRUNS", injectedUnderruns, 1) != 0)
                 throw std::runtime_error("Could not configure simulator underruns.");
             stream.start();
-            if (setenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT", "1", 1) != 0)
-                throw std::runtime_error("Could not configure simulator timeout.");
-            const auto forcedTimeout = stream.nextFrame(1);
-            unsetenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT");
-            if (forcedTimeout)
-                throw std::runtime_error("The simulator failed to inject the wait timeout.");
+            if (!sustainedMode) {
+                if (setenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT", "1", 1) != 0)
+                    throw std::runtime_error("Could not configure simulator timeout.");
+                const auto forcedTimeout = stream.nextFrame(1);
+                unsetenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT");
+                if (forcedTimeout)
+                    throw std::runtime_error("The simulator failed to inject the wait timeout.");
+            }
 
-            constexpr std::size_t requiredFrames = 5;
+            const std::size_t requiredFrames = sustainedMode ? 4096 : 5;
+            const std::uint64_t expectedUnderruns = sustainedMode ? 0 : 2;
+            const std::uint64_t expectedHostTimeouts = sustainedMode ? 0 : 1;
             const std::size_t sequenceOffset = verifyMultiDeviceIsolation ? 3 : 0;
             std::uint64_t previousFrameId = 0;
             std::uint64_t previousTimestampNanoseconds = 0;
@@ -300,7 +309,7 @@ int main(int argc, char** argv) {
             if (statistics.transportType !=
                     std::optional<std::string>(expectedTransportType) ||
                 statistics.producerDeliveredBuffers != requiredFrames ||
-                statistics.producerBufferUnderruns != 2 ||
+                statistics.producerBufferUnderruns != expectedUnderruns ||
                 statistics.producerFramesStarted != requiredFrames ||
                 statistics.announcedBuffers != 4 ||
                 statistics.queuedBuffers != 4 ||
@@ -320,8 +329,8 @@ int main(int argc, char** argv) {
                     (sequenceMode == "out-of-order" ? 1u : 0u) ||
                 statistics.integrity.ambiguousSequenceTransitions !=
                     (sequenceMode == "ambiguous" ? 1u : 0u) ||
-                statistics.integrity.frameWaitTimeouts != 1 ||
-                statistics.integrity.bufferStarvationEvents != 2) {
+                statistics.integrity.frameWaitTimeouts != expectedHostTimeouts ||
+                statistics.integrity.bufferStarvationEvents != expectedUnderruns) {
                 throw std::runtime_error(
                     "Acquisition statistics did not preserve the producer, "
                     "sequence and host-timeout distinctions.");

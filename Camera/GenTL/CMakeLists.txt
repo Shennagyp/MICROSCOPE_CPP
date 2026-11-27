@@ -142,6 +142,13 @@ if(BUILD_TESTING)
             PROPERTIES TIMEOUT 120)
     endforeach()
 
+    add_test(NAME camera_gentl_simulator_sustained_acquisition
+        COMMAND camera_gentl_simulator_smoke
+            "$<TARGET_FILE:gentl_test_simulator_cti>"
+            "0" "--sustained-acquisition")
+    set_tests_properties(camera_gentl_simulator_sustained_acquisition
+        PROPERTIES TIMEOUT 120)
+
     add_executable(camera_gentl_producer_catalog_tests
         tests/ProducerCatalogTests.cpp)
     target_compile_features(camera_gentl_producer_catalog_tests PRIVATE cxx_std_17)

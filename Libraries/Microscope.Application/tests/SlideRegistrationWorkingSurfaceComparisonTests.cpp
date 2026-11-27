@@ -258,8 +258,8 @@ void reportsDifferencesAndIndependentRevisionIdentity() {
     const auto& value = comparison.value();
     check(!value.revisionsAligned(),
         "flags different physical-registration and CAD-layout revisions instead of conflating them");
-    check(std::abs(value.corners()[0].workingSurfaceMinusMeasuredXMicrometers() - 100.0) < 1e-9 &&
-        std::abs(value.corners()[0].workingSurfaceMinusMeasuredYMicrometers() + 200.0) < 1e-9,
+    check(std::abs(value.corners()[0].workingSurfaceMinusMeasuredXMicrometers - 100.0) < 1e-9 &&
+        std::abs(value.corners()[0].workingSurfaceMinusMeasuredYMicrometers + 200.0) < 1e-9,
         "reports signed CAD-minus-measured corner deltas in the working-surface coordinate frame");
     check(std::abs(value.maximumCornerDiscrepancyMicrometers() - std::hypot(100.0, 200.0)) < 1e-9 &&
         std::abs(value.rmsCornerDiscrepancyMicrometers() - std::hypot(100.0, 200.0)) < 1e-9,

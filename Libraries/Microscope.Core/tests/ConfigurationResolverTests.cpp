@@ -1,6 +1,7 @@
 #include "microscope/core/configuration/Configuration.h"
 #include "microscope/core/configuration/ConfigurationTransition.h"
 #include "microscope/core/configuration/LightPathCameraResolver.h"
+#include "microscope/core/configuration/LightPathCalibration.h"
 #include "microscope/core/configuration/LightPathConfigurationRequestFactory.h"
 #include "microscope/core/configuration/OperationMode.h"
 #include "microscope/core/configuration/SampleMicroscopyRequirementAssessor.h"
@@ -1612,8 +1613,9 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
         operationModeId,
         1,
         "Fluorescence",
-        ContrastMethod::Fluorescence,
-        {modeSetting}));
+        ContrastMethod::Fluorescence));
+    const auto hardwareConfiguration =
+        take(OperationModeHardwareConfiguration::create(operationMode, {modeSetting}));
 
     FluorescenceCameraRequirements fluorescenceRequirements{
         take(SpectralBand::create(
@@ -1658,17 +1660,24 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
         fixture.cameraId,
         fixture.cameraModeId,
         fluorescenceRequirements);
-    check(staleModeCameraResolution.status() ==
-              LightPathCameraResolutionStatus::Unsupported,
-          "rejects a mode calibrated against an earlier equipment-definition revision");
-    check(std::any_of(
-              staleModeCameraResolution.diagnostics().begin(),
-              staleModeCameraResolution.diagnostics().end(),
-              [](const Diagnostic& diagnostic) {
-                  return diagnostic.code() ==
-                      "light_path_camera.equipment_revision_mismatch";
-              }),
-          "reports the equipment revision mismatch explicitly");
+    check(staleModeCameraResolution.isResolved(),
+          "camera discovery is independent of the optional calibration revision");
+    const auto staleHardwareRequest = LightPathConfigurationRequestFactory::create(
+        newerEquipmentRevision,
+        operationMode,
+        hardwareConfiguration,
+        lightPathId,
+        staleModeCameraResolution,
+        makeId<ConfigurationProfileId>("profile-stale-realization"),
+        fixture.objectiveId,
+        fixture.condenserId,
+        fixture.illuminationId,
+        fixture.illuminationChannelId,
+        ExposurePolicy::Manual);
+    check(!staleHardwareRequest &&
+          staleHardwareRequest.error() ==
+              LightPathConfigurationRequestFactoryError::HardwareConfigurationEquipmentRevisionMismatch,
+          "rejects the stale realization at the configuration request boundary");
 
     const auto fluorescenceProfileId =
         makeId<ConfigurationProfileId>("profile-lightpath-fluorescence");
@@ -1687,6 +1696,7 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
     const auto request = LightPathConfigurationRequestFactory::create(
         equipment,
         operationMode,
+        hardwareConfiguration,
         lightPathId,
         cameraResolution,
         fluorescenceProfileId,
@@ -1911,8 +1921,9 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         operationModeId,
         1,
         "Blood film brightfield 40x",
-        ContrastMethod::Brightfield,
-        {modeSetting}));
+        ContrastMethod::Brightfield));
+    const auto hardwareConfiguration =
+        take(OperationModeHardwareConfiguration::create(operationMode, {modeSetting}));
 
     const auto cameraResolution = LightPathCameraResolver::resolve(
         equipment,
@@ -1929,6 +1940,7 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
     const auto request = take(LightPathConfigurationRequestFactory::create(
         equipment,
         operationMode,
+        hardwareConfiguration,
         lightPathId,
         cameraResolution,
         fixture.brightfieldProfileId,
@@ -1995,7 +2007,7 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         sampleType,
         slide,
         *configuration.resolvedConfiguration(),
-        &operationMode);
+        &hardwareConfiguration);
     check(compatible.isCompatible(),
           "accepts condenser capability and the mode's 100 µW/mm² specimen-plane target inside the SampleType range");
 
@@ -2029,7 +2041,7 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         strictSampleType,
         strictSlide,
         *configuration.resolvedConfiguration(),
-        &operationMode);
+        &hardwareConfiguration);
     check(!incompatible.isCompatible() &&
           std::any_of(
               incompatible.diagnostics().begin(),
@@ -2078,20 +2090,20 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
               }),
           "rejects an actual Slide preparation method outside its SampleType envelope");
 
-    const auto missingMode = SampleMicroscopyRequirementAssessor::assess(
+    const auto missingHardware = SampleMicroscopyRequirementAssessor::assess(
         equipment,
         sampleType,
         slide,
         *configuration.resolvedConfiguration());
-    check(!missingMode.isCompatible() &&
+    check(!missingHardware.isCompatible() &&
           std::any_of(
-              missingMode.diagnostics().begin(),
-              missingMode.diagnostics().end(),
+              missingHardware.diagnostics().begin(),
+              missingHardware.diagnostics().end(),
               [](const Diagnostic& diagnostic) {
                   return diagnostic.code() ==
-                      "sample.microscopy.operation_mode_missing";
+                      "sample.microscopy.operation_mode_hardware_configuration_missing";
               }),
-          "does not infer calibrated specimen-plane irradiance when authoritative OperationMode is unavailable");
+          "does not infer calibrated specimen-plane irradiance without the separate hardware realization");
 }
 
 void testProfileRequiredComponentMustBeOnSelectedPaths() {

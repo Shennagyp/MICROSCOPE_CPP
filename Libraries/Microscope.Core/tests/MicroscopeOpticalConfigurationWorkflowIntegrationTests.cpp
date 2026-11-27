@@ -2,6 +2,7 @@
 #include "microscope/core/configuration/LightPathCameraResolver.h"
 #include "microscope/core/configuration/LightPathConfigurationRequestFactory.h"
 #include "microscope/core/configuration/OperationMode.h"
+#include "microscope/core/configuration/LightPathCalibration.h"
 #include "microscope/core/configuration/SampleMicroscopyRequirementAssessor.h"
 
 #include <algorithm>
@@ -79,6 +80,7 @@ struct Fixture final {
     OperationModeId modeId;
     MicroscopeEquipmentDefinition equipment;
     OperationMode operationMode;
+    OperationModeHardwareConfiguration hardwareConfiguration;
     ConfigurationProfileCatalog profileCatalog;
 };
 
@@ -213,8 +215,9 @@ Fixture makeFixture() {
         modeId,
         2,
         "Transmitted brightfield",
-        ContrastMethod::Brightfield,
-        {modeSetting}));
+        ContrastMethod::Brightfield));
+    const auto hardwareConfiguration =
+        take(OperationModeHardwareConfiguration::create(operationMode, {modeSetting}));
 
     const auto profile = take(ConfigurationProfile::create(
         profileId,
@@ -230,7 +233,7 @@ Fixture makeFixture() {
     return Fixture{
         microscopeId, sourceId, condenserId, objectiveId, cameraId,
         channelId, pathId, lightPathId, cameraModeId, profileId, modeId,
-        std::move(equipment), operationMode, profiles};
+        std::move(equipment), operationMode, hardwareConfiguration, profiles};
 }
 
 bool hasCode(const Diagnostics& diagnostics, const char* expected) {
@@ -252,6 +255,7 @@ void testSlideAssessmentUsesPinnedSampleTypeAndObservedSlideFacts() {
     const auto request = LightPathConfigurationRequestFactory::create(
         fixture.equipment,
         fixture.operationMode,
+        fixture.hardwareConfiguration,
         fixture.lightPathId,
         cameraResolution,
         fixture.profileId,
@@ -392,6 +396,7 @@ void testCompleteLightPathToDesiredConfigurationWorkflow() {
     const auto request = LightPathConfigurationRequestFactory::create(
         fixture.equipment,
         fixture.operationMode,
+        fixture.hardwareConfiguration,
         fixture.lightPathId,
         cameraResolution,
         fixture.profileId,
@@ -508,10 +513,25 @@ void testEquipmentRevisionChangeInvalidatesModeBoundLightPath() {
 
     const auto staleResolution = LightPathCameraResolver::resolve(
         changedEquipment, fixture.operationMode, fixture.lightPathId);
-    check(staleResolution.status() == LightPathCameraResolutionStatus::Unsupported &&
-          hasCode(staleResolution.diagnostics(),
-                  "light_path_camera.equipment_revision_mismatch"),
-          "the LightPath camera workflow rejects an OperationMode bound to an older equipment revision");
+    check(staleResolution.isResolved(),
+          "camera discovery continues to use physical topology after equipment revision changes");
+
+    const auto staleHardwareRequest = LightPathConfigurationRequestFactory::create(
+        changedEquipment,
+        fixture.operationMode,
+        fixture.hardwareConfiguration,
+        fixture.lightPathId,
+        staleResolution,
+        fixture.profileId,
+        fixture.objectiveId,
+        fixture.condenserId,
+        fixture.sourceId,
+        fixture.channelId,
+        ExposurePolicy::Manual);
+    check(!staleHardwareRequest &&
+          staleHardwareRequest.error() ==
+              LightPathConfigurationRequestFactoryError::HardwareConfigurationEquipmentRevisionMismatch,
+          "request creation rejects a stale calibrated realization independently of camera discovery");
 }
 
 } // namespace

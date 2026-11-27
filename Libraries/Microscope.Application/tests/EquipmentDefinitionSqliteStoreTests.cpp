@@ -89,6 +89,39 @@ void verifiesBlobStorageAndDatabaseLevelImmutability(const std::string& path) {
     sqlite3_close_v2(database);
 }
 
+void verifiesCurrentRevisionCannotRewindOrDisappear(const std::string& path) {
+    sqlite3* database = nullptr;
+    const int opened = sqlite3_open_v2(
+        path.c_str(), &database, SQLITE_OPEN_READWRITE, nullptr);
+    check(opened == SQLITE_OK && database != nullptr,
+        "opens the database to inspect the current revision guard");
+    if (opened != SQLITE_OK || database == nullptr) {
+        if (database != nullptr) sqlite3_close_v2(database);
+        return;
+    }
+
+    char* message = nullptr;
+    const int rewind = sqlite3_exec(
+        database,
+        "UPDATE equipment_definition_current SET revision = 1 "
+        "WHERE microscope_id = 'microscope-a'",
+        nullptr, nullptr, &message);
+    check(rewind != SQLITE_OK,
+        "database trigger prevents rewinding the published current revision");
+    sqlite3_free(message);
+    message = nullptr;
+
+    const int remove = sqlite3_exec(
+        database,
+        "DELETE FROM equipment_definition_current "
+        "WHERE microscope_id = 'microscope-a'",
+        nullptr, nullptr, &message);
+    check(remove != SQLITE_OK,
+        "database trigger prevents deleting the current revision pointer");
+    sqlite3_free(message);
+    sqlite3_close_v2(database);
+}
+
 void verifiesAppendOnlyRevisionsAndRestartRoundTrip() {
     const auto path = temporaryDatabasePath();
     const auto firstDocument = document("microscope-a", 1);
@@ -138,6 +171,7 @@ void verifiesAppendOnlyRevisionsAndRestartRoundTrip() {
         auto savedSecond = store.saveCurrentDefinition(secondDocument, 1);
         check(static_cast<bool>(savedSecond) && savedSecond.value() == 2,
             "appends a later equipment-definition revision");
+        verifiesCurrentRevisionCannotRewindOrDisappear(path);
 
         auto historical = store.loadRevision(
             MicroscopeId::create("microscope-a").value(), 1);

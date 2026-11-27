@@ -143,6 +143,9 @@ OperatingModeRecommender::recommend(
     }
 
     const auto& constraints = sampleType.microscopyRequirements().techniques();
+    // A Stain cannot independently select a contrast mode. It contributes
+    // advisory ranking only when the SampleType supplies technique context.
+    const bool hasSampleTypeTechniqueContext = !constraints.empty();
     std::vector<OperatingModeRecommendation> recommendations;
     recommendations.reserve(candidateModes.size());
 
@@ -156,7 +159,9 @@ OperatingModeRecommender::recommend(
             mode.id(),
             mode.revision(),
             isPreferredBySampleType(constraints, method),
-            stainSupportFor(slide, method)});
+            hasSampleTypeTechniqueContext
+                ? stainSupportFor(slide, method)
+                : std::vector<StainId>{}});
     }
 
     // Stable, explainable precedence:

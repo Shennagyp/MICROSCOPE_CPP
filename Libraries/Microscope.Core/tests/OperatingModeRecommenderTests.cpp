@@ -196,6 +196,28 @@ void testIdentityOnlyStainAddsNoRecommendationEvidence() {
           "multiple candidates without recommendation evidence remain ambiguous");
 }
 
+void testStainCannotSelectModeWithoutSampleTypeTechniqueContext() {
+    const auto sampleType = makeSampleType("sample-type-no-technique-context", {});
+    const auto slide = makeSlide(sampleType, "slide-stain-without-context", {
+        makeStain("stain-he-contextless", "Hematoxylin and eosin",
+                  {ContrastMethod::Brightfield})});
+
+    const auto recommendations = take(OperatingModeRecommender::recommend(
+        id<MicroscopeId>("recommendation-microscope"),
+        sampleType,
+        slide,
+        {makeMode("mode-brightfield", ContrastMethod::Brightfield),
+         makeMode("mode-phase", ContrastMethod::PhaseContrast)}));
+
+    check(recommendations.candidates().size() == 2,
+          "both intent candidates remain available without SampleType technique context");
+    check(!recommendations.candidates()[0].recommendedByStain() &&
+          !recommendations.candidates()[1].recommendedByStain(),
+          "does not use Stain suitability as standalone mode-selection evidence");
+    check(recommendations.unambiguousRecommendation() == nullptr,
+          "keeps selection ambiguous when only the Stain suggests a contrast method");
+}
+
 void testUnsupportedAndProhibitedModesAreFilteredWithoutStainOverride() {
     const auto sampleType = makeSampleType(
         "sample-type-supported-only",
@@ -281,6 +303,7 @@ int main() {
     testSampleTypePreferenceOutranksStainAdvisoryPreference();
     testMultipleStainsContributeAdvisoryEvidenceAndTiesStayAmbiguous();
     testIdentityOnlyStainAddsNoRecommendationEvidence();
+    testStainCannotSelectModeWithoutSampleTypeTechniqueContext();
     testUnsupportedAndProhibitedModesAreFilteredWithoutStainOverride();
     testSlideAndModeInputBoundariesAreValidated();
 

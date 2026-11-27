@@ -6,7 +6,7 @@
 **Architecture audit commit:** `983ae76c2502b38444f3f4dcad9782aeffae09d2`  
 **Verification:** [platform CI run 45929942838](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45929942838) passed Ubuntu GCC, macOS Clang and Windows MSVC. The macOS job includes the native Optika application build and tests.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.  
-**Current C++ implementation:** `67f1c084a8650893a7827b5dc7f869ba46b88c0c`. The ownership extraction passed three-platform CI. The next geometry change makes `SlideGeometry` axis-neutral and turns `SlideGeometry2D` into a compatibility-preserving stage adapter over the canonical value; CI for this follow-up is pending.
+**Current C++ implementation:** `9f7b4f708c15b6635d8f67276d493a33e06ba7ad`. The ownership extraction passed three-platform CI. Follow-up changes make `SlideGeometry` axis-neutral and turn `SlideGeometry2D` into a compatibility-preserving adapter over the canonical value. `MicroscopeConfigurationSqliteStore` now enumerates current OperationModes by microscope identity. CI for these follow-up changes is pending.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 

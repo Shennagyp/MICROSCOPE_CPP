@@ -59,6 +59,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <cmath>
 #include <cstdint>
 #include <functional>

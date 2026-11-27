@@ -35,7 +35,8 @@ add_library(microscope_application STATIC
     src/SlideRegistrationWorkingSurfaceComparison.cpp
     src/StageWorkingSurfaceSqliteStore.cpp
     src/ConfigurationProfileCatalogSqliteStore.cpp
-    src/EquipmentDefinitionJsonLoader.cpp)
+    src/EquipmentDefinitionJsonLoader.cpp
+    src/EquipmentDefinitionSqliteStore.cpp)
 add_library(Microscope::Application ALIAS microscope_application)
 
 target_compile_features(microscope_application PUBLIC cxx_std_17)
@@ -174,6 +175,18 @@ if(BUILD_TESTING)
     add_test(
         NAME microscope_application_equipment_definition_json_loader_tests
         COMMAND microscope_application_equipment_definition_json_loader_tests)
+
+    add_executable(microscope_application_equipment_definition_store_tests
+        tests/EquipmentDefinitionSqliteStoreTests.cpp)
+    target_link_libraries(microscope_application_equipment_definition_store_tests
+        PRIVATE Microscope::Application SQLite::SQLite3)
+    set_target_properties(microscope_application_equipment_definition_store_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_equipment_definition_store_tests
+        COMMAND microscope_application_equipment_definition_store_tests)
 
     add_executable(microscope_application_contract_tests
         tests/ApplicationContractTests.cpp)

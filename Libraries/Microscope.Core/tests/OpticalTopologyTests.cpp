@@ -894,28 +894,34 @@ ImagingLightPathFixture makeImagingLightPath(
 
 OperationMode makeCameraResolverMode(
     const EquipmentFixture& fixture,
-    const LightPathId& lightPathId,
     ContrastMethod contrastMethod,
     const char* modeId = "camera-resolver-mode") {
-    const auto operationModeId = makeId<OperationModeId>(modeId);
+    return take(OperationMode::create(
+        fixture.microscopeId,
+        makeId<OperationModeId>(modeId),
+        1,
+        "Camera resolver mode",
+        contrastMethod));
+}
+
+OperationModeHardwareConfiguration makeCameraResolverHardwareConfiguration(
+    const EquipmentFixture& fixture,
+    const MicroscopeEquipmentDefinition& equipment,
+    const OperationMode& operationMode,
+    const LightPathId& lightPathId) {
     auto setting = take(LightPathModeSetting::create(
         fixture.microscopeId,
-        1,
-        operationModeId,
-        1,
+        equipment.revision(),
+        operationMode.id(),
+        operationMode.revision(),
         lightPathId,
         makeId<CalibrationRevisionId>("camera-resolver-calibration"),
         makeId<EquipmentComponentId>("camera-resolver-source"),
         makeId<IlluminationChannelId>("camera-resolver-channel"),
         {makeId<EquipmentComponentId>("camera-resolver-objective")},
         6.0));
-    return take(OperationMode::create(
-        fixture.microscopeId,
-        operationModeId,
-        1,
-        "Camera resolver mode",
-        contrastMethod,
-        {std::move(setting)}));
+    return take(OperationModeHardwareConfiguration::create(
+        operationMode, {std::move(setting)}));
 }
 
 CameraSpecification cameraSpecificationWithSensor(
@@ -987,7 +993,7 @@ void testLightPathCameraResolverDerivesSingleConnectedEndpoint() {
         {}, {}, {}, {}, {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
-        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+        fixture, ContrastMethod::Brightfield);
     const auto resolution = LightPathCameraResolver::resolve(
         equipment, mode, imaging.lightPath.id());
 
@@ -1019,7 +1025,7 @@ void testManualConnectedCameraRemainsSelectedWithSuitabilityWarnings() {
         {}, {}, {}, {}, {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
-        fixture, imaging.lightPath.id(), ContrastMethod::Fluorescence);
+        fixture, ContrastMethod::Fluorescence);
     const auto resolution = LightPathCameraResolver::resolve(
         equipment,
         mode,
@@ -1057,7 +1063,7 @@ void testManualCameraOutsideSelectedLightPathIsUnsupported() {
         {}, {}, {}, {}, {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
-        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+        fixture, ContrastMethod::Brightfield);
     const auto resolution = LightPathCameraResolver::resolve(
         equipment,
         mode,
@@ -1093,7 +1099,7 @@ void testMultipleConnectedCamerasRequireSelectionWhenNoUniqueRecommendationExist
         {}, {}, {}, {}, {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
-        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+        fixture, ContrastMethod::Brightfield);
     const auto resolution = LightPathCameraResolver::resolve(
         equipment, mode, imaging.lightPath.id());
 
@@ -1130,7 +1136,7 @@ void testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie() {
         {}, {}, {}, {}, {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
-        fixture, imaging.lightPath.id(), ContrastMethod::Fluorescence);
+        fixture, ContrastMethod::Fluorescence);
     const auto resolution = LightPathCameraResolver::resolve(
         equipment,
         mode,
@@ -1170,7 +1176,7 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         {}, {}, {}, {}, {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
-        fixture, imaging.lightPath.id(), ContrastMethod::Brightfield);
+        fixture, ContrastMethod::Brightfield);
     const auto cameraResolution = LightPathCameraResolver::resolve(
         equipment,
         mode,
@@ -1181,9 +1187,13 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
     check(cameraResolution.isResolved(),
           "resolves a manual camera endpoint before creating a configuration request");
 
+    const auto hardwareConfiguration =
+        makeCameraResolverHardwareConfiguration(
+            fixture, equipment, mode, imaging.lightPath.id());
     const auto request = LightPathConfigurationRequestFactory::create(
         equipment,
         mode,
+        hardwareConfiguration,
         imaging.lightPath.id(),
         cameraResolution,
         makeId<ConfigurationProfileId>("camera-request-factory-profile"),
@@ -1222,12 +1232,15 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
 
     const auto otherMode = makeCameraResolverMode(
         fixture,
-        imaging.lightPath.id(),
         ContrastMethod::Brightfield,
         "camera-request-factory-other-mode");
+    const auto otherModeHardwareConfiguration =
+        makeCameraResolverHardwareConfiguration(
+            fixture, equipment, otherMode, imaging.lightPath.id());
     const auto staleModeResolution = LightPathConfigurationRequestFactory::create(
         equipment,
         otherMode,
+        otherModeHardwareConfiguration,
         imaging.lightPath.id(),
         cameraResolution,
         makeId<ConfigurationProfileId>("camera-request-factory-profile-stale-mode"),
@@ -1243,11 +1256,15 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
 
     const auto otherPathId = makeId<LightPathId>("different-light-path");
     const auto wrongPathMode = makeCameraResolverMode(
-        fixture, otherPathId, ContrastMethod::Brightfield,
+        fixture, ContrastMethod::Brightfield,
         "camera-request-factory-wrong-path-mode");
+    const auto wrongPathHardwareConfiguration =
+        makeCameraResolverHardwareConfiguration(
+            fixture, equipment, wrongPathMode, otherPathId);
     const auto mismatch = LightPathConfigurationRequestFactory::create(
         equipment,
         wrongPathMode,
+        wrongPathHardwareConfiguration,
         imaging.lightPath.id(),
         cameraResolution,
         makeId<ConfigurationProfileId>("camera-request-factory-profile-2"),
@@ -1258,11 +1275,11 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         ExposurePolicy{});
     check(!mismatch &&
           mismatch.error() ==
-              LightPathConfigurationRequestFactoryError::OperationModeDoesNotContainLightPath,
-          "rejects a mode that does not configure the selected LightPath");
+              LightPathConfigurationRequestFactoryError::LightPathSettingNotFound,
+          "rejects a requested LightPath without a hardware-realization setting");
 }
 
-void testOperationModeWithoutSelectedLightPathSettingIsUnsupported() {
+void testCameraDiscoveryDoesNotDependOnHardwareRealization() {
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
         fixture, "camera-resolver-unconfigured-path", false);
@@ -1275,15 +1292,15 @@ void testOperationModeWithoutSelectedLightPathSettingIsUnsupported() {
         {cameraSpecification(fixture.cameraAId, "camera-resolver-unconfigured-mode")},
         {}, {}, {}, {}, {imaging.lightPath}));
 
-    const auto otherLightPathId =
-        makeId<LightPathId>("camera-resolver-another-mode-path");
     const auto mode = makeCameraResolverMode(
-        fixture, otherLightPathId, ContrastMethod::Brightfield);
+        fixture, ContrastMethod::Brightfield);
     const auto resolution = LightPathCameraResolver::resolve(
         equipment, mode, imaging.lightPath.id());
 
-    check(resolution.status() == LightPathCameraResolutionStatus::Unsupported,
-          "requires the selected LightPath to be configured by the operation mode");
+    check(resolution.status() == LightPathCameraResolutionStatus::Resolved &&
+          resolution.selected() &&
+          resolution.selected()->lightPathId == imaging.lightPath.id(),
+          "discovers a connected camera without requiring saved mode calibration");
 }
 
 void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
@@ -1448,7 +1465,7 @@ int main() {
     testMultipleConnectedCamerasRequireSelectionWhenNoUniqueRecommendationExists();
     testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie();
     testLightPathRequestFactoryDerivesCameraAndAllRouteIds();
-    testOperationModeWithoutSelectedLightPathSettingIsUnsupported();
+    testCameraDiscoveryDoesNotDependOnHardwareRealization();
     testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath();
     testSharedPhysicalConnectionSupportsOppositePathTraversal();
     testDuplicatePhysicalIdentitiesAreRejected();

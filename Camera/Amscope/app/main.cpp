@@ -1,6 +1,7 @@
 #include "amscope/QtAmcamCamera.h"
 #include "camera/FrameRateEstimator.h"
 #include "camera/CameraFeatureValidation.h"
+#include "camera/gentl/ProducerCatalog.h"
 #include "camera/qtwidgets/CameraCapabilityPanel.h"
 #include "camera/qtwidgets/CameraControlPanel.h"
 #include "camera/qtwidgets/CameraFeatureEditor.h"
@@ -210,26 +211,71 @@ QString numericRangeText(const camera::CameraFeatureDescriptor& descriptor) {
 
 
 int listCameras() {
-    amscope::CameraError error;
-    const auto cameras = amscope::QtAmcamCamera::enumerate(&error);
-    if (!error.message.empty()) {
-        std::cerr << error.message << '\n';
-        return 1;
-    }
+    std::size_t amscopeCount = 0;
+    std::size_t gentlCount = 0;
 
-    std::cout << cameras.size() << " camera(s) found\n";
-    for (const auto& camera : cameras) {
-        const std::string label = !camera.displayName.empty()
-                                      ? camera.displayName
-                                      : camera.modelName;
-        std::cout << "  " << label << " [" << camera.id << "]\n";
-        for (std::size_t i = 0; i < camera.previewResolutions.size(); ++i) {
-            const auto& resolution = camera.previewResolutions[i];
-            std::cout << "    " << i << ": "
-                      << resolution.width << 'x' << resolution.height << '\n';
+    // AmScope enumeration is independent of GenTL discovery. A failure in one
+    // backend must not prevent the other backend from reporting its devices.
+    std::cout << "AmScope devices:\n";
+    try {
+        amscope::CameraError error;
+        const auto cameras = amscope::QtAmcamCamera::enumerate(&error);
+        amscopeCount = cameras.size();
+        if (!error.message.empty()) {
+            std::cerr << "  AmScope discovery warning: " << error.message << '\n';
         }
+        for (const auto& camera : cameras) {
+            const std::string label = !camera.displayName.empty()
+                                          ? camera.displayName
+                                          : camera.modelName;
+            std::cout << "  " << label << " [" << camera.id << "]\n";
+            for (std::size_t i = 0; i < camera.previewResolutions.size(); ++i) {
+                const auto& resolution = camera.previewResolutions[i];
+                std::cout << "    " << i << ": "
+                          << resolution.width << 'x' << resolution.height << '\n';
+            }
+        }
+    } catch (const std::exception& exception) {
+        std::cerr << "  AmScope discovery failed: " << exception.what() << '\n';
+    } catch (...) {
+        std::cerr << "  AmScope discovery failed with an unknown error.\n";
     }
-    return 0;
+    std::cout << "AmScope devices: " << amscopeCount << '\n';
+
+    std::cout << "GenTL devices:\n";
+    try {
+        const auto catalog = camera::gentl::ProducerCatalog::discoverDevices();
+        std::cout << "  CTI Producers scanned: " << catalog.producerPaths.size() << '\n';
+        for (const auto& entry : catalog.producers) {
+            for (const auto& device : entry.devices) {
+                ++gentlCount;
+                std::string label = device.displayName;
+                if (label.empty()) label = device.model;
+                if (label.empty()) label = device.deviceId;
+
+                std::cout << "  " << label << " [" << device.deviceId << "]";
+                if (!device.vendor.empty()) std::cout << " vendor=" << device.vendor;
+                if (!device.model.empty()) std::cout << " model=" << device.model;
+                if (!device.serialNumber.empty())
+                    std::cout << " serial=" << device.serialNumber;
+                std::cout << " producer=" << device.producerPath << '\n';
+            }
+        }
+        for (const auto& failure : catalog.failures) {
+            std::cerr << "  GenTL Producer failed: " << failure.producerPath
+                      << ": " << failure.message << '\n';
+        }
+        if (catalog.producerPaths.empty()) {
+            std::cout << "  No .cti Producers found; check GENICAM_GENTL64_PATH.\n";
+        }
+    } catch (const std::exception& exception) {
+        std::cerr << "  GenTL discovery failed: " << exception.what() << '\n';
+    } catch (...) {
+        std::cerr << "  GenTL discovery failed with an unknown error.\n";
+    }
+    std::cout << "GenTL devices: " << gentlCount << '\n';
+    std::cout << "Total cameras found: " << (amscopeCount + gentlCount) << '\n';
+    return EXIT_SUCCESS;
 }
 
 class PreviewWindow final : public QMainWindow {

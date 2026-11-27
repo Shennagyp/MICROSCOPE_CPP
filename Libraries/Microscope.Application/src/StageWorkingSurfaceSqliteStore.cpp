@@ -379,6 +379,16 @@ StageWorkingSurfaceSqliteStore::initializeSchema() {
         BEFORE DELETE ON stage_working_surface_revision
         BEGIN SELECT RAISE(ABORT, 'Working-surface revisions are immutable'); END;
 
+        CREATE TRIGGER IF NOT EXISTS stage_working_surface_slide_sequential_insert
+        BEFORE INSERT ON stage_working_surface_slide
+        WHEN NEW.revision != COALESCE((
+            SELECT revision FROM stage_working_surface_current
+            WHERE microscope_id = NEW.microscope_id
+              AND equipment_revision = NEW.equipment_revision
+              AND stage_component_id = NEW.stage_component_id
+        ), 0) + 1
+        BEGIN SELECT RAISE(ABORT, 'Working-surface slide rows cannot be added after their revision is published'); END;
+
         CREATE TRIGGER IF NOT EXISTS stage_working_surface_slide_no_update
         BEFORE UPDATE ON stage_working_surface_slide
         BEGIN SELECT RAISE(ABORT, 'Working-surface slide records are immutable'); END;

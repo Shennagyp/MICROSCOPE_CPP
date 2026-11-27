@@ -346,8 +346,16 @@ void revisionRowsAreImmutable() {
     const bool childUpdated = sqlExec(path,
         "UPDATE stage_working_surface_slide SET length_micrometers = 1 "
         "WHERE microscope_id = 'scope-immutable' AND slide_id = 'slide-a'");
-    check(!updated && !childUpdated,
-        "SQLite triggers prevent mutation of historical parent and slide-placement records");
+    const bool lateChildInserted = sqlExec(path,
+        "INSERT INTO stage_working_surface_slide ("
+        "microscope_id, equipment_revision, stage_component_id, revision, slide_id, "
+        "rectangle_revision_id, stop_x, stop_y, drawn_x, drawn_y, length_axis, "
+        "length_micrometers, width_micrometers, top_left_corner, top_right_corner, "
+        "bottom_right_corner, bottom_left_corner) VALUES ("
+        "'scope-immutable', 1, 'stage-main', 1, 'late-slide', 'cad-late-v1', "
+        "1, 1, 2, 2, 0, 10, 5, 0, 1, 2, 3)");
+    check(!updated && !childUpdated && !lateChildInserted,
+        "SQLite triggers prevent mutation or late insertion into a published historical layout revision");
 
     opened.value().reset();
     removeDatabaseFiles(path);

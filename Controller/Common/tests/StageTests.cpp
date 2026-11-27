@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <typeinfo>
 #include <utility>
 #include <vector>
 namespace {
@@ -13,7 +14,7 @@ void check(bool v,const char* m){if(!v){++failures;std::cerr<<"FAIL: "<<m<<'\n';
 template<class T,class E>T take(core::Result<T,E> r){
     if(!r){
         std::cerr << "Factory failure type=" << typeid(E).name()
-                  << " code=" << static_cast<int>(r.error()) << '\\n';
+                  << '\\n';
         throw std::runtime_error("Unexpected factory failure.");
     }
     return std::move(r).value();

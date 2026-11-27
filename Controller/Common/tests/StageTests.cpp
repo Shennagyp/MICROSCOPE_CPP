@@ -3,7 +3,6 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
-#include <typeinfo>
 #include <utility>
 #include <vector>
 namespace {
@@ -89,7 +88,8 @@ void testModelAndConfigurationCardinality(){
 }
 void testMovementAndCurrentSlot(){
  auto d=std::make_shared<FakeDriver>();StageConfigurationId slides=cid("s0"),petri=cid("p0");StageSlotId s2=sid("s2");
- auto stage=take(Stage::create(fixture(slides,petri,s2),d,slides));
+ auto specification=fixture(slides,petri,s2);
+ auto stage=take(Stage::create(std::move(specification),d,slides));
  check(static_cast<bool>(stage.home()),"home active linear axes");
  check(d->linearHomed.size()==3&&d->rotaryHomed.empty(),"does not home unused rotation axis");
  check(static_cast<bool>(stage.moveTo({12'000'000,10'000'000},s2)),"slot-relative move accepted");
@@ -101,7 +101,8 @@ void testMovementAndCurrentSlot(){
 }
 void testRefreshPosition(){
  auto d=std::make_shared<FakeDriver>();StageConfigurationId slides=cid("s0"),petri=cid("p0");StageSlotId s2=sid("s2");
- auto stage=take(Stage::create(fixture(slides,petri,s2),d,slides));
+ auto specification=fixture(slides,petri,s2);
+ auto stage=take(Stage::create(std::move(specification),d,slides));
  check(static_cast<bool>(stage.home()),"initial home");
  check(static_cast<bool>(stage.moveTo({4'000'000,5'000'000},s2)),"set XY");
  StageAbsolutePosition p;p.linear={84'000'000,5'000'000,12'000'000};
@@ -114,7 +115,8 @@ void testRefreshPosition(){
 }
 void testRotationActivation(){
  auto d=std::make_shared<FakeDriver>();StageConfigurationId slides=cid("s0"),petri=cid("p0");StageSlotId s2=sid("s2");
- auto stage=take(Stage::create(fixture(slides,petri,s2),d,slides));
+ auto specification=fixture(slides,petri,s2);
+ auto stage=take(Stage::create(std::move(specification),d,slides));
  check(static_cast<bool>(stage.home()),"home slide configuration");
  check(static_cast<bool>(stage.activateConfiguration(petri)),"activate Petri configuration on same Stage");
  check(static_cast<bool>(stage.home()),"home axes used by Petri configuration");
@@ -126,13 +128,9 @@ void testRotationActivation(){
 }
 }
 int main(){
- std::cerr << "testModelAndConfigurationCardinality\\n";
  testModelAndConfigurationCardinality();
- std::cerr << "testMovementAndCurrentSlot\\n";
  testMovementAndCurrentSlot();
- std::cerr << "testRefreshPosition\\n";
  testRefreshPosition();
- std::cerr << "testRotationActivation\\n";
  testRotationActivation();
  if(failures){std::cerr<<failures<<" Controller Stage test(s) failed.\n";return 1;}
  std::cout<<"All Controller Stage tests passed.\n";return 0;

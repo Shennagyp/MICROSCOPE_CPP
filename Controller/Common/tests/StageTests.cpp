@@ -11,7 +11,12 @@ using namespace microscope::controller;
 int failures=0;
 void check(bool v,const char* m){if(!v){++failures;std::cerr<<"FAIL: "<<m<<'\n';}}
 template<class T,class E>T take(core::Result<T,E> r){
-    if(!r)throw std::runtime_error("Unexpected factory failure.");return std::move(r).value();
+    if(!r){
+        std::cerr << "Factory failure type=" << typeid(E).name()
+                  << " code=" << static_cast<int>(r.error()) << '\\n';
+        throw std::runtime_error("Unexpected factory failure.");
+    }
+    return std::move(r).value();
 }
 core::StageAxisId aid(const char*s){return take(core::StageAxisId::create(s));}
 core::StageConfigurationId cid(const char*s){return take(core::StageConfigurationId::create(s));}
@@ -37,7 +42,7 @@ StageSpecification fixture(StageConfigurationId& slides,StageConfigurationId& pe
  auto t=take(RotationAxisSpecification::create(tid,
   RotationAxisGeometry{{10'000,20'000,30'000},RotationAxisDirection::Z},
   rr(-3.141592653589793,3.141592653589793),0.0001,0.001,0.0002));
- slides=cid("slides"),petri=cid("petri"),slot2=sid("slot-2");
+ slides=cid("slides"),petri=cid("petri"),slot2=sid("slide-slot-2");
  std::vector<StageSlot> slideSlots;
  for(int i=0;i<10;++i){
   const auto name="slide-slot-"+std::to_string(i+1);
@@ -103,8 +108,14 @@ void testRotationActivation(){
 }
 }
 int main(){
- testModelAndConfigurationCardinality();testMovementAndCurrentSlot();
- testRefreshPosition();testRotationActivation();
+ std::cerr << "testModelAndConfigurationCardinality\\n";
+ testModelAndConfigurationCardinality();
+ std::cerr << "testMovementAndCurrentSlot\\n";
+ testMovementAndCurrentSlot();
+ std::cerr << "testRefreshPosition\\n";
+ testRefreshPosition();
+ std::cerr << "testRotationActivation\\n";
+ testRotationActivation();
  if(failures){std::cerr<<failures<<" Controller Stage test(s) failed.\n";return 1;}
  std::cout<<"All Controller Stage tests passed.\n";return 0;
 }

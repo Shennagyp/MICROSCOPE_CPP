@@ -88,10 +88,10 @@ struct PreviewFrameRateMeterTests {
     private static func testCounterMeterResetsAfterNoProgress() {
         var meter = FrameRateCounterMeter()
         meter.record(0, at: 0.0)
-        meter.record(12, at: 0.48)
-        precondition(meter.framesPerSecond > 0)
+        meter.record(12, at: 0.52)
+        precondition(abs(meter.framesPerSecond - (12.0 / 0.52)) < 0.000001)
 
-        meter.refresh(at: 1.49)
+        meter.refresh(at: 1.53)
         precondition(meter.framesPerSecond == 0)
     }
 

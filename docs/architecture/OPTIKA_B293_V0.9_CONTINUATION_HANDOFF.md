@@ -2,11 +2,11 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Latest source/test commit:** `6b8a4ad4e176a80dd911b3c9be135ef4441aa045`  
-**Architecture audit commit:** `cad2c5463ca728a3e1db335625b389f7092139e4`  
+**Latest source/test commit:** `8cc64e2aafbb964f9956b74b7b56d236c801a543`  
+**Architecture audit commit:** `9893e654028183f8f1904fc045a6953e5b390240`  
 **Verification:** [platform CI run 45943921361](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45943921361) passed Ubuntu GCC, macOS Clang and Windows MSVC for the preceding Core/Application baseline. The new registration/working-surface comparison and its tests are in the current change set; their three-platform workflow is pending.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.  
-**Current C++ implementation:** `6b8a4ad4e176a80dd911b3c9be135ef4441aa045`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, this change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison`. It binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, independent geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. The comparison owns immutable copies of the original `SlideRegistration` and CAD rectangle, retaining the affine mapping methods and CAD draw/constraint data. It is not a motion command. CI run [45951302308](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45951302308) is running for this change set.
+**Current C++ implementation:** `8cc64e2aafbb964f9956b74b7b56d236c801a543`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, this change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison`. It binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, independent geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. The comparison owns immutable copies of the original `SlideRegistration` and CAD rectangle, retaining the affine mapping methods and CAD draw/constraint data. It is not a motion command. CI run [45951509031](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45951509031) is queued for this corrected change set.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 

@@ -10,6 +10,8 @@
 
 namespace microscope::core {
 
+class OperationMode;
+
 struct LightPathCalibrationPoint {
     double driveValue = 0.0;
     double irradianceMicrowattsPerSquareMillimeter = 0.0;
@@ -156,6 +158,50 @@ private:
     IlluminationChannelId illuminationChannelId_;
     std::vector<EquipmentComponentId> configuredOpticalComponentIds_;
     double targetIrradianceMicrowattsPerSquareMillimeter_;
+};
+
+
+enum class OperationModeHardwareConfigurationError {
+    EmptyLightPathSettings,
+    MicroscopeMismatch,
+    OperationModeIdentityMismatch,
+    OperationModeRevisionMismatch,
+    EquipmentDefinitionRevisionMismatch,
+    DuplicateLightPath
+};
+
+// Optional calibrated hardware realization for one exact OperationMode and
+// equipment revision. OperationMode itself remains valid without this object.
+class OperationModeHardwareConfiguration final {
+public:
+    [[nodiscard]] static Result<
+        OperationModeHardwareConfiguration,
+        OperationModeHardwareConfigurationError> create(
+            const OperationMode& operationMode,
+            std::vector<LightPathModeSetting> lightPathSettings);
+
+    [[nodiscard]] const MicroscopeId& microscopeId() const noexcept;
+    [[nodiscard]] const OperationModeId& operationModeId() const noexcept;
+    [[nodiscard]] std::uint64_t operationModeRevision() const noexcept;
+    [[nodiscard]] std::uint64_t equipmentDefinitionRevision() const noexcept;
+    [[nodiscard]] const std::vector<LightPathModeSetting>&
+    lightPathSettings() const noexcept;
+    [[nodiscard]] const LightPathModeSetting* findLightPathSetting(
+        const LightPathId& lightPathId) const noexcept;
+
+private:
+    OperationModeHardwareConfiguration(
+        MicroscopeId microscopeId,
+        OperationModeId operationModeId,
+        std::uint64_t operationModeRevision,
+        std::uint64_t equipmentDefinitionRevision,
+        std::vector<LightPathModeSetting> lightPathSettings);
+
+    MicroscopeId microscopeId_;
+    OperationModeId operationModeId_;
+    std::uint64_t operationModeRevision_;
+    std::uint64_t equipmentDefinitionRevision_;
+    std::vector<LightPathModeSetting> lightPathSettings_;
 };
 
 } // namespace microscope::core

@@ -1,4 +1,5 @@
 #include "microscope/core/configuration/LightPathCalibration.h"
+#include "microscope/core/configuration/OperationMode.h"
 
 #include <algorithm>
 #include <cmath>
@@ -336,6 +337,100 @@ std::optional<double> LightPathModeSetting::resolveDriveSetting(
 
     return calibration.driveSettingForTargetIrradiance(
         targetIrradianceMicrowattsPerSquareMillimeter_);
+}
+
+
+OperationModeHardwareConfiguration::OperationModeHardwareConfiguration(
+    MicroscopeId microscopeId,
+    OperationModeId operationModeId,
+    std::uint64_t operationModeRevision,
+    std::uint64_t equipmentDefinitionRevision,
+    std::vector<LightPathModeSetting> lightPathSettings)
+    : microscopeId_(std::move(microscopeId)),
+      operationModeId_(std::move(operationModeId)),
+      operationModeRevision_(operationModeRevision),
+      equipmentDefinitionRevision_(equipmentDefinitionRevision),
+      lightPathSettings_(std::move(lightPathSettings)) {}
+
+Result<
+    OperationModeHardwareConfiguration,
+    OperationModeHardwareConfigurationError>
+OperationModeHardwareConfiguration::create(
+    const OperationMode& operationMode,
+    std::vector<LightPathModeSetting> lightPathSettings) {
+    if (lightPathSettings.empty()) {
+        return Result<
+            OperationModeHardwareConfiguration,
+            OperationModeHardwareConfigurationError>::failure(
+                OperationModeHardwareConfigurationError::EmptyLightPathSettings);
+    }
+    const auto equipmentRevision =
+        lightPathSettings.front().equipmentDefinitionRevision();
+    std::set<LightPathId> pathIds;
+    for (const auto& setting : lightPathSettings) {
+        if (setting.microscopeId() != operationMode.microscopeId()) {
+            return Result<OperationModeHardwareConfiguration,
+                          OperationModeHardwareConfigurationError>::failure(
+                OperationModeHardwareConfigurationError::MicroscopeMismatch);
+        }
+        if (setting.operationModeId() != operationMode.id()) {
+            return Result<OperationModeHardwareConfiguration,
+                          OperationModeHardwareConfigurationError>::failure(
+                OperationModeHardwareConfigurationError::OperationModeIdentityMismatch);
+        }
+        if (setting.operationModeRevision() != operationMode.revision()) {
+            return Result<OperationModeHardwareConfiguration,
+                          OperationModeHardwareConfigurationError>::failure(
+                OperationModeHardwareConfigurationError::OperationModeRevisionMismatch);
+        }
+        if (setting.equipmentDefinitionRevision() != equipmentRevision) {
+            return Result<OperationModeHardwareConfiguration,
+                          OperationModeHardwareConfigurationError>::failure(
+                OperationModeHardwareConfigurationError::EquipmentDefinitionRevisionMismatch);
+        }
+        if (!pathIds.insert(setting.lightPathId()).second) {
+            return Result<OperationModeHardwareConfiguration,
+                          OperationModeHardwareConfigurationError>::failure(
+                OperationModeHardwareConfigurationError::DuplicateLightPath);
+        }
+    }
+    return Result<OperationModeHardwareConfiguration,
+                  OperationModeHardwareConfigurationError>::success(
+        OperationModeHardwareConfiguration(
+            operationMode.microscopeId(), operationMode.id(),
+            operationMode.revision(), equipmentRevision,
+            std::move(lightPathSettings)));
+}
+
+const MicroscopeId&
+OperationModeHardwareConfiguration::microscopeId() const noexcept {
+    return microscopeId_;
+}
+const OperationModeId&
+OperationModeHardwareConfiguration::operationModeId() const noexcept {
+    return operationModeId_;
+}
+std::uint64_t
+OperationModeHardwareConfiguration::operationModeRevision() const noexcept {
+    return operationModeRevision_;
+}
+std::uint64_t
+OperationModeHardwareConfiguration::equipmentDefinitionRevision() const noexcept {
+    return equipmentDefinitionRevision_;
+}
+const std::vector<LightPathModeSetting>&
+OperationModeHardwareConfiguration::lightPathSettings() const noexcept {
+    return lightPathSettings_;
+}
+const LightPathModeSetting*
+OperationModeHardwareConfiguration::findLightPathSetting(
+    const LightPathId& lightPathId) const noexcept {
+    const auto found = std::find_if(
+        lightPathSettings_.begin(), lightPathSettings_.end(),
+        [&lightPathId](const LightPathModeSetting& setting) {
+            return setting.lightPathId() == lightPathId;
+        });
+    return found == lightPathSettings_.end() ? nullptr : &*found;
 }
 
 } // namespace microscope::core

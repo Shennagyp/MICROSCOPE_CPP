@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -13,7 +14,7 @@ inline constexpr std::size_t DefaultCameraRegisterTransferLimitBytes =
 struct CameraRegisterDescriptor {
     std::string name;
     std::string displayName;
-    std::size_t sizeBytes = 0;
+    std::optional<std::size_t> sizeBytes;
     bool isAvailable = false;
     bool isReadable = false;
     bool isWritable = false;

@@ -4,6 +4,7 @@
 #include "camera/gentl/GenApiFeatureAccess.h"
 #include "camera/gentl/GenApiRegisterAccess.h"
 
+#include <cstddef>
 #include <memory>
 
 namespace camera::gentl {

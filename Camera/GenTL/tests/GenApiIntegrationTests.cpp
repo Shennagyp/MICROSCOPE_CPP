@@ -136,6 +136,22 @@ int main(int argc, char** argv) {
             require(rawRegisterBytes && rawRegisterBytes->size() == 2,
                     "IRegister read did not return the declared byte length.");
 
+            auto scalarAsRegister = access.registers().readRegister("Gain");
+            auto* scalarAsRegisterError =
+                std::get_if<camera::CameraRegisterAccessError>(&scalarAsRegister);
+            require(scalarAsRegisterError &&
+                        scalarAsRegisterError->code ==
+                            camera::CameraRegisterAccessError::Code::Unsupported,
+                    "Scalar GenApi feature was accepted as a raw IRegister.");
+
+            auto internalRegister = access.registers().readRegister("GainReg");
+            auto* internalRegisterError =
+                std::get_if<camera::CameraRegisterAccessError>(&internalRegister);
+            require(internalRegisterError &&
+                        internalRegisterError->code ==
+                            camera::CameraRegisterAccessError::Code::RegisterNotFound,
+                    "Internal implementation IntReg was exposed as a public IRegister.");
+
             const std::vector<std::uint8_t> rawWriteBytes{0x11, 0x22};
             auto rawRegisterWrite =
                 access.registers().writeRegister("RawRegister", rawWriteBytes);

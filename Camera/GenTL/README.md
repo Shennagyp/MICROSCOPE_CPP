@@ -48,7 +48,7 @@ cmake --build build/gentl-genapi --parallel
 ctest --test-dir build/gentl-genapi --output-on-failure
 ```
 
-GenApi is optional at build time because it depends on the official GenICam SDK. The macOS CI workflow downloads and hash-verifies the official EMVA GenICam Package, builds GenApi 3.5.1 for Intel x86_64 and Apple Silicon arm64, then runs XML-backed tests through the native CTI Consumer and the in-repository simulated Producer. Those tests exercise Root/nested-category traversal, dynamic availability, access modes, Boolean/Integer/Float/String/Enumeration features, numeric validation, commands, register-node rejection and failure/recovery behavior.
+GenApi is optional at build time because it depends on the official GenICam SDK. The macOS CI workflow downloads and hash-verifies the official EMVA GenICam Package, builds GenApi 3.5.1 for Intel x86_64 and Apple Silicon arm64, then runs XML-backed tests through the native CTI Consumer and the in-repository simulated Producer. Those tests exercise Root/nested-category traversal, dynamic availability, access modes, Boolean/Integer/Float/String/Enumeration features, numeric validation, commands, public `IRegister` enumeration/read/write, exact byte-length checks, read-only rejection, hidden internal `IntReg` nodes and failure/recovery behavior.
 
 ## Production C++ API
 
@@ -113,7 +113,14 @@ auto commandList = genApi.commands().commandDescriptors();
 
 auto issued = genApi.commands().executeCommand("AcquisitionStart");
 auto done = genApi.commands().isCommandDone("AcquisitionStart");
+
+auto registerList = genApi.registers().registerDescriptors();
+auto registerBytes = genApi.registers().readRegister("DeviceRegister");
+// Raw register writes require an exact byte count matching IRegister::GetLength().
 ```
+
+
+Raw GenApi register access is a separate `ICameraRegisterAccess` contract (`GenApiDeviceAccess::registers()`). Register values remain opaque byte sequences; no integer width, byte order or bit-field interpretation is inferred. The default transfer limit is 16 MiB and can be changed when constructing `GenApiDeviceAccess`. Only public `IRegister` nodes reachable from the GenApi Root category are exposed. Internal implementation nodes such as `IntReg` remain hidden, and scalar features are not accepted by the register API. The public GenApi interface supplies `Get`, `Set` and `GetLength`; transfers enforce access mode, exact write length and the configured size bound.
 
 Use the combined GenApi owner when both feature and command access are required. It retains one device session and shares one node map, remote port and serialization boundary; do not open a second session for the command adapter.
 

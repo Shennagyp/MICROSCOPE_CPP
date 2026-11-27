@@ -1762,7 +1762,7 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
             30.0, 1.0, std::nullopt, 15000.0));
     const auto microscopyRequirements = take(MicroscopyRequirements::create(
         {{ContrastMethod::Brightfield,
-          MicroscopyTechniqueConstraintKind::Required},
+          MicroscopyTechniqueConstraintKind::Supported},
          {ContrastMethod::PhaseContrast,
           MicroscopyTechniqueConstraintKind::Preferred}},
         objectiveRequirements,
@@ -1811,7 +1811,15 @@ void testSampleTypeRequirementsAssessResolvedConfigurationAndPreserveCameraWarni
     check(assessment.isCompatible(),
           "accepts a resolved Brightfield configuration satisfying SampleType technique and objective requirements");
     check(assessment.hasWarnings(),
-          "reports unknown camera performance data without blocking the manually selected operable camera");
+          "reports advisory diagnostics without blocking the manually selected operable camera");
+    check(std::any_of(
+              assessment.diagnostics().begin(),
+              assessment.diagnostics().end(),
+              [](const Diagnostic& diagnostic) {
+                  return diagnostic.code() ==
+                      "sample.microscopy.preferred_technique_not_selected";
+              }),
+          "accepts the supported method while warning that the SampleType prefers another allowed method");
     check(hasDiagnosticCode(configuration, "configuration.profile.not_found") == false,
           "keeps SampleType requirements independent of the microscope equipment-specific profile catalog");
 

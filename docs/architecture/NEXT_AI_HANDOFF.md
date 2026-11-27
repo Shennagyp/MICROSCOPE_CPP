@@ -7,9 +7,9 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 ### Latest tested checkpoint
 
 - Branch: `camera-v.2.0`.
-- Latest tested implementation commit: `57c4a1aac058b79eb767143de1ff640de14e0faf` (current documentation-only head is its child).
-- GenTL bridge [workflow #45917087302](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917087302): passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and integration tests.
-- Package/external-consumer [workflow #45917087347](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917087347): passed Intel x86_64 and Apple Silicon arm64, including package tests, relocation, clean external consumers and runtime loading/link checks.
+- Latest tested implementation commit: `e03ddb000a1d716b95510ff6c531647c85e1610a`.
+- GenTL bridge [workflow #45917806852](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917806852): passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and integration tests.
+- Package/external-consumer [workflow #45917806847](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917806847): passed Intel x86_64 and Apple Silicon arm64, including package tests, relocation, clean external consumers and runtime loading/link checks.
 - No physical camera is available. In-repository CTI tests are software integration evidence only, not independent vendor CTI or physical hardware qualification.
 
 ### Implemented and tested
@@ -18,6 +18,7 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 2. **PFNC:** Mono14p and all four Bayer14p patterns are mapped in addition to existing verified formats. Packed payloads remain byte-identical; no sample unpacking/demosaicing occurs.
 3. **Acquisition integrity:** bounded-memory Common accounting distinguishes complete images, incomplete buffers, non-image payloads, empty payloads, host wait timeouts, missing IDs, forward gaps/missing IDs, duplicate IDs, out-of-order IDs, ambiguous backwards transitions, declared wraps and Producer starvation.
 4. **Simulator faults and sustained recycling:** separate Producer underrun and host timeout injection; gap/duplicate/out-of-order/ambiguous ID scenarios; incomplete and empty payload scenarios; 4,096 frames recycled through four announced buffers.
+5. **Lifecycle/recovery qualification:** queue starvation with explicit queue depletion and Producer counter increment, separate host timeout, buffer replenishment and recovery; three stop/reopen cycles; simulated stream interruption after two frames followed by stop/reopen and monotonic frame/timestamp continuation. Recovery CTests pass on both architectures.
 5. **Multipart:** optional GenTL 1.5 `DSGetNumBufferParts` and `DSGetBufferPartInfo` entry points are resolved as optional. Part base/size are validated against the filled payload, converted to offsets before requeue, and represented as Common `FramePart` views over the one owned payload. The simulator exercises a 2D image part and a non-image part; image-bearing multipart buffers count as complete image deliveries. Producers without the optional functions remain usable for single-part acquisition.
 6. **GenApi `IRegister`:** new Common `ICameraRegisterAccess` keeps raw byte-register operations separate from scalar `ICameraFeatureAccess`. `GenApiDeviceAccess::registers()` exposes only public Root-reachable `IRegister` nodes. The default transfer bound is 16 MiB, configurable at device-access construction; read/write access and exact byte length are enforced; reads use `IRegister::Get`, writes use `Set`; internal `IntReg` nodes remain hidden. Tests cover read-only read, read-only write rejection, RW write and byte-for-byte readback, wrong-length rejection, configurable transfer-limit rejection, scalar-as-register rejection and hidden internal register rejection.
 
@@ -33,7 +34,7 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 
 ### Next work — strict order
 
-**A. Finish GenTL lifecycle/recovery qualification.** Add deterministic queue exhaustion and recovery, provider starvation distinct from host delayed delivery, repeated start/stop, stop/reopen, interruption/restart and bounded queue tests. Existing 4,096-frame test proves repeated buffer recycling, not true queue depletion, hardware FPS or long-duration WSI storage. Assert all observable counters and recovery transitions.
+**A. Cross-protocol reuse is now the next implementation stage.** Extend the validated Common frame-layout and acquisition-integrity contracts into AmScope/Amcam first, then other supported adapters. Preserve each backend's own buffer pool, lifecycle, timestamp unit/clock domain, sequence-counter width/wrap, provider counters and drop semantics. For Amcam, the SDK declares a 32-bit unsigned frame sequence and microsecond timestamp ticks; preserve those facts and do not invent a clock origin. Add fake-SDK tests for sequence gaps/duplicates/wrap, absent metadata, pool exhaustion/host drops and restart. Do not merge vendor lifecycle semantics into GenTL or Common.
 
 **B. Independent Producer interoperability.** Keep it a separate external gate. The first-party CTI simulator proves our consumer path only. Use a current CTI Producer whose license permits generic third-party consumer testing; do not guess package URLs or claim independent compatibility without a passing run.
 

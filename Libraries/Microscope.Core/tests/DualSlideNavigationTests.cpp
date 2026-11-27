@@ -58,11 +58,16 @@ void convertsMicrometersIntoDeclaredAxisUnits() {
  auto spec=take(DualSlideCarrierSpecification::create(
      mmStage,id<StageAxisId>("mm-x"),id<StageAxisId>("mm-y"),
      CarrierHorizontalDirection::PositiveStageXFromLeftToRight));
- auto command=spec.moveTo({12500.0,22000.0});
+ auto leftRegistration=registration("mm-left",DualSlideSlot::Left,5000);
+ auto rightRegistration=registration("mm-right",DualSlideSlot::Right,95000);
+ auto carrier=take(DualSlideCarrierState::create(spec,
+     take(SlideSlotState::create(DualSlideSlot::Left,id<SlideId>("mm-left"),leftRegistration)),
+     take(SlideSlotState::create(DualSlideSlot::Right,id<SlideId>("mm-right"),rightRegistration))));
+ auto command=carrier.commandFor(id<SlideId>("mm-left"),{37500.0,12500.0});
  if(!command||command.value().targets()[0].unit()!=AxisCoordinateUnit::Millimeters||
-    std::abs(command.value().targets()[0].value()-12.5)>1e-9||
-    std::abs(command.value().targets()[1].value()-22.0)>1e-9)
-     throw std::runtime_error("micrometer slide map was not converted to declared millimeter axes");
+    std::abs(command.value().targets()[0].value()-42.5)>1e-9||
+    std::abs(command.value().targets()[1].value()-32.5)>1e-9)
+     throw std::runtime_error("slide navigation did not convert mapped micrometers into declared millimeter axes");
 }
 int main(){
  try { equipmentDefinitionOwnsCarrier(); convertsMicrometersIntoDeclaredAxisUnits(); }

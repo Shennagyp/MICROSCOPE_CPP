@@ -1,4 +1,5 @@
 #include "microscope/application/persistence/EquipmentDefinitionSqliteStore.h"
+#include "microscope/application/configuration/EquipmentDefinitionJsonLoader.h"
 
 #include <sqlite3.h>
 
@@ -221,6 +222,19 @@ core::Status<Error> EquipmentDefinitionSqliteStore::initializeSchema() {
         BEFORE DELETE ON equipment_definition_revision
         BEGIN
             SELECT RAISE(ABORT, 'equipment definition revisions are immutable');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS equipment_definition_current_no_rewind
+        BEFORE UPDATE ON equipment_definition_current
+        WHEN NEW.revision <= OLD.revision
+        BEGIN
+            SELECT RAISE(ABORT, 'current equipment definition revision must increase');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS equipment_definition_current_no_delete
+        BEFORE DELETE ON equipment_definition_current
+        BEGIN
+            SELECT RAISE(ABORT, 'current equipment definition pointer cannot be deleted');
         END;
 
         CREATE INDEX IF NOT EXISTS equipment_definition_revision_lookup

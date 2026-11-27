@@ -1,7 +1,7 @@
 #pragma once
 #include "microscope/core/equipment/StageSpecifications.h"
 #include "microscope/core/equipment/DualSlideCarrierSpecification.h"
-#include "microscope/core/equipment/SlideGeometry.h"
+#include "microscope/core/samples/SlideGeometry.h"
 #include "microscope/core/runtime/Feedback.h"
 #include "microscope/core/motion/StageMotionPort.h"
 #include "microscope/core/motion/StageAxisPositionState.h"

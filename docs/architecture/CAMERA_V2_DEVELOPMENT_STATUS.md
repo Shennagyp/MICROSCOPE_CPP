@@ -16,10 +16,10 @@ This is the active software continuation authority for `camera-v.2.0`. Historica
 
 ### Accepted implementation and verification
 
-**Latest source commit:** `9d898ef4f962f0c48691928c7383cfaf612b618e`.
+**Latest tested implementation commit:** `57c4a1aac058b79eb767143de1ff640de14e0faf` (the current documentation-only head is a child of this commit).
 
-- GenTL bridge workflow [#45916852610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45916852610) passed on Intel x86_64 and Apple Silicon arm64, including CTest and official GenApi 3.5.1 integration.
-- Package/external-consumer workflow [#45916852586](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45916852586) passed on Intel x86_64 and Apple Silicon arm64, including package tests, install/relocation, clean external consumers and runtime-link checks.
+- GenTL bridge workflow [#45917087302](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917087302) passed on Intel x86_64 and Apple Silicon arm64, including CTest and official GenApi 3.5.1 integration.
+- Package/external-consumer workflow [#45917087347](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917087347) passed on Intel x86_64 and Apple Silicon arm64, including package tests, install/relocation, clean external consumers and runtime-link checks.
 - These are CI and in-repository CTI simulator results. They do not qualify an independent vendor CTI, physical camera transport, real network loss, or a durable/lossless WSI tile-storage path.
 
 Accepted capabilities in the latest tested source:
@@ -29,7 +29,7 @@ Accepted capabilities in the latest tested source:
 3. **Acquisition integrity:** Common tracks complete/incomplete/non-image/invalid deliveries, optional frame IDs, forward gaps/missing IDs, duplicates, out-of-order IDs, ambiguous backward transitions, declared wrap models, host wait timeouts and provider-reported starvation. Host wait timeouts and Producer underruns are distinct.
 4. **GenTL simulator fault and continuity tests:** gaps, duplicates, out-of-order and ambiguous IDs, incomplete frames, empty payloads, injected Producer underruns, a separate host timeout and 4,096 consecutive buffer-recycling deliveries through four announced buffers.
 5. **GenTL multipart:** optional `DSGetNumBufferParts` / `DSGetBufferPartInfo` dispatch; validated part address/size ranges converted to offsets before buffer requeue; Common `FramePart` metadata and `partData()` views refer to the single owned payload. Simulator test covers one 2D image part plus one non-image part. An image-bearing multipart buffer counts as a complete image delivery. Producers without the optional entry points continue to work for ordinary single-part acquisition.
-6. **GenApi public `IRegister`:** `Camera.Common` defines a separate opaque-byte `ICameraRegisterAccess` contract; `GenApiDeviceAccess::registers()` enumerates public Root-reachable `IRegister` nodes and supports bounded read/write. Default transfer limit is 16 MiB and configurable. Reads use `Get`; writes use `Set`; length, availability, read/write access and exact write size are checked under the shared serialized node map. Internal `IntReg` implementation nodes remain hidden and scalar features are not accepted as raw registers. XML-backed tests cover RO read, RW write, wrong-length rejection and hidden/scalar-node rejection.
+6. **GenApi public `IRegister`:** `Camera.Common` defines a separate opaque-byte `ICameraRegisterAccess` contract; `GenApiDeviceAccess::registers()` enumerates public Root-reachable `IRegister` nodes and supports bounded read/write. Default transfer limit is 16 MiB and configurable. Reads use `Get`; writes use `Set`; length, availability, read/write access and exact write size are checked under the shared serialized node map. Internal `IntReg` implementation nodes remain hidden and scalar features are not accepted as raw registers. XML-backed tests cover RO read, RW write/readback byte equality, wrong-length rejection, configurable transfer-limit rejection and hidden/scalar-node rejection.
 
 ### Ownership and classification
 

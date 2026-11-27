@@ -7,9 +7,9 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 ### Latest tested checkpoint
 
 - Branch: `camera-v.2.0`.
-- Source commit: `9d898ef4f962f0c48691928c7383cfaf612b618e`.
-- GenTL bridge [workflow #45916852610](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45916852610): passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and integration tests.
-- Package/external-consumer [workflow #45916852586](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45916852586): passed Intel x86_64 and Apple Silicon arm64, including package tests, relocation, clean external consumers and runtime loading/link checks.
+- Latest tested implementation commit: `57c4a1aac058b79eb767143de1ff640de14e0faf` (current documentation-only head is its child).
+- GenTL bridge [workflow #45917087302](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917087302): passed Intel x86_64 and Apple Silicon arm64, including official GenApi 3.5.1 build and integration tests.
+- Package/external-consumer [workflow #45917087347](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917087347): passed Intel x86_64 and Apple Silicon arm64, including package tests, relocation, clean external consumers and runtime loading/link checks.
 - No physical camera is available. In-repository CTI tests are software integration evidence only, not independent vendor CTI or physical hardware qualification.
 
 ### Implemented and tested
@@ -19,7 +19,7 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 3. **Acquisition integrity:** bounded-memory Common accounting distinguishes complete images, incomplete buffers, non-image payloads, empty payloads, host wait timeouts, missing IDs, forward gaps/missing IDs, duplicate IDs, out-of-order IDs, ambiguous backwards transitions, declared wraps and Producer starvation.
 4. **Simulator faults and sustained recycling:** separate Producer underrun and host timeout injection; gap/duplicate/out-of-order/ambiguous ID scenarios; incomplete and empty payload scenarios; 4,096 frames recycled through four announced buffers.
 5. **Multipart:** optional GenTL 1.5 `DSGetNumBufferParts` and `DSGetBufferPartInfo` entry points are resolved as optional. Part base/size are validated against the filled payload, converted to offsets before requeue, and represented as Common `FramePart` views over the one owned payload. The simulator exercises a 2D image part and a non-image part; image-bearing multipart buffers count as complete image deliveries. Producers without the optional functions remain usable for single-part acquisition.
-6. **GenApi `IRegister`:** new Common `ICameraRegisterAccess` keeps raw byte-register operations separate from scalar `ICameraFeatureAccess`. `GenApiDeviceAccess::registers()` exposes only public Root-reachable `IRegister` nodes. The default transfer bound is 16 MiB, configurable at device-access construction; read/write access and exact byte length are enforced; reads use `IRegister::Get`, writes use `Set`; internal `IntReg` nodes remain hidden. Tests cover read-only read, read-only write rejection, RW write, wrong-length rejection, scalar-as-register rejection and hidden internal register rejection.
+6. **GenApi `IRegister`:** new Common `ICameraRegisterAccess` keeps raw byte-register operations separate from scalar `ICameraFeatureAccess`. `GenApiDeviceAccess::registers()` exposes only public Root-reachable `IRegister` nodes. The default transfer bound is 16 MiB, configurable at device-access construction; read/write access and exact byte length are enforced; reads use `IRegister::Get`, writes use `Set`; internal `IntReg` nodes remain hidden. Tests cover read-only read, read-only write rejection, RW write and byte-for-byte readback, wrong-length rejection, configurable transfer-limit rejection, scalar-as-register rejection and hidden internal register rejection.
 
 ### Protocol/feature ownership
 

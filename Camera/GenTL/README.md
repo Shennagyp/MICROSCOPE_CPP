@@ -48,7 +48,7 @@ cmake --build build/gentl-genapi --parallel
 ctest --test-dir build/gentl-genapi --output-on-failure
 ```
 
-GenApi is optional at build time because it depends on the official GenICam SDK. The macOS CI workflow downloads and hash-verifies the official EMVA GenICam Package, builds GenApi 3.5.1 for Intel x86_64 and Apple Silicon arm64, then runs XML-backed tests through the native CTI Consumer and the in-repository simulated Producer. Those tests exercise Root/nested-category traversal, dynamic availability, access modes, Boolean/Integer/Float/String/Enumeration features, numeric validation, commands, public `IRegister` enumeration/read/write, exact byte-length checks, read-only rejection, hidden internal `IntReg` nodes and failure/recovery behavior.
+GenApi is optional at build time because it depends on the official GenICam SDK. The macOS CI workflow downloads and hash-verifies the official EMVA GenICam Package, builds GenApi 3.5.1 for Intel x86_64 and Apple Silicon arm64, then runs XML-backed tests through the native CTI Consumer and the in-repository simulated Producer. Those tests exercise Root/nested-category traversal, dynamic availability, access modes, Boolean/Integer/Float/String/Enumeration features, numeric validation, commands, public `IRegister` enumeration/read/write, exact byte-length checks, read-only rejection, byte-for-byte write/readback, configurable transfer-limit rejection, hidden internal `IntReg` nodes and failure/recovery behavior.
 
 ## Production C++ API
 

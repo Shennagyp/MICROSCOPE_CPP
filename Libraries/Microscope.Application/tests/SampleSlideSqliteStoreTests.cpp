@@ -337,7 +337,21 @@ void testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation() {
         const auto sampleTypeV2 = makeSampleType(typeId, 2, "Kidney histology v2");
         check(store->saveSampleTypeRevision(sampleTypeV1, 0).isSuccess(),
               "persists the SampleType revision required by the Slide");
-        const auto slideV1 = makeSlide(slideId, 1, sampleTypeV1, originLabId);
+        const auto stainSuitability = take(StainMicroscopySuitability::create({
+            ContrastMethod::Brightfield,
+            ContrastMethod::PolarizedLight}));
+        const auto hematoxylinEosin = take(Stain::create(
+            makeId<StainId>("stain-he-kidney"),
+            "Hematoxylin and eosin",
+            "Routine histology stain",
+            stainSuitability));
+        const auto periodicAcidSchiff = take(Stain::create(
+            makeId<StainId>("stain-pas-kidney"),
+            "Periodic acid-Schiff",
+            "Carbohydrate and basement-membrane stain"));
+        const auto slideV1 = makeSlide(
+            slideId, 1, sampleTypeV1, originLabId,
+            {hematoxylinEosin, periodicAcidSchiff});
         const auto savedSlide = store->saveSlideRevision(slideV1, 0);
         check(savedSlide.isSuccess(),
               "persists a Slide only after its exact SampleType revision exists");
@@ -355,6 +369,30 @@ void testSlidePinsExactSampleTypeRevisionAndRoundTripsCompletePreparation() {
                   "preserves the Slide's exact historical SampleType foreign-key revision");
             check(loaded.originLabId() == originLabId,
                   "round-trips optional OriginLabId without requiring a Lab entity");
+            check(loaded.code() ==
+                      std::optional<std::string>{"SLIDE-slide-kidney-cortex-001"},
+                  "round-trips the Slide's human-facing code");
+            check(loaded.stains().size() == 2,
+                  "round-trips multiple stains on one physical Slide");
+            if (loaded.stains().size() == 2) {
+                const auto& loadedHe = loaded.stains()[0];
+                const auto& loadedPas = loaded.stains()[1];
+                check(loadedHe.id() == makeId<StainId>("stain-he-kidney") &&
+                      loadedHe.name() == "Hematoxylin and eosin" &&
+                      loadedHe.description() ==
+                          std::optional<std::string>{"Routine histology stain"},
+                      "round-trips Stain identity, descriptive name and optional description");
+                check(loadedHe.microscopySuitability() &&
+                      loadedHe.microscopySuitability()->recommendedContrastMethods() ==
+                          std::vector<ContrastMethod>{
+                              ContrastMethod::Brightfield,
+                              ContrastMethod::PolarizedLight},
+                      "round-trips optional stain suitability recommendations");
+                check(loadedPas.id() == makeId<StainId>("stain-pas-kidney") &&
+                      loadedPas.name() == "Periodic acid-Schiff" &&
+                      !loadedPas.microscopySuitability(),
+                      "round-trips a valid identity-only stain with no suitability metadata");
+            }
             check(loaded.geometry().widthMicrometers() == 75000.0 &&
                   loaded.geometry().heightMicrometers() == 25000.0,
                   "round-trips physical slide geometry");

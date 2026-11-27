@@ -252,6 +252,14 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
         message(FATAL_ERROR "AMSCOPE_BUILD_PREVIEW_APP requires AMSCOPE_BUILD_QT_ADAPTER=ON")
     endif()
 
+    # The preview's --list-cameras diagnostic checks both installed camera
+    # backends. Keep the interactive preview/control session AmScope-specific.
+    if(NOT TARGET Camera::GenTLConsumerBridge)
+        add_subdirectory(
+            "${CMAKE_CURRENT_LIST_DIR}/../GenTL"
+            "${CMAKE_CURRENT_BINARY_DIR}/camera_gentl")
+    endif()
+
     find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
     if(NOT TARGET Camera::QtWidgets)
         add_subdirectory(
@@ -261,7 +269,7 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
 
     add_executable(amscope_preview app/main.cpp)
     target_compile_features(amscope_preview PRIVATE cxx_std_17)
-    target_link_libraries(amscope_preview PRIVATE Amscope::Qt Camera::QtWidgets Qt6::Widgets)
+    target_link_libraries(amscope_preview PRIVATE Amscope::Qt Camera::GenTLConsumerBridge Camera::QtWidgets Qt6::Widgets)
     set_target_properties(amscope_preview PROPERTIES
         BUILD_RPATH "@loader_path")
 
@@ -270,6 +278,16 @@ if(AMSCOPE_BUILD_PREVIEW_APP)
             COMMAND amscope_preview --self-test-ui)
         set_tests_properties(amscope_preview_ui_composition_tests PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        if(TARGET gentl_test_simulator_cti)
+            add_test(NAME amscope_and_gentl_discovery_tests
+                COMMAND "${CMAKE_COMMAND}"
+                    "-DPREVIEW_EXECUTABLE=$<TARGET_FILE:amscope_preview>"
+                    "-DGENICAM_GENTL_PATH=$<TARGET_FILE_DIR:gentl_test_simulator_cti>"
+                    -P "${CMAKE_CURRENT_LIST_DIR}/tests/VerifyCameraDiscovery.cmake")
+            set_tests_properties(amscope_and_gentl_discovery_tests PROPERTIES
+                TIMEOUT 60)
+        endif()
     endif()
 
     # Physical-camera performance test. Intentionally not registered with

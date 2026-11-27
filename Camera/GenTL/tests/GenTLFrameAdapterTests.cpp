@@ -73,7 +73,7 @@ void testPackedMono10pAndMono12pPreserveByteLayout() {
         source.deliveredImageHeight = 2;
         source.pixelFormat = test.format;
         source.pixelEndianness = GenTL::PIXELENDIANNESS_UNKNOWN;
-        source.payload.resize(test.expectedStride * source.height);
+        source.payload.resize(test.expectedStride * source.height.value());
         for (std::size_t i = 0; i < source.payload.size(); ++i)
             source.payload[i] = static_cast<std::uint8_t>(i * 17 + 3);
         const auto original = source.payload;

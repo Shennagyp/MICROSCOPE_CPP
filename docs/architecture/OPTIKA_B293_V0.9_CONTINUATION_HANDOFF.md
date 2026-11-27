@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Latest source/test commit:** `0d51df7b6e9c863c2e09ae25a2aeaf0c700a2e13`  
-**Architecture audit commit:** `fc504dac175479a984032e509e03febec80be12d`  
+**Architecture audit commit:** `29551ff9424e4650dee3f509736a5cfc688a88cf`  
 **Verification:** [platform CI run 45929942838](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45929942838) passed Ubuntu GCC, macOS Clang and Windows MSVC. The macOS job includes the native Optika application build and tests.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.
 

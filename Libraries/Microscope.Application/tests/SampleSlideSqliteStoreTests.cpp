@@ -133,7 +133,8 @@ Slide makeSlide(
     const SlideId& id,
     std::uint64_t revision,
     const SampleType& sampleType,
-    std::optional<OriginLabId> originLabId = std::nullopt) {
+    std::optional<OriginLabId> originLabId = std::nullopt,
+    std::vector<Stain> stains = {}) {
     return take(Slide::create(
         id,
         revision,
@@ -143,7 +144,7 @@ Slide makeSlide(
         "Kidney cortex section",
         take(SlideGeometry::create(75000.0, 25000.0)),
         makeSlidePreparation(),
-        {},
+        std::move(stains),
         std::move(originLabId)));
 }
 

@@ -124,11 +124,11 @@ Relevant camera-line CI evidence:
 
 These are software/simulator CI results, not a physical CTI-camera qualification. GenTL copies a completed payload once into owned storage before requeueing the producer buffer; the Common adapter then moves that vector into the common Frame. There is no second adapter copy or payload rearrangement.
 
-**Do not merge the camera branch wholesale.** The two development branches have substantially diverged. Import the Camera module as a controlled subtree at a pinned commit and adapt the Optika root CMake composition.
+**Do not merge the camera branch wholesale.** The GitHub comparison reports a 795/472-commit divergence between the two lines. Import the Camera module as a controlled subtree at a pinned commit and adapt the Optika root CMake composition.
 
 Before importing, reconcile two previously rejected scope items:
 - `AcquisitionIntegrityTracker` is still used by both AmScope and GenTL and adds sequence/integrity accounting to the acquisition path. Keep it out of the Optika integration unless explicitly reconsidered.
-- Optional Qt adapters, QtWidgets and the preview application still exist in the camera branch. The Optika application is SwiftUI; do not import or build these Qt components.
+- Optional Qt adapters, QtWidgets and the preview application still exist in the camera branch. The Optika application is SwiftUI; do not import or build these Qt components. The older AmScope CMake setup on the Optika branch also defaults its Qt adapter and preview options to ON; do not carry that default into the integrated package.
 
 No separate `ValidatedSharedFrame` wrapper was found. The GenTL frame adapter validates layout metadata and produces the existing common Frame type.
 

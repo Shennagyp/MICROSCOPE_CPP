@@ -3,7 +3,7 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Latest source/test commit:** `0d51df7b6e9c863c2e09ae25a2aeaf0c700a2e13`  
-**Architecture audit commit:** `a2f4bfa1e6e2d5e500f930bee0405622bc663d85`  
+**Architecture audit commit:** `5eab50fbbabde36b7f26f2359e5d1a2f6b81f13b`  
 **Verification:** [platform CI run 45929942838](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45929942838) passed Ubuntu GCC, macOS Clang and Windows MSVC. The macOS job includes the native Optika application build and tests.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.
 
@@ -100,4 +100,4 @@ Immediate next work is not more UI:
 
 ## Preservation constraints
 
-Keep camera ownership and vendor lifecycles inside the camera module; do not leak AmScope or GenTL SDK types into Microscope.Core. Do not add the rejected acquisition-integrity qualification layer or Qt UI/preview components to the Optika integration. Keep the native SwiftUI layer as presentation over the C++ Application API; do not move domain validation, microscope configuration or persistence into views. The physical dual-slide carrier remains two horizontal slots with four-corner registration per slide. ImageProcessing remains a separate project.
+Keep camera ownership and vendor lifecycles inside the camera module; do not leak AmScope or GenTL SDK types into Microscope.Core. Do not add the rejected acquisition-integrity qualification layer or Qt UI/preview components to the Optika integration. Keep Swift as the application layer for acquisition orchestration and image/tile organization, and SwiftUI views as presentation. The C++ Application API owns microscope-domain validation, equipment configuration, hardware orchestration and its persistence; do not duplicate those rules in Swift views. The physical dual-slide carrier remains two horizontal slots with four-corner registration per slide. ImageProcessing remains a separate project.

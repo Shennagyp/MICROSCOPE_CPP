@@ -106,8 +106,61 @@ int main(int argc, char** argv) {
                            item.name == "TriggerModeReg" ||
                            item.name == "CommandReg";
                 }), "Internal register nodes leaked into the public feature list.");
-            require(findFeature(*features, "RawRegister") == nullptr,
-                    "Unsupported public IRegister node was exposed as a scalar feature.");
+            require(findFeature(*features, "RawRegister") == nullptr &&
+                        findFeature(*features, "WritableRegister") == nullptr,
+                    "Public IRegister nodes were exposed as scalar camera features.");
+
+            auto registerResult = access.registers().registerDescriptors();
+            auto* registers =
+                std::get_if<std::vector<camera::CameraRegisterDescriptor>>(&registerResult);
+            require(registers != nullptr, "GenApi IRegister enumeration failed.");
+            const auto findRegister = [&](const std::string& name) {
+                const auto found = std::find_if(registers->begin(), registers->end(),
+                    [&](const auto& item) { return item.name == name; });
+                return found == registers->end() ? nullptr : &*found;
+            };
+            const auto* rawRegister = findRegister("RawRegister");
+            const auto* writableRegister = findRegister("WritableRegister");
+            require(rawRegister && rawRegister->sizeBytes == 2 &&
+                        rawRegister->isAvailable && rawRegister->isReadable &&
+                        !rawRegister->isWritable,
+                    "Read-only IRegister metadata was incorrect.");
+            require(writableRegister && writableRegister->sizeBytes == 4 &&
+                        writableRegister->isAvailable && writableRegister->isReadable &&
+                        writableRegister->isWritable,
+                    "Read/write IRegister metadata was incorrect.");
+
+            auto rawRegisterRead = access.registers().readRegister("RawRegister");
+            auto* rawRegisterBytes =
+                std::get_if<std::vector<std::uint8_t>>(&rawRegisterRead);
+            require(rawRegisterBytes && rawRegisterBytes->size() == 2,
+                    "IRegister read did not return the declared byte length.");
+
+            const std::vector<std::uint8_t> rawWriteBytes{0x11, 0x22};
+            auto rawRegisterWrite =
+                access.registers().writeRegister("RawRegister", rawWriteBytes);
+            auto* rawRegisterWriteError =
+                std::get_if<camera::CameraRegisterAccessError>(&rawRegisterWrite);
+            require(rawRegisterWriteError &&
+                        rawRegisterWriteError->code ==
+                            camera::CameraRegisterAccessError::Code::RegisterNotWritable,
+                    "Read-only IRegister write was not rejected.");
+
+            const std::vector<std::uint8_t> wrongRegisterSize{0x11, 0x22};
+            auto wrongSizeWrite = access.registers().writeRegister(
+                "WritableRegister", wrongRegisterSize);
+            auto* wrongSizeError =
+                std::get_if<camera::CameraRegisterAccessError>(&wrongSizeWrite);
+            require(wrongSizeError &&
+                        wrongSizeError->code ==
+                            camera::CameraRegisterAccessError::Code::InvalidSize,
+                    "IRegister accepted a write with the wrong byte length.");
+
+            const std::vector<std::uint8_t> writableBytes{0x10, 0x20, 0x30, 0x40};
+            auto writableResult = access.registers().writeRegister(
+                "WritableRegister", writableBytes);
+            require(std::holds_alternative<std::monostate>(writableResult),
+                    "GenApi IRegister write failed.");
 
             auto unsupportedRegisterRead =
                 access.features().readFeature("RawRegister");

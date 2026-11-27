@@ -280,6 +280,7 @@ if(CAMERA_GENTL_ENABLE_GENAPI)
         src/GenApiFeatureAccess.cpp
         src/GenApiCommandAccess.cpp
         src/GenApiDeviceAccess.cpp
+        src/GenApiRegisterAccess.cpp
         src/GenApiFeatureTree.h
         include/camera/gentl/GenApiDeviceAccess.h
         include/camera/gentl/GenApiNodeMap.h

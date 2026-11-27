@@ -75,6 +75,7 @@ static const char mock_xml[] =
     "    <pFeature>Temperature</pFeature>\n" \
     "    <pFeature>DeviceLabel</pFeature>\n" \
     "    <pFeature>RawRegister</pFeature>\n" \
+    "    <pFeature>WritableRegister</pFeature>\n" \
     "    <pFeature>AcquisitionControl</pFeature>\n" \
     "  </Category>\n" \
     "  <Category Name=\"AcquisitionControl\">\n" \
@@ -188,6 +189,12 @@ static const char mock_xml[] =
     "    <Address>0x1010</Address>\n" \
     "    <Length>2</Length>\n" \
     "    <AccessMode>RO</AccessMode>\n" \
+    "    <pPort>Device</pPort>\n" \
+    "  </Register>\n" \
+    "  <Register Name=\"WritableRegister\">\n" \
+    "    <Address>0x1012</Address>\n" \
+    "    <Length>4</Length>\n" \
+    "    <AccessMode>RW</AccessMode>\n" \
     "    <pPort>Device</pPort>\n" \
     "  </Register>\n" \
     "</RegisterDescription>\n";

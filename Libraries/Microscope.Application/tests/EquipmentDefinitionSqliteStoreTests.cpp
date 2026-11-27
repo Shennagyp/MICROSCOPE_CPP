@@ -65,7 +65,7 @@ std::string document(std::uint64_t revision, bool includeSecondComponent = false
     if (token == std::string::npos) throw std::runtime_error("missing revision fixture token");
     result.replace(token, 8, std::to_string(revision));
     if (includeSecondComponent) {
-        const auto anchor = R"(    { "id": "mechanical-frame", "kind": "other" })";
+        const std::string anchor = R"(    { "id": "mechanical-frame", "kind": "other" })";
         const auto position = result.find(anchor);
         if (position == std::string::npos) throw std::runtime_error("missing component fixture anchor");
         result.insert(position + anchor.size(),

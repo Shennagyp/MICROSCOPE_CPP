@@ -168,7 +168,7 @@ There is no intermediary test shim: this exercises `Producer::open(ctiPath)`, wh
 
 The simulator exposes two deterministic cameras on one interface. Each has a distinct device ID, display name, serial number, remote-port/register space, data-stream handle, event handle, buffer ownership and frame-sequence counter. The smoke opens both devices and both streams concurrently, writes different values to the same register address on each remote port, and interleaves frame retrieval. It verifies that each stream independently starts at frame ID 1, timestamps increase, and Mono8 payload bytes advance with the frame sequence. It then stops one stream while the peer remains active and verifies that the peer continues delivering frames. The ordinary smoke also verifies discovery, device open, GenApi XML retrieval, stream start, complete image buffers, Common frame projection, stream stop and device close.
 
-Dedicated CTests also inject one frame-sequence anomaly per run: a forward gap, duplicate ID, out-of-order ID under the GigE Vision counter model, and an ambiguous backwards transition for a transport type with no declared wrap rule. The simulator keeps timestamps and payload ordinal tied to delivery order rather than transport frame IDs. These tests verify that sequence accounting reports only what the transport counter proves and does not invent loss after duplicate/reordered observations.
+Dedicated CTests also inject one frame-sequence anomaly per run: a forward gap, duplicate ID, out-of-order ID under the GigE Vision counter model, and an ambiguous backwards transition for a transport type with no declared wrap rule. The simulator keeps timestamps and payload ordinal tied to delivery order rather than transport frame IDs. These tests verify that sequence accounting reports only what the transport counter proves and does not invent loss after duplicate/reordered observations. Dedicated CTests additionally inject one incomplete buffer and one empty image payload. They verify that filled bytes and `BUFFER_INFO_IS_INCOMPLETE` are preserved independently, the Common raster adapter refuses invalid image projection, and the Common tracker counts incomplete buffers and empty/invalid payloads separately from complete images.
 
 Run it with the ordinary test build:
 
@@ -206,7 +206,7 @@ Implemented in this module:
 - TL initialization and interface/device discovery;
 - retained interface/device lifetime and device opening;
 - data-stream discovery, acquisition lifecycle and bounded buffer management;
-- buffer queue/requeue/drain and frame metadata extraction;
+- buffer queue/requeue/drain and frame metadata extraction, including incomplete/empty buffer classification;
 - frame payload ownership and backend-neutral projection for verified PFNC layouts;
 - remote-port read/write and `LOCAL`/`FILE` GenApi XML retrieval;
 - optional GenApi 3.5.1 feature and command access;

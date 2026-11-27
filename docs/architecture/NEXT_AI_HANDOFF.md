@@ -15,9 +15,10 @@ The owner requires remaining camera capabilities to be implemented in a staged s
 ### Latest accepted source and CI
 
 - Branch: `camera-v.2.0`.
-- Latest accepted source commit: `992d4162a4aa16fa8215370ba4ea1b8fd5673486`.
-- GenTL bridge [workflow #45913589920](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45913589920): passed on Intel x86_64 and Apple Silicon arm64, including GenTL simulator CTests and official GenApi 3.5.1 integration.
-- Package/external-consumer [workflow #45913589940](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45913589940): passed on Intel x86_64 and Apple Silicon arm64, including install/relocation and external consumer checks.
+- Latest accepted source commit: `7288ac678399e7d7b76fda69e8109f4cd702dee8`.
+- GenTL bridge [workflow #45913972311](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45913972311): passed on Intel x86_64 and Apple Silicon arm64, including sequence-fault, incomplete/empty payload CTests and official GenApi 3.5.1 integration.
+- Package/external-consumer [workflow #45913972309](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45913972309): passed on Intel x86_64 and Apple Silicon arm64, including install/relocation and external consumer checks.
+- Prior sequence-fault acceptance commit `992d4162a4aa16fa8215370ba4ea1b8fd5673486` passed workflows #45913589920 and #45913589940.
 - No physical camera is available. The in-repository CTI remains software integration evidence, not vendor-CTI or hardware qualification.
 
 ### Implemented and verified
@@ -26,11 +27,11 @@ The owner requires remaining camera capabilities to be implemented in a staged s
 2. `Camera/GenTL/src/GenTLFrameAdapter.cpp`: supported single-raster layouts are projected only after overflow-safe byte accounting. Unknown/inconsistent/multipart/planar/compressed payloads remain opaque. There is no demosaic, sample unpack or normalization copy.
 3. `Camera/Common/include/camera/AcquisitionIntegrityTracker.h`: bounded-memory accounting for complete/incomplete/non-image/invalid buffers; optional sequence IDs; forward gaps/missing IDs; duplicates; out-of-order and ambiguous backwards transitions; configured wrap models; host wait timeouts; Producer starvation events.
 4. `DataStreamSession::statistics()`: optional typed Producer counters and Common integrity snapshot. `EventGetData` timeout is separate from `STREAM_INFO_NUM_UNDERRUN`. Only `TLTYPE=GEV` receives the known one-based 16-bit GigE Vision counter model.
-5. The simulator exercises normal and injected fault cases: exact forward frame-ID gap; duplicate; out-of-order under GEV; ambiguous backwards transition on an unspecified transport; separate Producer underrun and host wait timeout; independent timestamps and payload sequence.
+5. The simulator exercises normal and injected fault cases: exact forward frame-ID gap; duplicate; out-of-order under GEV; ambiguous backwards transition on an unspecified transport; separate Producer underrun and host wait timeout; incomplete image buffer; empty image payload; independent timestamps and payload sequence.
 
 ### Next implementation and test order
 
-**A — Complete acquisition lifecycle/recovery qualification.** Add incomplete and empty payload fault injection; sustained capture; queue depletion/starvation and recovery; stop while an active waiter is blocked; stop/reopen; stream interruption/restart and recovery. Keep counters for host timeout, Producer underrun, incomplete payload, frame ID loss and downstream storage loss distinct. Existing unit/simulator coverage already includes wrap behaviour, gap, duplicate, out-of-order and ambiguous backwards transition.
+**A — Complete acquisition lifecycle/recovery qualification.** Incomplete and empty payload fault injection is now implemented and accepted. Continue with sustained capture; queue depletion/starvation and recovery; repeated start/stop; stop/reopen; stream interruption/restart and recovery. Existing non-simulator teardown tests exercise an active event waiter and event-unregistration cancellation. Keep counters for host timeout, Producer underrun, incomplete payload, invalid/empty image, frame-ID loss and downstream storage loss distinct. Existing unit/simulator coverage includes wrap behaviour, gap, duplicate, out-of-order and ambiguous backwards transition.
 
 **B — PFNC packed 14-bit layouts.** Add Mono14p and BayerGR/RG/GB/BG14p using verified identifiers. Explicitly test byte-aligned row size for odd/even widths, image prefix offset, X/Y padding, malformed payload size and byte preservation. Do not unpack or demosaic in Camera.
 

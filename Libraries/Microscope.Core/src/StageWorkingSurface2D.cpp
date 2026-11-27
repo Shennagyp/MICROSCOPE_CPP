@@ -84,24 +84,27 @@ Result<StageTravelRange2D, StageTravelRange2DError> StageTravelRange2D::create(
 double StageTravelRange2D::xMicrometers() const noexcept { return x_; }
 double StageTravelRange2D::yMicrometers() const noexcept { return y_; }
 
-SlideGeometry2D::SlideGeometry2D(double length, double width) noexcept
-    : length_(length), width_(width) {}
-Result<SlideGeometry2D, SlideGeometry2DError> SlideGeometry2D::create(
+SlideGeometry2D::SlideGeometry2D(SlideGeometry geometry) noexcept
+    : geometry_(std::move(geometry)) {}
+Result<SlideGeometry2D, SlideGeometryError> SlideGeometry2D::create(
     double length, double width) {
-    if (!std::isfinite(length) || !std::isfinite(width))
-        return Result<SlideGeometry2D, SlideGeometry2DError>::failure(
-            SlideGeometry2DError::NonFiniteDimension);
-    if (length <= 0.0 || width <= 0.0)
-        return Result<SlideGeometry2D, SlideGeometry2DError>::failure(
-            SlideGeometry2DError::NonPositiveDimension);
-    return Result<SlideGeometry2D, SlideGeometry2DError>::success(
-        SlideGeometry2D(length, width));
+    auto geometry = SlideGeometry::create(length, width);
+    if (!geometry)
+        return Result<SlideGeometry2D, SlideGeometryError>::failure(geometry.error());
+    return Result<SlideGeometry2D, SlideGeometryError>::success(
+        SlideGeometry2D(std::move(geometry).value()));
 }
-double SlideGeometry2D::lengthMicrometers() const noexcept { return length_; }
-double SlideGeometry2D::widthMicrometers() const noexcept { return width_; }
+double SlideGeometry2D::lengthMicrometers() const noexcept {
+    return geometry_.xExtentMicrometers();
+}
+double SlideGeometry2D::widthMicrometers() const noexcept {
+    return geometry_.yExtentMicrometers();
+}
 bool SlideGeometry2D::contains(const SlidePoint2D& p) const noexcept {
-    return finite(p) && p.xMicrometers >= 0.0 && p.xMicrometers <= length_ &&
-        p.yMicrometers >= 0.0 && p.yMicrometers <= width_;
+    return finite(p) && geometry_.contains(p.xMicrometers, p.yMicrometers);
+}
+const SlideGeometry& SlideGeometry2D::canonicalGeometry() const noexcept {
+    return geometry_;
 }
 
 SlidePlacement2D::SlidePlacement2D(SlideId id, CalibrationRevisionId revision,

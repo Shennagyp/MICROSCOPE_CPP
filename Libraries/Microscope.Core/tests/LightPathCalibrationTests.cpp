@@ -182,26 +182,26 @@ void testCalibrationBindingRejectsChangedOpticalConfiguration() {
 
 void testOperationModeHardwareConfigurationIsSeparateAndRevisionBound() {
     const auto mode = take(OperationMode::create(
-        id<MicroscopeId>("hardware-config-microscope"),
-        id<OperationModeId>("mode-with-two-lightpaths"),
+        makeId<MicroscopeId>("hardware-config-microscope"),
+        makeId<OperationModeId>("mode-with-two-lightpaths"),
         4,
         "Brightfield",
         ContrastMethod::Brightfield));
 
     const auto settingA = take(LightPathModeSetting::create(
         mode.microscopeId(), 12, mode.id(), mode.revision(),
-        id<LightPathId>("transmitted-light"),
-        id<CalibrationRevisionId>("cal-transmitted-r4"),
-        id<EquipmentComponentId>("white-led"),
-        id<IlluminationChannelId>("white-channel"),
-        {id<EquipmentComponentId>("objective-4x")}, 9.0));
+        makeId<LightPathId>("transmitted-light"),
+        makeId<CalibrationRevisionId>("cal-transmitted-r4"),
+        makeId<EquipmentComponentId>("white-led"),
+        makeId<IlluminationChannelId>("white-channel"),
+        {makeId<EquipmentComponentId>("objective-4x")}, 9.0));
     const auto settingB = take(LightPathModeSetting::create(
         mode.microscopeId(), 12, mode.id(), mode.revision(),
-        id<LightPathId>("epi-light"),
-        id<CalibrationRevisionId>("cal-epi-r4"),
-        id<EquipmentComponentId>("epi-led"),
-        id<IlluminationChannelId>("epi-channel"),
-        {id<EquipmentComponentId>("objective-10x")}, 4.0));
+        makeId<LightPathId>("epi-light"),
+        makeId<CalibrationRevisionId>("cal-epi-r4"),
+        makeId<EquipmentComponentId>("epi-led"),
+        makeId<IlluminationChannelId>("epi-channel"),
+        {makeId<EquipmentComponentId>("objective-10x")}, 4.0));
 
     const auto hardware = take(OperationModeHardwareConfiguration::create(
         mode, {settingA, settingB}));
@@ -211,7 +211,7 @@ void testOperationModeHardwareConfigurationIsSeparateAndRevisionBound() {
           hardware.equipmentDefinitionRevision() == 12,
           "binds hardware realization to the exact microscope, mode and equipment revisions");
     check(hardware.lightPathSettings().size() == 2 &&
-          hardware.findLightPathSetting(id<LightPathId>("epi-light")) != nullptr,
+          hardware.findLightPathSetting(makeId<LightPathId>("epi-light")) != nullptr,
           "stores and looks up independent per-LightPath settings");
 
     const auto empty = OperationModeHardwareConfiguration::create(mode, {});
@@ -221,10 +221,10 @@ void testOperationModeHardwareConfigurationIsSeparateAndRevisionBound() {
 
     const auto staleSetting = take(LightPathModeSetting::create(
         mode.microscopeId(), 12, mode.id(), mode.revision() - 1,
-        id<LightPathId>("stale-light"),
-        id<CalibrationRevisionId>("cal-stale"),
-        id<EquipmentComponentId>("white-led"),
-        id<IlluminationChannelId>("white-channel"), {}, 2.0));
+        makeId<LightPathId>("stale-light"),
+        makeId<CalibrationRevisionId>("cal-stale"),
+        makeId<EquipmentComponentId>("white-led"),
+        makeId<IlluminationChannelId>("white-channel"), {}, 2.0));
     const auto staleModeRevision =
         OperationModeHardwareConfiguration::create(mode, {staleSetting});
     check(!staleModeRevision && staleModeRevision.error() ==
@@ -232,11 +232,11 @@ void testOperationModeHardwareConfigurationIsSeparateAndRevisionBound() {
           "rejects settings from a different OperationMode revision");
 
     const auto wrongModeSetting = take(LightPathModeSetting::create(
-        mode.microscopeId(), 12, id<OperationModeId>("other-mode"), mode.revision(),
-        id<LightPathId>("other-mode-light"),
-        id<CalibrationRevisionId>("cal-other-mode"),
-        id<EquipmentComponentId>("white-led"),
-        id<IlluminationChannelId>("white-channel"), {}, 2.0));
+        mode.microscopeId(), 12, makeId<OperationModeId>("other-mode"), mode.revision(),
+        makeId<LightPathId>("other-mode-light"),
+        makeId<CalibrationRevisionId>("cal-other-mode"),
+        makeId<EquipmentComponentId>("white-led"),
+        makeId<IlluminationChannelId>("white-channel"), {}, 2.0));
     const auto wrongMode =
         OperationModeHardwareConfiguration::create(mode, {wrongModeSetting});
     check(!wrongMode && wrongMode.error() ==
@@ -245,10 +245,10 @@ void testOperationModeHardwareConfigurationIsSeparateAndRevisionBound() {
 
     const auto mixedEquipmentSetting = take(LightPathModeSetting::create(
         mode.microscopeId(), 13, mode.id(), mode.revision(),
-        id<LightPathId>("mixed-equipment-light"),
-        id<CalibrationRevisionId>("cal-mixed-equipment"),
-        id<EquipmentComponentId>("white-led"),
-        id<IlluminationChannelId>("white-channel"), {}, 2.0));
+        makeId<LightPathId>("mixed-equipment-light"),
+        makeId<CalibrationRevisionId>("cal-mixed-equipment"),
+        makeId<EquipmentComponentId>("white-led"),
+        makeId<IlluminationChannelId>("white-channel"), {}, 2.0));
     const auto mixedEquipment =
         OperationModeHardwareConfiguration::create(mode, {settingA, mixedEquipmentSetting});
     check(!mixedEquipment && mixedEquipment.error() ==

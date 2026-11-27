@@ -10,6 +10,8 @@
 - [Microscope Core and Application Contracts v0.9](MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md) — C++17 identity, result, feedback and runtime contract conventions.
 - [Microscope Platform Implementation Plan v0.9](../plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md) — migration phases and acceptance criteria.
 
+- [OPTIKA B293 v0.9 Continuation Handoff](OPTIKA_B293_V0.9_CONTINUATION_HANDOFF.md) — current branch checkpoint, implemented ownership boundaries, verification status and next repository work.
+
 ## Capability-specific architecture
 
 - [Stage Working Surface and Axis Reference v2](STAGE_WORKING_SURFACE_AND_AXIS_REFERENCE_V2.md) — empty XY canvas, variable slide geometry, independent focus Z and stage referencing.

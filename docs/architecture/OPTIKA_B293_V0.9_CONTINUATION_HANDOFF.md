@@ -2,11 +2,11 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Latest source/test commit:** `8cc64e2aafbb964f9956b74b7b56d236c801a543`  
-**Architecture audit commit:** `9893e654028183f8f1904fc045a6953e5b390240`  
+**Latest source/test commit:** `6f1b9253530cb7c7c718064a3eea4e01b89bbf6a`  
+**Architecture audit commit:** `62f6c298b27be96283c0c8c25291d30531ad7307`  
 **Verification:** [platform CI run 45943921361](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45943921361) passed Ubuntu GCC, macOS Clang and Windows MSVC for the preceding Core/Application baseline. The new registration/working-surface comparison and its tests are in the current change set; their three-platform workflow is pending.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.  
-**Current C++ implementation:** `8cc64e2aafbb964f9956b74b7b56d236c801a543`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, this change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison`. It binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, independent geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. The comparison owns immutable copies of the original `SlideRegistration` and CAD rectangle, retaining the affine mapping methods and CAD draw/constraint data. It is not a motion command. CI run [45951509031](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45951509031) is queued for this corrected change set.
+**Current C++ implementation:** `6f1b9253530cb7c7c718064a3eea4e01b89bbf6a`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, this change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison`. It binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, correspondence-aware geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. The comparison owns immutable copies of the original `SlideRegistration` and CAD rectangle, retaining the affine mapping methods and CAD draw/constraint data. It remaps dimension comparisons when the explicit corner cycle rotates the local axes. It is not a motion command. CI run [45951730921](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45951730921) is queued for this corrected change set.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 
@@ -73,7 +73,7 @@ Existing SQL child tables are reused; the separation is semantic and does not re
 
 The fixed two-slot carrier and the CAD working surface remain separate Core models. The Application comparison joins them only for a specific physical `SlideId` and an explicit `SlideCornerCorrespondence`.
 
-- The correspondence array is ordered by measured `TopLeft`, `TopRight`, `BottomRight`, `BottomLeft`; values identify CAD `StopPoint`, `LengthEdgeEnd`, `OppositeCorner`, or `WidthEdgeEnd`.
+- The correspondence array is ordered by measured `TopLeft`, `TopRight`, `BottomRight`, `BottomLeft`; values identify CAD `StopPoint`, `LengthEdgeEnd`, `OppositeCorner`, or `WidthEdgeEnd`. Its cyclic winding determines whether measured local X corresponds to CAD local X (length) or local Y (width), so extent deltas follow the actual orientation.
 - The factory accepts only a one-to-one cyclic rotation or reflection. It does not infer the stop point from the carrier slot.
 - The comparison validates stage-component identity and the two physical stage-axis IDs. It handles the case where carrier horizontal/transverse axes are the reverse of working-surface X/Y axes by reordering coordinates using axis identity.
 - It compares raw measured corners with the selected CAD corners and reports signed CAD-minus-measured X/Y deltas, per-corner distance, maximum and RMS discrepancy, and physical-versus-CAD X/Y extent deltas.

@@ -6,7 +6,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -25,6 +24,7 @@ enum class MicroscopeConfigurationStoreErrorCode {
     DuplicateCalibrationRevision,
     CalibrationNotFound,
     CalibrationBindingMismatch,
+    OperationModeHardwareConfigurationMismatch,
     InvalidPersistedRecord,
     SqliteOperationFailed
 };
@@ -67,20 +67,27 @@ public:
             const core::MicroscopeId& microscopeId,
             const core::CalibrationRevisionId& calibrationRevisionId);
 
-    // Saves a new immutable OperationMode revision. expectedCurrentRevision
-    // is zero when creating the first revision. Each contained LightPath
-    // setting must reference a persisted calibration matching the mode's
-    // microscope, equipment revision, mode revision, path, source and optics.
+    // Saves a contrast-intent revision and, optionally, its separate
+    // revision-bound LightPath hardware realization in one transaction.
     [[nodiscard]] core::Status<MicroscopeConfigurationStoreError>
     saveOperationMode(
         const core::OperationMode& operationMode,
-        std::uint64_t expectedCurrentRevision);
+        std::uint64_t expectedCurrentRevision,
+        const core::OperationModeHardwareConfiguration* hardwareConfiguration =
+            nullptr);
 
     [[nodiscard]] core::Result<
         std::optional<core::OperationMode>,
         MicroscopeConfigurationStoreError> loadCurrentOperationMode(
             const core::MicroscopeId& microscopeId,
             const core::OperationModeId& operationModeId);
+
+    // Loads the optional calibrated realization associated with this exact
+    // current OperationMode revision. No value means no realization is saved.
+    [[nodiscard]] core::Result<
+        std::optional<core::OperationModeHardwareConfiguration>,
+        MicroscopeConfigurationStoreError> loadOperationModeHardwareConfiguration(
+            const core::OperationMode& operationMode);
 
 private:
     explicit MicroscopeConfigurationSqliteStore(sqlite3* database) noexcept;

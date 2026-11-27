@@ -716,7 +716,8 @@ MicroscopeConfigurationSqliteStore::loadCalibration(
 core::Status<MicroscopeConfigurationStoreError>
 MicroscopeConfigurationSqliteStore::saveOperationMode(
     const core::OperationMode& operationMode,
-    std::uint64_t expectedCurrentRevision) {
+    std::uint64_t expectedCurrentRevision,
+    const core::OperationModeHardwareConfiguration* hardwareConfiguration) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (expectedCurrentRevision >= kMaximumSqliteInteger ||
@@ -724,7 +725,7 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
         return failureStatus(makeError(
             StoreErrorCode::InvalidRevision,
             database_,
-            "The new operation mode revision must be exactly one greater than the expected current revision."));
+            "The new operation mode revision is outside the SQLite integer range."));
     }
 
     Transaction transaction(database_);
@@ -755,31 +756,51 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
             "OperationMode revision must advance exactly one from the current revision."));
     }
 
-    for (const auto& setting : operationMode.lightPathSettings()) {
-        if (setting.equipmentDefinitionRevision() == 0 ||
-            setting.equipmentDefinitionRevision() > kMaximumSqliteInteger) {
+    if (hardwareConfiguration != nullptr) {
+        if (hardwareConfiguration->microscopeId() != operationMode.microscopeId() ||
+            hardwareConfiguration->operationModeId() != operationMode.id() ||
+            hardwareConfiguration->operationModeRevision() != operationMode.revision()) {
+            return failureStatus(makeError(
+                StoreErrorCode::OperationModeHardwareConfigurationMismatch,
+                database_,
+                "The hardware realization does not belong to this exact OperationMode revision."));
+        }
+        if (hardwareConfiguration->equipmentDefinitionRevision() > kMaximumSqliteInteger) {
             return failureStatus(makeError(
                 StoreErrorCode::InvalidRevision,
                 database_,
-                "An operation mode setting has an equipment revision outside the SQLite integer range."));
+                "The hardware realization equipment revision exceeds the SQLite integer range."));
         }
-        auto calibration = loadCalibrationUnlocked(
-            operationMode.microscopeId(),
-            setting.calibrationRevisionId());
-        if (!calibration) {
-            return failureStatus(calibration.error());
-        }
-        if (!calibration.value()) {
-            return failureStatus(makeError(
-                StoreErrorCode::CalibrationNotFound,
-                database_,
-                "An operation mode references a calibration revision that is not persisted."));
-        }
-        if (!isCalibrationBindingMatch(setting, *calibration.value())) {
-            return failureStatus(makeError(
-                StoreErrorCode::CalibrationBindingMismatch,
-                database_,
-                "An operation mode LightPath setting does not match its referenced calibration revision."));
+
+        for (const auto& setting : hardwareConfiguration->lightPathSettings()) {
+            if (setting.equipmentDefinitionRevision() == 0 ||
+                setting.equipmentDefinitionRevision() > kMaximumSqliteInteger ||
+                setting.equipmentDefinitionRevision() !=
+                    hardwareConfiguration->equipmentDefinitionRevision()) {
+                return failureStatus(makeError(
+                    StoreErrorCode::InvalidRevision,
+                    database_,
+                    "A hardware setting has an invalid or inconsistent equipment revision."));
+            }
+
+            auto calibration = loadCalibrationUnlocked(
+                operationMode.microscopeId(),
+                setting.calibrationRevisionId());
+            if (!calibration) {
+                return failureStatus(calibration.error());
+            }
+            if (!calibration.value()) {
+                return failureStatus(makeError(
+                    StoreErrorCode::CalibrationNotFound,
+                    database_,
+                    "A hardware setting references a calibration revision that is not persisted."));
+            }
+            if (!isCalibrationBindingMatch(setting, *calibration.value())) {
+                return failureStatus(makeError(
+                    StoreErrorCode::CalibrationBindingMismatch,
+                    database_,
+                    "A hardware LightPath setting does not match its referenced calibration revision."));
+            }
         }
     }
 
@@ -803,61 +824,63 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
             StoreErrorCode::SqliteOperationFailed, database_));
     }
 
-    Statement insertSetting(
-        database_,
-        "INSERT INTO operation_mode_light_path_setting ("
-        "microscope_id, operation_mode_id, mode_revision, light_path_id, "
-        "equipment_definition_revision, calibration_revision_id, "
-        "illumination_component_id, illumination_channel_id, "
-        "target_irradiance_uw_per_mm2"
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    Statement insertComponent(
-        database_,
-        "INSERT INTO operation_mode_setting_optical_component ("
-        "microscope_id, operation_mode_id, mode_revision, light_path_id, component_id"
-        ") VALUES (?, ?, ?, ?, ?)");
-    if (!insertSetting.prepared() || !insertComponent.prepared()) {
-        return failureStatus(makeError(
-            StoreErrorCode::SqliteOperationFailed, database_));
-    }
-
-    for (const auto& setting : operationMode.lightPathSettings()) {
-        if (!bindText(insertSetting.get(), 1, operationMode.microscopeId().value()) ||
-            !bindText(insertSetting.get(), 2, operationMode.id().value()) ||
-            sqlite3_bind_int64(
-                insertSetting.get(), 3,
-                static_cast<sqlite3_int64>(operationMode.revision())) != SQLITE_OK ||
-            !bindText(insertSetting.get(), 4, setting.lightPathId().value()) ||
-            sqlite3_bind_int64(
-                insertSetting.get(), 5,
-                static_cast<sqlite3_int64>(setting.equipmentDefinitionRevision())) != SQLITE_OK ||
-            !bindText(insertSetting.get(), 6, setting.calibrationRevisionId().value()) ||
-            !bindText(insertSetting.get(), 7, setting.illuminationComponentId().value()) ||
-            !bindText(insertSetting.get(), 8, setting.illuminationChannelId().value()) ||
-            sqlite3_bind_double(
-                insertSetting.get(), 9,
-                setting.targetIrradianceMicrowattsPerSquareMillimeter()) != SQLITE_OK ||
-            sqlite3_step(insertSetting.get()) != SQLITE_DONE) {
+    if (hardwareConfiguration != nullptr) {
+        Statement insertSetting(
+            database_,
+            "INSERT INTO operation_mode_light_path_setting ("
+            "microscope_id, operation_mode_id, mode_revision, light_path_id, "
+            "equipment_definition_revision, calibration_revision_id, "
+            "illumination_component_id, illumination_channel_id, "
+            "target_irradiance_uw_per_mm2"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        Statement insertComponent(
+            database_,
+            "INSERT INTO operation_mode_setting_optical_component ("
+            "microscope_id, operation_mode_id, mode_revision, light_path_id, component_id"
+            ") VALUES (?, ?, ?, ?, ?)");
+        if (!insertSetting.prepared() || !insertComponent.prepared()) {
             return failureStatus(makeError(
                 StoreErrorCode::SqliteOperationFailed, database_));
         }
-        sqlite3_reset(insertSetting.get());
-        sqlite3_clear_bindings(insertSetting.get());
 
-        for (const auto& componentId : setting.configuredOpticalComponentIds()) {
-            if (!bindText(insertComponent.get(), 1, operationMode.microscopeId().value()) ||
-                !bindText(insertComponent.get(), 2, operationMode.id().value()) ||
+        for (const auto& setting : hardwareConfiguration->lightPathSettings()) {
+            if (!bindText(insertSetting.get(), 1, operationMode.microscopeId().value()) ||
+                !bindText(insertSetting.get(), 2, operationMode.id().value()) ||
                 sqlite3_bind_int64(
-                    insertComponent.get(), 3,
+                    insertSetting.get(), 3,
                     static_cast<sqlite3_int64>(operationMode.revision())) != SQLITE_OK ||
-                !bindText(insertComponent.get(), 4, setting.lightPathId().value()) ||
-                !bindText(insertComponent.get(), 5, componentId.value()) ||
-                sqlite3_step(insertComponent.get()) != SQLITE_DONE) {
+                !bindText(insertSetting.get(), 4, setting.lightPathId().value()) ||
+                sqlite3_bind_int64(
+                    insertSetting.get(), 5,
+                    static_cast<sqlite3_int64>(setting.equipmentDefinitionRevision())) != SQLITE_OK ||
+                !bindText(insertSetting.get(), 6, setting.calibrationRevisionId().value()) ||
+                !bindText(insertSetting.get(), 7, setting.illuminationComponentId().value()) ||
+                !bindText(insertSetting.get(), 8, setting.illuminationChannelId().value()) ||
+                sqlite3_bind_double(
+                    insertSetting.get(), 9,
+                    setting.targetIrradianceMicrowattsPerSquareMillimeter()) != SQLITE_OK ||
+                sqlite3_step(insertSetting.get()) != SQLITE_DONE) {
                 return failureStatus(makeError(
                     StoreErrorCode::SqliteOperationFailed, database_));
             }
-            sqlite3_reset(insertComponent.get());
-            sqlite3_clear_bindings(insertComponent.get());
+            sqlite3_reset(insertSetting.get());
+            sqlite3_clear_bindings(insertSetting.get());
+
+            for (const auto& componentId : setting.configuredOpticalComponentIds()) {
+                if (!bindText(insertComponent.get(), 1, operationMode.microscopeId().value()) ||
+                    !bindText(insertComponent.get(), 2, operationMode.id().value()) ||
+                    sqlite3_bind_int64(
+                        insertComponent.get(), 3,
+                        static_cast<sqlite3_int64>(operationMode.revision())) != SQLITE_OK ||
+                    !bindText(insertComponent.get(), 4, setting.lightPathId().value()) ||
+                    !bindText(insertComponent.get(), 5, componentId.value()) ||
+                    sqlite3_step(insertComponent.get()) != SQLITE_DONE) {
+                    return failureStatus(makeError(
+                        StoreErrorCode::SqliteOperationFailed, database_));
+                }
+                sqlite3_reset(insertComponent.get());
+                sqlite3_clear_bindings(insertComponent.get());
+            }
         }
     }
 
@@ -904,210 +927,52 @@ MicroscopeConfigurationSqliteStore::saveOperationMode(
     return core::Status<MicroscopeConfigurationStoreError>::success();
 }
 
-core::Result<
-    std::optional<core::OperationMode>,
-    MicroscopeConfigurationStoreError>
 MicroscopeConfigurationSqliteStore::loadCurrentOperationMode(
     const core::MicroscopeId& microscopeId,
     const core::OperationModeId& operationModeId) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    std::optional<std::uint64_t> currentRevision;
-    if (!readCurrentModeRevision(
-            database_, microscopeId, operationModeId, currentRevision)) {
+    std::optional<std::uint64_t> revision;
+    if (!readCurrentModeRevision(database_, microscopeId, operationModeId, revision)) {
         return core::Result<
             std::optional<core::OperationMode>,
             MicroscopeConfigurationStoreError>::failure(
                 makeError(StoreErrorCode::SqliteOperationFailed, database_));
     }
-    if (!currentRevision) {
+    if (!revision) {
         return core::Result<
             std::optional<core::OperationMode>,
             MicroscopeConfigurationStoreError>::success(std::nullopt);
     }
 
-    std::string name;
-    core::ContrastMethod contrastMethod = core::ContrastMethod::Unknown;
-    {
-        Statement mode(
-            database_,
-            "SELECT name, contrast_method FROM operation_mode "
-            "WHERE microscope_id = ? AND operation_mode_id = ? AND revision = ?");
-        if (!mode.prepared() ||
-            !bindText(mode.get(), 1, microscopeId.value()) ||
-            !bindText(mode.get(), 2, operationModeId.value()) ||
-            sqlite3_bind_int64(
-                mode.get(), 3,
-                static_cast<sqlite3_int64>(*currentRevision)) != SQLITE_OK) {
-            return core::Result<
-                std::optional<core::OperationMode>,
-                MicroscopeConfigurationStoreError>::failure(
-                    makeError(StoreErrorCode::SqliteOperationFailed, database_));
-        }
-        if (sqlite3_step(mode.get()) != SQLITE_ROW) {
-            return core::Result<
-                std::optional<core::OperationMode>,
-                MicroscopeConfigurationStoreError>::failure(
-                    makeError(StoreErrorCode::InvalidPersistedRecord, database_));
-        }
-        auto storedName = readText(mode.get(), 0);
-        if (!storedName) {
-            return core::Result<
-                std::optional<core::OperationMode>,
-                MicroscopeConfigurationStoreError>::failure(
-                    makeError(StoreErrorCode::InvalidPersistedRecord, database_));
-        }
-        name = std::move(*storedName);
-        contrastMethod = static_cast<core::ContrastMethod>(
-            sqlite3_column_int(mode.get(), 1));
+    Statement mode(
+        database_,
+        "SELECT name, contrast_method FROM operation_mode "
+        "WHERE microscope_id = ? AND operation_mode_id = ? AND revision = ?");
+    if (!mode.prepared() ||
+        !bindText(mode.get(), 1, microscopeId.value()) ||
+        !bindText(mode.get(), 2, operationModeId.value()) ||
+        sqlite3_bind_int64(
+            mode.get(), 3, static_cast<sqlite3_int64>(*revision)) != SQLITE_OK ||
+        sqlite3_step(mode.get()) != SQLITE_ROW) {
+        return core::Result<
+            std::optional<core::OperationMode>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::InvalidPersistedRecord, database_));
     }
 
-    std::vector<core::LightPathModeSetting> settings;
-    {
-        Statement settingRows(
-            database_,
-            "SELECT light_path_id, equipment_definition_revision, "
-            "calibration_revision_id, illumination_component_id, "
-            "illumination_channel_id, target_irradiance_uw_per_mm2 "
-            "FROM operation_mode_light_path_setting "
-            "WHERE microscope_id = ? AND operation_mode_id = ? AND mode_revision = ? "
-            "ORDER BY light_path_id");
-        if (!settingRows.prepared() ||
-            !bindText(settingRows.get(), 1, microscopeId.value()) ||
-            !bindText(settingRows.get(), 2, operationModeId.value()) ||
-            sqlite3_bind_int64(
-                settingRows.get(), 3,
-                static_cast<sqlite3_int64>(*currentRevision)) != SQLITE_OK) {
-            return core::Result<
-                std::optional<core::OperationMode>,
-                MicroscopeConfigurationStoreError>::failure(
-                    makeError(StoreErrorCode::SqliteOperationFailed, database_));
-        }
-
-        for (;;) {
-            const int step = sqlite3_step(settingRows.get());
-            if (step == SQLITE_DONE) {
-                break;
-            }
-            if (step != SQLITE_ROW) {
-                return core::Result<
-                    std::optional<core::OperationMode>,
-                    MicroscopeConfigurationStoreError>::failure(
-                        makeError(StoreErrorCode::SqliteOperationFailed, database_));
-            }
-
-            const auto lightPathId =
-                readStrongId<core::LightPathId>(settingRows.get(), 0);
-            const sqlite3_int64 equipmentRevision =
-                sqlite3_column_int64(settingRows.get(), 1);
-            const auto calibrationRevisionId =
-                readStrongId<core::CalibrationRevisionId>(settingRows.get(), 2);
-            const auto illuminationComponentId =
-                readStrongId<core::EquipmentComponentId>(settingRows.get(), 3);
-            const auto illuminationChannelId =
-                readStrongId<core::IlluminationChannelId>(settingRows.get(), 4);
-            const double targetIrradiance =
-                sqlite3_column_double(settingRows.get(), 5);
-            if (!lightPathId || equipmentRevision <= 0 ||
-                !calibrationRevisionId || !illuminationComponentId ||
-                !illuminationChannelId) {
-                return core::Result<
-                    std::optional<core::OperationMode>,
-                    MicroscopeConfigurationStoreError>::failure(
-                        makeError(StoreErrorCode::InvalidPersistedRecord, database_));
-            }
-
-            std::vector<core::EquipmentComponentId> opticalComponentIds;
-            Statement componentRows(
-                database_,
-                "SELECT component_id FROM operation_mode_setting_optical_component "
-                "WHERE microscope_id = ? AND operation_mode_id = ? AND mode_revision = ? "
-                "AND light_path_id = ? ORDER BY component_id");
-            if (!componentRows.prepared() ||
-                !bindText(componentRows.get(), 1, microscopeId.value()) ||
-                !bindText(componentRows.get(), 2, operationModeId.value()) ||
-                sqlite3_bind_int64(
-                    componentRows.get(), 3,
-                    static_cast<sqlite3_int64>(*currentRevision)) != SQLITE_OK ||
-                !bindText(componentRows.get(), 4, lightPathId->value())) {
-                return core::Result<
-                    std::optional<core::OperationMode>,
-                    MicroscopeConfigurationStoreError>::failure(
-                        makeError(StoreErrorCode::SqliteOperationFailed, database_));
-            }
-
-            for (;;) {
-                const int componentStep = sqlite3_step(componentRows.get());
-                if (componentStep == SQLITE_DONE) {
-                    break;
-                }
-                if (componentStep != SQLITE_ROW) {
-                    return core::Result<
-                        std::optional<core::OperationMode>,
-                        MicroscopeConfigurationStoreError>::failure(
-                            makeError(StoreErrorCode::SqliteOperationFailed, database_));
-                }
-                auto componentId =
-                    readStrongId<core::EquipmentComponentId>(componentRows.get(), 0);
-                if (!componentId) {
-                    return core::Result<
-                        std::optional<core::OperationMode>,
-                        MicroscopeConfigurationStoreError>::failure(
-                            makeError(StoreErrorCode::InvalidPersistedRecord, database_));
-                }
-                opticalComponentIds.push_back(std::move(*componentId));
-            }
-
-            auto setting = core::LightPathModeSetting::create(
-                microscopeId,
-                static_cast<std::uint64_t>(equipmentRevision),
-                operationModeId,
-                *currentRevision,
-                *lightPathId,
-                *calibrationRevisionId,
-                *illuminationComponentId,
-                *illuminationChannelId,
-                std::move(opticalComponentIds),
-                targetIrradiance);
-            if (!setting) {
-                return core::Result<
-                    std::optional<core::OperationMode>,
-                    MicroscopeConfigurationStoreError>::failure(
-                        makeError(StoreErrorCode::InvalidPersistedRecord, database_));
-            }
-
-            auto calibration = loadCalibrationUnlocked(
-                microscopeId, *calibrationRevisionId);
-            if (!calibration) {
-                return core::Result<
-                    std::optional<core::OperationMode>,
-                    MicroscopeConfigurationStoreError>::failure(calibration.error());
-            }
-            if (!calibration.value()) {
-                return core::Result<
-                    std::optional<core::OperationMode>,
-                    MicroscopeConfigurationStoreError>::failure(
-                        makeError(StoreErrorCode::CalibrationNotFound, database_));
-            }
-            if (!isCalibrationBindingMatch(
-                    setting.value(), *calibration.value())) {
-                return core::Result<
-                    std::optional<core::OperationMode>,
-                    MicroscopeConfigurationStoreError>::failure(
-                        makeError(StoreErrorCode::CalibrationBindingMismatch, database_));
-            }
-
-            settings.push_back(std::move(setting).value());
-        }
+    auto name = readText(mode.get(), 0);
+    if (!name) {
+        return core::Result<
+            std::optional<core::OperationMode>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::InvalidPersistedRecord, database_));
     }
-
+    const auto contrastMethod = static_cast<core::ContrastMethod>(
+        sqlite3_column_int(mode.get(), 1));
     auto operationMode = core::OperationMode::create(
-        microscopeId,
-        operationModeId,
-        *currentRevision,
-        std::move(name),
-        contrastMethod,
-        std::move(settings));
+        microscopeId, operationModeId, *revision,
+        std::move(*name), contrastMethod);
     if (!operationMode) {
         return core::Result<
             std::optional<core::OperationMode>,
@@ -1119,6 +984,211 @@ MicroscopeConfigurationSqliteStore::loadCurrentOperationMode(
         std::optional<core::OperationMode>,
         MicroscopeConfigurationStoreError>::success(
             std::optional<core::OperationMode>{std::move(operationMode).value()});
+}
+
+core::Result<
+    std::optional<core::OperationModeHardwareConfiguration>,
+    MicroscopeConfigurationStoreError>
+MicroscopeConfigurationSqliteStore::loadOperationModeHardwareConfiguration(
+    const core::OperationMode& operationMode) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::optional<std::uint64_t> currentRevision;
+    if (!readCurrentModeRevision(
+            database_, operationMode.microscopeId(), operationMode.id(),
+            currentRevision)) {
+        return core::Result<
+            std::optional<core::OperationModeHardwareConfiguration>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::SqliteOperationFailed, database_));
+    }
+    if (!currentRevision || *currentRevision != operationMode.revision()) {
+        return core::Result<
+            std::optional<core::OperationModeHardwareConfiguration>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::RevisionConflict, database_,
+                    "Hardware realization requested for a non-current OperationMode revision."));
+    }
+
+    Statement storedMode(
+        database_,
+        "SELECT name, contrast_method FROM operation_mode "
+        "WHERE microscope_id = ? AND operation_mode_id = ? AND revision = ?");
+    if (!storedMode.prepared() ||
+        !bindText(storedMode.get(), 1, operationMode.microscopeId().value()) ||
+        !bindText(storedMode.get(), 2, operationMode.id().value()) ||
+        sqlite3_bind_int64(
+            storedMode.get(), 3,
+            static_cast<sqlite3_int64>(operationMode.revision())) != SQLITE_OK ||
+        sqlite3_step(storedMode.get()) != SQLITE_ROW) {
+        return core::Result<
+            std::optional<core::OperationModeHardwareConfiguration>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::InvalidPersistedRecord, database_));
+    }
+    auto storedName = readText(storedMode.get(), 0);
+    const auto storedContrast = static_cast<core::ContrastMethod>(
+        sqlite3_column_int(storedMode.get(), 1));
+    if (!storedName || *storedName != operationMode.name() ||
+        storedContrast != operationMode.contrastMethod()) {
+        return core::Result<
+            std::optional<core::OperationModeHardwareConfiguration>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::InvalidPersistedRecord, database_,
+                    "The supplied OperationMode value does not match the persisted revision."));
+    }
+
+    std::vector<core::LightPathModeSetting> settings;
+    Statement settingRows(
+        database_,
+        "SELECT light_path_id, equipment_definition_revision, calibration_revision_id, "
+        "illumination_component_id, illumination_channel_id, target_irradiance_uw_per_mm2 "
+        "FROM operation_mode_light_path_setting "
+        "WHERE microscope_id = ? AND operation_mode_id = ? AND mode_revision = ? "
+        "ORDER BY light_path_id");
+    if (!settingRows.prepared() ||
+        !bindText(settingRows.get(), 1, operationMode.microscopeId().value()) ||
+        !bindText(settingRows.get(), 2, operationMode.id().value()) ||
+        sqlite3_bind_int64(
+            settingRows.get(), 3,
+            static_cast<sqlite3_int64>(operationMode.revision())) != SQLITE_OK) {
+        return core::Result<
+            std::optional<core::OperationModeHardwareConfiguration>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::SqliteOperationFailed, database_));
+    }
+
+    for (;;) {
+        const int step = sqlite3_step(settingRows.get());
+        if (step == SQLITE_DONE) break;
+        if (step != SQLITE_ROW) {
+            return core::Result<
+                std::optional<core::OperationModeHardwareConfiguration>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::SqliteOperationFailed, database_));
+        }
+
+        const auto lightPathId =
+            readStrongId<core::LightPathId>(settingRows.get(), 0);
+        const sqlite3_int64 equipmentRevision =
+            sqlite3_column_int64(settingRows.get(), 1);
+        const auto calibrationRevisionId =
+            readStrongId<core::CalibrationRevisionId>(settingRows.get(), 2);
+        const auto illuminationComponentId =
+            readStrongId<core::EquipmentComponentId>(settingRows.get(), 3);
+        const auto illuminationChannelId =
+            readStrongId<core::IlluminationChannelId>(settingRows.get(), 4);
+        const double targetIrradiance =
+            sqlite3_column_double(settingRows.get(), 5);
+        if (!lightPathId || equipmentRevision <= 0 ||
+            !calibrationRevisionId || !illuminationComponentId ||
+            !illuminationChannelId) {
+            return core::Result<
+                std::optional<core::OperationModeHardwareConfiguration>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+
+        std::vector<core::EquipmentComponentId> opticalComponentIds;
+        Statement componentRows(
+            database_,
+            "SELECT component_id FROM operation_mode_setting_optical_component "
+            "WHERE microscope_id = ? AND operation_mode_id = ? AND mode_revision = ? "
+            "AND light_path_id = ? ORDER BY component_id");
+        if (!componentRows.prepared() ||
+            !bindText(componentRows.get(), 1, operationMode.microscopeId().value()) ||
+            !bindText(componentRows.get(), 2, operationMode.id().value()) ||
+            sqlite3_bind_int64(
+                componentRows.get(), 3,
+                static_cast<sqlite3_int64>(operationMode.revision())) != SQLITE_OK ||
+            !bindText(componentRows.get(), 4, lightPathId->value())) {
+            return core::Result<
+                std::optional<core::OperationModeHardwareConfiguration>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::SqliteOperationFailed, database_));
+        }
+
+        for (;;) {
+            const int componentStep = sqlite3_step(componentRows.get());
+            if (componentStep == SQLITE_DONE) break;
+            if (componentStep != SQLITE_ROW) {
+                return core::Result<
+                    std::optional<core::OperationModeHardwareConfiguration>,
+                    MicroscopeConfigurationStoreError>::failure(
+                        makeError(StoreErrorCode::SqliteOperationFailed, database_));
+            }
+            auto componentId =
+                readStrongId<core::EquipmentComponentId>(componentRows.get(), 0);
+            if (!componentId) {
+                return core::Result<
+                    std::optional<core::OperationModeHardwareConfiguration>,
+                    MicroscopeConfigurationStoreError>::failure(
+                        makeError(StoreErrorCode::InvalidPersistedRecord, database_));
+            }
+            opticalComponentIds.push_back(std::move(*componentId));
+        }
+
+        auto setting = core::LightPathModeSetting::create(
+            operationMode.microscopeId(),
+            static_cast<std::uint64_t>(equipmentRevision),
+            operationMode.id(),
+            operationMode.revision(),
+            *lightPathId,
+            *calibrationRevisionId,
+            *illuminationComponentId,
+            *illuminationChannelId,
+            std::move(opticalComponentIds),
+            targetIrradiance);
+        if (!setting) {
+            return core::Result<
+                std::optional<core::OperationModeHardwareConfiguration>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+
+        auto calibration = loadCalibrationUnlocked(
+            operationMode.microscopeId(), *calibrationRevisionId);
+        if (!calibration) {
+            return core::Result<
+                std::optional<core::OperationModeHardwareConfiguration>,
+                MicroscopeConfigurationStoreError>::failure(calibration.error());
+        }
+        if (!calibration.value()) {
+            return core::Result<
+                std::optional<core::OperationModeHardwareConfiguration>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::CalibrationNotFound, database_));
+        }
+        if (!isCalibrationBindingMatch(setting.value(), *calibration.value())) {
+            return core::Result<
+                std::optional<core::OperationModeHardwareConfiguration>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::CalibrationBindingMismatch, database_));
+        }
+        settings.push_back(std::move(setting).value());
+    }
+
+    if (settings.empty()) {
+        return core::Result<
+            std::optional<core::OperationModeHardwareConfiguration>,
+            MicroscopeConfigurationStoreError>::success(std::nullopt);
+    }
+
+    auto hardwareConfiguration =
+        core::OperationModeHardwareConfiguration::create(
+            operationMode, std::move(settings));
+    if (!hardwareConfiguration) {
+        return core::Result<
+            std::optional<core::OperationModeHardwareConfiguration>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::InvalidPersistedRecord, database_));
+    }
+
+    return core::Result<
+        std::optional<core::OperationModeHardwareConfiguration>,
+        MicroscopeConfigurationStoreError>::success(
+            std::optional<core::OperationModeHardwareConfiguration>{
+                std::move(hardwareConfiguration).value()});
 }
 
 } // namespace microscope::application::persistence

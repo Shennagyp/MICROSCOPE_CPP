@@ -1143,6 +1143,27 @@ The project owner separately reported a local Release run with 43/43 tests passi
 
 ### 12.6 Physical and interoperability evidence boundaries
 
+#### MU503 reference-device observations
+
+The project owner's reference camera is an AmScope MU503 on USB 2.0. The following values are observations from the owner's device/SDK probes, not generic guarantees for all MU503 units or all AmScope models:
+
+| Item | Recorded observation |
+|---|---|
+| Vendor SDK version | `58.28273.20250415` |
+| Firmware | `1.4.4.20200314` |
+| Hardware revision | `2.0` |
+| Production date reported | `20210721` |
+| Native Amcam enumeration ID | `tp-0-1-0547-4511` |
+| SDK device ID observed | `tp-1-2-0547-3511` |
+| Maximum observed preview dimensions | `1280 × 960` |
+| Other observed preview dimension | `640 × 480` |
+| Pixel size reported | `2.200 µm` |
+| Observed RAW mode | RAW8, RGGB |
+| SDK bit-depth report | 8 bits in the inspected SDK query |
+
+The native enumeration ID and SDK device ID are opaque provider tokens; they are not serial numbers and must not be treated as stable identities across replug. The SDK's 8-bit report is an observation for this connected device/query, not proof that every AmScope sensor is 8-bit. Do not invent 10/12/14/16-bit modes for the MU503 when the live SDK does not enumerate them.
+
+
 - A physical AmScope MU503 has previously been used for preview smoke and acquisition probes. The recorded Phase 4 FrameView smoke on 24 November 2026 was on the older `amscope-native-driver-v0.7` source snapshot `5339c441...`; it passed open/start/live-frame/stop/close, but did not measure sustained rate, feature readback, metadata completeness or the full Phase 4 exit criteria.
 - The MU503 is USB 2.0. Earlier reported measurements include native probe 835 frames in 60.722 seconds with zero observed drops, vendor WaitImageV3 around 29–30 FPS at 1280×960, and a separate 640×480 event/pull/paint test around 91 FPS. These are different paths and conditions; do not combine them into one guaranteed production rate.
 - The user has no physical camera supporting CTI. The in-repository CTI fixture is therefore the available GenTL software integration evidence.

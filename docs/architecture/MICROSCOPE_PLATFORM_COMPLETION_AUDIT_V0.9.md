@@ -164,9 +164,9 @@ The existing preview, feature controls and workspace shell can remain as present
 4. Add authoritative equipment-definition JSON loading and revision persistence. Add mode/profile enumeration/loading and a central database migration owner.
 5. Compose a microscope-level Application runtime and UI-facing snapshots/events. Integrate SampleType + Stain -> recommended OperationMode -> explicit selection -> desired/observed state reconciliation.
 6. Implement and test concrete stage and optical component adapters. Preserve stage error accumulation/homing behavior; complete cancellation, timeout, verified-idle and late-completion handling.
-7. Add the Slide -> Tile acquisition contract and single-tile capture/persistence workflow. Keep image bytes in file/asset storage, not in Core; keep ImageProcessing separate.
-8. Move Rayleigh-based automatic-resolution policy and objective/exposure orchestration behind Core/Application contracts, using the explicit per-axis camera output mapping.
-9. Replace Swift domain logic with a thin native bridge to Microscope.Application.
+7. Move Rayleigh-based automatic-resolution policy and objective/exposure orchestration behind Core/Application contracts, using the explicit per-axis camera output mapping.
+8. Integrate the existing Swift acquisition workflow with the C++ microscope facade: pass physical Slide identity, use camera sessions and stage/optical commands, and consume verified state/events. Keep capture orchestration, image/tile organization, file persistence and gallery lifecycle in Swift.
+9. Replace only duplicated microscope-domain logic in Swift with calls to Microscope.Application; do not move the Swift acquisition workflow into C++.
 
 ## 5. UI-readiness acceptance gate
 

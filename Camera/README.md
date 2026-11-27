@@ -57,6 +57,14 @@ CAMERA_MODULE_BUILD_PREVIEW_APP is an optional local application build, not
 a library package component. Qt remains optional: Common, GenTL and native
 AmScope consumers do not acquire Qt unless they request a Qt component.
 
+The AmScope preview executable's `--list-cameras` diagnostic queries both
+native AmScope enumeration and the GenTL `ProducerCatalog`. GenTL discovery
+scans the `GENICAM_GENTL64_PATH` directories for CTI Producers and continues
+past individual Producer failures. The diagnostic reports each backend
+separately and combines the discovered-device count. The interactive preview
+and camera-control session remains AmScope-specific; listing a GenTL device
+does not imply that this preview application can open or control it.
+
 External-consumer fixtures under tests/consumers configure against an
 installed, relocated prefix. They do not use source-tree include paths or
 open a physical camera. CI runs them to verify linking and runtime loading.

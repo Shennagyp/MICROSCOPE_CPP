@@ -20,6 +20,8 @@ struct LightPathIdTag final {};
 struct OperationModeIdTag final {};
 struct CameraModeIdTag final {};
 struct StageAxisIdTag final {};
+struct StageConfigurationIdTag final {};
+struct StageSlotIdTag final {};
 struct ConfigurationProfileIdTag final {};
 struct ConfigurationTransitionStepIdTag final {};
 struct OpticalCompatibilityIdTag final {};
@@ -50,6 +52,8 @@ using LightPathId = StrongId<detail::LightPathIdTag>;
 using OperationModeId = StrongId<detail::OperationModeIdTag>;
 using CameraModeId = StrongId<detail::CameraModeIdTag>;
 using StageAxisId = StrongId<detail::StageAxisIdTag>;
+using StageConfigurationId = StrongId<detail::StageConfigurationIdTag>;
+using StageSlotId = StrongId<detail::StageSlotIdTag>;
 using ConfigurationProfileId = StrongId<detail::ConfigurationProfileIdTag>;
 using ConfigurationTransitionStepId =
     StrongId<detail::ConfigurationTransitionStepIdTag>;

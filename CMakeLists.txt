@@ -31,6 +31,9 @@ add_subdirectory(Camera/Common)
 # The microscope platform libraries are backend-neutral. They are added
 # independently from the existing AmScope camera capability.
 add_subdirectory(Libraries/Microscope.Core)
+
+# Backend-neutral hardware motion and stage-control capability.
+add_subdirectory(Controller/Common)
 add_subdirectory(Libraries/Microscope.Application)
 
 if(OPTIKA_BUILD_AMSCOPE)

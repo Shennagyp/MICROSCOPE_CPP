@@ -23,6 +23,8 @@ add_library(microscope_core STATIC
     src/OpticalSpecifications.cpp
     src/IlluminationSpecifications.cpp
     src/StageSpecifications.cpp
+    src/SlideGeometry.cpp
+    src/DualSlideCarrierSpecification.cpp
     src/StageWorkingSurface2D.cpp
     src/StagePosition3D.cpp
     src/StageAxisReference.cpp

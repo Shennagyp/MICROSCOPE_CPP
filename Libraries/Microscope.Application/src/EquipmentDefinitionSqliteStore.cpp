@@ -237,8 +237,6 @@ core::Status<Error> EquipmentDefinitionSqliteStore::initializeSchema() {
             SELECT RAISE(ABORT, 'current equipment definition pointer cannot be deleted');
         END;
 
-        CREATE INDEX IF NOT EXISTS equipment_definition_revision_lookup
-            ON equipment_definition_revision (microscope_id, revision);
     )SQL";
 
     if (!execute(database_, schema)) {

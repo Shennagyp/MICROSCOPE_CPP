@@ -1,3 +1,5 @@
+> **Owner-direction update — 27 November 2026:** This audit records the earlier AmScope freeze. The owner has now authorized the limited cross-protocol work of integrating the validated Common frame-layout and acquisition-integrity contracts into AmScope/Amcam. This does not authorize redesign of its vendor-specific lifecycle, callback/event queue, frame-pool lease, cache-flush or SDK ownership semantics. The audit's prior freeze statements are historical and superseded only to that extent.
+
 # Camera v2.0 — Phase 6 Capability, Feature, Command and Model Audit
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  

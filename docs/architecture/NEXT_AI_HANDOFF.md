@@ -18,10 +18,9 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 2. **PFNC:** Mono14p and all four Bayer14p patterns are mapped in addition to existing verified formats. Packed payloads remain byte-identical; no sample unpacking/demosaicing occurs.
 3. **Acquisition integrity:** bounded-memory Common accounting distinguishes complete images, incomplete buffers, non-image payloads, empty payloads, host wait timeouts, missing IDs, forward gaps/missing IDs, duplicate IDs, out-of-order IDs, ambiguous backwards transitions, declared wraps and Producer starvation.
 4. **Simulator faults and sustained recycling:** separate Producer underrun and host timeout injection; gap/duplicate/out-of-order/ambiguous ID scenarios; incomplete and empty payload scenarios; 4,096 frames recycled through four announced buffers.
-5. **Lifecycle/recovery qualification:** queue starvation with explicit queue depletion and Producer counter increment, separate host timeout, buffer replenishment and recovery; three stop/reopen cycles; simulated stream interruption after two frames followed by stop/reopen and monotonic frame/timestamp continuation. Recovery CTests pass on both architectures.
 5. **Multipart:** optional GenTL 1.5 `DSGetNumBufferParts` and `DSGetBufferPartInfo` entry points are resolved as optional. Part base/size are validated against the filled payload, converted to offsets before requeue, and represented as Common `FramePart` views over the one owned payload. The simulator exercises a 2D image part and a non-image part; image-bearing multipart buffers count as complete image deliveries. Producers without the optional functions remain usable for single-part acquisition.
 6. **GenApi `IRegister`:** new Common `ICameraRegisterAccess` keeps raw byte-register operations separate from scalar `ICameraFeatureAccess`. `GenApiDeviceAccess::registers()` exposes only public Root-reachable `IRegister` nodes. The default transfer bound is 16 MiB, configurable at device-access construction; read/write access and exact byte length are enforced; reads use `IRegister::Get`, writes use `Set`; internal `IntReg` nodes remain hidden. Tests cover read-only read, read-only write rejection, RW write and byte-for-byte readback, wrong-length rejection, configurable transfer-limit rejection, scalar-as-register rejection and hidden internal register rejection.
-
+7. **Lifecycle/recovery qualification:** queue starvation with explicit queue depletion and Producer counter increment, separate host timeout, buffer replenishment and recovery; three stop/reopen cycles; simulated stream interruption after two frames followed by stop/reopen and monotonic frame/timestamp continuation. Recovery CTests pass on both architectures.
 ### Protocol/feature ownership
 
 - GenTL transport features: CTI/Producer and stream lifecycle, buffers/events, stream counters, multipart buffer parts.
@@ -38,7 +37,7 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 
 **B. Independent Producer interoperability.** Keep it a separate external gate. The first-party CTI simulator proves our consumer path only. Use a current CTI Producer whose license permits generic third-party consumer testing; do not guess package URLs or claim independent compatibility without a passing run.
 
-**C. Extend Common semantics to other protocols only after A passes exact-commit CI on Intel and arm64.** Map layout/part/integrity contracts into AmScope/Amcam and other supported adapters. Do not copy GenTL-specific types into Common. Each backend owns its counter/wrap semantics, timestamp base/frequency/clock domain and provider starvation counters. Keep UI, slides, stage and tile capture out of Camera.
+**C. Extend beyond AmScope/Amcam only after that adapter's Common-contract integration passes exact-commit CI.** Do not copy GenTL-specific types into Common. Each backend owns its counter/wrap semantics, timestamp base/frequency/clock domain and provider starvation counters. Keep UI, slides, stage and tile capture out of Camera.
 
 ### Invariants
 
@@ -73,7 +72,7 @@ The latest app-only correction:
 - Displays preview-resolution enumeration choices as dimensions (for example `1280 × 960`) while retaining the canonical `index:widthxheight` symbol for backend writes/readback.
 - Replaces direct `CameraFeatureGroup`-to-tab presentation with host-owned operator sections: Capture, Exposure, Image appearance, Sensor & hardware, and Advanced. The backend descriptor group remains unchanged for validation and lifecycle semantics.
 
-**Important boundary:** this is a presentation correction, not proof that the SDK supplied a model descriptor for MU503. If the UI summary reports that the descriptor is absent, resolving that requires a provider-level model-query path; the AmScope provider freeze remains in force. Do not fabricate the missing data or bypass the session owner. The changes have not been compiled or run by the assistant; obtain exact-commit CI and owner visual inspection before accepting them.
+**Important boundary:** this is a presentation correction, not proof that the SDK supplied a model descriptor for MU503. If the UI summary reports that the descriptor is absent, resolving that requires a provider-level model-query path; do not fabricate missing data. The provider freeze described in this historical 26 November note was superseded on 27 November only for the explicitly authorized Common frame-layout/acquisition-integrity integration; it does not authorize redesign of AmScope lifecycle or UI. The changes have not been compiled or run by the assistant; obtain exact-commit CI and owner visual inspection before accepting them.
 
 
 The project owner explicitly corrected the previous continuation attempt:
@@ -81,9 +80,9 @@ The project owner explicitly corrected the previous continuation attempt:
 - Qt is optional as a dependency, not a removed deliverable. Original Phase 3 (Qt streaming) and Phase 4 (reusable Qt UI) remain in scope.
 - Phase 3 is accepted. Phase 4 source/offscreen work is complete; visual/workspace acceptance remains pending and the physical MU503 test is postponed by owner direction. Phase 4 is not marked accepted, but its pending acceptance does not block Phase 6 software work.
 - Phase 5 GenTL/GenApi implementation is complete by owner direction; do not restart it.
-- Phase 6 remains open. Its provider-neutral GenTL/GenApi work is complete for the current public contract; AmScope provider-level feature/command/model tests remain blocked by the explicit AmScope freeze.
+- Phase 6 remains open and is now active for Common frame-layout/acquisition-integrity integration into AmScope/Amcam. The prior freeze was superseded on 27 November for this limited cross-protocol work.
 - The owner explicitly authorized Phase 7 packaging and external-consumer work on 26 November 2026, without lifting the AmScope freeze. Phase 7 may modify CMake packaging metadata, package config, consumer fixtures, CI and documentation.
-- **AmScope provider source, tests, public contracts and runtime behavior remain frozen. Do not write to `OPTIKA-B293-DUALSLIDE-APP-v.0.9`. Continue only on `camera-v.2.0`.**
+- **The prior AmScope provider freeze is superseded only for Common frame-layout/acquisition-integrity integration.** Preserve vendor-specific lifecycle, callback/event queue, frame-pool leases, cache flush, SDK access and existing feature semantics. Do not modify Optika UI or `OPTIKA-B293-DUALSLIDE-APP-v.0.9`. Continue only on `camera-v.2.0`.
 - The AmScope preview application exists in Camera/Amscope/app/main.cpp; do not treat it as obsolete or exclude it from the project.
 - The retired AMSCOPE_DRIVER project/repository is not a current dependency or source of truth. Do not inspect, revive, clone, build against, or modify it.
 
@@ -103,7 +102,7 @@ If older documents conflict with this owner direction or the current status ledg
 | 7 — Packaging and external consumers | **ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026)** | Commits `643319a`, `58f3790`, `49cc11e`, `fc3be40`, `22ee34f`, `c0f50da`, `75768c1` and `bdd39bd` add the package entry point, exports, component-aware config, relocation consumers, runtime API use, Qt/GenApi dependency isolation, an installed GenApi consumer, two-architecture runtime/architecture checks and vendor-runtime redistribution gating. Package workflow #45778844769 passed both architectures (28/28 CTest tests each), all relocated consumer/runtime checks, and the default-off vendor-runtime install contract on Apple Silicon. Installed-artifact physical AmScope and GenTL smoke tests remain required by Phase 7. Keep the AmScope freeze intact. |
 | 8 — Hardware qualification and release | Open | Preserve as a separate evidence/release milestone. |
 
-The immediate task is Phase 7 packaging and external-consumer verification on `camera-v.2.0`. Preserve the existing preview and reusable UI. Keep Phase 4 visual acceptance pending and physical MU503 testing postponed. Phase 6 remains open at the frozen AmScope provider-test boundary; do not modify AmScope provider source, tests, contracts or runtime behavior.
+The immediate software task is Phase 6 Common-contract integration into AmScope/Amcam on `camera-v.2.0`. Preserve the existing preview and reusable UI. Keep Phase 4 visual acceptance pending and physical MU503 testing postponed. Do not redesign AmScope lifecycle, callback/event queue, frame pool or cache ownership.
 
 ## 3. Repository boundaries
 

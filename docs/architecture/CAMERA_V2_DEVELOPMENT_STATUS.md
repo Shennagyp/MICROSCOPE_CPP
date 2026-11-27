@@ -5,7 +5,7 @@
 **Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `75768c18ab77edad49373823b83e7d74797ab0db` — AmScope vendor runtime bundling is an explicit opt-in, default OFF for the reusable package; the installed config exposes whether it was included. **Latest package CI definition:** `bdd39bd218e1f10a80266c7ea677d4f416f15aba` — tests explicit runtime inclusion for ephemeral CI and the default-off install contract. **Package CI:** [workflow #45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) passed on Intel x86_64 and Apple Silicon arm64: 28/28 CTest tests per architecture, install/relocation, Common/GenTL/GenApi/AmScope/Qt consumer configure/build/run, runtime-link inspection and installed-artifact architecture checks. The default-off vendor-runtime install contract also passed on Apple Silicon.  
 **Latest CI-validated checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — workflow [#45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) passed the GenTL bridge and official GenApi integration build/tests on Intel x86_64 and Apple Silicon arm64 (10/10 bridge tests and 11/11 official GenApi tests per architecture).  
 **Review date:** 27 November 2026.  
-**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 complete by owner direction; Phase 6 remains open but blocked at the frozen AmScope provider-test boundary; Phase 7 is active by explicit owner authorization on 26 November 2026.  
+**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual and physical MU503 acceptance pending/postponed; Phase 5 GenTL/GenApi and simulator recovery passed CI on both architectures; Phase 6 is active for the newly authorized Common-contract integration into AmScope/Amcam; Phase 7 package CI is passed, with physical and redistribution gates separate.  
 **Mandatory continuation guide:** [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
 
 
@@ -28,10 +28,9 @@ Accepted capabilities in the latest tested source:
 2. **PFNC layouts:** Mono14p and Bayer GR/RG/GB/BG14p are supported in addition to the verified Mono8/10p/12p, unpacked Mono10/12/14/16, RGB8 and Bayer 8/10/12/14/16 paths. Packed bytes remain unchanged; tests cover byte-aligned odd-width rows, exact payload accounting, offsets and padding. No unpacking or demosaicing occurs in Camera.
 3. **Acquisition integrity:** Common tracks complete/incomplete/non-image/invalid deliveries, optional frame IDs, forward gaps/missing IDs, duplicates, out-of-order IDs, ambiguous backward transitions, declared wrap models, host wait timeouts and provider-reported starvation. Host wait timeouts and Producer underruns are distinct.
 4. **GenTL simulator fault and continuity tests:** gaps, duplicates, out-of-order and ambiguous IDs, incomplete frames, empty payloads, injected Producer underruns, a separate host timeout and 4,096 consecutive buffer-recycling deliveries through four announced buffers.
-7. **Lifecycle and recovery tests:** queue depletion reports one Producer underrun and a separate host timeout, then restores the four announced buffers; three successive stop/reopen cycles preserve increasing frame IDs and timestamps; an interrupted stream produces a host timeout without inventing an underrun and resumes after stream close/reopen. The recovery test checks delivery counters, queue depth and integrity counters on each new session.
 5. **GenTL multipart:** optional `DSGetNumBufferParts` / `DSGetBufferPartInfo` dispatch; validated part address/size ranges converted to offsets before buffer requeue; Common `FramePart` metadata and `partData()` views refer to the single owned payload. Simulator test covers one 2D image part plus one non-image part. An image-bearing multipart buffer counts as a complete image delivery. Producers without the optional entry points continue to work for ordinary single-part acquisition.
 6. **GenApi public `IRegister`:** `Camera.Common` defines a separate opaque-byte `ICameraRegisterAccess` contract; `GenApiDeviceAccess::registers()` enumerates public Root-reachable `IRegister` nodes and supports bounded read/write. Default transfer limit is 16 MiB and configurable. Reads use `Get`; writes use `Set`; length, availability, read/write access and exact write size are checked under the shared serialized node map. Internal `IntReg` implementation nodes remain hidden and scalar features are not accepted as raw registers. XML-backed tests cover RO read, RW write/readback byte equality, wrong-length rejection, configurable transfer-limit rejection and hidden/scalar-node rejection.
-
+7. **GenTL lifecycle and recovery:** queue depletion reports one Producer underrun and a separate host timeout, then restores all four announced buffers; three successive stop/reopen cycles preserve increasing frame IDs and timestamps; an interrupted stream produces a host timeout without inventing an underrun and resumes after stream close/reopen. Recovery tests verify delivery counters, queue depth and integrity counters for each new session.
 ### Ownership and classification
 
 - **GenTL transport:** CTI loading, Producer/interface/device/stream lifecycle, buffers/events/statistics and multipart buffer-part operations.
@@ -46,7 +45,7 @@ Accepted capabilities in the latest tested source:
 
 1. **Begin cross-protocol extension of the validated Common contracts.** Start with AmScope/Amcam. Map frame layout metadata and acquisition-integrity accounting without changing its vendor-specific lifecycle, callback, buffer-pool or frame-cache ownership semantics. The SDK reports a 32-bit unsigned sequence field and microsecond timestamp ticks; preserve those source units and configure the sequence wrap model only from the verified SDK declaration. Do not infer a clock origin. Add simulator/fake-SDK tests for gaps, duplicates, wrap, missing metadata, host-side frame-pool discards and stop/restart. Apply the same approach to any additional supported backend after its source metadata is inspected.
 2. **Independent CTI interoperability remains an external qualification gate.** The in-repository simulator validates our consumer path, not third-party Producer interoperability. Use only a current Producer whose license permits generic third-party consumer testing; do not invent/download an installer or treat an in-repo fixture as vendor evidence.
-3. **Cross-protocol extension only after the GenTL lifecycle/recovery increment passes exact-commit CI on both architectures.** Extend the validated Common frame-layout, part and integrity semantics through AmScope/Amcam and any other supported adapter. Keep each backend's source-counter width/wrap, timestamp frequency/clock domain, starvation counters and missing-metadata semantics in that adapter. Do not leak GenTL types into Common.
+3. **After AmScope/Amcam passes exact-commit CI, extend to any additional supported adapter.** Keep each backend's source-counter width/wrap, timestamp frequency/clock domain, starvation counters and missing-metadata semantics in that adapter. Do not leak GenTL types into Common.
 4. **Do not implement `IIntegerVector` as a standard GenApi feature.** No standard public interface exists in GenApi 3.5.1. Defer vendor-specific vector support until an actual target XML/schema requires it.
 
 ### Performance and ownership invariants
@@ -58,7 +57,7 @@ Accepted capabilities in the latest tested source:
 
 ## 0. Immediate continuation instruction
 
-The next AI must read [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md) and this ledger before touching source. Qt streaming and reusable UI are original Phase 3/4 deliverables, not excluded historical code. Phase 3 is accepted. Phase 4 source/offscreen work is complete, but human visual inspection and physical MU503 UI acceptance remain pending; the owner postponed the physical test. Preserve the existing preview. Phase 5 GenTL/GenApi is complete by owner direction. Phase 6 remains open because AmScope provider-level tests are blocked by the explicit freeze. The owner explicitly authorized Phase 7 packaging and external-consumer work on 26 November 2026. **Do not modify AmScope provider source, tests, public contracts or runtime behavior; do not write to `OPTIKA-B293-DUALSLIDE-APP-v.0.9`.** Phase 7 may change CMake packaging metadata, package configuration, consumer fixtures, CI and documentation. The owner has now requested simulator-backed GenTL software qualification; follow [CAMERA_V2_SIMULATOR_QUALIFICATION.md](CAMERA_V2_SIMULATOR_QUALIFICATION.md), keep it isolated from AmScope, and do not equate simulator results with physical hardware acceptance. Continue on `camera-v.2.0`. Do not run local build/test/debug runs. Do not restart Phase 5 or revive retired repositories.
+The next AI must read [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md) and this ledger before touching source. Phase 3 is accepted. Phase 4 source/offscreen work is complete, but human visual inspection and physical MU503 UI acceptance remain pending; the owner postponed the physical test. Preserve the existing preview and do not write to `OPTIKA-B293-DUALSLIDE-APP-v.0.9`. Phase 5 GenTL/GenApi and its simulator-backed recovery qualification are implemented and CI-tested on both architectures. **Owner direction on 27 November 2026 supersedes the earlier AmScope provider freeze for a limited purpose:** extend the validated Common frame-layout and acquisition-integrity contracts into AmScope/Amcam, then other supported protocol adapters. Preserve the existing vendor-specific lifecycle, callback/event queue, frame-pool leases, cache-flush and SDK ownership semantics; do not refactor them into GenTL or Common. Add fake-SDK tests for sequence gaps/wrap, missing metadata, host-side drops and restart. Independent CTI interoperability and physical camera acceptance remain separate evidence gates. Use GitHub Actions for builds/tests; do not run local build/test/debug runs. Continue on `camera-v.2.0` and do not revive retired repositories.
 
 ## 1. Branch provenance
 
@@ -343,9 +342,10 @@ Phase 6 disposition:
    for the current public contract, including malformed XML, unsupported
    IRegister, feature read/write failures, command execution/status failures,
    and recovery.
-4. The remaining high-priority Phase 6 gaps are AmScope provider-level feature,
-   command and model-mapping tests. They are blocked by the explicit AmScope
-   freeze. Do not modify AmScope source, tests, contracts or behavior.
+4. The next Phase 6 increment is Common frame-layout and acquisition-integrity
+   integration in AmScope/Amcam. The earlier provider freeze was superseded by
+   owner direction on 27 November 2026 for this limited adapter work. Preserve
+   the existing vendor lifecycle, callback, pool and cache ownership model.
 5. No additional provider-neutral Phase 6 source gap is currently identified.
    Do not invent work or reopen completed GenTL integration. Keep physical
    MU503, vendor CTI and real-device GenApi evidence pending for Phase 8.
@@ -368,14 +368,12 @@ MU503 RGB24 and short-rate observations are narrow evidence. They do not prove p
 
 ## 8. Next development sequence
 
-1. Phase 6 remains open at the AmScope provider-test boundary. Its
-   provider-neutral GenTL/GenApi coverage and discovery/vector decisions are
-   complete for the current public contract. The remaining AmScope
-   feature/command/model tests are blocked by the explicit freeze; do not
-   modify AmScope source, tests, contracts or runtime behavior.
-2. The owner explicitly authorized Phase 7 on 26 November 2026. Continue
-   package/export work on `camera-v.2.0`; do not wait for the frozen Phase 6
-   tests and do not mark Phase 6 complete.
+1. Phase 6 is active for cross-protocol integration. Extend Common frame
+   layout and acquisition-integrity semantics into AmScope/Amcam while
+   preserving its vendor-specific lifecycle, callback, frame-pool and cache
+   ownership. The earlier freeze is superseded only for this authorized work.
+2. Phase 7 package/export CI is already verified on both architectures. Keep
+   physical camera, external CTI and redistribution evidence separate.
 3. Phase 7 software/package acceptance is CI-verified by workflow
    #45778844769 on Intel x86_64 and Apple Silicon arm64: package build/tests,
    install, relocation, component-aware `find_package`, clean external

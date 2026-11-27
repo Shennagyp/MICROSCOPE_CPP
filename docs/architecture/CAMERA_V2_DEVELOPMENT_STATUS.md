@@ -1,5 +1,41 @@
 # Camera Module v2.0 — Development Status
 
+> **Current authority update — 27 November 2026:** The checkpoint below supersedes older phase-next-task statements in the historical ledger. The complete implementation and OOP explanation is [CAMERA_V2_ARCHITECTURE_AND_OOP.md](CAMERA_V2_ARCHITECTURE_AND_OOP.md); operational continuation instructions are in [NEXT_AI_HANDOFF.md](NEXT_AI_HANDOFF.md).
+
+## Current branch and evidence checkpoint
+
+- Working branch: `camera-v.2.0`.
+- Documentation baseline before this update: branch HEAD `f2ec068ee0150a953b0749d856b8d3a72bd1152a`; latest changes at that point were Optika workspace UI only.
+- GenTL/GenApi recovery software checkpoint: `e03ddb000a1d716b95510ff6c531647c85e1610a`; [GenTL workflow #45917806852](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917806852) passed Intel x86_64 and Apple Silicon arm64; [package workflow #45917806847](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45917806847) passed both architectures.
+- Common acquisition-integrity integration into AmScope: `46aba0614d56f65629bc25a688adec0f1cfe8f3c`; [AmScope workflow #45918559518](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45918559518) and [package workflow #45918559602](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45918559602) passed the listed Intel/Apple Silicon jobs.
+- Combined AmScope + GenTL discovery diagnostic/test: `12a832de98b1c082de0c432ecbc10f24c6fdada3`; [AmScope workflow #45927150635](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45927150635) and [package workflow #45927150649](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45927150649) passed.
+- Latest Optika dock presentation build at `f2ec068ee0150a953b0749d856b8d3a72bd1152a`; [workflow #45937445092](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45937445092) passed all five jobs. This is UI build/test evidence, not camera-core verification or visual acceptance.
+- Project owner separately reported a local Release run with 43/43 tests passing and physical MU503 discovery. The exact local SHA was not supplied; this remains owner-reported evidence.
+
+## Current phase disposition
+
+| Area | Current status | Qualification boundary |
+|---|---|---|
+| Phase 3 — Qt streaming separation | Accepted by owner | Preserve the one-session adapter and backend-neutral frame-stream boundary |
+| Phase 4 — reusable Qt UI | Source/offscreen work present; owner visual/workspace acceptance pending | Historical MU503 FrameView smoke is limited; physical UI test postponed by owner |
+| Phase 5 — GenTL/GenApi | Complete by owner direction | Do not restart implementation; physical/vendor CTI interoperability is a separate evidence gate |
+| Phase 6 — feature/command/model coverage | Partially complete; do not mark the entire phase complete | GenTL/GenApi adapter coverage and Common integrity integration are implemented/tested; AmScope provider-level feature read/write and command/accessory tests remain gaps in the Phase 6 audit |
+| Phase 7 — package and external consumers | Software CI passed | Installed-artifact physical smoke and vendor SDK redistribution review remain |
+| Phase 8 — hardware qualification/release | Open | Model/provider matrix, independent CTI, physical GenTL, long-duration/recovery, deployment and release evidence remain |
+
+### 27 November scope clarification
+
+The owner explicitly authorized the limited Common frame-layout/acquisition-integrity integration into AmScope/Amcam. That integration was committed at `46aba0614d56f65629bc25a688adec0f1cfe8f3c` and passed the AmScope/package workflows above. This supersedes the earlier provider freeze only for that bounded integration. It does **not** authorize a general Amcam lifecycle rewrite and does **not** close the remaining AmScope feature/command/model test gaps.
+
+The user has no physical CTI-capable camera. The in-repository CTI fixture provides first-party software integration evidence only. Do not claim independent vendor CTI interoperability or physical GenTL camera qualification. The MU503 is an AmScope USB camera and is not a substitute for CTI hardware.
+
+### Current next-task policy
+
+Do not restart GenTL/GenApi work already accepted by owner direction. Do not invent a new provider or broad feature expansion. Select a precise remaining AmScope provider test gap only when explicitly authorized, or continue with the separate Optika microscope application. Keep camera responsibilities limited to discovery, session lifecycle, acquisition, frame representation, camera controls/commands and transport telemetry. Microscope optics, stage/controller, slides, WSI tile scheduling/persistence, stitching and image processing remain outside Camera.
+
+---
+
+
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Development branch:** `camera-v.2.0`  
 **Latest provider implementation checkpoint:** `85dd6af1fc71434d16452e4c62ceae6933b2a713` — GenTL discovery routing and GenApi negative-path coverage are recorded. **Latest package implementation checkpoint:** `75768c18ab77edad49373823b83e7d74797ab0db` — AmScope vendor runtime bundling is an explicit opt-in, default OFF for the reusable package; the installed config exposes whether it was included. **Latest package CI definition:** `bdd39bd218e1f10a80266c7ea677d4f416f15aba` — tests explicit runtime inclusion for ephemeral CI and the default-off install contract. **Package CI:** [workflow #45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) passed on Intel x86_64 and Apple Silicon arm64: 28/28 CTest tests per architecture, install/relocation, Common/GenTL/GenApi/AmScope/Qt consumer configure/build/run, runtime-link inspection and installed-artifact architecture checks. The default-off vendor-runtime install contract also passed on Apple Silicon.  

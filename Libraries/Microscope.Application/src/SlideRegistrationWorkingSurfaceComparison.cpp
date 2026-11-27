@@ -119,36 +119,18 @@ SlideCornerCorrespondence::mappings() const noexcept {
 }
 
 SlideRegistrationWorkingSurfaceComparison::SlideRegistrationWorkingSurfaceComparison(
-    core::SlideId slideId,
-    core::CalibrationRevisionId physicalRevision,
-    core::CalibrationRevisionId workingSurfaceRevision,
+    core::SlideRegistration physicalRegistration,
+    core::SlideRectangleDefinition2D workingSurfaceRectangle,
     bool horizontalMapsToX,
-    double physicalX,
-    double physicalY,
-    double workingX,
-    double workingY,
     std::array<SlideCornerReconciliation, 4> corners,
     double maximumDiscrepancy,
-    double rmsDiscrepancy,
-    double registrationMaximumResidual,
-    double registrationRmsResidual,
-    double registrationAcceptedMaximumResidual,
-    std::array<double, 4> registrationCornerResiduals) noexcept
-    : slideId_(std::move(slideId)),
-      physicalRegistrationRevision_(std::move(physicalRevision)),
-      workingSurfaceRevision_(std::move(workingSurfaceRevision)),
+    double rmsDiscrepancy) noexcept
+    : physicalRegistration_(std::move(physicalRegistration)),
+      workingSurfaceRectangle_(std::move(workingSurfaceRectangle)),
       horizontalMapsToWorkingSurfaceX_(horizontalMapsToX),
-      physicalXExtent_(physicalX),
-      physicalYExtent_(physicalY),
-      workingSurfaceXExtent_(workingX),
-      workingSurfaceYExtent_(workingY),
       corners_(std::move(corners)),
       maximumCornerDiscrepancy_(maximumDiscrepancy),
-      rmsCornerDiscrepancy_(rmsDiscrepancy),
-      registrationMaximumFitResidual_(registrationMaximumResidual),
-      registrationRmsFitResidual_(registrationRmsResidual),
-      registrationAcceptedMaximumFitResidual_(registrationAcceptedMaximumResidual),
-      registrationCornerFitResiduals_(registrationCornerResiduals) {}
+      rmsCornerDiscrepancy_(rmsDiscrepancy) {}
 
 core::Result<SlideRegistrationWorkingSurfaceComparison,
     SlideRegistrationWorkingSurfaceComparisonError>
@@ -289,60 +271,60 @@ SlideRegistrationWorkingSurfaceComparison::compare(
     return core::Result<SlideRegistrationWorkingSurfaceComparison,
         SlideRegistrationWorkingSurfaceComparisonError>::success(
             SlideRegistrationWorkingSurfaceComparison(
-                slideId,
-                registration->revision(),
-                rectangle->registrationRevision(),
+                *registration,
+                *rectangle,
                 horizontalMapsToX,
-                physicalGeometry.xExtentMicrometers(),
-                physicalGeometry.yExtentMicrometers(),
-                workingGeometry.xExtentMicrometers(),
-                workingGeometry.yExtentMicrometers(),
                 std::move(reconciledCorners),
                 maximumDiscrepancy,
-                rmsDiscrepancy,
-                registration->maximumFitResidualMicrometers(),
-                registration->rmsFitResidualMicrometers(),
-                registration->acceptedMaximumFitResidualMicrometers(),
-                registration->cornerFitResidualsMicrometers()));
+                rmsDiscrepancy));
 }
 
 const core::SlideId& SlideRegistrationWorkingSurfaceComparison::slideId() const noexcept {
-    return slideId_;
+    return physicalRegistration_.slideId();
+}
+const core::SlideRegistration&
+SlideRegistrationWorkingSurfaceComparison::physicalRegistration() const noexcept {
+    return physicalRegistration_;
+}
+const core::SlideRectangleDefinition2D&
+SlideRegistrationWorkingSurfaceComparison::workingSurfaceRectangle() const noexcept {
+    return workingSurfaceRectangle_;
 }
 const core::CalibrationRevisionId&
 SlideRegistrationWorkingSurfaceComparison::physicalRegistrationRevision() const noexcept {
-    return physicalRegistrationRevision_;
+    return physicalRegistration_.revision();
 }
 const core::CalibrationRevisionId&
 SlideRegistrationWorkingSurfaceComparison::workingSurfaceRevision() const noexcept {
-    return workingSurfaceRevision_;
+    return workingSurfaceRectangle_.registrationRevision();
 }
 bool SlideRegistrationWorkingSurfaceComparison::revisionsAligned() const noexcept {
-    return physicalRegistrationRevision_ == workingSurfaceRevision_;
+    return physicalRegistration_.revision() ==
+        workingSurfaceRectangle_.registrationRevision();
 }
 bool SlideRegistrationWorkingSurfaceComparison::
 carrierHorizontalAxisMapsToWorkingSurfaceX() const noexcept {
     return horizontalMapsToWorkingSurfaceX_;
 }
 double SlideRegistrationWorkingSurfaceComparison::physicalXExtentMicrometers() const noexcept {
-    return physicalXExtent_;
+    return physicalRegistration_.geometry().xExtentMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::physicalYExtentMicrometers() const noexcept {
-    return physicalYExtent_;
+    return physicalRegistration_.geometry().yExtentMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::workingSurfaceXExtentMicrometers() const noexcept {
-    return workingSurfaceXExtent_;
+    return workingSurfaceRectangle_.geometry().canonicalGeometry().xExtentMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::workingSurfaceYExtentMicrometers() const noexcept {
-    return workingSurfaceYExtent_;
+    return workingSurfaceRectangle_.geometry().canonicalGeometry().yExtentMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::
 workingSurfaceMinusPhysicalXExtentMicrometers() const noexcept {
-    return workingSurfaceXExtent_ - physicalXExtent_;
+    return workingSurfaceXExtentMicrometers() - physicalXExtentMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::
 workingSurfaceMinusPhysicalYExtentMicrometers() const noexcept {
-    return workingSurfaceYExtent_ - physicalYExtent_;
+    return workingSurfaceYExtentMicrometers() - physicalYExtentMicrometers();
 }
 const std::array<SlideCornerReconciliation, 4>&
 SlideRegistrationWorkingSurfaceComparison::corners() const noexcept {
@@ -358,20 +340,20 @@ rmsCornerDiscrepancyMicrometers() const noexcept {
 }
 double SlideRegistrationWorkingSurfaceComparison::
 registrationMaximumFitResidualMicrometers() const noexcept {
-    return registrationMaximumFitResidual_;
+    return physicalRegistration_.maximumFitResidualMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::
 registrationRmsFitResidualMicrometers() const noexcept {
-    return registrationRmsFitResidual_;
+    return physicalRegistration_.rmsFitResidualMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::
 registrationAcceptedMaximumFitResidualMicrometers() const noexcept {
-    return registrationAcceptedMaximumFitResidual_;
+    return physicalRegistration_.acceptedMaximumFitResidualMicrometers();
 }
 const std::array<double, 4>&
 SlideRegistrationWorkingSurfaceComparison::
 registrationCornerFitResidualsMicrometers() const noexcept {
-    return registrationCornerFitResiduals_;
+    return physicalRegistration_.cornerFitResidualsMicrometers();
 }
 
 } // namespace microscope::application::navigation

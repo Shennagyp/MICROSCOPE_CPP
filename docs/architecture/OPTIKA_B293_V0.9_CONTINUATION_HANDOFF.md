@@ -2,9 +2,10 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Latest source/test commit:** `f8bc28294dca959d906fb366f49ca47a3ba2c797`  
-**Architecture/plan documentation commit:** `90df49a7edd0ec64868d730dd51b7af0822a3156`  
-**Verification:** source and test changes are authored; the target branch reference has not yet been advanced and CI has not yet run for this change set.
+**Latest source/test commit:** `0d51df7b6e9c863c2e09ae25a2aeaf0c700a2e13`  
+**Architecture audit commit:** `fc504dac175479a984032e509e03febec80be12d`  
+**Verification:** [platform CI run 45929942838](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45929942838) passed Ubuntu GCC, macOS Clang and Windows MSVC. The macOS job includes the native Optika application build and tests.  
+**Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 
@@ -67,36 +68,36 @@ The request factory consumes the separate hardware configuration and validates i
 
 Existing SQL child tables are reused; the separation is semantic and does not require a database schema migration. Existing rows remain associated with their exact mode revision.
 
-## Tests authored; CI pending
+## Verification
 
-New/updated Core tests cover:
-- Intent-only OperationMode construction.
-- Hardware realization exact mode/equipment revision checks, duplicate LightPath rejection and multi-LightPath values.
-- Camera discovery independent of stale calibration; request creation rejects stale hardware realization.
-- SampleType hard/preferred technique precedence over Stain advice.
-- Multiple stains, identity-only stains, stain-only recommendation rejection and ambiguous ties.
-- Slide/SampleType identity boundaries.
+The following source/test corrections are included in the verified code baseline:
 
-Application tests cover:
-- Stained Slide payload round-trip.
-- Separate OperationMode intent and hardware-realization persistence.
-- Intent-only mode persistence with no hardware realization.
-- Calibration binding rejection and optimistic revision conflicts.
+- Updated optical topology tests to the current intent/hardware-realization split. Camera discovery tests no longer require saved LightPath calibration.
+- Updated sample microscopy assessment tests to pass `OperationModeHardwareConfiguration`, not `OperationMode`.
+- Fixed the missing return type on `MicroscopeConfigurationSqliteStore::loadCurrentOperationMode`.
+- Corrected PreviewFrameRateMeter test timestamps to satisfy the meter's 0.5-second sampling interval and one-second stale threshold.
 
-These are authored and registered test sources, not passing-test evidence. The v0.9 branch must be advanced to the final commit, then GitHub Actions must build and execute the full CTest suite on the supported matrix. Native macOS application build/test must be checked separately from Core/Application CTest.
+The complete three-platform matrix passed on the current code baseline:
+- Core standalone and Core tests.
+- Application standalone and Application tests.
+- Root platform-only build and tests.
+- Native Optika app build/tests on macOS.
 
-## Remaining work, in dependency order
+This verifies the software build/test baseline, not physical microscope hardware execution.
 
-1. Advance the target branch only after verifying its current ref still equals the original parent `7d295e9d885914ab4de3e42e1f13e09e0439f9f2`; do not force-push.
-2. Run CI. Fix compiler errors and contract-test failures before adding more scope. Confirm Linux GCC, Windows MSVC and macOS Clang/Core tests, then the native OPTIKA app job.
-3. Recheck all OperatingMode factory, request-factory and assessor call sites for old embedded-hardware assumptions.
-4. Complete whole-configuration candidate discovery: objective, condenser, filter/optical function, illumination and LightPath alternatives must be resolved as coherent physical configurations. The current resolver remains selection-driven.
-5. Extend the calibrated optical-state fingerprint beyond component IDs to the actual adjustable route/optical settings and measurement provenance.
-6. Persist the full microscope equipment constitution and its revisions. Revalidate calibration/hardware realizations against this authoritative definition.
-7. Implement actual optical device command/observation/verification adapters. Core resolution and a declarative transition DAG do not prove that physical hardware changed.
-8. Integrate the recommendation service into the Application workflow/UI as a recommendation with reasons and explicit selection, not a hidden mode switch.
-9. Complete stage-controller lifecycle work (controlled cancellation/stop, timeout/deadline handling, verified idle and late-completion reconciliation) and connect a concrete adapter only after the installed controller protocol is specified.
+## Remaining work
+
+The complete library audit and dependency-ordered completion plan are maintained in [Microscope Platform Completion Audit v0.9](MICROSCOPE_PLATFORM_COMPLETION_AUDIT_V0.9.md).
+
+Immediate next work is not more UI:
+1. Correct Core ownership dependencies around SlideGeometry and DualSlideCarrierSpecification; reconcile the physical dual-slide carrier registration with the newer working-surface model.
+2. Integrate the camera-v2.0 module as a controlled subtree, not a wholesale branch merge. Exclude the previously rejected AcquisitionIntegrityTracker and Qt adapters/preview; add a backend-neutral provider/session API.
+3. Add authoritative equipment-definition JSON loading and revision persistence, plus mode/profile enumeration and database migration ownership.
+4. Build the microscope-level Application composition root, observed-state snapshot and configuration reconciler.
+5. Complete stage/optical hardware adapters and operation cancellation/timeout/late-completion semantics.
+6. Add the Slide-to-Tile acquisition contract and one complete single-tile capture workflow.
+7. Move domain decisions and persistence behind the C++ Application API; leave SwiftUI as presentation.
 
 ## Preservation constraints
 
-Keep the existing AmScope camera ownership, SDK lifecycle, bounded acquisition, frame-lease and preview behavior intact. Do not replace it with a simulated controller path. Keep the native SwiftUI layer as presentation/composition over Core/Application; do not move domain validation or SQLite ownership into views. The dual-slide carrier remains two horizontal physical slots with four-corner registration per slide.
+Keep camera ownership and vendor lifecycles inside the camera module; do not leak AmScope or GenTL SDK types into Microscope.Core. Do not add the rejected acquisition-integrity qualification layer or Qt UI/preview components to the Optika integration. Keep the native SwiftUI layer as presentation over the C++ Application API; do not move domain validation, microscope configuration or persistence into views. The physical dual-slide carrier remains two horizontal slots with four-corner registration per slide. ImageProcessing remains a separate project.

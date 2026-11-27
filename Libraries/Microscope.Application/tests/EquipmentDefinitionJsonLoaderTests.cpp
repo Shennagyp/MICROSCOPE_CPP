@@ -40,13 +40,15 @@ const std::string& validDocument() {
       "id": "condenser-abbe",
       "kind": "optical-element",
       "ports": [
-        { "id": "condenser-input", "direction": "input" }
+        { "id": "condenser-input", "direction": "input" },
+        { "id": "condenser-output", "direction": "output" }
       ]
     },
     {
       "id": "objective-4x",
       "kind": "optical-element",
       "ports": [
+        { "id": "objective-input", "direction": "input" },
         { "id": "objective-output", "direction": "output" }
       ]
     },
@@ -60,6 +62,10 @@ const std::string& validDocument() {
     {
       "id": "filter-excitation",
       "kind": "optical-element",
+      "ports": [
+        { "id": "filter-input", "direction": "input" },
+        { "id": "filter-output", "direction": "output" }
+      ],
       "opticalFunctions": [
         {
           "function": "excitation-filter",
@@ -69,7 +75,11 @@ const std::string& validDocument() {
     },
     {
       "id": "tube-lens",
-      "kind": "optical-element"
+      "kind": "optical-element",
+      "ports": [
+        { "id": "tube-lens-input", "direction": "input" },
+        { "id": "tube-lens-output", "direction": "output" }
+      ]
     },
     {
       "id": "stage-main",

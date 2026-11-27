@@ -9,7 +9,7 @@ This audit distinguishes implemented domain contracts from executable hardware w
 
 ## 1. Current dependency picture
 
-The Optika branch currently links the C++ Core and Application targets, but the native SwiftUI bridge imports only the AmScope camera bridge. Microscope configuration, automatic resolution, objective/exposure coordination and capture-gallery behavior still live in Swift models. The C++ Application stores and stage runtimes are not yet composed into the native app.
+The Optika branch currently links the C++ Core and Application targets, but the native SwiftUI bridge imports only the AmScope camera bridge. Swift already owns the application acquisition workflow, including capture orchestration, slide-folder/image organization and gallery lifecycle; this is an established application responsibility, not a missing C++ library feature. Microscope configuration, automatic resolution and objective/exposure coordination also remain Swift-side today. The C++ Application stores and stage runtimes are not yet composed into the native app.
 
 The camera implementation with GenTL support is on a separate development line, `camera-v.2.0`; it is not present in the Optika branch.
 
@@ -17,7 +17,7 @@ The camera implementation with GenTL support is on a separate development line, 
 flowchart TD
     UI[SwiftUI presentation]
     CamBridge[AmScope native bridge]
-    SwiftRules[Swift configuration, resolution and exposure models]
+    SwiftApp[Swift application: acquisition workflow, capture orchestration, image/tile organization and gallery]\n    SwiftRules[Swift microscope configuration, resolution and exposure models]
     Core[Microscope.Core]
     App[Microscope.Application]
     Stores[SQLite stores]
@@ -56,7 +56,7 @@ flowchart TD
     App --> Persistence
 ```
 
-The target graph is not yet implemented. ImageProcessing remains a separate project; the microscope platform should define the acquisition/tile contract without absorbing image-processing algorithms.
+The target graph is not yet implemented. Swift is the owner of the application-level acquisition workflow and durable image/tile organization. Camera-v2.0 supplies the camera-side discovery, session, streaming and frame-delivery capability (including its advanced preview pipeline); it does not need to absorb microscope acquisition policy. ImageProcessing remains a separate project. C++ Core/Application should expose microscope hardware and domain capabilities to Swift rather than duplicate the Swift acquisition lifecycle.
 
 ## 2. Library status
 
@@ -80,7 +80,7 @@ The target graph is not yet implemented. ImageProcessing remains a separate proj
 1. `SampleModels.h` imports `DualSlideNavigation.h` to obtain `SlideGeometry`. `OpticalTopology.h` also imports navigation to obtain `DualSlideCarrierSpecification`. These are dependency-direction inversions: sample and installed-equipment definitions should not depend on the navigation runtime header.
 2. `StageWorkingSurface2D` defines a separate `SlideGeometry2D`. Establish one canonical physical slide-geometry value, or document a deliberate distinction between slide dimensions and working-surface placement.
 3. The fixed physical `DualSlideCarrierState` (Left/Right slots and four-corner affine registration) and the newer `StageWorkingSurface2D` placement model are not yet joined by an explicit, lossless mapping. Do not replace the measured four-corner registration with a simpler drawn rectangle.
-4. There is no Tile or acquisition-record model. The current domain contains Slide, not the `Slide -> Tile` acquisition relationship.
+4. There is no Core Tile/acquisition-record model. This is not currently classified as a missing platform feature: the established Swift application owns acquisition workflow and image/tile organization. Add a Core Tile value only if microscope-domain semantics (for example, stage-space tile identity or registration) must be shared independently of the Swift application; do not duplicate image/tile persistence merely to mirror the UI workflow.
 5. Equipment definitions are revisioned in memory, but there is no authoritative JSON loader or persisted equipment-definition repository. Calibration and carrier records refer to equipment revisions; those revisions must be reloadable and verifiable after restart.
 6. Configuration resolution produces desired state and a transition DAG. It does not read a complete observed microscope state, skip already-satisfied changes, issue optical device commands or verify physical completion.
 7. Stage-axis accumulated error and homing-required state exist in Core, but there is no explicit persistence/restart contract for them. On restart, the runtime must not treat a stale saved position as observed truth; define whether the axis must be re-homed or whether a controller can re-establish a verified reference.
@@ -147,12 +147,12 @@ AmScope SDK redistribution rights remain a release/distribution question; local 
 
 ## 3. Native application status
 
-The native app builds, but its domain responsibilities are not yet thin presentation:
+The native app builds. Its acquisition workflow is an intentional Swift application responsibility and should remain there. The remaining boundary issue is not to move acquisition into C++; it is to make the C++ platform services available to the Swift application so its existing workflow can operate against authoritative microscope state. Current integration observations:
 
 - The bridging header imports the AmScope native bridge, not a Microscope.Application bridge.
 - Swift owns microscope configuration persistence through UserDefaults.
 - Automatic resolution and objective/exposure coordination remain Swift-side. The current Rayleigh policy uses a wavelength band and a target sampling factor, but derives mode scaling from a provisional full-field width/height ratio. Move this policy to Core and use the camera output mode's explicit per-axis sensor-pixel mapping; do not infer X/Y sampling from output dimensions alone.
-- The capture gallery uses a global AmScope capture directory rather than a selected physical-slide folder and Tile record. `NativeSlideID` identifies a presentation pane, not the physical `SlideId`.
+- The Swift acquisition workflow and gallery are application-owned. Verify during integration that the workflow's physical Slide identity is sourced from `SlideId`, while `NativeSlideID` remains only a presentation-pane identity; do not conflate the two. Image/tile file organization remains Swift-owned.
 
 The existing preview, feature controls and workspace shell can remain as presentation. Do not add more UI behavior until the C++ application API owns the domain workflows and the UI consumes immutable snapshots/events.
 
@@ -181,4 +181,4 @@ Build one complete vertical slice before treating the libraries as a UI foundati
 7. Capture one Tile into the selected slide folder with camera mode, optical configuration, equipment revision, stage transform and acquisition metadata.
 8. Publish immutable microscope/operation snapshots and events to SwiftUI.
 
-Run this vertical slice with fake camera, stage and optical adapters in CI. Hardware smoke tests remain separate. Once this works, the UI can be built without duplicating microscope rules or persistence.
+Run this vertical slice with fake camera, stage and optical adapters in CI while exercising the existing Swift acquisition coordinator against the platform facade. Hardware smoke tests remain separate. The acceptance criterion is a stable platform contract beneath the existing application workflow—not a second C++ implementation of that workflow.

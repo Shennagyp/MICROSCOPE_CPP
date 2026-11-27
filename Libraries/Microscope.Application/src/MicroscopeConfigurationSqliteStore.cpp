@@ -990,6 +990,72 @@ MicroscopeConfigurationSqliteStore::loadCurrentOperationMode(
 }
 
 core::Result<
+    std::vector<core::OperationMode>,
+    MicroscopeConfigurationStoreError>
+MicroscopeConfigurationSqliteStore::loadCurrentOperationModes(
+    const core::MicroscopeId& microscopeId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    Statement modes(
+        database_,
+        "SELECT mode.operation_mode_id, mode.revision, mode.name, mode.contrast_method "
+        "FROM operation_mode_current AS current "
+        "JOIN operation_mode AS mode "
+        "ON mode.microscope_id = current.microscope_id "
+        "AND mode.operation_mode_id = current.operation_mode_id "
+        "AND mode.revision = current.revision "
+        "WHERE current.microscope_id = ? "
+        "ORDER BY mode.operation_mode_id");
+    if (!modes.prepared() || !bindText(modes.get(), 1, microscopeId.value())) {
+        return core::Result<
+            std::vector<core::OperationMode>,
+            MicroscopeConfigurationStoreError>::failure(
+                makeError(StoreErrorCode::SqliteOperationFailed, database_));
+    }
+
+    std::vector<core::OperationMode> result;
+    for (;;) {
+        const int step = sqlite3_step(modes.get());
+        if (step == SQLITE_DONE) break;
+        if (step != SQLITE_ROW) {
+            return core::Result<
+                std::vector<core::OperationMode>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::SqliteOperationFailed, database_));
+        }
+
+        const auto operationModeId =
+            readStrongId<core::OperationModeId>(modes.get(), 0);
+        const sqlite3_int64 revision = sqlite3_column_int64(modes.get(), 1);
+        auto name = readText(modes.get(), 2);
+        const auto contrastMethod = static_cast<core::ContrastMethod>(
+            sqlite3_column_int(modes.get(), 3));
+        if (!operationModeId || revision <= 0 || !name) {
+            return core::Result<
+                std::vector<core::OperationMode>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+
+        auto mode = core::OperationMode::create(
+            microscopeId, *operationModeId,
+            static_cast<std::uint64_t>(revision),
+            std::move(*name), contrastMethod);
+        if (!mode) {
+            return core::Result<
+                std::vector<core::OperationMode>,
+                MicroscopeConfigurationStoreError>::failure(
+                    makeError(StoreErrorCode::InvalidPersistedRecord, database_));
+        }
+        result.push_back(std::move(mode).value());
+    }
+
+    return core::Result<
+        std::vector<core::OperationMode>,
+        MicroscopeConfigurationStoreError>::success(std::move(result));
+}
+
+core::Result<
     std::optional<core::OperationModeHardwareConfiguration>,
     MicroscopeConfigurationStoreError>
 MicroscopeConfigurationSqliteStore::loadOperationModeHardwareConfiguration(

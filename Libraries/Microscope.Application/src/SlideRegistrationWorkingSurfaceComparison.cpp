@@ -55,8 +55,10 @@ bool loadedInCarrier(
 } // namespace
 
 SlideCornerCorrespondence::SlideCornerCorrespondence(
-    std::array<SlideRectangleCorner2D, 4> mappings) noexcept
-    : mappings_(mappings) {}
+    std::array<SlideRectangleCorner2D, 4> mappings,
+    bool measuredXMapsToWorkingSurfaceX) noexcept
+    : mappings_(mappings),
+      measuredXMapsToWorkingSurfaceX_(measuredXMapsToWorkingSurfaceX) {}
 
 core::Result<SlideCornerCorrespondence, SlideCornerCorrespondenceError>
 SlideCornerCorrespondence::create(
@@ -97,9 +99,18 @@ SlideCornerCorrespondence::create(
         }
     }
 
+    const auto first = indices[0];
+    const auto second = indices[1];
+    const bool measuredXMapsToWorkingSurfaceX =
+        (first == 0U && second == 1U) ||
+        (first == 1U && second == 0U) ||
+        (first == 2U && second == 3U) ||
+        (first == 3U && second == 2U);
+
     return core::Result<SlideCornerCorrespondence,
         SlideCornerCorrespondenceError>::success(
-            SlideCornerCorrespondence(std::move(mappings)));
+            SlideCornerCorrespondence(
+                std::move(mappings), measuredXMapsToWorkingSurfaceX));
 }
 
 SlideRectangleCorner2D SlideCornerCorrespondence::workingSurfaceCornerFor(
@@ -117,17 +128,22 @@ const std::array<SlideRectangleCorner2D, 4>&
 SlideCornerCorrespondence::mappings() const noexcept {
     return mappings_;
 }
+bool SlideCornerCorrespondence::measuredXMapsToWorkingSurfaceX() const noexcept {
+    return measuredXMapsToWorkingSurfaceX_;
+}
 
 SlideRegistrationWorkingSurfaceComparison::SlideRegistrationWorkingSurfaceComparison(
     core::SlideRegistration physicalRegistration,
     core::SlideRectangleDefinition2D workingSurfaceRectangle,
     bool horizontalMapsToX,
+    bool physicalXMapsToWorkingSurfaceX,
     std::array<SlideCornerReconciliation, 4> corners,
     double maximumDiscrepancy,
     double rmsDiscrepancy) noexcept
     : physicalRegistration_(std::move(physicalRegistration)),
       workingSurfaceRectangle_(std::move(workingSurfaceRectangle)),
       horizontalMapsToWorkingSurfaceX_(horizontalMapsToX),
+      physicalSlideXMapsToWorkingSurfaceX_(physicalXMapsToWorkingSurfaceX),
       corners_(std::move(corners)),
       maximumCornerDiscrepancy_(maximumDiscrepancy),
       rmsCornerDiscrepancy_(rmsDiscrepancy) {}
@@ -274,6 +290,7 @@ SlideRegistrationWorkingSurfaceComparison::compare(
                 *registration,
                 *rectangle,
                 horizontalMapsToX,
+                correspondence.measuredXMapsToWorkingSurfaceX(),
                 std::move(reconciledCorners),
                 maximumDiscrepancy,
                 rmsDiscrepancy));
@@ -306,6 +323,10 @@ bool SlideRegistrationWorkingSurfaceComparison::
 carrierHorizontalAxisMapsToWorkingSurfaceX() const noexcept {
     return horizontalMapsToWorkingSurfaceX_;
 }
+bool SlideRegistrationWorkingSurfaceComparison::
+physicalSlideXMapsToWorkingSurfaceX() const noexcept {
+    return physicalSlideXMapsToWorkingSurfaceX_;
+}
 double SlideRegistrationWorkingSurfaceComparison::physicalXExtentMicrometers() const noexcept {
     return physicalRegistration_.geometry().xExtentMicrometers();
 }
@@ -320,11 +341,19 @@ double SlideRegistrationWorkingSurfaceComparison::workingSurfaceYExtentMicromete
 }
 double SlideRegistrationWorkingSurfaceComparison::
 workingSurfaceMinusPhysicalXExtentMicrometers() const noexcept {
-    return workingSurfaceXExtentMicrometers() - physicalXExtentMicrometers();
+    const double correspondingWorkingSurfaceExtent =
+        physicalSlideXMapsToWorkingSurfaceX_
+            ? workingSurfaceXExtentMicrometers()
+            : workingSurfaceYExtentMicrometers();
+    return correspondingWorkingSurfaceExtent - physicalXExtentMicrometers();
 }
 double SlideRegistrationWorkingSurfaceComparison::
 workingSurfaceMinusPhysicalYExtentMicrometers() const noexcept {
-    return workingSurfaceYExtentMicrometers() - physicalYExtentMicrometers();
+    const double correspondingWorkingSurfaceExtent =
+        physicalSlideXMapsToWorkingSurfaceX_
+            ? workingSurfaceYExtentMicrometers()
+            : workingSurfaceXExtentMicrometers();
+    return correspondingWorkingSurfaceExtent - physicalYExtentMicrometers();
 }
 const std::array<SlideCornerReconciliation, 4>&
 SlideRegistrationWorkingSurfaceComparison::corners() const noexcept {

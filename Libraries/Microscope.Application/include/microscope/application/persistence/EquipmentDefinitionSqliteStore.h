@@ -1,6 +1,5 @@
 #pragma once
 
-#include "microscope/application/configuration/EquipmentDefinitionJsonLoader.h"
 #include "microscope/core/equipment/OpticalTopology.h"
 #include "microscope/core/result/Result.h"
 

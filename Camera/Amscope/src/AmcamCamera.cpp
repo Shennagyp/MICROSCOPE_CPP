@@ -1226,6 +1226,16 @@ camera::CameraFeatureAccessError featureBackendError(
 namespace amscope {
 namespace {
 
+static_assert(sizeof(((AmcamFrameInfoV3*)nullptr)->seq) == sizeof(std::uint32_t),
+              "Amcam sequence field must remain a 32-bit unsigned counter.");
+
+std::optional<std::uint64_t> amcamFrameSequence(
+    const AmcamFrameInfoV3& info) noexcept {
+    if ((info.flag & AMCAM_FRAMEINFO_FLAG_SEQ) == 0)
+        return std::nullopt;
+    return static_cast<std::uint64_t>(info.seq);
+}
+
 void assignAmcamFrameMetadata(
     AmcamFrame& frame,
     const AmcamFrameInfoV3& info) noexcept {
@@ -1321,6 +1331,10 @@ struct AmcamCamera::Impl {
     std::atomic<std::uint64_t> dropped{0};
     std::atomic<std::uint64_t> pulledFrames{0};
     std::atomic<std::uint64_t> imageEvents{0};
+    // The SDK declares seq as unsigned (32-bit on supported macOS ABIs).
+    // A zero-based 2^32 modulus preserves wrap semantics without guessing.
+    camera::AcquisitionIntegrityTracker acquisitionIntegrity{
+        camera::SequenceCounterModel{(std::uint64_t{1} << 32), 0}};
 
     detail::AmcamEventQueue eventQueue;
     std::mutex stillCaptureMutex;
@@ -1961,13 +1975,7 @@ struct AmcamCamera::Impl {
                     expectedExposureMicroseconds.store(
                         info.v3.expotime, std::memory_order_release);
 
-                // Keep draining the SDK even when all frame leases are retained.
-                // Pull into the private discard buffer and account for the drop.
-                if (!writable) {
-                    dropped.fetch_add(1, std::memory_order_relaxed);
-                    continue;
-                }
-
+                const auto sequence = amcamFrameSequence(info.v3);
                 const auto w = info.v3.width;
                 const auto h = info.v3.height;
                 const std::uint64_t stride64 =
@@ -1975,6 +1983,8 @@ struct AmcamCamera::Impl {
                 if (w == 0 || h == 0 ||
                     stride64 > std::numeric_limits<std::uint32_t>::max() ||
                     stride64 > std::numeric_limits<std::uint64_t>::max() / h) {
+                    acquisitionIntegrity.recordBuffer(
+                        sequence, camera::FrameDeliveryStatus::InvalidPayload);
                     fatal = true;
                     error = {-1, "Amcam_PullImageV4",
                              "SDK frame dimensions overflow the selected pixel-format layout."};
@@ -1982,13 +1992,33 @@ struct AmcamCamera::Impl {
                 }
                 const std::uint64_t required64 = stride64 * h;
                 if (required64 > std::numeric_limits<std::size_t>::max() ||
-                    required64 > writable->pixels.capacity()) {
+                    required64 > activePool->discard.size()) {
+                    acquisitionIntegrity.recordBuffer(
+                        sequence, camera::FrameDeliveryStatus::InvalidPayload);
                     fatal = true;
                     error = {-1, "Amcam_PullImageV4",
                              "SDK frame dimensions exceed the allocated pixel-format buffer."};
                     break;
                 }
                 const auto required = static_cast<std::size_t>(required64);
+
+                // Keep draining the SDK even when all frame leases are retained.
+                // The frame was received, but the host could not deliver it to
+                // the consumer. droppedFrames() reports that host-side loss.
+                if (!writable) {
+                    acquisitionIntegrity.recordBuffer(
+                        sequence, camera::FrameDeliveryStatus::CompleteImage);
+                    dropped.fetch_add(1, std::memory_order_relaxed);
+                    continue;
+                }
+                if (required > writable->pixels.capacity()) {
+                    acquisitionIntegrity.recordBuffer(
+                        sequence, camera::FrameDeliveryStatus::InvalidPayload);
+                    fatal = true;
+                    error = {-1, "Amcam_PullImageV4",
+                             "SDK frame dimensions exceed the selected frame slot capacity."};
+                    break;
+                }
 
                 // Keep the logical byte count equal to this frame's dimensions,
                 // while retaining vector capacity for later frames of this size.
@@ -2001,6 +2031,8 @@ struct AmcamCamera::Impl {
                 writable->height = h;
                 writable->strideBytes = static_cast<std::uint32_t>(stride64);
                 assignAmcamFrameMetadata(*writable, info.v3);
+                acquisitionIntegrity.recordBuffer(
+                    writable->sequenceNumber, camera::FrameDeliveryStatus::CompleteImage);
 
                 FramePtr lease = std::move(writable);
                 try {
@@ -2362,6 +2394,7 @@ bool AmcamCamera::start(FrameCallback onFrame, ErrorCallback onError,
     impl_->dropped.store(0, std::memory_order_relaxed);
     impl_->pulledFrames.store(0, std::memory_order_relaxed);
     impl_->imageEvents.store(0, std::memory_order_relaxed);
+    impl_->acquisitionIntegrity.reset();
 
     int configuredTriggerMode = 0;
     CameraError triggerHealthError;
@@ -2761,6 +2794,11 @@ std::uint64_t AmcamCamera::framesPulled() const noexcept {
 }
 std::uint64_t AmcamCamera::imageEventsReceived() const noexcept {
     return impl_->imageEvents.load(std::memory_order_relaxed);
+}
+
+camera::AcquisitionIntegritySnapshot
+AmcamCamera::acquisitionIntegrity() const noexcept {
+    return impl_->acquisitionIntegrity.snapshot();
 }
 
 bool AmcamCamera::setResolution(std::uint32_t index, CameraError* error) {

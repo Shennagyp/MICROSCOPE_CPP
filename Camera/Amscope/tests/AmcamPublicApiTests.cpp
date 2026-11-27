@@ -27,9 +27,13 @@ int main() {
         return 1;
     }
 
+    const auto integrity = camera.acquisitionIntegrity();
     if (camera.framesPulled() != 0 ||
         camera.imageEventsReceived() != 0 ||
-        camera.droppedFrames() != 0) {
+        camera.droppedFrames() != 0 ||
+        integrity.observedBuffers != 0 ||
+        integrity.completeImages != 0 ||
+        integrity.buffersWithoutSequence != 0) {
         std::cerr << "A new camera must start with zero acquisition counters.\n";
         return 2;
     }

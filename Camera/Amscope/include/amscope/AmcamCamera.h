@@ -2,6 +2,7 @@
 #include "amscope/CameraTypes.h"
 #include "amscope/AmcamCameraProfiles.h"
 #include "camera/CameraFeatureAccess.h"
+#include "camera/AcquisitionIntegrityTracker.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -38,6 +39,9 @@ public:
     [[nodiscard]] std::uint64_t framesPulled() const noexcept;
     // Number of AMCAM_EVENT_IMAGE callbacks received in the current run.
     [[nodiscard]] std::uint64_t imageEventsReceived() const noexcept;
+    // Snapshot for the current/most recent live acquisition. SDK sequence
+    // IDs and timestamps retain their source units and wrap semantics.
+    [[nodiscard]] camera::AcquisitionIntegritySnapshot acquisitionIntegrity() const noexcept;
 
     // Non-feature camera command and telemetry surfaces.
     bool autoWhiteBalance(CameraError* error = nullptr);

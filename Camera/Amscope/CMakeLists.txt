@@ -74,7 +74,8 @@ add_library(amscope_driver SHARED
     include/amscope/AmcamCameraProfiles.h
     include/amscope/CameraTypes.h
     ../Common/include/camera/CameraModels.h
-    ../Common/include/camera/CameraFrames.h)
+    ../Common/include/camera/CameraFrames.h
+    ../Common/include/camera/AcquisitionIntegrityTracker.h)
 add_library(Amscope::Driver ALIAS amscope_driver)
 set_target_properties(amscope_driver PROPERTIES EXPORT_NAME Driver)
 

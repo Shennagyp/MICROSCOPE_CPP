@@ -122,6 +122,13 @@ and the GenTL/GenApi dependency assessment is in
   `amcam.fourcc` scheme and are not relabelled as PFNC. Amcam timestamps and
   per-frame exposure durations are represented in microsecond timebases; the
   timestamp clock origin remains unspecified.
+- Live acquisition exposes `AmcamCamera::acquisitionIntegrity()`. The SDK's
+  `seq` field is a 32-bit unsigned counter, so the adapter configures a
+  zero-based 2^32 wrap model. `FrameTimestamp` retains the SDK's microsecond
+  ticks (`ticksPerSecond = 1,000,000`) and leaves the clock domain unspecified.
+  Missing sequence flags are counted as missing metadata. Frame-pool exhaustion
+  remains a separate host-side `droppedFrames()` count and is not misreported
+  as a Producer underrun.
 - Four reusable buffers are exposed as immutable common `FramePtr` leases. If
   every buffer is retained, the worker drains into a private discard buffer and
   increments droppedFrames rather than blocking acquisition.

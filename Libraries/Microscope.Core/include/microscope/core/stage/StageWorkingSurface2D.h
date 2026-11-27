@@ -37,6 +37,8 @@ private:
 
 enum class SlideRectangleLengthAxis { StageX, StageY };
 
+using SlideGeometry2DError = SlideGeometryError;
+
 // Stage-local adapter over the canonical sample SlideGeometry. Its first
 // extent is the slide's local length axis; its second is the local width axis.
 // It owns no independent dimension validation or geometry state.

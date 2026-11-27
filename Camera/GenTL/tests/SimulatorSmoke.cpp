@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
             << "[--verify-two-device-isolation|--sequence-gap|--sequence-duplicate|"
                "--sequence-out-of-order|--sequence-ambiguous|"
                "--incomplete-frame|--empty-frame|--sustained-acquisition|--multipart|"
-               "--queue-starvation-recovery|--reopen-cycles]\n";
+               "--queue-starvation-recovery|--reopen-cycles|--interruption-recovery]\n";
         return 64;
     }
 
@@ -116,6 +116,7 @@ int main(int argc, char** argv) {
     bool multipartMode = false;
     bool queueStarvationMode = false;
     bool reopenCyclesMode = false;
+    bool interruptionMode = false;
     if (argc >= 3) {
         const std::string option = argv[2];
         if (option == "--verify-two-device-isolation") {
@@ -157,6 +158,9 @@ int main(int argc, char** argv) {
             setenv("MOCK_GENTL_SIMULATOR_QUEUE_STARVATION", "1", 1);
         } else if (option == "--reopen-cycles") {
             reopenCyclesMode = true;
+        } else if (option == "--interruption-recovery") {
+            interruptionMode = true;
+            setenv("MOCK_GENTL_SIMULATOR_INTERRUPT_AFTER", "2", 1);
         } else {
             std::cerr << "Unknown simulator smoke option.\n";
             return 67;
@@ -217,11 +221,11 @@ int main(int argc, char** argv) {
             // host wait timeout. The sustained case intentionally injects
             // neither and exercises repeated acquisition-buffer recycling.
             const char* injectedUnderruns =
-                (sustainedMode || queueStarvationMode) ? "0" : "2";
+                (sustainedMode || queueStarvationMode || interruptionMode) ? "0" : "2";
             if (setenv("MOCK_GENTL_SIMULATOR_UNDERRUNS", injectedUnderruns, 1) != 0)
                 throw std::runtime_error("Could not configure simulator underruns.");
             stream.start();
-            if (!sustainedMode) {
+            if (!sustainedMode && !interruptionMode) {
                 if (setenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT", "1", 1) != 0)
                     throw std::runtime_error("Could not configure simulator timeout.");
                 const auto forcedTimeout = stream.nextFrame(1);
@@ -231,11 +235,14 @@ int main(int argc, char** argv) {
             }
 
             const std::size_t requiredFrames =
-                sustainedMode ? 4096 : (multipartMode ? 1 : 5);
+                sustainedMode ? 4096 :
+                interruptionMode ? 2 : (multipartMode ? 1 : 5);
             const std::uint64_t expectedUnderruns =
-                queueStarvationMode ? 1 : (sustainedMode ? 0 : 2);
+                queueStarvationMode ? 1 :
+                ((sustainedMode || interruptionMode) ? 0 : 2);
             const std::uint64_t expectedHostTimeouts =
-                queueStarvationMode ? 2 : (sustainedMode ? 0 : 1);
+                interruptionMode ? 1 :
+                (queueStarvationMode ? 2 : (sustainedMode ? 0 : 1));
 
             if (queueStarvationMode) {
                 const auto depletedWait = stream.nextFrame(1);
@@ -347,6 +354,12 @@ int main(int argc, char** argv) {
                 std::cout << '\n';
             }
 
+            if (interruptionMode) {
+                const auto interruptedWait = stream.nextFrame(1);
+                if (interruptedWait)
+                    throw std::runtime_error("The interrupted stream unexpectedly delivered a frame.");
+            }
+
             const auto statistics = stream.statistics();
             const std::string expectedTransportType =
                 sequenceMode == "out-of-order" ? "GEV" : "MockGenTL";
@@ -409,7 +422,44 @@ int main(int argc, char** argv) {
             unsetenv("MOCK_GENTL_SIMULATOR_DELIVERY_MODE");
             unsetenv("MOCK_GENTL_SIMULATOR_MULTIPART");
             unsetenv("MOCK_GENTL_SIMULATOR_QUEUE_STARVATION");
+            unsetenv("MOCK_GENTL_SIMULATOR_INTERRUPT_AFTER");
             stream.stop();
+
+            if (interruptionMode) {
+                auto restarted = device.openDataStream(streamIds.front(), 4);
+                restarted.start();
+                auto lastFrameId = previousFrameId;
+                auto lastTimestamp = previousTimestampNanoseconds;
+                for (std::size_t frameIndex = 0; frameIndex < 2; ++frameIndex) {
+                    const auto frame = restarted.nextFrame(5000);
+                    if (!frame || frame->incomplete || !frame->frameId ||
+                        *frame->frameId != lastFrameId + 1 ||
+                        !frame->timestampNanoseconds ||
+                        *frame->timestampNanoseconds <= lastTimestamp ||
+                        frame->payload.size() != 16 ||
+                        frame->payload.front() !=
+                            static_cast<std::uint8_t>(0x30 + frameIndex)) {
+                        throw std::runtime_error(
+                            "Stream interruption recovery did not resume with monotonic frames.");
+                    }
+                    lastFrameId = *frame->frameId;
+                    lastTimestamp = *frame->timestampNanoseconds;
+                }
+                const auto restartedStats = restarted.statistics();
+                if (restartedStats.producerDeliveredBuffers != 2 ||
+                    restartedStats.producerFramesStarted != 2 ||
+                    restartedStats.producerBufferUnderruns != 0 ||
+                    restartedStats.announcedBuffers != 4 ||
+                    restartedStats.queuedBuffers != 4 ||
+                    restartedStats.buffersAwaitingDelivery != 0 ||
+                    restartedStats.integrity.completeImages != 2 ||
+                    restartedStats.integrity.frameWaitTimeouts != 0 ||
+                    restartedStats.integrity.bufferStarvationEvents != 0) {
+                    throw std::runtime_error(
+                        "Restarted acquisition did not return to a clean state.");
+                }
+                restarted.stop();
+            }
 
             if (reopenCyclesMode) {
                 if (stream || stream.nextFrame(1))

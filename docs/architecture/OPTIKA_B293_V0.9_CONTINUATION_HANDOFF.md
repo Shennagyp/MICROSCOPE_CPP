@@ -3,9 +3,10 @@
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
 **Latest source/test commit:** `0d51df7b6e9c863c2e09ae25a2aeaf0c700a2e13`  
-**Architecture audit commit:** `5eab50fbbabde36b7f26f2359e5d1a2f6b81f13b`  
+**Architecture audit commit:** `983ae76c2502b38444f3f4dcad9782aeffae09d2`  
 **Verification:** [platform CI run 45929942838](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45929942838) passed Ubuntu GCC, macOS Clang and Windows MSVC. The macOS job includes the native Optika application build and tests.  
-**Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.
+**Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.  
+**Current C++ implementation:** `893996a188571e00565b05a2f40431bbceac90fb`. Core ownership extraction is committed: sample geometry and carrier equipment specification no longer depend on the navigation header. The branch CI run for this change is pending and must pass before the extraction is considered verified.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 
@@ -90,7 +91,7 @@ This verifies the software build/test baseline, not physical microscope hardware
 The complete library audit and dependency-ordered completion plan are maintained in [Microscope Platform Completion Audit v0.9](MICROSCOPE_PLATFORM_COMPLETION_AUDIT_V0.9.md).
 
 Immediate next work is not more UI:
-1. Correct Core ownership dependencies around SlideGeometry and DualSlideCarrierSpecification; reconcile the physical dual-slide carrier registration with the newer working-surface model.
+1. Reconcile sample-domain `SlideGeometry` with `StageWorkingSurface2D::SlideGeometry2D`, then establish a lossless mapping between the four-corner physical carrier registration and working-surface placement. Preserve measured-corner residuals and registration revisions.
 2. Integrate the camera-v2.0 module as a controlled subtree, not a wholesale branch merge. Exclude the previously rejected AcquisitionIntegrityTracker and Qt adapters/preview; add a backend-neutral provider/session API.
 3. Add authoritative equipment-definition JSON loading and revision persistence, plus mode/profile enumeration and database migration ownership.
 4. Build the microscope-level Application composition root, observed-state snapshot and configuration reconciler.

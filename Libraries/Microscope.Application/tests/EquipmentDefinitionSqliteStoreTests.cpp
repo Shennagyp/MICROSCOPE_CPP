@@ -1,6 +1,7 @@
 #include "microscope/application/persistence/EquipmentDefinitionSqliteStore.h"
 
 #include <chrono>
+#include <sqlite3.h>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -48,6 +49,46 @@ void removeDatabase(const std::string& path) {
     std::filesystem::remove(path + "-shm", ignored);
 }
 
+void verifiesBlobStorageAndDatabaseLevelImmutability(const std::string& path) {
+    sqlite3* database = nullptr;
+    const int opened = sqlite3_open_v2(
+        path.c_str(), &database, SQLITE_OPEN_READWRITE, nullptr);
+    check(opened == SQLITE_OK && database != nullptr,
+        "opens the database independently to inspect the stored payload");
+    if (opened != SQLITE_OK || database == nullptr) {
+        if (database != nullptr) sqlite3_close_v2(database);
+        return;
+    }
+
+    sqlite3_stmt* query = nullptr;
+    const int prepared = sqlite3_prepare_v2(
+        database,
+        "SELECT typeof(payload) FROM equipment_definition_revision "
+        "WHERE microscope_id = 'microscope-a' AND revision = 1",
+        -1, &query, nullptr);
+    check(prepared == SQLITE_OK, "prepares the equipment payload storage-type query");
+    if (prepared == SQLITE_OK && sqlite3_step(query) == SQLITE_ROW) {
+        const auto* type = sqlite3_column_text(query, 0);
+        check(type != nullptr && std::string(
+            reinterpret_cast<const char*>(type)) == "blob",
+            "stores the exact JSON document using SQLite BLOB affinity");
+    } else {
+        check(false, "finds the first immutable equipment payload row");
+    }
+    if (query != nullptr) sqlite3_finalize(query);
+
+    char* message = nullptr;
+    const int update = sqlite3_exec(
+        database,
+        "UPDATE equipment_definition_revision SET payload = X'00' "
+        "WHERE microscope_id = 'microscope-a' AND revision = 1",
+        nullptr, nullptr, &message);
+    check(update != SQLITE_OK,
+        "database trigger prevents mutation of a published equipment revision");
+    sqlite3_free(message);
+    sqlite3_close_v2(database);
+}
+
 void verifiesAppendOnlyRevisionsAndRestartRoundTrip() {
     const auto path = temporaryDatabasePath();
     const auto firstDocument = document("microscope-a", 1);
@@ -64,6 +105,20 @@ void verifiesAppendOnlyRevisionsAndRestartRoundTrip() {
         auto savedFirst = store.saveCurrentDefinition(firstDocument, 0);
         check(static_cast<bool>(savedFirst) && savedFirst.value() == 1,
             "stores the first equipment-definition revision");
+        verifiesBlobStorageAndDatabaseLevelImmutability(path);
+
+        auto secondConnection = EquipmentDefinitionSqliteStore::open(path);
+        check(static_cast<bool>(secondConnection),
+            "opens a second SQLite store connection for optimistic concurrency");
+        if (secondConnection) {
+            auto conflictingWriter =
+                secondConnection.value()->saveCurrentDefinition(
+                    document("microscope-a", 7), 0);
+            check(!conflictingWriter &&
+                conflictingWriter.error().code ==
+                    EquipmentDefinitionStoreErrorCode::RevisionConflict,
+                "a separate store connection cannot overwrite a current revision using a stale token");
+        }
 
         auto current = store.loadCurrentDefinition(
             MicroscopeId::create("microscope-a").value());

@@ -12,6 +12,7 @@ on:
       - "Camera/VendorSDK/AmscopeVendorSDK/inc/**"
       - "Camera/VendorSDK/AmscopeVendorSDK/mac/**"
       - "Camera/Common/**"
+      - "Controller/**"
       - "docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md"
       - ".github/workflows/microscope-platform.yml"
   pull_request:
@@ -19,6 +20,7 @@ on:
       - "CMakeLists.txt"
       - "Libraries/**"
       - "Camera/Common/**"
+      - "Controller/**"
       - "docs/architecture/MICROSCOPE_CORE_APPLICATION_CONTRACTS_V0.9.md"
       - ".github/workflows/microscope-platform.yml"
   workflow_dispatch:

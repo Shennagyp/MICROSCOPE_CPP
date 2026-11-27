@@ -55,7 +55,7 @@ The owner requires staged delivery: implement and test the meaningful GenTL func
 **Latest package CI definition:** `bdd39bd218e1f10a80266c7ea677d4f416f15aba`  
 **Package CI:** [workflow #45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) — both architectures passed 28/28 tests, relocation, all external consumer runtime checks, installed-link and architecture checks; the default-off vendor-runtime install contract passed on Apple Silicon.  
 **Latest prior implementation CI:** [workflow #45770024248](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45770024248) — GenTL bridge and official GenApi 3.5.1 build/integration tests passed on Intel x86_64 and Apple Silicon arm64.  
-**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 complete by owner direction; Phase 6 open but blocked by the AmScope freeze; Phase 7 active by explicit owner authorization on 26 November 2026. Package software CI passes on both architectures; physical-camera acceptance remains pending.  
+**Phase status:** Phase 3 accepted; Phase 4 source/offscreen checks complete with visual acceptance pending and physical MU503 test postponed; Phase 5 GenTL/GenApi and simulator recovery CI-tested on both architectures; Phase 6 active for limited Common-contract integration into AmScope/Amcam by 27 November owner direction; Phase 7 package software CI passes on both architectures; physical-camera acceptance remains pending.  
 **Latest AmScope preview UI-only corrections:** `1de091a1`, `fe897959`, `2b3c1a35`, `522d8648`, `6447996d` (main.cpp only; no provider source, tests, public contracts, Optika app or runtime behavior changed). These commits are not yet CI-verified.
 
 ---
@@ -81,7 +81,7 @@ The project owner explicitly corrected the previous continuation attempt:
 - Phase 3 is accepted. Phase 4 source/offscreen work is complete; visual/workspace acceptance remains pending and the physical MU503 test is postponed by owner direction. Phase 4 is not marked accepted, but its pending acceptance does not block Phase 6 software work.
 - Phase 5 GenTL/GenApi implementation is complete by owner direction; do not restart it.
 - Phase 6 remains open and is now active for Common frame-layout/acquisition-integrity integration into AmScope/Amcam. The prior freeze was superseded on 27 November for this limited cross-protocol work.
-- The owner explicitly authorized Phase 7 packaging and external-consumer work on 26 November 2026, without lifting the AmScope freeze. Phase 7 may modify CMake packaging metadata, package config, consumer fixtures, CI and documentation.
+- The owner explicitly authorized Phase 7 packaging and external-consumer work on 26 November 2026. On 27 November, the owner additionally authorized limited Common frame-layout/acquisition-integrity integration into AmScope/Amcam, superseding the earlier provider freeze only for that work.
 - **The prior AmScope provider freeze is superseded only for Common frame-layout/acquisition-integrity integration.** Preserve vendor-specific lifecycle, callback/event queue, frame-pool leases, cache flush, SDK access and existing feature semantics. Do not modify Optika UI or `OPTIKA-B293-DUALSLIDE-APP-v.0.9`. Continue only on `camera-v.2.0`.
 - The AmScope preview application exists in Camera/Amscope/app/main.cpp; do not treat it as obsolete or exclude it from the project.
 - The retired AMSCOPE_DRIVER project/repository is not a current dependency or source of truth. Do not inspect, revive, clone, build against, or modify it.
@@ -98,8 +98,8 @@ If older documents conflict with this owner direction or the current status ledg
 | 3 — Qt streaming separation | **Accepted by owner** | Preserve the one-session adapter and backend-neutral frame-stream boundary. |
 | 4 — Reusable Qt UI | **SOURCE/OFFSCREEN COMPLETE; OWNER ACCEPTANCE PENDING** | FrameView, CameraControlPanel, ImageInfoBar, CameraFeatureEditor, CameraCommandPanel and CameraCapabilityPanel exist; the AmScope preview uses the feature editor, telemetry strip and model capability panel. CI passes 24/24 tests per architecture, including the application-level offscreen composition/dock-state smoke. Visual/workspace acceptance remains pending; physical MU503 UI test is postponed. Do not mark Phase 4 accepted, but do not block Phase 6 software work on it. |
 | 5 — GenTL/GenApi integration | **Complete by owner direction** | Do not restart, duplicate, or replace the integration. External device qualification is separate Phase 8 evidence. |
-| 6 — Capability, feature, command and model coverage | **OPEN; BLOCKED AT FROZEN AMSCOPE TESTS** | Provider-neutral GenTL/GenApi work and discovery/vector decisions are complete for the current public contract. AmScope provider-level feature/command/model tests remain blocked. Do not modify AmScope provider source, tests, contracts or behavior; do not mark Phase 6 complete. |
-| 7 — Packaging and external consumers | **ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026)** | Commits `643319a`, `58f3790`, `49cc11e`, `fc3be40`, `22ee34f`, `c0f50da`, `75768c1` and `bdd39bd` add the package entry point, exports, component-aware config, relocation consumers, runtime API use, Qt/GenApi dependency isolation, an installed GenApi consumer, two-architecture runtime/architecture checks and vendor-runtime redistribution gating. Package workflow #45778844769 passed both architectures (28/28 CTest tests each), all relocated consumer/runtime checks, and the default-off vendor-runtime install contract on Apple Silicon. Installed-artifact physical AmScope and GenTL smoke tests remain required by Phase 7. Keep the AmScope freeze intact. |
+| 6 — Capability, feature, command and model coverage | **ACTIVE — COMMON-CONTRACT INTEGRATION AUTHORIZED** | GenTL/GenApi coverage and recovery qualification are CI-tested. Extend Common frame-layout/acquisition-integrity semantics into AmScope/Amcam while preserving vendor lifecycle, callback, pool and cache ownership. The 27 Nov owner direction supersedes the earlier freeze only for this integration. |
+| 7 — Packaging and external consumers | **ACTIVE BY OWNER AUTHORIZATION (26 NOV 2026)** | Commits `643319a`, `58f3790`, `49cc11e`, `fc3be40`, `22ee34f`, `c0f50da`, `75768c1` and `bdd39bd` add the package entry point, exports, component-aware config, relocation consumers, runtime API use, Qt/GenApi dependency isolation, an installed GenApi consumer, two-architecture runtime/architecture checks and vendor-runtime redistribution gating. Package workflow #45778844769 passed both architectures (28/28 CTest tests each), all relocated consumer/runtime checks, and the default-off vendor-runtime install contract on Apple Silicon. Installed-artifact physical AmScope and GenTL smoke tests remain required by Phase 7. Preserve AmScope vendor lifecycle/ownership semantics; the earlier source freeze is superseded only for Common frame-layout/acquisition-integrity integration. |
 | 8 — Hardware qualification and release | Open | Preserve as a separate evidence/release milestone. |
 
 The immediate software task is Phase 6 Common-contract integration into AmScope/Amcam on `camera-v.2.0`. Preserve the existing preview and reusable UI. Keep Phase 4 visual acceptance pending and physical MU503 testing postponed. Do not redesign AmScope lifecycle, callback/event queue, frame pool or cache ownership.
@@ -152,8 +152,7 @@ accepted. Phase 6 remains open at the frozen AmScope provider-test boundary;
 its provider-neutral GenTL/GenApi work is complete for the current public
 contract. See [CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md](CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md)
 for the recorded audit. Do not repeat the inventory or reopen Phase 5.
-AmScope provider source, tests, public contracts and runtime behavior remain
-frozen.
+AmScope provider work is now authorized only for Common frame-layout/acquisition-integrity integration. Preserve its vendor-specific lifecycle, callback/event queue, frame-pool leases, cache-flush and SDK ownership semantics.
 
 
 Phase 4 includes CameraFeatureEditor in the preview feature tabs,
@@ -231,9 +230,9 @@ The next Phase 7 work is **not another package implementation pass**. It is the 
    terms, but the applicable SDK redistribution grant has not been obtained.
    Keep `CAMERA_MODULE_INSTALL_AMSCOPE_VENDOR_RUNTIME=OFF` for releases until
    this is resolved. CI's opt-in is limited to ephemeral internal validation.
-3. Keep Phase 6 open/blocked at the frozen AmScope provider-test boundary.
-   Do not modify AmScope provider source, tests, public contracts or runtime
-   behavior. Phase 7 CMake packaging metadata does not lift that freeze.
+3. Keep Phase 6 active for the 27 November authorized Common-contract integration
+   into AmScope/Amcam. Preserve the vendor-specific lifecycle, callback/event
+   queue, frame-pool leases, cache flush and SDK ownership semantics.
 4. Keep Phase 4 visual/workspace acceptance pending and physical MU503 UI
    testing postponed. Do not mark Phase 4 accepted.
 5. Phase 8 remains the broader exact-commit provider/model qualification,
@@ -303,7 +302,7 @@ The first-party, test-only CTI simulator is now implemented in source:
 - The smoke uses the native test shim and actual `GenTLProducerLibrary` dynamic loader, then calls the existing `ConsumerBridge` and `Producer` API.
 - It currently represents one deterministic mock camera and repeated Mono8 frames; it is not vendor interoperability evidence.
 
-**Next:** inspect the CI result for the exact source commit. If it fails, diagnose from workflow logs only; do not run local builds/tests/debuggers. If it passes, record that the in-repository CTI integration path is validated, then decide whether to obtain written vendor permission and a current external CTI for separate interoperability testing. Do not modify AmScope, the Optika app, Phase 4/5, or physical-camera gates.
+**Next:** inspect the CI result for the exact source commit. If it fails, diagnose from workflow logs only; do not run local builds/tests/debuggers. If it passes, record that the in-repository CTI integration path is validated, then decide whether to obtain written vendor permission and a current external CTI for separate interoperability testing. Do not modify the Optika app, Phase 4/5 or physical-camera gates. AmScope is now in scope only for Common frame-layout/acquisition-integrity integration.
 
 ### Latest source increment — GenApi through CTI simulator
 

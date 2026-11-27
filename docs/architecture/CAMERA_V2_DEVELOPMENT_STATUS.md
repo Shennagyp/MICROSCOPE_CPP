@@ -144,13 +144,15 @@ The original *AmScope Native Driver and Camera Module Completion Plan* on `amsco
 | 7 | Release packaging and external-consumer integration | **AUTOMATED PACKAGE ACCEPTANCE PASSED; PHASE 7 REMAINS OPEN FOR PHYSICAL AND REDISTRIBUTION GATES.** Workflow [#45778844769](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45778844769) passed on Intel x86_64 and Apple Silicon arm64: 28/28 CTest tests per architecture, install/relocation, clean Common/GenTL/GenApi/AmScope/Qt external consumers, runtime-link inspection and installed-artifact architecture checks. The AmScope vendor-runtime default-off contract passed on Apple Silicon. Installed non-Qt/Qt AmScope physical smoke and installed GenTL physical CTI-camera smoke remain pending; SDK redistribution rights remain unresolved. A separate simulator-backed GenTL software qualification track is authorized. The test-only native CTI shim and opt-in five-frame smoke harness are now present, but no simulator run or CI compile result is yet claimed; see [simulator qualification plan](CAMERA_V2_SIMULATOR_QUALIFICATION.md). |
 | 8 | Final hardware qualification and release | **Open.** Requires exact-commit hardware records, declared provider/model matrix, installed-consumer deployment, vendor SDK redistribution review, release CI and owner acceptance. |
 
-Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Current execution is owner-directed: Phase 3 is accepted; Phase 4 source/offscreen work is complete while visual/workspace and physical MU503 acceptance remain pending (physical test postponed); Phase 5 is complete by owner direction; Phase 6 remains open but is blocked by the explicit AmScope freeze; Phase 7 is now active by explicit owner authorization despite that blocked Phase 6 provider-specific test gap. This does not waive or complete Phase 6. Vendor CTI/device qualification remains separate Phase 8 evidence; do not restart Phase 5.
+Historical phase order remains 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Current execution is owner-directed: Phase 3 is accepted; Phase 4 source/offscreen work is complete while visual/workspace and physical MU503 acceptance remain pending (physical test postponed); Phase 5 GenTL/GenApi and simulator recovery are CI-tested; Phase 6 is active for the limited Common-contract integration into AmScope/Amcam authorized on 27 November 2026; Phase 7 package CI is passed. Physical and external-Producer qualification remain separate. Vendor CTI/device qualification remains separate Phase 8 evidence; do not restart Phase 5.
 
 ## 5A. Phase 7 — package and external-consumer contract
 
-Owner authorization: 26 November 2026. Phase 7 proceeds while the remaining
-AmScope Phase 6 provider tests stay blocked by the existing AmScope freeze.
-This is a sequencing authorization, not a declaration that Phase 6 is complete.
+Owner authorization: 26 November 2026. Phase 7 package work is CI-verified.
+The 26 November AmScope provider freeze was superseded on 27 November 2026
+for the limited Common frame-layout/acquisition-integrity integration into
+AmScope/Amcam. This does not authorize redesign of vendor lifecycle or SDK
+ownership semantics.
 
 The reusable package entry point is `Camera/CMakeLists.txt`, distinct from
 the application-oriented repository root. Commits `643319a`, `58f3790`, `49cc11e`, `fc3be40`, `22ee34f`, `c0f50da`, `75768c1` and `bdd39bd`

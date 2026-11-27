@@ -2,8 +2,9 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Latest source/test commit:** `eb255d7b86c9687fd24f991e93d40598c87cc2b3`  
-**Verification:** source and test changes are authored; the updated branch has not yet been advanced and CI has not yet run for this change set.
+**Latest source/test commit:** `f8bc28294dca959d906fb366f49ca47a3ba2c797`  
+**Architecture/plan documentation commit:** `90df49a7edd0ec64868d730dd51b7af0822a3156`  
+**Verification:** source and test changes are authored; the target branch reference has not yet been advanced and CI has not yet run for this change set.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 

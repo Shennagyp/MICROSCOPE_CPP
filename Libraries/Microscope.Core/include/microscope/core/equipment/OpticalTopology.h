@@ -2,7 +2,7 @@
 
 #include "microscope/core/equipment/IlluminationSpecifications.h"
 #include "microscope/core/equipment/StageSpecifications.h"
-#include "microscope/core/navigation/DualSlideNavigation.h"
+#include "microscope/core/equipment/DualSlideCarrierSpecification.h"
 #include "microscope/core/equipment/OpticalSpecifications.h"
 #include "microscope/core/ids/Ids.h"
 #include "microscope/core/result/Result.h"

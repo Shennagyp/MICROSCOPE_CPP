@@ -323,7 +323,7 @@ Result<MoveAxesTo,SlideNavigationCommandError> DualSlideCarrierState::commandFor
     auto stagePoint=registration->toStage(localPoint);
     if(!stagePoint)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
         SlideNavigationCommandError::InvalidStageCoordinate);
-    return specification_.moveTo(stagePoint.value());
+    return commandForStagePoint(specification_, stagePoint.value());
 }
 
 namespace {

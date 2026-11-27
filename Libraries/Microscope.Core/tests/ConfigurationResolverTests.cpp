@@ -2087,7 +2087,7 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
             incompatiblePreparationType,
             incompatiblePreparationSlide,
             *configuration.resolvedConfiguration(),
-            &operationMode);
+            &hardwareConfiguration);
     check(!preparationMismatch.isCompatible() &&
           std::any_of(
               preparationMismatch.diagnostics().begin(),

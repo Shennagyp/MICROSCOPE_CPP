@@ -103,7 +103,8 @@ int main(int argc, char** argv) {
             << "<vendor-producer.cti> [device-index] "
             << "[--verify-two-device-isolation|--sequence-gap|--sequence-duplicate|"
                "--sequence-out-of-order|--sequence-ambiguous|"
-               "--incomplete-frame|--empty-frame|--sustained-acquisition|--multipart]\n";
+               "--incomplete-frame|--empty-frame|--sustained-acquisition|--multipart|"
+               "--queue-starvation-recovery|--reopen-cycles]\n";
         return 64;
     }
 
@@ -113,6 +114,8 @@ int main(int argc, char** argv) {
     std::string deliveryMode;
     bool sustainedMode = false;
     bool multipartMode = false;
+    bool queueStarvationMode = false;
+    bool reopenCyclesMode = false;
     if (argc >= 3) {
         const std::string option = argv[2];
         if (option == "--verify-two-device-isolation") {
@@ -149,6 +152,11 @@ int main(int argc, char** argv) {
         } else if (option == "--multipart") {
             multipartMode = true;
             setenv("MOCK_GENTL_SIMULATOR_MULTIPART", "1", 1);
+        } else if (option == "--queue-starvation-recovery") {
+            queueStarvationMode = true;
+            setenv("MOCK_GENTL_SIMULATOR_QUEUE_STARVATION", "1", 1);
+        } else if (option == "--reopen-cycles") {
+            reopenCyclesMode = true;
         } else {
             std::cerr << "Unknown simulator smoke option.\n";
             return 67;
@@ -208,7 +216,8 @@ int main(int argc, char** argv) {
             // The ordinary smoke injects two Producer underruns and one
             // host wait timeout. The sustained case intentionally injects
             // neither and exercises repeated acquisition-buffer recycling.
-            const char* injectedUnderruns = sustainedMode ? "0" : "2";
+            const char* injectedUnderruns =
+                (sustainedMode || queueStarvationMode) ? "0" : "2";
             if (setenv("MOCK_GENTL_SIMULATOR_UNDERRUNS", injectedUnderruns, 1) != 0)
                 throw std::runtime_error("Could not configure simulator underruns.");
             stream.start();
@@ -223,8 +232,27 @@ int main(int argc, char** argv) {
 
             const std::size_t requiredFrames =
                 sustainedMode ? 4096 : (multipartMode ? 1 : 5);
-            const std::uint64_t expectedUnderruns = sustainedMode ? 0 : 2;
-            const std::uint64_t expectedHostTimeouts = sustainedMode ? 0 : 1;
+            const std::uint64_t expectedUnderruns =
+                queueStarvationMode ? 1 : (sustainedMode ? 0 : 2);
+            const std::uint64_t expectedHostTimeouts =
+                queueStarvationMode ? 2 : (sustainedMode ? 0 : 1);
+
+            if (queueStarvationMode) {
+                const auto depletedWait = stream.nextFrame(1);
+                if (depletedWait)
+                    throw std::runtime_error("A depleted Producer queue unexpectedly delivered a frame.");
+                const auto depleted = stream.statistics();
+                if (depleted.producerBufferUnderruns != 1 ||
+                    depleted.announcedBuffers != 4 ||
+                    depleted.queuedBuffers != 0 ||
+                    depleted.buffersAwaitingDelivery != 0 ||
+                    depleted.integrity.observedBuffers != 0 ||
+                    depleted.integrity.frameWaitTimeouts != 2 ||
+                    depleted.integrity.bufferStarvationEvents != 1) {
+                    throw std::runtime_error(
+                        "Producer queue depletion was not distinguished from host timeout.");
+                }
+            }
             const std::size_t sequenceOffset = verifyMultiDeviceIsolation ? 3 : 0;
             std::uint64_t previousFrameId = 0;
             std::uint64_t previousTimestampNanoseconds = 0;
@@ -380,8 +408,49 @@ int main(int argc, char** argv) {
             unsetenv("MOCK_GENTL_SIMULATOR_TLTYPE");
             unsetenv("MOCK_GENTL_SIMULATOR_DELIVERY_MODE");
             unsetenv("MOCK_GENTL_SIMULATOR_MULTIPART");
-            unsetenv("MOCK_GENTL_SIMULATOR_MULTIPART");
+            unsetenv("MOCK_GENTL_SIMULATOR_QUEUE_STARVATION");
             stream.stop();
+
+            if (reopenCyclesMode) {
+                if (stream || stream.nextFrame(1))
+                    throw std::runtime_error("Stopped stream remained active.");
+                auto lastFrameId = previousFrameId;
+                auto lastTimestamp = previousTimestampNanoseconds;
+                for (std::size_t cycle = 0; cycle < 3; ++cycle) {
+                    auto reopened = device.openDataStream(streamIds.front(), 4);
+                    reopened.start();
+                    for (std::size_t frameIndex = 0; frameIndex < 2; ++frameIndex) {
+                        const auto frame = reopened.nextFrame(5000);
+                        if (!frame || frame->incomplete || !frame->frameId ||
+                            *frame->frameId != lastFrameId + 1 ||
+                            !frame->timestampNanoseconds ||
+                            *frame->timestampNanoseconds <= lastTimestamp ||
+                            frame->payload.size() != 16 ||
+                            frame->payload.front() !=
+                                static_cast<std::uint8_t>(0x30 + frameIndex)) {
+                            throw std::runtime_error(
+                                "Reopened stream did not resume with valid monotonic frames.");
+                        }
+                        lastFrameId = *frame->frameId;
+                        lastTimestamp = *frame->timestampNanoseconds;
+                    }
+                    const auto reopenedStats = reopened.statistics();
+                    if (reopenedStats.producerDeliveredBuffers != 2 ||
+                        reopenedStats.producerFramesStarted != 2 ||
+                        reopenedStats.announcedBuffers != 4 ||
+                        reopenedStats.queuedBuffers != 4 ||
+                        reopenedStats.buffersAwaitingDelivery != 0 ||
+                        reopenedStats.integrity.completeImages != 2 ||
+                        reopenedStats.integrity.frameWaitTimeouts != 0 ||
+                        reopenedStats.integrity.bufferStarvationEvents != 0) {
+                        throw std::runtime_error(
+                            "Reopened stream did not restore a clean acquisition state.");
+                    }
+                    reopened.stop();
+                    if (reopened || reopened.nextFrame(1))
+                        throw std::runtime_error("A stopped reopened stream remained active.");
+                }
+            }
         }
 
         device.close();

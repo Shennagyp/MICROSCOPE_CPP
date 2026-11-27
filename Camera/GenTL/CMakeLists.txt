@@ -158,6 +158,20 @@ if(BUILD_TESTING)
     set_tests_properties(camera_gentl_simulator_multipart
         PROPERTIES TIMEOUT 120)
 
+    add_test(NAME camera_gentl_simulator_queue_starvation_recovery
+        COMMAND camera_gentl_simulator_smoke
+            "$<TARGET_FILE:gentl_test_simulator_cti>"
+            "0" "--queue-starvation-recovery")
+    set_tests_properties(camera_gentl_simulator_queue_starvation_recovery
+        PROPERTIES TIMEOUT 120)
+
+    add_test(NAME camera_gentl_simulator_reopen_cycles
+        COMMAND camera_gentl_simulator_smoke
+            "$<TARGET_FILE:gentl_test_simulator_cti>"
+            "0" "--reopen-cycles")
+    set_tests_properties(camera_gentl_simulator_reopen_cycles
+        PROPERTIES TIMEOUT 120)
+
     add_executable(camera_gentl_producer_catalog_tests
         tests/ProducerCatalogTests.cpp)
     target_compile_features(camera_gentl_producer_catalog_tests PRIVATE cxx_std_17)

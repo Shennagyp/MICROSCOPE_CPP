@@ -213,6 +213,8 @@ static uint64_t simulator_last_frame_ids[2];
 static uint64_t simulator_delivered_buffers[2];
 static uint64_t simulator_buffer_underruns[2];
 static uint64_t simulator_frames_started[2];
+static uint64_t simulator_timestamp_sequence[2];
+static int simulator_starvation_phase[2];
 static atomic_int event_wait_entered = 0;
 static atomic_int event_unregistered = 0;
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
@@ -559,6 +561,48 @@ int32_t gentl_consumer_invoke(
             return GC_ERR_ABORT;
         }
 #endif
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+        if (atomic_load_explicit(&simulator_event_unregistered[event], memory_order_acquire) ||
+            !simulator_stream_acquiring[event]) return GC_ERR_TIMEOUT;
+        if (getenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT"))
+            return GC_ERR_TIMEOUT;
+
+        // Deplete every queued buffer for this stream once, report a Producer
+        // underrun, and return a host wait timeout. On the next wait, the
+        // simulated Producer restores its announced buffers so acquisition
+        // can recover without changing the consumer's requeue path.
+        if (getenv("MOCK_GENTL_SIMULATOR_QUEUE_STARVATION") &&
+            simulator_starvation_phase[event] == 0) {
+            size_t writeIndex = 0;
+            for (size_t i = 0; i < queued_buffer_count; ++i) {
+                size_t bufferIndex = 0;
+                while (bufferIndex < stream_buffer_count &&
+                       stream_handles[bufferIndex] != queued_buffers[i]) ++bufferIndex;
+                if (bufferIndex < stream_buffer_count &&
+                    stream_owners[bufferIndex] != owner)
+                    queued_buffers[writeIndex++] = queued_buffers[i];
+            }
+            queued_buffer_count = writeIndex;
+            ++simulator_buffer_underruns[event];
+            simulator_starvation_phase[event] = 1;
+            return GC_ERR_TIMEOUT;
+        }
+        if (getenv("MOCK_GENTL_SIMULATOR_QUEUE_STARVATION") &&
+            simulator_starvation_phase[event] == 1) {
+            for (size_t i = 0; i < stream_buffer_count; ++i) {
+                if (!stream_memory[i] || stream_owners[i] != owner) continue;
+                int alreadyQueued = 0;
+                for (size_t q = 0; q < queued_buffer_count; ++q)
+                    if (queued_buffers[q] == stream_handles[i]) {
+                        alreadyQueued = 1;
+                        break;
+                    }
+                if (!alreadyQueued && queued_buffer_count < 32)
+                    queued_buffers[queued_buffer_count++] = stream_handles[i];
+            }
+            simulator_starvation_phase[event] = 2;
+        }
+#endif
         size_t queuedIndex = 0;
         while (queuedIndex < queued_buffer_count) {
             size_t bufferIndex = 0;
@@ -568,12 +612,6 @@ int32_t gentl_consumer_invoke(
                 stream_owners[bufferIndex] == owner) break;
             ++queuedIndex;
         }
-#if defined(CAMERA_GENTL_SIMULATOR_MODE)
-        if (atomic_load_explicit(&simulator_event_unregistered[event], memory_order_acquire) ||
-            !simulator_stream_acquiring[event]) return GC_ERR_TIMEOUT;
-        if (getenv("MOCK_GENTL_SIMULATOR_FORCE_WAIT_TIMEOUT"))
-            return GC_ERR_TIMEOUT;
-#endif
         if (queuedIndex == queued_buffer_count) return GC_ERR_TIMEOUT;
         if (*size < sizeof(EVENT_NEW_BUFFER_DATA)) {
             *size = sizeof(EVENT_NEW_BUFFER_DATA);
@@ -624,7 +662,7 @@ int32_t gentl_consumer_invoke(
         stream_frame_ids[index] = frameId;
         stream_timestamps_ns[index] =
             UINT64_C(123456789) +
-            (simulator_delivered_buffers[event] + 1) * UINT64_C(1000000);
+            (++simulator_timestamp_sequence[event]) * UINT64_C(1000000);
         const size_t deliveredBytes =
             getenv("MOCK_GENTL_SIMULATOR_MULTIPART") ? 64 : 16;
         for (size_t i = 0; i < deliveredBytes; ++i) {
@@ -698,6 +736,7 @@ int32_t gentl_consumer_invoke(
         simulator_delivered_buffers[index] = 0;
         simulator_buffer_underruns[index] = 0;
         simulator_frames_started[index] = 0;
+        simulator_starvation_phase[index] = 0;
         {
             const char* injected = getenv("MOCK_GENTL_SIMULATOR_UNDERRUNS");
             if (injected && *injected) {

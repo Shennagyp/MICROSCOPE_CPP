@@ -6,9 +6,42 @@
 
 namespace microscope::core {
 namespace {
-bool physicalLinear(AxisCoordinateUnit u) {
-    return u==AxisCoordinateUnit::Micrometers || u==AxisCoordinateUnit::Millimeters;
+Result<MoveAxesTo,SlideNavigationCommandError> commandForStagePoint(
+    const DualSlideCarrierSpecification& specification, const StagePlanePoint& point) {
+    if (!std::isfinite(point.horizontalMicrometers) ||
+        !std::isfinite(point.transverseMicrometers)) {
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::InvalidStageCoordinate);
+    }
+    const double horizontal = specification.horizontalUnit() == AxisCoordinateUnit::Millimeters
+        ? point.horizontalMicrometers / 1000.0 : point.horizontalMicrometers;
+    const double transverse = specification.transverseUnit() == AxisCoordinateUnit::Millimeters
+        ? point.transverseMicrometers / 1000.0 : point.transverseMicrometers;
+    const auto& horizontalRange = specification.horizontalRange();
+    const auto& transverseRange = specification.transverseRange();
+    if (horizontal < horizontalRange.minimum() || horizontal > horizontalRange.maximum() ||
+        transverse < transverseRange.minimum() || transverse > transverseRange.maximum()) {
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::OutsideStageTravel);
+    }
+    auto x = AxisPosition::create(specification.horizontalAxisId(), horizontal,
+        specification.horizontalUnit());
+    auto y = AxisPosition::create(specification.transverseAxisId(), transverse,
+        specification.transverseUnit());
+    if (!x || !y) {
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::InvalidStageCoordinate);
+    }
+    auto command = MoveAxesTo::create({std::move(x).value(), std::move(y).value()});
+    if (!command) {
+        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
+            SlideNavigationCommandError::InvalidStageCoordinate);
+    }
+    return Result<MoveAxesTo,SlideNavigationCommandError>::success(std::move(command).value());
 }
+}
+
+namespace {
 std::size_t cornerIndex(SlideCorner c) {
     switch(c) {
     case SlideCorner::TopLeft:return 0;
@@ -26,84 +59,6 @@ bool validSource(ObservationSource s) {
            s==ObservationSource::CalibratedEstimate;
 }
 }
-DualSlideCarrierSpecification::DualSlideCarrierSpecification(
-    EquipmentComponentId c,StageAxisId x,StageAxisId y,CarrierHorizontalDirection d,
-    AxisCoordinateUnit xu,AxisCoordinateUnit yu,AxisOperatingRange xr,AxisOperatingRange yr)
-    :stageComponentId_(std::move(c)),horizontalAxisId_(std::move(x)),
-     transverseAxisId_(std::move(y)),direction_(d),horizontalUnit_(xu),transverseUnit_(yu),
-     horizontalRange_(xr),transverseRange_(yr) {}
-Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>
-DualSlideCarrierSpecification::create(
-    const StageSpecification& stage,StageAxisId x,StageAxisId y,CarrierHorizontalDirection d) {
-    if(x==y)return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::failure(
-        DualSlideCarrierSpecificationError::SamePlaneAxis);
-    auto xi=std::find_if(stage.axes().begin(),stage.axes().end(),[&](const auto&a){return a.id()==x;});
-    if(xi==stage.axes().end())return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::failure(
-        DualSlideCarrierSpecificationError::MissingHorizontalAxis);
-    auto yi=std::find_if(stage.axes().begin(),stage.axes().end(),[&](const auto&a){return a.id()==y;});
-    if(yi==stage.axes().end())return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::failure(
-        DualSlideCarrierSpecificationError::MissingTransverseAxis);
-    if(xi->motionType()!=AxisMotionType::Linear || yi->motionType()!=AxisMotionType::Linear)
-        return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::failure(
-            DualSlideCarrierSpecificationError::NonLinearPlaneAxis);
-    if(!physicalLinear(xi->coordinateUnit()) || !physicalLinear(yi->coordinateUnit()))
-        return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::failure(
-            DualSlideCarrierSpecificationError::NonPhysicalPlaneAxisUnit);
-    if(d!=CarrierHorizontalDirection::PositiveStageXFromLeftToRight &&
-       d!=CarrierHorizontalDirection::NegativeStageXFromLeftToRight)
-        return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::failure(
-            DualSlideCarrierSpecificationError::InvalidHorizontalDirection);
-    return Result<DualSlideCarrierSpecification,DualSlideCarrierSpecificationError>::success(
-        DualSlideCarrierSpecification(stage.componentId(),std::move(x),std::move(y),d,
-            xi->coordinateUnit(),yi->coordinateUnit(),
-            xi->operatingRange(),yi->operatingRange()));
-}
-const EquipmentComponentId& DualSlideCarrierSpecification::stageComponentId()const noexcept{return stageComponentId_;}
-const StageAxisId& DualSlideCarrierSpecification::horizontalAxisId()const noexcept{return horizontalAxisId_;}
-const StageAxisId& DualSlideCarrierSpecification::transverseAxisId()const noexcept{return transverseAxisId_;}
-AxisCoordinateUnit DualSlideCarrierSpecification::horizontalUnit()const noexcept{return horizontalUnit_;}
-AxisCoordinateUnit DualSlideCarrierSpecification::transverseUnit()const noexcept{return transverseUnit_;}
-
-CarrierHorizontalDirection DualSlideCarrierSpecification::horizontalDirection()const noexcept{return direction_;}
-
-Result<MoveAxesTo,SlideNavigationCommandError>
-DualSlideCarrierSpecification::moveTo(const StagePlanePoint& p) const {
-    if(!std::isfinite(p.horizontalMicrometers)||!std::isfinite(p.transverseMicrometers))
-        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
-            SlideNavigationCommandError::InvalidStageCoordinate);
-    const double x=horizontalUnit_==AxisCoordinateUnit::Millimeters
-        ? p.horizontalMicrometers/1000.0 : p.horizontalMicrometers;
-    const double y=transverseUnit_==AxisCoordinateUnit::Millimeters
-        ? p.transverseMicrometers/1000.0 : p.transverseMicrometers;
-    if(x<horizontalRange_.minimum()||x>horizontalRange_.maximum()||
-       y<transverseRange_.minimum()||y>transverseRange_.maximum())
-        return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
-            SlideNavigationCommandError::OutsideStageTravel);
-    auto xt=AxisPosition::create(horizontalAxisId_,x,horizontalUnit_);
-    auto yt=AxisPosition::create(transverseAxisId_,y,transverseUnit_);
-    if(!xt||!yt)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
-        SlideNavigationCommandError::InvalidStageCoordinate);
-    auto command=MoveAxesTo::create({std::move(xt).value(),std::move(yt).value()});
-    if(!command)return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
-        SlideNavigationCommandError::InvalidStageCoordinate);
-    return Result<MoveAxesTo,SlideNavigationCommandError>::success(std::move(command).value());
-}
-
-
-SlideGeometry::SlideGeometry(double w,double h):width_(w),height_(h){}
-Result<SlideGeometry,SlideGeometryError> SlideGeometry::create(double w,double h) {
-    if(!std::isfinite(w)||!std::isfinite(h))
-        return Result<SlideGeometry,SlideGeometryError>::failure(SlideGeometryError::NonFiniteDimension);
-    if(w<=0||h<=0)
-        return Result<SlideGeometry,SlideGeometryError>::failure(SlideGeometryError::NonPositiveDimension);
-    return Result<SlideGeometry,SlideGeometryError>::success(SlideGeometry(w,h));
-}
-double SlideGeometry::widthMicrometers()const noexcept{return width_;}
-double SlideGeometry::heightMicrometers()const noexcept{return height_;}
-bool SlideGeometry::contains(double x,double y)const noexcept {
-    return std::isfinite(x)&&std::isfinite(y)&&x>=0&&y>=0&&x<=width_&&y<=height_;
-}
-
 SlideCornerMeasurement::SlideCornerMeasurement(SlideCorner c,StagePlanePoint p,ObservationSource s,double u)
     :corner_(c),stage_(p),source_(s),uncertainty_(u){}
 Result<SlideCornerMeasurement,SlideCornerMeasurementError>
@@ -352,7 +307,7 @@ Result<MoveAxesTo,SlideNavigationCommandError> DualSlideCarrierState::commandFor
     if(!stagePoint)
         return Result<MoveAxesTo,SlideNavigationCommandError>::failure(
             SlideNavigationCommandError::InvalidStageCoordinate);
-    return specification_.moveTo(stagePoint.value());
+    return commandForStagePoint(specification_, stagePoint.value());
 }
 
 Result<MoveAxesTo,SlideNavigationCommandError> DualSlideCarrierState::commandFor(

@@ -529,7 +529,7 @@ void testMissingLayoutMetadataIsRejected() {
 
 
 void testMultipartPayloadPreservesRawParts() {
-    DataStreamFrame source;
+    camera::gentl::DataStreamFrame source;
     source.payload.resize(64);
     for (std::size_t i = 0; i < source.payload.size(); ++i)
         source.payload[i] = static_cast<std::uint8_t>(i + 0x20);
@@ -537,7 +537,7 @@ void testMultipartPayloadPreservesRawParts() {
     source.isComposite = true;
     source.frameId = 17;
     source.timestampNanoseconds = 987654321;
-    DataStreamPart image;
+    camera::gentl::DataStreamPart image;
     image.offsetBytes = 8;
     image.byteSize = 16;
     image.dataType = GenTL::PART_DATATYPE_2D_IMAGE;
@@ -548,7 +548,7 @@ void testMultipartPayloadPreservesRawParts() {
     image.sourceId = 7;
     image.regionId = 3;
     image.dataPurposeId = 1;
-    DataStreamPart auxiliary;
+    camera::gentl::DataStreamPart auxiliary;
     auxiliary.offsetBytes = 40;
     auxiliary.byteSize = 8;
     auxiliary.dataType = GenTL::PART_DATATYPE_UNKNOWN;

@@ -283,14 +283,14 @@ int main(int argc, char** argv) {
                     const auto& first = (*commonFrame)->parts[0];
                     const auto& second = (*commonFrame)->parts[1];
                     if (first.offsetBytes != 8 || first.byteSize != 16 ||
-                        first.dataType != PART_DATATYPE_2D_IMAGE ||
+                        first.dataType != GenTL::PART_DATATYPE_2D_IMAGE ||
                         first.dataFormat != UINT64_C(0x01080001) ||
-                        first.dataFormatNamespace != PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
+                        first.dataFormatNamespace != GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
                         first.width != 4 || first.height != 4 ||
                         first.sourceId != 7 || first.regionId != 3 ||
                         first.dataPurposeId != 1 ||
                         second.offsetBytes != 40 || second.byteSize != 8 ||
-                        second.dataType != PART_DATATYPE_UNKNOWN ||
+                        second.dataType != GenTL::PART_DATATYPE_UNKNOWN ||
                         (*commonFrame)->partData(first) == nullptr ||
                         (*commonFrame)->partData(second) == nullptr ||
                         (*commonFrame)->partData(first)[0] != frame->payload[8] ||

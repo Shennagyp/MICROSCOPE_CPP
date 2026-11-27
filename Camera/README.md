@@ -77,3 +77,23 @@ retained for Phase 8.
 The initial supported platform scope remains macOS Intel x86_64 and Apple
 Silicon arm64. Do not infer Windows/Linux support from the platform-neutral
 GenTL source or the presence of unrelated vendor binaries.
+
+## Architecture and continuation
+
+For the complete Camera v2.0 architecture, OOP/class relationships, lifecycle
+diagrams, frame-memory rules, provider functionality, build/package boundaries,
+test evidence and known limitations, see:
+
+- [Camera v2.0 Architecture and OOP Reference](../docs/architecture/CAMERA_V2_ARCHITECTURE_AND_OOP.md)
+- [Current development status and evidence ledger](../docs/architecture/CAMERA_V2_DEVELOPMENT_STATUS.md)
+- [Current continuation handoff](../docs/architecture/NEXT_AI_HANDOFF.md)
+- [Common/provider-specific type ownership](../docs/architecture/CAMERA_COMMON_TYPE_OWNERSHIP.md)
+- [Phase 6 capability audit](../docs/architecture/CAMERA_V2_PHASE6_CAPABILITY_AUDIT.md)
+
+The Camera library owns camera discovery, camera sessions, acquisition, frame
+representation, camera features/commands and transport telemetry. Microscope
+optics, stage/controller, slide/rack mapping, WSI tile scheduling and durable
+tile storage, stitching and image processing belong to the consuming
+microscope application or their separate libraries. The Optika SwiftUI
+application is a consumer of the native camera API, not a dependency of
+Camera.Common.

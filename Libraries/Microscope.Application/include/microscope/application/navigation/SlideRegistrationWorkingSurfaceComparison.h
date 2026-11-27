@@ -109,37 +109,21 @@ public:
 
 private:
     SlideRegistrationWorkingSurfaceComparison(
-        core::SlideId,
-        core::CalibrationRevisionId,
-        core::CalibrationRevisionId,
+        core::SlideRegistration,
+        core::SlideRectangleDefinition2D,
         bool,
-        double,
-        double,
-        double,
-        double,
         std::array<SlideCornerReconciliation, 4>,
         double,
-        double,
-        double,
-        double,
-        double,
-        std::array<double, 4>) noexcept;
+        double) noexcept;
 
-    core::SlideId slideId_;
-    core::CalibrationRevisionId physicalRegistrationRevision_;
-    core::CalibrationRevisionId workingSurfaceRevision_;
+    // Keep the exact immutable source models. In particular, the affine
+    // registration remains available through its original toStage/toSlide API.
+    core::SlideRegistration physicalRegistration_;
+    core::SlideRectangleDefinition2D workingSurfaceRectangle_;
     bool horizontalMapsToWorkingSurfaceX_;
-    double physicalXExtent_;
-    double physicalYExtent_;
-    double workingSurfaceXExtent_;
-    double workingSurfaceYExtent_;
     std::array<SlideCornerReconciliation, 4> corners_;
     double maximumCornerDiscrepancy_;
     double rmsCornerDiscrepancy_;
-    double registrationMaximumFitResidual_;
-    double registrationRmsFitResidual_;
-    double registrationAcceptedMaximumFitResidual_;
-    std::array<double, 4> registrationCornerFitResiduals_;
 };
 
 } // namespace microscope::application::navigation

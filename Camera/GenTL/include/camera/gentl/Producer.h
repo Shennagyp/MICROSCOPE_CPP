@@ -25,8 +25,26 @@ struct DeviceDescriptor {
     std::string serialNumber;
 };
 
+struct DataStreamPart {
+    std::size_t offsetBytes = 0;
+    std::size_t byteSize = 0;
+    std::optional<std::uint64_t> dataType;
+    std::optional<std::uint64_t> dataFormat;
+    std::optional<std::uint64_t> dataFormatNamespace;
+    std::optional<std::size_t> width;
+    std::optional<std::size_t> height;
+    std::optional<std::size_t> xOffset;
+    std::optional<std::size_t> yOffset;
+    std::optional<std::size_t> xPadding;
+    std::optional<std::size_t> deliveredImageHeight;
+    std::optional<std::uint64_t> sourceId;
+    std::optional<std::uint64_t> regionId;
+    std::optional<std::uint64_t> dataPurposeId;
+};
+
 struct DataStreamFrame {
     std::vector<std::uint8_t> payload;
+    std::vector<DataStreamPart> parts;
     std::optional<std::uint64_t> frameId;
     std::optional<std::uint64_t> timestampNanoseconds;
     std::optional<std::uint64_t> pixelFormat;

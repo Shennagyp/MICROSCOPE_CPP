@@ -153,6 +153,48 @@ bool packedRowBytes(std::uint32_t width, std::uint8_t bitsPerPixel,
 
 std::optional<camera::FramePtr>
 makeCommonFrame(DataStreamFrame source) {
+    const bool multipartPayload =
+        source.payloadType == GenTL::PAYLOAD_TYPE_MULTI_PART ||
+        source.isComposite.value_or(false);
+    if (multipartPayload) {
+        if (source.payload.empty() || source.incomplete ||
+            source.dataLargerThanBuffer.value_or(false))
+            return std::nullopt;
+
+        auto frame = std::make_shared<camera::Frame>();
+        frame->isMultipart = true;
+        frame->pixels = std::move(source.payload);
+        frame->sequenceNumber = source.frameId;
+        if (source.timestampNanoseconds) {
+            frame->timestamp = camera::FrameTimestamp{
+                *source.timestampNanoseconds, nanosecondsPerSecond, std::nullopt};
+        }
+
+        frame->parts.reserve(source.parts.size());
+        for (const auto& sourcePart : source.parts) {
+            if (sourcePart.offsetBytes > frame->pixels.size() ||
+                sourcePart.byteSize > frame->pixels.size() - sourcePart.offsetBytes)
+                return std::nullopt;
+            camera::FramePart part;
+            part.offsetBytes = sourcePart.offsetBytes;
+            part.byteSize = sourcePart.byteSize;
+            part.dataType = sourcePart.dataType;
+            part.dataFormat = sourcePart.dataFormat;
+            part.dataFormatNamespace = sourcePart.dataFormatNamespace;
+            part.width = sourcePart.width;
+            part.height = sourcePart.height;
+            part.xOffset = sourcePart.xOffset;
+            part.yOffset = sourcePart.yOffset;
+            part.xPadding = sourcePart.xPadding;
+            part.deliveredImageHeight = sourcePart.deliveredImageHeight;
+            part.sourceId = sourcePart.sourceId;
+            part.regionId = sourcePart.regionId;
+            part.dataPurposeId = sourcePart.dataPurposeId;
+            frame->parts.push_back(std::move(part));
+        }
+        return camera::FramePtr{std::move(frame)};
+    }
+
     if (source.payload.empty() ||
         !source.imagePresent.value_or(false) ||
         source.incomplete ||

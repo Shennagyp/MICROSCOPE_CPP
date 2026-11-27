@@ -1372,6 +1372,125 @@ std::optional<DataStreamFrame> DataStreamSession::nextFrame(
         if (isComposite)
             frame.isComposite = *isComposite != 0;
 
+        const bool multipartPayload =
+            frame.payloadType == GenTL::PAYLOAD_TYPE_MULTI_PART ||
+            frame.isComposite.value_or(false);
+        if (multipartPayload) {
+            constexpr std::uint32_t maximumPartsPerBuffer = 4096;
+            std::uint32_t partCount = 0;
+            const auto countStatus = context->consumer.invoke(
+                Operation::dsGetNumBufferParts,
+                streamHandle, eventData.BufferHandle, &partCount);
+            if (countStatus == GenTL::GC_ERR_SUCCESS) {
+                if (partCount > maximumPartsPerBuffer)
+                    throw std::runtime_error(
+                        "The Producer reported an unreasonable multipart part count.");
+                frame.parts.reserve(partCount);
+
+                const auto readPartInfo = [&](std::uint32_t partIndex,
+                                              GenTL::BUFFER_PART_INFO_CMD command,
+                                              GenTL::INFO_DATATYPE expected,
+                                              const char* name,
+                                              auto valueType) {
+                    using Value = decltype(valueType);
+                    return readTypedInfo<Value>(
+                        [&](GenTL::INFO_DATATYPE* type, void* value,
+                            std::size_t* size) {
+                            return context->consumer.invoke(
+                                Operation::dsGetBufferPartInfo,
+                                streamHandle, eventData.BufferHandle,
+                                partIndex, command, type, value, size);
+                        }, expected, name);
+                };
+
+                const auto payloadAddress =
+                    reinterpret_cast<std::uintptr_t>(*base);
+                for (std::uint32_t partIndex = 0;
+                     partIndex < partCount; ++partIndex) {
+                    const auto partBase = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_BASE,
+                        GenTL::INFO_DATATYPE_PTR,
+                        "DSGetBufferPartInfo(BASE)", static_cast<void*>(nullptr));
+                    const auto partSize = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_DATA_SIZE,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(DATA_SIZE)", std::size_t{});
+                    const auto partType = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_DATA_TYPE,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(DATA_TYPE)", std::size_t{});
+                    if (!partBase || !*partBase || !partSize || !partType)
+                        throw std::runtime_error(
+                            "The Producer returned incomplete multipart range metadata.");
+
+                    const auto partAddress =
+                        reinterpret_cast<std::uintptr_t>(*partBase);
+                    if (partAddress < payloadAddress)
+                        throw std::runtime_error(
+                            "A multipart part begins before the filled payload.");
+                    const auto partOffset = partAddress - payloadAddress;
+                    if (partOffset > *filled ||
+                        *partSize > *filled - partOffset)
+                        throw std::runtime_error(
+                            "A multipart part extends beyond the filled payload.");
+
+                    DataStreamPart part;
+                    part.offsetBytes = static_cast<std::size_t>(partOffset);
+                    part.byteSize = *partSize;
+                    part.dataType = static_cast<std::uint64_t>(*partType);
+                    part.dataFormat = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_DATA_FORMAT,
+                        GenTL::INFO_DATATYPE_UINT64,
+                        "DSGetBufferPartInfo(DATA_FORMAT)", std::uint64_t{});
+                    part.dataFormatNamespace = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_DATA_FORMAT_NAMESPACE,
+                        GenTL::INFO_DATATYPE_UINT64,
+                        "DSGetBufferPartInfo(DATA_FORMAT_NAMESPACE)", std::uint64_t{});
+                    part.width = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_WIDTH,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(WIDTH)", std::size_t{});
+                    part.height = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_HEIGHT,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(HEIGHT)", std::size_t{});
+                    part.xOffset = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_XOFFSET,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(XOFFSET)", std::size_t{});
+                    part.yOffset = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_YOFFSET,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(YOFFSET)", std::size_t{});
+                    part.xPadding = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_XPADDING,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(XPADDING)", std::size_t{});
+                    part.sourceId = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_SOURCE_ID,
+                        GenTL::INFO_DATATYPE_UINT64,
+                        "DSGetBufferPartInfo(SOURCE_ID)", std::uint64_t{});
+                    part.deliveredImageHeight = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_DELIVERED_IMAGEHEIGHT,
+                        GenTL::INFO_DATATYPE_SIZET,
+                        "DSGetBufferPartInfo(DELIVERED_IMAGEHEIGHT)", std::size_t{});
+                    part.regionId = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_REGION_ID,
+                        GenTL::INFO_DATATYPE_UINT64,
+                        "DSGetBufferPartInfo(REGION_ID)", std::uint64_t{});
+                    part.dataPurposeId = readPartInfo(
+                        partIndex, GenTL::BUFFER_PART_INFO_DATA_PURPOSE_ID,
+                        GenTL::INFO_DATATYPE_UINT64,
+                        "DSGetBufferPartInfo(DATA_PURPOSE_ID)", std::uint64_t{});
+                    frame.parts.push_back(std::move(part));
+                }
+            } else if (countStatus != GenTL::GC_ERR_NOT_IMPLEMENTED &&
+                       countStatus != GenTL::GC_ERR_NOT_AVAILABLE &&
+                       countStatus != GenTL::GC_ERR_INVALID_PARAMETER) {
+                check(countStatus, "DSGetNumBufferParts");
+            }
+        }
+
         frame.payload.resize(*filled);
         if (*filled != 0)
             std::memcpy(frame.payload.data(), *base, *filled);

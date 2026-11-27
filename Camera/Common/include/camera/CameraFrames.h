@@ -73,6 +73,26 @@ struct FrameExposure {
     std::uint64_t ticksPerSecond = 0;
 };
 
+// A multipart part is a byte range into Frame::pixels. Metadata values are
+// kept in their source namespace; the Common layer does not reinterpret
+// transport-specific part data types or pixel formats.
+struct FramePart {
+    std::size_t offsetBytes = 0;
+    std::size_t byteSize = 0;
+    std::optional<std::uint64_t> dataType;
+    std::optional<std::uint64_t> dataFormat;
+    std::optional<std::uint64_t> dataFormatNamespace;
+    std::optional<std::size_t> width;
+    std::optional<std::size_t> height;
+    std::optional<std::size_t> xOffset;
+    std::optional<std::size_t> yOffset;
+    std::optional<std::size_t> xPadding;
+    std::optional<std::size_t> deliveredImageHeight;
+    std::optional<std::uint64_t> sourceId;
+    std::optional<std::uint64_t> regionId;
+    std::optional<std::uint64_t> dataPurposeId;
+};
+
 // Backend-neutral frame payload and metadata. The pixel-format enum
 // describes the buffer layout known to the consumer; pixelFormatIdentifier
 // preserves the backend/standard's exact format identity when available.
@@ -96,6 +116,10 @@ struct Frame {
     std::uint8_t significantBitsPerPixel = 0;
     std::uint8_t storageBitsPerPixel = 0;
     bool isStill = false;
+    // Composite/multipart payloads are not implicitly treated as one raster.
+    // Each part refers to a byte range in pixels; no per-part copy is made.
+    bool isMultipart = false;
+    std::vector<FramePart> parts;
 
     // These are optional because a backend or camera may not provide them.
     // A present sequence value of zero is valid and is not a uniqueness key.
@@ -118,6 +142,14 @@ struct Frame {
 
     [[nodiscard]] std::size_t byteSize() const noexcept {
         return pixels.size();
+    }
+
+    [[nodiscard]] const std::uint8_t* partData(
+        const FramePart& part) const noexcept {
+        if (pixels.empty() || part.offsetBytes > pixels.size() ||
+            part.byteSize > pixels.size() - part.offsetBytes)
+            return nullptr;
+        return pixels.data() + part.offsetBytes;
     }
 };
 

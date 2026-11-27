@@ -10,6 +10,14 @@ namespace camera::gentl {
 namespace {
 
 template <typename Function>
+Function resolveOptional(void* library, const char* symbol) noexcept {
+    dlerror();
+    auto* address = dlsym(library, symbol);
+    if (dlerror()) return nullptr;
+    return reinterpret_cast<Function>(address);
+}
+
+template <typename Function>
 Function resolve(void* library, const char* symbol) {
     dlerror();
     auto* address = dlsym(library, symbol);
@@ -61,6 +69,8 @@ struct GenTLProducerLibrary::Functions {
     GenTL::PDSRevokeBuffer dsRevokeBuffer = nullptr;
     GenTL::PDSQueueBuffer dsQueueBuffer = nullptr;
     GenTL::PDSGetBufferInfo dsGetBufferInfo = nullptr;
+    GenTL::PDSGetNumBufferParts dsGetNumBufferParts = nullptr;
+    GenTL::PDSGetBufferPartInfo dsGetBufferPartInfo = nullptr;
     GenTL::PGCGetNumPortURLs gcGetNumPortURLs = nullptr;
     GenTL::PGCGetPortURLInfo gcGetPortURLInfo = nullptr;
 };
@@ -147,6 +157,12 @@ std::shared_ptr<GenTLProducerLibrary> GenTLProducerLibrary::load(
             resolve<GenTL::PDSQueueBuffer>(library, "DSQueueBuffer");
         functions.dsGetBufferInfo =
             resolve<GenTL::PDSGetBufferInfo>(library, "DSGetBufferInfo");
+        // GenTL 1.5 multipart entry points are optional. Their absence must
+        // not make a Producer that supports ordinary image buffers unloadable.
+        functions.dsGetNumBufferParts =
+            resolveOptional<GenTL::PDSGetNumBufferParts>(library, "DSGetNumBufferParts");
+        functions.dsGetBufferPartInfo =
+            resolveOptional<GenTL::PDSGetBufferPartInfo>(library, "DSGetBufferPartInfo");
         functions.gcGetNumPortURLs =
             resolve<GenTL::PGCGetNumPortURLs>(library, "GCGetNumPortURLs");
         functions.gcGetPortURLInfo =
@@ -372,6 +388,21 @@ std::int32_t GenTLProducerLibrary::invokeRaw(
             static_cast<GenTL::BUFFER_INFO_CMD>(arguments[2]),
             static_cast<GenTL::INFO_DATATYPE*>(pointer(3)),
             pointer(4), static_cast<std::size_t*>(pointer(5))) : invalid();
+    case Operation::dsGetNumBufferParts:
+        if (!f.dsGetNumBufferParts) return GenTL::GC_ERR_NOT_IMPLEMENTED;
+        return countIs(3) ? f.dsGetNumBufferParts(
+            static_cast<GenTL::DS_HANDLE>(pointer(0)),
+            static_cast<GenTL::BUFFER_HANDLE>(pointer(1)),
+            static_cast<std::uint32_t*>(pointer(2))) : invalid();
+    case Operation::dsGetBufferPartInfo:
+        if (!f.dsGetBufferPartInfo) return GenTL::GC_ERR_NOT_IMPLEMENTED;
+        return countIs(7) ? f.dsGetBufferPartInfo(
+            static_cast<GenTL::DS_HANDLE>(pointer(0)),
+            static_cast<GenTL::BUFFER_HANDLE>(pointer(1)),
+            static_cast<std::uint32_t>(arguments[2]),
+            static_cast<GenTL::BUFFER_PART_INFO_CMD>(arguments[3]),
+            static_cast<GenTL::INFO_DATATYPE*>(pointer(4)),
+            pointer(5), static_cast<std::size_t*>(pointer(6))) : invalid();
     case Operation::gcGetNumPortURLs:
         return countIs(2) ? f.gcGetNumPortURLs(
             static_cast<GenTL::PORT_HANDLE>(pointer(0)),

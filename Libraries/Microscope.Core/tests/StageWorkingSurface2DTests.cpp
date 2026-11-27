@@ -77,6 +77,9 @@ void cadRectanglesAreXYOnlyAndVariableCount() {
     check(slide3->solvedOppositeEndpoint().xMicrometers == 210'000 &&
         slide3->solvedOppositeEndpoint().yMicrometers == 50'000,
         "the dimensions solve the opposite corner from the initial handle");
+    check(slide3->geometry().canonicalGeometry().xExtentMicrometers() == 50'000 &&
+        slide3->geometry().canonicalGeometry().yExtentMicrometers() == 20'000,
+        "stage-local geometry delegates to the canonical X/Y slide geometry without a second dimension model");
     const auto corners = slide3->stageCorners();
     check(corners.stopPoint.xMicrometers == 160'000 &&
         corners.stopPoint.yMicrometers == 30'000 &&

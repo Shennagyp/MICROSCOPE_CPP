@@ -279,7 +279,7 @@ void reportsGeometryDifferencesSeparatelyFromCornerRegistration() {
     check(std::abs(comparison.value().workingSurfaceMinusPhysicalXExtentMicrometers() - 20.0) < 1e-9 &&
         std::abs(comparison.value().workingSurfaceMinusPhysicalYExtentMicrometers() + 20.0) < 1e-9,
         "reports CAD-minus-physical extent deltas instead of rejecting or rewriting either geometry");
-    check(std::abs(comparison.value().maximumCornerDiscrepancyMicrometers() - 20.0) < 1e-9,
+    check(std::abs(comparison.value().maximumCornerDiscrepancyMicrometers() - std::hypot(20.0, 20.0)) < 1e-9,
         "reports the geometric corner mismatch independently from the registration fit residual");
 }
 

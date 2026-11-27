@@ -45,11 +45,11 @@ StageSpecification fixture(StageConfigurationId& slides,StageConfigurationId& pe
    {static_cast<Nanometres>(i)*80'000'000,0},nr(0,75'000'000),nr(0,25'000'000))));
  }
  auto sc=take(StageConfiguration::create(slides,
-  {{xid,nr(0,800'000'000)},{yid,nr(0,300'000'000)},{zid,nr(8'000'000,80'000'000}},
+  {{xid,nr(0,800'000'000)},{yid,nr(0,300'000'000)},{zid,nr(8'000'000,80'000'000)}},
   {},std::move(slideSlots)));
  auto petriSlot=take(StageSlot::create(sid("petri-slot"),{0,0},nr(0,150'000'000),nr(0,150'000'000)));
  auto pc=take(StageConfiguration::create(petri,
-  {{xid,nr(0,800'000'000)},{yid,nr(0,300'000'000)},{zid,nr(2'000'000,60'000'000}},
+  {{xid,nr(0,800'000'000)},{yid,nr(0,300'000'000)},{zid,nr(2'000'000,60'000'000)}},
   {{tid,rr(-1.5707963267948966,1.5707963267948966)}},{std::move(petriSlot)}));
  return take(StageSpecification::create(eid("stage"),
   {std::move(x),std::move(y),std::move(z)},{std::move(t)},{std::move(sc),std::move(pc)}));

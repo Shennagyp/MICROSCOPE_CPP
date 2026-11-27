@@ -310,8 +310,10 @@ core::Status<StageOperationError> Stage::moveTo(const StageAbsolutePosition& p){
     }
     auto l=driver_->moveLinearAxesTo({{x->axisId,p.linear.x},{y->axisId,p.linear.y},{z->axisId,p.linear.z}});
     if(!l){invalidatePosition();return driverFailure(l.error());}
-    auto r=driver_->moveRotationAxesTo(p.rotations);
-    if(!r){invalidatePosition();return driverFailure(r.error());}
+    if(!p.rotations.empty()){
+        auto r=driver_->moveRotationAxesTo(p.rotations);
+        if(!r){invalidatePosition();return driverFailure(r.error());}
+    }
     position_.x=p.linear.x;position_.y=p.linear.y;position_.z=p.linear.z;
     position_.rotations=p.rotations;position_.evidence=StagePositionEvidence::CommandDerived;
     return core::Status<StageOperationError>::success();

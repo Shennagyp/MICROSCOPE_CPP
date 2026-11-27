@@ -234,24 +234,31 @@ SlideRegistrationWorkingSurfaceComparison::compare(
 
     // SlideRegistration normalizes and stores its four measurements in this
     // canonical cyclic order, independent of the caller's input array order.
-    std::array<SlideCornerReconciliation, 4> reconciledCorners = [&]() {
-        auto topLeft = makeCorner(measuredCorners[0]);
-        auto topRight = makeCorner(measuredCorners[1]);
-        auto bottomRight = makeCorner(measuredCorners[2]);
-        auto bottomLeft = makeCorner(measuredCorners[3]);
-        if (!topLeft || !topRight || !bottomRight || !bottomLeft) {
-            return std::array<SlideCornerReconciliation, 4>{
-                topLeft ? std::move(topLeft).value() : std::move(topRight).value(),
-                topRight ? std::move(topRight).value() : std::move(topLeft).value(),
-                bottomRight ? std::move(bottomRight).value() : std::move(bottomLeft).value(),
-                bottomLeft ? std::move(bottomLeft).value() : std::move(bottomRight).value()};
-        }
-        return std::array<SlideCornerReconciliation, 4>{
-            std::move(topLeft).value(),
-            std::move(topRight).value(),
-            std::move(bottomRight).value(),
-            std::move(bottomLeft).value()};
-    }();
+    auto topLeft = makeCorner(measuredCorners[0]);
+    if (!topLeft) {
+        return core::Result<SlideRegistrationWorkingSurfaceComparison,
+            SlideRegistrationWorkingSurfaceComparisonError>::failure(topLeft.error());
+    }
+    auto topRight = makeCorner(measuredCorners[1]);
+    if (!topRight) {
+        return core::Result<SlideRegistrationWorkingSurfaceComparison,
+            SlideRegistrationWorkingSurfaceComparisonError>::failure(topRight.error());
+    }
+    auto bottomRight = makeCorner(measuredCorners[2]);
+    if (!bottomRight) {
+        return core::Result<SlideRegistrationWorkingSurfaceComparison,
+            SlideRegistrationWorkingSurfaceComparisonError>::failure(bottomRight.error());
+    }
+    auto bottomLeft = makeCorner(measuredCorners[3]);
+    if (!bottomLeft) {
+        return core::Result<SlideRegistrationWorkingSurfaceComparison,
+            SlideRegistrationWorkingSurfaceComparisonError>::failure(bottomLeft.error());
+    }
+    std::array<SlideCornerReconciliation, 4> reconciledCorners{
+        std::move(topLeft).value(),
+        std::move(topRight).value(),
+        std::move(bottomRight).value(),
+        std::move(bottomLeft).value()};
 
     for (const auto& corner : reconciledCorners) {
         if (!std::isfinite(corner.discrepancyMicrometers)) {

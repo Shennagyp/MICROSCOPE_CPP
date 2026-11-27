@@ -15,6 +15,20 @@ int main(int argc, char** argv) {
     if (!producerLibrary || producerLibrary->path() !=
             std::filesystem::canonical(argv[1])) return 2;
 
+    std::uint32_t unavailablePartCount = 0;
+    if (producerLibrary->invoke(
+            camera::gentl::Operation::dsGetNumBufferParts,
+            nullptr, nullptr, &unavailablePartCount) !=
+        GenTL::GC_ERR_NOT_IMPLEMENTED) return 13;
+    GenTL::INFO_DATATYPE unavailablePartType = GenTL::INFO_DATATYPE_UNKNOWN;
+    std::size_t unavailablePartSize = 0;
+    if (producerLibrary->invoke(
+            camera::gentl::Operation::dsGetBufferPartInfo,
+            nullptr, nullptr, std::uint32_t{0},
+            GenTL::BUFFER_PART_INFO_BASE,
+            &unavailablePartType, nullptr, &unavailablePartSize) !=
+        GenTL::GC_ERR_NOT_IMPLEMENTED) return 14;
+
     if (producerLibrary->invoke(camera::gentl::Operation::gcInitLib) !=
         GenTL::GC_ERR_SUCCESS) return 3;
 

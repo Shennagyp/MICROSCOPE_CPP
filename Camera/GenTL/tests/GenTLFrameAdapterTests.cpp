@@ -528,6 +528,62 @@ void testMissingLayoutMetadataIsRejected() {
 }
 
 
+void testMultipartPayloadPreservesRawParts() {
+    DataStreamFrame source;
+    source.payload.resize(64);
+    for (std::size_t i = 0; i < source.payload.size(); ++i)
+        source.payload[i] = static_cast<std::uint8_t>(i + 0x20);
+    source.payloadType = GenTL::PAYLOAD_TYPE_MULTI_PART;
+    source.isComposite = true;
+    source.frameId = 17;
+    source.timestampNanoseconds = 987654321;
+    DataStreamPart image;
+    image.offsetBytes = 8;
+    image.byteSize = 16;
+    image.dataType = GenTL::PART_DATATYPE_2D_IMAGE;
+    image.dataFormat = UINT64_C(0x01080001);
+    image.dataFormatNamespace = GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT;
+    image.width = 4;
+    image.height = 4;
+    image.sourceId = 7;
+    image.regionId = 3;
+    image.dataPurposeId = 1;
+    DataStreamPart auxiliary;
+    auxiliary.offsetBytes = 40;
+    auxiliary.byteSize = 8;
+    auxiliary.dataType = GenTL::PART_DATATYPE_UNKNOWN;
+    source.parts = {image, auxiliary};
+    const auto original = source.payload;
+
+    const auto result = camera::gentl::makeCommonFrame(std::move(source));
+    require(result.has_value(), "Multipart buffer was rejected.");
+    const auto& frame = **result;
+    require(frame.isMultipart && frame.parts.size() == 2 &&
+                frame.pixelFormat == camera::PixelFormat::Unknown &&
+                frame.width == 0 && frame.height == 0,
+            "Multipart buffer was incorrectly represented as a single raster.");
+    require(frame.sequenceNumber == 17 && frame.timestamp &&
+                frame.timestamp->ticks == 987654321,
+            "Multipart frame sequence/timestamp metadata was not preserved.");
+    require(frame.pixels == original,
+            "Multipart payload bytes were modified.");
+    require(frame.parts[0].offsetBytes == 8 &&
+                frame.parts[0].byteSize == 16 &&
+                frame.parts[0].dataType == GenTL::PART_DATATYPE_2D_IMAGE &&
+                frame.parts[0].dataFormat == UINT64_C(0x01080001) &&
+                frame.parts[0].dataFormatNamespace ==
+                    GenTL::PIXELFORMAT_NAMESPACE_PFNC_32BIT &&
+                frame.parts[0].sourceId == 7 &&
+                frame.parts[0].regionId == 3 &&
+                frame.parts[0].dataPurposeId == 1,
+            "Image part fields were not preserved.");
+    require(frame.partData(frame.parts[0]) == frame.pixels.data() + 8 &&
+                frame.partData(frame.parts[1]) == frame.pixels.data() + 40,
+            "Part pointers must be computed from validated payload offsets.");
+    require(frame.partData(camera::FramePart{frame.pixels.size(), 1}) == nullptr,
+            "Out-of-range part accessor must return null.");
+}
+
 void testEmptyPayloadIsRejectedForEveryPixelFormat() {
     auto source = validMono8Frame();
     source.payload.clear();
@@ -577,6 +633,7 @@ int main() {
         testPfnc16NamespaceMappings();
         testUnknownPixelFormatPreservesIdentity();
         testImageOffsetAndPaddingArePreservedWithoutCopying();
+        testMultipartPayloadPreservesRawParts();
         testMissingLayoutMetadataIsRejected();
         testEmptyPayloadIsRejectedForEveryPixelFormat();
         testNonImageAndIncompleteBuffersAreRejected();

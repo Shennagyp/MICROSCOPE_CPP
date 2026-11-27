@@ -52,6 +52,8 @@ if(BUILD_TESTING)
         tests/MockConsumerBridge.c)
     target_include_directories(gentl_consumer_bridge_fixture PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/include")
+    target_compile_definitions(gentl_consumer_bridge_fixture PRIVATE
+        MOCK_GENTL_DISABLE_MULTIPART=1)
     set_target_properties(gentl_consumer_bridge_fixture PROPERTIES
         C_STANDARD 11
         C_STANDARD_REQUIRED YES

@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
             << "<vendor-producer.cti> [device-index] "
             << "[--verify-two-device-isolation|--sequence-gap|--sequence-duplicate|"
                "--sequence-out-of-order|--sequence-ambiguous|"
-               "--incomplete-frame|--empty-frame|--sustained-acquisition]\n";
+               "--incomplete-frame|--empty-frame|--sustained-acquisition|--multipart]\n";
         return 64;
     }
 
@@ -112,6 +112,7 @@ int main(int argc, char** argv) {
     std::string sequenceMode;
     std::string deliveryMode;
     bool sustainedMode = false;
+    bool multipartMode = false;
     if (argc >= 3) {
         const std::string option = argv[2];
         if (option == "--verify-two-device-isolation") {
@@ -145,6 +146,9 @@ int main(int argc, char** argv) {
             deliveryMode = "empty";
         } else if (option == "--sustained-acquisition") {
             sustainedMode = true;
+        } else if (option == "--multipart") {
+            multipartMode = true;
+            setenv("MOCK_GENTL_SIMULATOR_MULTIPART", "1", 1);
         } else {
             std::cerr << "Unknown simulator smoke option.\n";
             return 67;
@@ -217,7 +221,8 @@ int main(int argc, char** argv) {
                     throw std::runtime_error("The simulator failed to inject the wait timeout.");
             }
 
-            const std::size_t requiredFrames = sustainedMode ? 4096 : 5;
+            const std::size_t requiredFrames =
+                sustainedMode ? 4096 : (multipartMode ? 1 : 5);
             const std::uint64_t expectedUnderruns = sustainedMode ? 0 : 2;
             const std::uint64_t expectedHostTimeouts = sustainedMode ? 0 : 1;
             const std::size_t sequenceOffset = verifyMultiDeviceIsolation ? 3 : 0;
@@ -238,7 +243,8 @@ int main(int argc, char** argv) {
                     throw std::runtime_error(
                         "The Producer incomplete-buffer status did not match the injected case.");
                 }
-                if (frame->payload.size() != (expectedEmpty ? 0U : 16U)) {
+                if (frame->payload.size() !=
+                    (multipartMode ? 64U : (expectedEmpty ? 0U : 16U))) {
                     throw std::runtime_error(
                         "The deterministic simulator returned an unexpected filled payload size.");
                 }
@@ -266,7 +272,33 @@ int main(int argc, char** argv) {
 
                 const auto commonFrame =
                     camera::gentl::makeCommonFrame(*frame);
-                if ((expectedIncomplete || expectedEmpty) == commonFrame.has_value()) {
+                if (multipartMode) {
+                    if (!commonFrame || !(*commonFrame)->isMultipart ||
+                        (*commonFrame)->pixelFormat != camera::PixelFormat::Unknown ||
+                        (*commonFrame)->parts.size() != 2 ||
+                        (*commonFrame)->pixels.size() != 64) {
+                        throw std::runtime_error(
+                            "Multipart payload was not preserved as a composite Common frame.");
+                    }
+                    const auto& first = (*commonFrame)->parts[0];
+                    const auto& second = (*commonFrame)->parts[1];
+                    if (first.offsetBytes != 8 || first.byteSize != 16 ||
+                        first.dataType != PART_DATATYPE_2D_IMAGE ||
+                        first.dataFormat != UINT64_C(0x01080001) ||
+                        first.dataFormatNamespace != PIXELFORMAT_NAMESPACE_PFNC_32BIT ||
+                        first.width != 4 || first.height != 4 ||
+                        first.sourceId != 7 || first.regionId != 3 ||
+                        first.dataPurposeId != 1 ||
+                        second.offsetBytes != 40 || second.byteSize != 8 ||
+                        second.dataType != PART_DATATYPE_UNKNOWN ||
+                        (*commonFrame)->partData(first) == nullptr ||
+                        (*commonFrame)->partData(second) == nullptr ||
+                        (*commonFrame)->partData(first)[0] != frame->payload[8] ||
+                        (*commonFrame)->partData(second)[0] != frame->payload[40]) {
+                        throw std::runtime_error(
+                            "Multipart part metadata or offset-backed byte views are invalid.");
+                    }
+                } else if ((expectedIncomplete || expectedEmpty) == commonFrame.has_value()) {
                     throw std::runtime_error(
                         "Incomplete/empty payload acceptance did not match the adapter contract.");
                 }
@@ -315,8 +347,10 @@ int main(int argc, char** argv) {
                 statistics.queuedBuffers != 4 ||
                 statistics.buffersAwaitingDelivery != 0 ||
                 statistics.integrity.observedBuffers != requiredFrames ||
-                statistics.integrity.completeImages != requiredFrames -
-                    ((deliveryMode == "incomplete" || deliveryMode == "empty") ? 1U : 0U) ||
+                statistics.integrity.completeImages !=
+                    (multipartMode ? 0U : requiredFrames -
+                    ((deliveryMode == "incomplete" || deliveryMode == "empty") ? 1U : 0U)) ||
+                statistics.integrity.nonImagePayloads != (multipartMode ? 1U : 0U) ||
                 statistics.integrity.incompleteBuffers !=
                     (deliveryMode == "incomplete" ? 1U : 0U) ||
                 statistics.integrity.invalidPayloads !=
@@ -345,6 +379,8 @@ int main(int argc, char** argv) {
             unsetenv("MOCK_GENTL_SIMULATOR_SEQUENCE_MODE");
             unsetenv("MOCK_GENTL_SIMULATOR_TLTYPE");
             unsetenv("MOCK_GENTL_SIMULATOR_DELIVERY_MODE");
+            unsetenv("MOCK_GENTL_SIMULATOR_MULTIPART");
+            unsetenv("MOCK_GENTL_SIMULATOR_MULTIPART");
             stream.stop();
         }
 

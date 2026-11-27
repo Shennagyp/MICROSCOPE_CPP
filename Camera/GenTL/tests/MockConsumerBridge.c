@@ -618,7 +618,9 @@ int32_t gentl_consumer_invoke(
         stream_timestamps_ns[index] =
             UINT64_C(123456789) +
             (simulator_delivered_buffers[event] + 1) * UINT64_C(1000000);
-        for (size_t i = 0; i < 16; ++i) {
+        const size_t deliveredBytes =
+            getenv("MOCK_GENTL_SIMULATOR_MULTIPART") ? 64 : 16;
+        for (size_t i = 0; i < deliveredBytes; ++i) {
             stream_memory[index][i] =
                 (uint8_t)(0x30 + i +
                     (uint8_t)simulator_delivered_buffers[event]);
@@ -801,6 +803,100 @@ int32_t gentl_consumer_invoke(
         queued_buffers[queued_buffer_count++] = handle;
         return GC_ERR_SUCCESS;
     }
+    case 55: { // DSGetNumBufferParts (optional GenTL 1.5)
+        if (argument_count != 3 ||
+            stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
+            return GC_ERR_INVALID_HANDLE;
+        if (!getenv("MOCK_GENTL_SIMULATOR_MULTIPART"))
+            return GC_ERR_NOT_AVAILABLE;
+        const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
+        size_t index = 0;
+        while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
+        if (index == stream_buffer_count || !stream_memory[index] ||
+            stream_owners[index] != (DS_HANDLE)pointer(arguments[0]))
+            return GC_ERR_INVALID_BUFFER;
+        uint32_t* count = (uint32_t*)pointer(arguments[2]);
+        if (!count) return GC_ERR_INVALID_PARAMETER;
+        *count = 2;
+        return GC_ERR_SUCCESS;
+    }
+    case 56: { // DSGetBufferPartInfo (optional GenTL 1.5)
+        if (argument_count != 7 ||
+            stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
+            return GC_ERR_INVALID_HANDLE;
+        if (!getenv("MOCK_GENTL_SIMULATOR_MULTIPART"))
+            return GC_ERR_NOT_AVAILABLE;
+        const BUFFER_HANDLE handle = (BUFFER_HANDLE)pointer(arguments[1]);
+        size_t index = 0;
+        while (index < stream_buffer_count && stream_handles[index] != handle) ++index;
+        if (index == stream_buffer_count || !stream_memory[index] ||
+            stream_owners[index] != (DS_HANDLE)pointer(arguments[0]))
+            return GC_ERR_INVALID_BUFFER;
+        const uint32_t partIndex = (uint32_t)arguments[2];
+        const int32_t command = (int32_t)arguments[3];
+        INFO_DATATYPE* type = (INFO_DATATYPE*)pointer(arguments[4]);
+        void* output = pointer(arguments[5]);
+        size_t* size = (size_t*)pointer(arguments[6]);
+        if (!type || !size || partIndex > 1) return GC_ERR_INVALID_PARAMETER;
+        if (partIndex == 1 && command != BUFFER_PART_INFO_BASE &&
+            command != BUFFER_PART_INFO_DATA_SIZE &&
+            command != BUFFER_PART_INFO_DATA_TYPE)
+            return GC_ERR_NOT_AVAILABLE;
+        if (command == BUFFER_PART_INFO_BASE) {
+            void* value = stream_memory[index] + (partIndex == 0 ? 8 : 40);
+            return write_scalar(type, output, size, INFO_DATATYPE_PTR,
+                &value, sizeof(value));
+        }
+        if (command == BUFFER_PART_INFO_DATA_SIZE) {
+            const size_t value = partIndex == 0 ? 16 : 8;
+            return write_scalar(type, output, size, INFO_DATATYPE_SIZET,
+                &value, sizeof(value));
+        }
+        if (command == BUFFER_PART_INFO_DATA_TYPE) {
+            const size_t value = partIndex == 0
+                ? PART_DATATYPE_2D_IMAGE : PART_DATATYPE_UNKNOWN;
+            return write_scalar(type, output, size, INFO_DATATYPE_SIZET,
+                &value, sizeof(value));
+        }
+        if (partIndex == 0) {
+            switch (command) {
+            case BUFFER_PART_INFO_DATA_FORMAT: {
+                const uint64_t value = UINT64_C(0x01080001);
+                return write_scalar(type, output, size, INFO_DATATYPE_UINT64,
+                    &value, sizeof(value));
+            }
+            case BUFFER_PART_INFO_DATA_FORMAT_NAMESPACE: {
+                const uint64_t value = PIXELFORMAT_NAMESPACE_PFNC_32BIT;
+                return write_scalar(type, output, size, INFO_DATATYPE_UINT64,
+                    &value, sizeof(value));
+            }
+            case BUFFER_PART_INFO_WIDTH:
+            case BUFFER_PART_INFO_HEIGHT:
+            case BUFFER_PART_INFO_DELIVERED_IMAGEHEIGHT: {
+                const size_t value = 4;
+                return write_scalar(type, output, size, INFO_DATATYPE_SIZET,
+                    &value, sizeof(value));
+            }
+            case BUFFER_PART_INFO_XOFFSET:
+            case BUFFER_PART_INFO_YOFFSET:
+            case BUFFER_PART_INFO_XPADDING: {
+                const size_t value = 0;
+                return write_scalar(type, output, size, INFO_DATATYPE_SIZET,
+                    &value, sizeof(value));
+            }
+            case BUFFER_PART_INFO_SOURCE_ID:
+            case BUFFER_PART_INFO_REGION_ID:
+            case BUFFER_PART_INFO_DATA_PURPOSE_ID: {
+                const uint64_t value = command == BUFFER_PART_INFO_SOURCE_ID
+                    ? 7 : (command == BUFFER_PART_INFO_REGION_ID ? 3 : 1);
+                return write_scalar(type, output, size, INFO_DATATYPE_UINT64,
+                    &value, sizeof(value));
+            }
+            default: return GC_ERR_NOT_AVAILABLE;
+            }
+        }
+        return GC_ERR_NOT_AVAILABLE;
+    }
     case 46: { // DSGetBufferInfo
         if (argument_count != 6 || stream_index((DS_HANDLE)pointer(arguments[0])) < 0)
             return GC_ERR_INVALID_HANDLE;
@@ -822,7 +918,8 @@ int32_t gentl_consumer_invoke(
         }
         case BUFFER_INFO_SIZE_FILLED: {
 #if defined(CAMERA_GENTL_SIMULATOR_MODE)
-            const size_t value = simulator_buffer_empty[index] ? 0 : 16;
+            const size_t value = simulator_buffer_empty[index] ? 0 :
+                (getenv("MOCK_GENTL_SIMULATOR_MULTIPART") ? 64 : 16);
 #else
             const size_t value = 16;
 #endif
@@ -881,7 +978,12 @@ int32_t gentl_consumer_invoke(
             return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
         }
         case BUFFER_INFO_PAYLOADTYPE: {
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            const size_t value = getenv("MOCK_GENTL_SIMULATOR_MULTIPART")
+                ? PAYLOAD_TYPE_MULTI_PART : PAYLOAD_TYPE_IMAGE;
+#else
             const size_t value = PAYLOAD_TYPE_IMAGE;
+#endif
             return write_scalar(type, output, size, INFO_DATATYPE_SIZET, &value, sizeof(value));
         }
         case BUFFER_INFO_CONTAINS_CHUNKDATA: {
@@ -890,7 +992,12 @@ int32_t gentl_consumer_invoke(
         }
         case BUFFER_INFO_DATA_LARGER_THAN_BUFFER:
         case BUFFER_INFO_IS_COMPOSITE: {
+#if defined(CAMERA_GENTL_SIMULATOR_MODE)
+            const bool8_t value = command == BUFFER_INFO_IS_COMPOSITE &&
+                getenv("MOCK_GENTL_SIMULATOR_MULTIPART") ? 1 : 0;
+#else
             const bool8_t value = 0;
+#endif
             return write_scalar(type, output, size, INFO_DATATYPE_BOOL8, &value, sizeof(value));
         }
         default: return GC_ERR_NOT_AVAILABLE;
@@ -937,6 +1044,10 @@ static GC_ERROR mock_genTL_call(
 #define MOCK_CALL6(operation, a, b, c, d, e, f) do { \
     const uint64_t args[] = {MOCK_ENCODE(a), MOCK_ENCODE(b), MOCK_ENCODE(c), MOCK_ENCODE(d), MOCK_ENCODE(e), MOCK_ENCODE(f)}; \
     return mock_genTL_call((operation), args, 6); \
+} while (0)
+#define MOCK_CALL7(operation, a, b, c, d, e, f, g) do { \
+    const uint64_t args[] = {MOCK_ENCODE(a), MOCK_ENCODE(b), MOCK_ENCODE(c), MOCK_ENCODE(d), MOCK_ENCODE(e), MOCK_ENCODE(f), MOCK_ENCODE(g)}; \
+    return mock_genTL_call((operation), args, 7); \
 } while (0)
 
 GC_ERROR GC_CALLTYPE GCGetInfo(
@@ -1060,6 +1171,18 @@ GC_ERROR GC_CALLTYPE DSGetBufferInfo(
     INFO_DATATYPE* type, void* value, size_t* size) {
     MOCK_CALL6(46, stream, buffer, command, type, value, size);
 }
+#if !defined(MOCK_GENTL_DISABLE_MULTIPART)
+GC_ERROR GC_CALLTYPE DSGetNumBufferParts(
+    DS_HANDLE stream, BUFFER_HANDLE buffer, uint32_t* count) {
+    MOCK_CALL3(55, stream, buffer, count);
+}
+GC_ERROR GC_CALLTYPE DSGetBufferPartInfo(
+    DS_HANDLE stream, BUFFER_HANDLE buffer, uint32_t partIndex,
+    BUFFER_PART_INFO_CMD command, INFO_DATATYPE* type,
+    void* value, size_t* size) {
+    MOCK_CALL7(56, stream, buffer, partIndex, command, type, value, size);
+}
+#endif
 GC_ERROR GC_CALLTYPE GCGetNumPortURLs(
     PORT_HANDLE port, uint32_t* count) { MOCK_CALL2(47, port, count); }
 GC_ERROR GC_CALLTYPE GCGetPortURLInfo(
@@ -1075,4 +1198,5 @@ GC_ERROR GC_CALLTYPE GCGetPortURLInfo(
 #undef MOCK_CALL4
 #undef MOCK_CALL5
 #undef MOCK_CALL6
+#undef MOCK_CALL7
 #undef MOCK_ENCODE

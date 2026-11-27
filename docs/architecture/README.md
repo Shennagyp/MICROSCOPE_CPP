@@ -11,6 +11,7 @@
 - [Microscope Platform Implementation Plan v0.9](../plans/MICROSCOPE_PLATFORM_IMPLEMENTATION_V0.9.md) — migration phases and acceptance criteria.
 
 - [OPTIKA B293 v0.9 Continuation Handoff](OPTIKA_B293_V0.9_CONTINUATION_HANDOFF.md) — current branch checkpoint, implemented ownership boundaries, verification status and next repository work.
+- [Microscope Platform Completion Audit v0.9](MICROSCOPE_PLATFORM_COMPLETION_AUDIT_V0.9.md) — current Core/Application/Camera/Stage/Acquisition audit, branch-integration constraints and UI-readiness acceptance gate.
 
 ## Capability-specific architecture
 

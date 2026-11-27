@@ -1,6 +1,7 @@
 #pragma once
 #include "microscope/core/equipment/StageSpecifications.h"
 #include "microscope/core/ids/Ids.h"
+#include "microscope/core/samples/SlideGeometry.h"
 #include "microscope/core/result/Result.h"
 #include <vector>
 
@@ -36,17 +37,19 @@ private:
 
 enum class SlideRectangleLengthAxis { StageX, StageY };
 
-enum class SlideGeometry2DError { NonFiniteDimension, NonPositiveDimension };
+// Stage-local adapter over the canonical sample SlideGeometry. Its first
+// extent is the slide's local length axis; its second is the local width axis.
+// It owns no independent dimension validation or geometry state.
 class SlideGeometry2D final {
 public:
-    static Result<SlideGeometry2D, SlideGeometry2DError> create(double length, double width);
+    static Result<SlideGeometry2D, SlideGeometryError> create(double length, double width);
     double lengthMicrometers() const noexcept;
     double widthMicrometers() const noexcept;
     bool contains(const SlidePoint2D&) const noexcept;
+    const SlideGeometry& canonicalGeometry() const noexcept;
 private:
-    SlideGeometry2D(double, double) noexcept;
-    double length_;
-    double width_;
+    explicit SlideGeometry2D(SlideGeometry) noexcept;
+    SlideGeometry geometry_;
 };
 
 enum class SlidePlacement2DError {

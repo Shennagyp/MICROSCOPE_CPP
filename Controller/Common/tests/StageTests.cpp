@@ -37,10 +37,10 @@ public:
 };
 StageSpecification fixture(StageConfigurationId& slides,StageConfigurationId& petri,StageSlotId& slot2){
  auto xid=aid("x"),yid=aid("y"),zid=aid("z"),tid=aid("theta");
- auto x=take(LinearAxisSpecification::create(xid,LinearAxisRole::X,nr(0,1'000'000'000),100,2000,500));
- auto y=take(LinearAxisSpecification::create(yid,LinearAxisRole::Y,nr(0,500'000'000),100,2000,500));
- auto z=take(LinearAxisSpecification::create(zid,LinearAxisRole::Z,nr(0,100'000'000),50,1000,250));
- auto t=take(RotationAxisSpecification::create(tid,
+ auto x=take(LinearAxis::create(xid,LinearAxisRole::X,nr(0,1'000'000'000),100,2000,500));
+ auto y=take(LinearAxis::create(yid,LinearAxisRole::Y,nr(0,500'000'000),100,2000,500));
+ auto z=take(LinearAxis::create(zid,LinearAxisRole::Z,nr(0,100'000'000),50,1000,250));
+ auto t=take(RotationAxis::create(tid,
   RotationAxisGeometry{{10'000,20'000,30'000},RotationAxisDirection::Z},
   rr(-3.141592653589793,3.141592653589793),0.0001,0.001,0.0002));
  slides=cid("slides"),petri=cid("petri"),slot2=sid("slide-slot-2");
@@ -63,6 +63,23 @@ StageSpecification fixture(StageConfigurationId& slides,StageConfigurationId& pe
 void testModelAndConfigurationCardinality(){
  StageConfigurationId slides=cid("s0"),petri=cid("p0");StageSlotId s2=sid("s2");
  auto spec=fixture(slides,petri,s2);
+ auto axisDriver=std::make_shared<FakeDriver>();
+ const auto* xAxis=spec.linearAxis(LinearAxisRole::X);
+ check(xAxis && static_cast<bool>(xAxis->home(*axisDriver)),
+       "LinearAxis owns a homing operation delegated to its driver");
+ check(xAxis && static_cast<bool>(xAxis->moveTo(*axisDriver,5'000'000)),
+       "LinearAxis exposes absolute movement in nanometres");
+ check(xAxis && static_cast<bool>(xAxis->moveBy(*axisDriver,5'000'000,2'000)),
+       "LinearAxis exposes relative movement in nanometres");
+ check(xAxis && !xAxis->moveTo(*axisDriver,2'000'000'000),
+       "LinearAxis rejects targets beyond its mechanical travel range");
+ const auto* theta=spec.rotationAxis(aid("theta"));
+ check(theta && static_cast<bool>(theta->home(*axisDriver)),
+       "RotationAxis owns a homing operation delegated to its driver");
+ check(theta && static_cast<bool>(theta->rotateTo(*axisDriver,0.25)),
+       "RotationAxis exposes absolute angular movement in radians");
+ check(theta && static_cast<bool>(theta->rotateBy(*axisDriver,0.25,0.1)),
+       "RotationAxis exposes relative angular movement in radians");
  check(spec.configuration(slides)->slots().size()==10,"configuration supports ten generic slots");
  check(spec.configuration(petri)->slots().size()==1,"configuration supports one sample-holder slot");
  check(spec.configuration(slides)->workingRotationAxes().empty(),"rotation is optional per configuration");

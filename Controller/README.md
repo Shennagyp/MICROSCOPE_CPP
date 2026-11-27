@@ -7,7 +7,7 @@ into the common Stage model.
 
 ## Stage model
 
-A Stage owns installed LinearAxis and RotationAxis specifications and a collection
+A Stage owns installed LinearAxis and RotationAxis objects and a collection
 of StageConfigurations. Every configuration selects its working X, Y and Z
 linear axes, its effective range for each, optional working rotation axes, and
 a variable-size collection of StageSlots. Thus ten slide slots and one Petri-dish

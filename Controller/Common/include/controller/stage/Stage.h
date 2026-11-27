@@ -25,6 +25,16 @@ enum class StageModelError {
     CoordinateOverflow, DriverFailure
 };
 
+enum class StageDriverErrorCode {
+    NotConnected, Busy, Unsupported, LimitReached, Timeout, Fault,
+    CommunicationFailure, Other
+};
+struct StageDriverError final {
+    StageDriverErrorCode code=StageDriverErrorCode::Other;
+    std::string detail;
+};
+class IStageDriver;
+
 class NanometreRange final {
 public:
     static core::Result<NanometreRange, StageModelError> create(Nanometres min, Nanometres max);
@@ -52,9 +62,9 @@ struct StagePosition3D final { Nanometres x=0, y=0, z=0; };
 struct SlotRelativePosition final { Nanometres x=0, y=0; };
 
 enum class LinearAxisRole { X, Y, Z };
-class LinearAxisSpecification final {
+class LinearAxis final {
 public:
-    static core::Result<LinearAxisSpecification, StageModelError> create(
+    static core::Result<LinearAxis, StageModelError> create(
         StageAxisId id, LinearAxisRole role, NanometreRange mechanicalRange,
         Nanometres minimumIncrement, Nanometres accuracy, Nanometres precision);
     const StageAxisId& id() const noexcept;
@@ -64,12 +74,19 @@ public:
     Nanometres accuracy() const noexcept;
     Nanometres precision() const noexcept;
 private:
-    LinearAxisSpecification(StageAxisId, LinearAxisRole, NanometreRange,
+    LinearAxis(StageAxisId, LinearAxisRole, NanometreRange,
         Nanometres, Nanometres, Nanometres);
     StageAxisId id_;
     LinearAxisRole role_;
     NanometreRange mechanicalRange_;
     Nanometres minimumIncrement_, accuracy_, precision_;
+public:
+    core::Status<StageOperationError> home(IStageDriver& driver) const;
+    core::Status<StageOperationError> moveTo(
+        IStageDriver& driver, Nanometres absolutePosition) const;
+    core::Status<StageOperationError> moveBy(
+        IStageDriver& driver, Nanometres currentPosition,
+        Nanometres displacement) const;
 };
 
 enum class RotationAxisDirection { X, Y, Z };
@@ -77,9 +94,9 @@ struct RotationAxisGeometry final {
     StagePosition3D pointOnAxis;
     RotationAxisDirection direction = RotationAxisDirection::Z;
 };
-class RotationAxisSpecification final {
+class RotationAxis final {
 public:
-    static core::Result<RotationAxisSpecification, StageModelError> create(
+    static core::Result<RotationAxis, StageModelError> create(
         StageAxisId id, RotationAxisGeometry geometry, RadianRange mechanicalRange,
         Radians minimumIncrement, Radians accuracy, Radians precision);
     const StageAxisId& id() const noexcept;
@@ -89,12 +106,19 @@ public:
     Radians accuracy() const noexcept;
     Radians precision() const noexcept;
 private:
-    RotationAxisSpecification(StageAxisId, RotationAxisGeometry, RadianRange,
+    RotationAxis(StageAxisId, RotationAxisGeometry, RadianRange,
         Radians, Radians, Radians);
     StageAxisId id_;
     RotationAxisGeometry geometry_;
     RadianRange mechanicalRange_;
     Radians minimumIncrement_, accuracy_, precision_;
+public:
+    core::Status<StageOperationError> home(IStageDriver& driver) const;
+    core::Status<StageOperationError> rotateTo(
+        IStageDriver& driver, Radians absoluteAngle) const;
+    core::Status<StageOperationError> rotateBy(
+        IStageDriver& driver, Radians currentAngle,
+        Radians angularDisplacement) const;
 };
 
 struct WorkingLinearAxis final { StageAxisId axisId; NanometreRange effectiveRange; };
@@ -136,23 +160,23 @@ private:
 class StageSpecification final {
 public:
     static core::Result<StageSpecification, StageModelError> create(
-        EquipmentComponentId id, std::vector<LinearAxisSpecification> linearAxes,
-        std::vector<RotationAxisSpecification> rotationAxes,
+        EquipmentComponentId id, std::vector<LinearAxis> linearAxes,
+        std::vector<RotationAxis> rotationAxes,
         std::vector<StageConfiguration> configurations);
     const EquipmentComponentId& componentId() const noexcept;
-    const std::vector<LinearAxisSpecification>& linearAxes() const noexcept;
-    const std::vector<RotationAxisSpecification>& rotationAxes() const noexcept;
+    const std::vector<LinearAxis>& linearAxes() const noexcept;
+    const std::vector<RotationAxis>& rotationAxes() const noexcept;
     const std::vector<StageConfiguration>& configurations() const noexcept;
     const StageConfiguration* configuration(const StageConfigurationId&) const noexcept;
-    const LinearAxisSpecification* linearAxis(const StageAxisId&) const noexcept;
-    const LinearAxisSpecification* linearAxis(LinearAxisRole) const noexcept;
-    const RotationAxisSpecification* rotationAxis(const StageAxisId&) const noexcept;
+    const LinearAxis* linearAxis(const StageAxisId&) const noexcept;
+    const LinearAxis* linearAxis(LinearAxisRole) const noexcept;
+    const RotationAxis* rotationAxis(const StageAxisId&) const noexcept;
 private:
-    StageSpecification(EquipmentComponentId, std::vector<LinearAxisSpecification>,
-        std::vector<RotationAxisSpecification>, std::vector<StageConfiguration>);
+    StageSpecification(EquipmentComponentId, std::vector<LinearAxis>,
+        std::vector<RotationAxis>, std::vector<StageConfiguration>);
     EquipmentComponentId id_;
-    std::vector<LinearAxisSpecification> linearAxes_;
-    std::vector<RotationAxisSpecification> rotationAxes_;
+    std::vector<LinearAxis> linearAxes_;
+    std::vector<RotationAxis> rotationAxes_;
     std::vector<StageConfiguration> configurations_;
 };
 
@@ -166,14 +190,6 @@ struct StageAbsolutePosition final {
 struct StageDisplacement final {
     StagePosition3D linear;
     std::vector<RotationAxisDisplacement> rotations;
-};
-
-enum class StageDriverErrorCode {
-    NotConnected, Busy, Unsupported, LimitReached, Timeout, Fault, CommunicationFailure, Other
-};
-struct StageDriverError final {
-    StageDriverErrorCode code=StageDriverErrorCode::Other;
-    std::string detail;
 };
 
 // A driver must wait for terminal completion. "Command accepted" is not success.

@@ -80,40 +80,108 @@ Radians RadianRange::minimum()const noexcept{return min_;}
 Radians RadianRange::maximum()const noexcept{return max_;}
 bool RadianRange::contains(Radians v)const noexcept{return finite(v)&&v>=min_&&v<=max_;}
 
-LinearAxisSpecification::LinearAxisSpecification(StageAxisId id,LinearAxisRole role,
+LinearAxis::LinearAxis(StageAxisId id,LinearAxisRole role,
     NanometreRange r,Nanometres inc,Nanometres a,Nanometres p)
     :id_(std::move(id)),role_(role),mechanicalRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
-core::Result<LinearAxisSpecification,StageModelError> LinearAxisSpecification::create(
+core::Result<LinearAxis,StageModelError> LinearAxis::create(
     StageAxisId id,LinearAxisRole role,NanometreRange r,Nanometres inc,Nanometres a,Nanometres p){
     if(!validRole(role)||inc<=0||a<0||p<0||!r.contains(0))
-        return core::Result<LinearAxisSpecification,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
-    return core::Result<LinearAxisSpecification,StageModelError>::success(
-        LinearAxisSpecification(std::move(id),role,r,inc,a,p));
+        return core::Result<LinearAxis,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
+    return core::Result<LinearAxis,StageModelError>::success(
+        LinearAxis(std::move(id),role,r,inc,a,p));
 }
-const StageAxisId& LinearAxisSpecification::id()const noexcept{return id_;}
-LinearAxisRole LinearAxisSpecification::role()const noexcept{return role_;}
-const NanometreRange& LinearAxisSpecification::mechanicalTravelRange()const noexcept{return mechanicalRange_;}
-Nanometres LinearAxisSpecification::minimumIncrement()const noexcept{return minimumIncrement_;}
-Nanometres LinearAxisSpecification::accuracy()const noexcept{return accuracy_;}
-Nanometres LinearAxisSpecification::precision()const noexcept{return precision_;}
+const StageAxisId& LinearAxis::id()const noexcept{return id_;}
+LinearAxisRole LinearAxis::role()const noexcept{return role_;}
+const NanometreRange& LinearAxis::mechanicalTravelRange()const noexcept{return mechanicalRange_;}
+Nanometres LinearAxis::minimumIncrement()const noexcept{return minimumIncrement_;}
+Nanometres LinearAxis::accuracy()const noexcept{return accuracy_;}
+Nanometres LinearAxis::precision()const noexcept{return precision_;}
 
-RotationAxisSpecification::RotationAxisSpecification(StageAxisId id,RotationAxisGeometry g,
+core::Status<StageOperationError> LinearAxis::home(IStageDriver& driver) const {
+    const auto result = driver.homeLinearAxis(id_);
+    if (!result) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::DriverFailure, result.error()});
+    }
+    return core::Status<StageOperationError>::success();
+}
+
+core::Status<StageOperationError> LinearAxis::moveTo(
+    IStageDriver& driver, Nanometres absolutePosition) const {
+    if (!mechanicalRange_.contains(absolutePosition)) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::TargetOutsideWorkingRange, std::nullopt});
+    }
+    const auto result = driver.moveLinearAxesTo({LinearAxisTarget{id_, absolutePosition}});
+    if (!result) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::DriverFailure, result.error()});
+    }
+    return core::Status<StageOperationError>::success();
+}
+
+core::Status<StageOperationError> LinearAxis::moveBy(
+    IStageDriver& driver, Nanometres currentPosition,
+    Nanometres displacement) const {
+    Nanometres target = 0;
+    if (!add(currentPosition, displacement, target)) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::CoordinateOverflow, std::nullopt});
+    }
+    return moveTo(driver, target);
+}
+
+RotationAxis::RotationAxis(StageAxisId id,RotationAxisGeometry g,
     RadianRange r,Radians inc,Radians a,Radians p)
     :id_(std::move(id)),geometry_(g),mechanicalRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
-core::Result<RotationAxisSpecification,StageModelError> RotationAxisSpecification::create(
+core::Result<RotationAxis,StageModelError> RotationAxis::create(
     StageAxisId id,RotationAxisGeometry g,RadianRange r,Radians inc,Radians a,Radians p){
     if(!validDirection(g.direction)||!finite(inc)||!finite(a)||!finite(p)||
        inc<=0||a<0||p<0||!r.contains(0))
-        return core::Result<RotationAxisSpecification,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
-    return core::Result<RotationAxisSpecification,StageModelError>::success(
-        RotationAxisSpecification(std::move(id),g,r,inc,a,p));
+        return core::Result<RotationAxis,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
+    return core::Result<RotationAxis,StageModelError>::success(
+        RotationAxis(std::move(id),g,r,inc,a,p));
 }
-const StageAxisId& RotationAxisSpecification::id()const noexcept{return id_;}
-const RotationAxisGeometry& RotationAxisSpecification::geometry()const noexcept{return geometry_;}
-const RadianRange& RotationAxisSpecification::mechanicalTravelRange()const noexcept{return mechanicalRange_;}
-Radians RotationAxisSpecification::minimumIncrement()const noexcept{return minimumIncrement_;}
-Radians RotationAxisSpecification::accuracy()const noexcept{return accuracy_;}
-Radians RotationAxisSpecification::precision()const noexcept{return precision_;}
+const StageAxisId& RotationAxis::id()const noexcept{return id_;}
+const RotationAxisGeometry& RotationAxis::geometry()const noexcept{return geometry_;}
+const RadianRange& RotationAxis::mechanicalTravelRange()const noexcept{return mechanicalRange_;}
+Radians RotationAxis::minimumIncrement()const noexcept{return minimumIncrement_;}
+Radians RotationAxis::accuracy()const noexcept{return accuracy_;}
+Radians RotationAxis::precision()const noexcept{return precision_;}
+
+core::Status<StageOperationError> RotationAxis::home(IStageDriver& driver) const {
+    const auto result = driver.homeRotationAxis(id_);
+    if (!result) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::DriverFailure, result.error()});
+    }
+    return core::Status<StageOperationError>::success();
+}
+
+core::Status<StageOperationError> RotationAxis::rotateTo(
+    IStageDriver& driver, Radians absoluteAngle) const {
+    if (!mechanicalRange_.contains(absoluteAngle)) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::TargetOutsideWorkingRange, std::nullopt});
+    }
+    const auto result = driver.moveRotationAxesTo({RotationAxisTarget{id_, absoluteAngle}});
+    if (!result) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::DriverFailure, result.error()});
+    }
+    return core::Status<StageOperationError>::success();
+}
+
+core::Status<StageOperationError> RotationAxis::rotateBy(
+    IStageDriver& driver, Radians currentAngle,
+    Radians angularDisplacement) const {
+    const Radians target = currentAngle + angularDisplacement;
+    if (!finite(target)) {
+        return core::Status<StageOperationError>::failure(
+            StageOperationError{StageModelError::RotationTargetMismatch, std::nullopt});
+    }
+    return rotateTo(driver, target);
+}
 
 StageSlot::StageSlot(StageSlotId id,StagePosition2D o,NanometreRange x,NanometreRange y)
     :id_(std::move(id)),origin_(o),xRange_(x),yRange_(y){}
@@ -158,12 +226,12 @@ const std::vector<WorkingLinearAxis>& StageConfiguration::workingLinearAxes()con
 const std::vector<WorkingRotationAxis>& StageConfiguration::workingRotationAxes()const noexcept{return rotationAxes_;}
 const std::vector<StageSlot>& StageConfiguration::slots()const noexcept{return slots_;}
 
-StageSpecification::StageSpecification(EquipmentComponentId id,std::vector<LinearAxisSpecification> l,
-    std::vector<RotationAxisSpecification> r,std::vector<StageConfiguration> c)
+StageSpecification::StageSpecification(EquipmentComponentId id,std::vector<LinearAxis> l,
+    std::vector<RotationAxis> r,std::vector<StageConfiguration> c)
     :id_(std::move(id)),linearAxes_(std::move(l)),rotationAxes_(std::move(r)),configurations_(std::move(c)){}
 core::Result<StageSpecification,StageModelError> StageSpecification::create(
-    EquipmentComponentId id,std::vector<LinearAxisSpecification> l,
-    std::vector<RotationAxisSpecification> r,std::vector<StageConfiguration> c){
+    EquipmentComponentId id,std::vector<LinearAxis> l,
+    std::vector<RotationAxis> r,std::vector<StageConfiguration> c){
     if(l.empty()||c.empty())return core::Result<StageSpecification,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
     std::set<StageAxisId> ids;
     for(const auto& a:l)if(!ids.insert(a.id()).second)
@@ -209,22 +277,22 @@ core::Result<StageSpecification,StageModelError> StageSpecification::create(
         StageSpecification(std::move(id),std::move(l),std::move(r),std::move(c)));
 }
 const EquipmentComponentId& StageSpecification::componentId()const noexcept{return id_;}
-const std::vector<LinearAxisSpecification>& StageSpecification::linearAxes()const noexcept{return linearAxes_;}
-const std::vector<RotationAxisSpecification>& StageSpecification::rotationAxes()const noexcept{return rotationAxes_;}
+const std::vector<LinearAxis>& StageSpecification::linearAxes()const noexcept{return linearAxes_;}
+const std::vector<RotationAxis>& StageSpecification::rotationAxes()const noexcept{return rotationAxes_;}
 const std::vector<StageConfiguration>& StageSpecification::configurations()const noexcept{return configurations_;}
 const StageConfiguration* StageSpecification::configuration(const StageConfigurationId& id)const noexcept{
     const auto i=std::find_if(configurations_.begin(),configurations_.end(),[&](const auto& v){return v.id()==id;});
     return i==configurations_.end()?nullptr:&*i;
 }
-const LinearAxisSpecification* StageSpecification::linearAxis(const StageAxisId& id)const noexcept{
+const LinearAxis* StageSpecification::linearAxis(const StageAxisId& id)const noexcept{
     const auto i=std::find_if(linearAxes_.begin(),linearAxes_.end(),[&](const auto& v){return v.id()==id;});
     return i==linearAxes_.end()?nullptr:&*i;
 }
-const LinearAxisSpecification* StageSpecification::linearAxis(LinearAxisRole role)const noexcept{
+const LinearAxis* StageSpecification::linearAxis(LinearAxisRole role)const noexcept{
     const auto i=std::find_if(linearAxes_.begin(),linearAxes_.end(),[&](const auto& v){return v.role()==role;});
     return i==linearAxes_.end()?nullptr:&*i;
 }
-const RotationAxisSpecification* StageSpecification::rotationAxis(const StageAxisId& id)const noexcept{
+const RotationAxis* StageSpecification::rotationAxis(const StageAxisId& id)const noexcept{
     const auto i=std::find_if(rotationAxes_.begin(),rotationAxes_.end(),[&](const auto& v){return v.id()==id;});
     return i==rotationAxes_.end()?nullptr:&*i;
 }
@@ -249,13 +317,23 @@ core::Status<StageOperationError> Stage::driverFailure(const StageDriverError& e
 }
 core::Status<StageOperationError> Stage::home(){
     const auto& cfg=activeConfiguration();
-    for(const auto& a:cfg.workingLinearAxes()){
-        auto r=driver_->homeLinearAxis(a.axisId);
-        if(!r){invalidatePosition();return driverFailure(r.error());}
+    for(const auto& working:cfg.workingLinearAxes()){
+        const auto* axis = specification_.linearAxis(working.axisId);
+        if(!axis){
+            invalidatePosition();
+            return core::Status<StageOperationError>::failure(error(StageModelError::UnknownWorkingAxis));
+        }
+        auto result = axis->home(*driver_);
+        if(!result){invalidatePosition();return core::Status<StageOperationError>::failure(result.error());}
     }
-    for(const auto& a:cfg.workingRotationAxes()){
-        auto r=driver_->homeRotationAxis(a.axisId);
-        if(!r){invalidatePosition();return driverFailure(r.error());}
+    for(const auto& working:cfg.workingRotationAxes()){
+        const auto* axis = specification_.rotationAxis(working.axisId);
+        if(!axis){
+            invalidatePosition();
+            return core::Status<StageOperationError>::failure(error(StageModelError::UnknownWorkingAxis));
+        }
+        auto result = axis->home(*driver_);
+        if(!result){invalidatePosition();return core::Status<StageOperationError>::failure(result.error());}
     }
     position_=StagePositionSnapshot{};
     position_.x=0;position_.y=0;position_.z=0;

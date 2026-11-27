@@ -15,6 +15,7 @@ constexpr std::uint64_t pfnc32Mono14 = UINT64_C(0x01100025);
 constexpr std::uint64_t pfnc32Mono16 = UINT64_C(0x01100007);
 constexpr std::uint64_t pfnc32Mono10p = UINT64_C(0x010A0046);
 constexpr std::uint64_t pfnc32Mono12p = UINT64_C(0x010C0047);
+constexpr std::uint64_t pfnc32Mono14p = UINT64_C(0x010E0104);
 constexpr std::uint64_t pfnc32Rgb8 = UINT64_C(0x02180014);
 constexpr std::uint64_t pfnc16Mono8 = UINT64_C(0x0101);
 constexpr std::uint64_t pfnc16Mono16 = UINT64_C(0x0105);
@@ -38,6 +39,7 @@ constexpr BayerFormat bayerFormats[] = {
     {UINT64_C(0x0110002E), camera::PixelColorFilterArray::GRBG, 16},
     {UINT64_C(0x010A0056), camera::PixelColorFilterArray::GRBG, 10, true},
     {UINT64_C(0x010C0057), camera::PixelColorFilterArray::GRBG, 12, true},
+    {UINT64_C(0x010E0105), camera::PixelColorFilterArray::GRBG, 14, true},
     {UINT64_C(0x01080009), camera::PixelColorFilterArray::RGGB, 8},
     {UINT64_C(0x0110000D), camera::PixelColorFilterArray::RGGB, 10},
     {UINT64_C(0x01100011), camera::PixelColorFilterArray::RGGB, 12},
@@ -45,6 +47,7 @@ constexpr BayerFormat bayerFormats[] = {
     {UINT64_C(0x0110002F), camera::PixelColorFilterArray::RGGB, 16},
     {UINT64_C(0x010A0058), camera::PixelColorFilterArray::RGGB, 10, true},
     {UINT64_C(0x010C0059), camera::PixelColorFilterArray::RGGB, 12, true},
+    {UINT64_C(0x010E0106), camera::PixelColorFilterArray::RGGB, 14, true},
     {UINT64_C(0x0108000A), camera::PixelColorFilterArray::GBRG, 8},
     {UINT64_C(0x0110000E), camera::PixelColorFilterArray::GBRG, 10},
     {UINT64_C(0x01100012), camera::PixelColorFilterArray::GBRG, 12},
@@ -52,13 +55,15 @@ constexpr BayerFormat bayerFormats[] = {
     {UINT64_C(0x01100030), camera::PixelColorFilterArray::GBRG, 16},
     {UINT64_C(0x010A0054), camera::PixelColorFilterArray::GBRG, 10, true},
     {UINT64_C(0x010C0055), camera::PixelColorFilterArray::GBRG, 12, true},
+    {UINT64_C(0x010E0107), camera::PixelColorFilterArray::GBRG, 14, true},
     {UINT64_C(0x0108000B), camera::PixelColorFilterArray::BGGR, 8},
     {UINT64_C(0x0110000F), camera::PixelColorFilterArray::BGGR, 10},
     {UINT64_C(0x01100013), camera::PixelColorFilterArray::BGGR, 12},
     {UINT64_C(0x0110010C), camera::PixelColorFilterArray::BGGR, 14},
     {UINT64_C(0x01100031), camera::PixelColorFilterArray::BGGR, 16},
     {UINT64_C(0x010A0052), camera::PixelColorFilterArray::BGGR, 10, true},
-    {UINT64_C(0x010C0053), camera::PixelColorFilterArray::BGGR, 12, true}
+    {UINT64_C(0x010C0053), camera::PixelColorFilterArray::BGGR, 12, true},
+    {UINT64_C(0x010E0108), camera::PixelColorFilterArray::BGGR, 14, true}
 };
 
 std::optional<BayerFormat> bayerFormat(
@@ -215,9 +220,10 @@ makeCommonFrame(DataStreamFrame source) {
                     frame->rowPaddingBytes, frame->trailingPaddingBytes,
                     frame->pixels.size(), packedStride)) {
                 frame->pixelFormat = camera::PixelFormat::Raw8;
-                frame->pixelPacking = bayer->significantBits == 10
-                    ? camera::PixelPacking::PFNC10p
-                    : camera::PixelPacking::PFNC12p;
+                frame->pixelPacking =
+                    bayer->significantBits == 10 ? camera::PixelPacking::PFNC10p :
+                    bayer->significantBits == 12 ? camera::PixelPacking::PFNC12p :
+                                                   camera::PixelPacking::PFNC14p;
                 frame->pixelByteOrder = camera::PixelByteOrder::NotApplicable;
                 frame->strideBytes = packedStride;
                 frame->significantBitsPerPixel = bayer->significantBits;
@@ -251,7 +257,7 @@ makeCommonFrame(DataStreamFrame source) {
         }
     }
 
-    // PFNC Mono10p/Mono12p retain their packed wire representation.
+    // PFNC Mono10p/Mono12p/Mono14p retain their packed wire representation.
     // Do not unpack or reorder samples in the camera backend. Each row is
     // byte-aligned; the final byte may contain unused high bits for widths
     // that do not fill a complete byte.
@@ -263,6 +269,9 @@ makeCommonFrame(DataStreamFrame source) {
     } else if (isPfnc32(source, pfnc32Mono12p)) {
         packedSignificantBits = 12;
         packedKind = camera::PixelPacking::PFNC12p;
+    } else if (isPfnc32(source, pfnc32Mono14p)) {
+        packedSignificantBits = 14;
+        packedKind = camera::PixelPacking::PFNC14p;
     }
     if (packedSignificantBits != 0) {
         std::size_t activeRowBytes = 0;

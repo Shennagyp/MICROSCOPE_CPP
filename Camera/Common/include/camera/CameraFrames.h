@@ -46,7 +46,8 @@ enum class PixelPacking : std::uint8_t {
     Unknown,
     NotPacked,
     PFNC10p,
-    PFNC12p
+    PFNC12p,
+    PFNC14p
 };
 
 // A format identifier is meaningful only inside its declared scheme.

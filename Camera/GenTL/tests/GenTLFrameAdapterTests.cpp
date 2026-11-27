@@ -63,7 +63,8 @@ void testPackedMono10pAndMono12pPreserveByteLayout() {
     };
     const FormatCase cases[] = {
         {UINT64_C(0x010A0046), 10, camera::PixelPacking::PFNC10p, 4},
-        {UINT64_C(0x010C0047), 12, camera::PixelPacking::PFNC12p, 5}
+        {UINT64_C(0x010C0047), 12, camera::PixelPacking::PFNC12p, 5},
+        {UINT64_C(0x010E0104), 14, camera::PixelPacking::PFNC14p, 6}
     };
     for (const auto& test : cases) {
         auto source = validMono8Frame();
@@ -72,9 +73,9 @@ void testPackedMono10pAndMono12pPreserveByteLayout() {
         source.deliveredImageHeight = 2;
         source.pixelFormat = test.format;
         source.pixelEndianness = GenTL::PIXELENDIANNESS_UNKNOWN;
-        source.payload = {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08};
-        if (test.bits == 12)
-            source.payload.insert(source.payload.end(), {0x09,0x0A});
+        source.payload.resize(test.expectedStride * source.height);
+        for (std::size_t i = 0; i < source.payload.size(); ++i)
+            source.payload[i] = static_cast<std::uint8_t>(i * 17 + 3);
         const auto original = source.payload;
         const auto result = camera::gentl::makeCommonFrame(std::move(source));
         require(result.has_value(), "Packed monochrome image was rejected.");
@@ -95,15 +96,46 @@ void testPackedMono10pAndMono12pPreserveByteLayout() {
     }
 }
 
+void testPackedMono14pPreservesOffsetAndPadding() {
+    auto source = validMono8Frame();
+    source.width = 3;
+    source.height = 2;
+    source.deliveredImageHeight = 2;
+    source.pixelFormat = UINT64_C(0x010E0104);
+    source.pixelEndianness = GenTL::PIXELENDIANNESS_UNKNOWN;
+    source.imageOffset = 2;
+    source.xPadding = 2;
+    source.yPadding = 3;
+    source.payload.resize(2 + (6 + 2) * 2 + 3);
+    for (std::size_t i = 0; i < source.payload.size(); ++i)
+        source.payload[i] = static_cast<std::uint8_t>(0xA0 + i);
+    const auto original = source.payload;
+
+    const auto result = camera::gentl::makeCommonFrame(std::move(source));
+    require(result.has_value(), "Padded Mono14p image was rejected.");
+    const auto& frame = **result;
+    require(frame.pixelPacking == camera::PixelPacking::PFNC14p &&
+                frame.significantBitsPerPixel == 14 &&
+                frame.storageBitsPerPixel == 14,
+            "Padded Mono14p representation metadata was not preserved.");
+    require(frame.imageOffsetBytes == 2 && frame.rowPaddingBytes == 2 &&
+                frame.trailingPaddingBytes == 3 && frame.strideBytes == 8,
+            "Padded Mono14p layout offsets/stride were not preserved.");
+    require(frame.imageData() == frame.pixels.data() + 2,
+            "Mono14p image start did not retain the no-copy payload offset.");
+    require(frame.pixels == original,
+            "Mono14p padding or packed payload bytes were modified.");
+}
+
 void testPackedMonochromeRejectsIncorrectPayloadLength() {
     auto source = validMono8Frame();
-    source.pixelFormat = UINT64_C(0x010A0046);
-    source.payload.resize(5);
+    source.pixelFormat = UINT64_C(0x010E0104);
+    source.payload.resize(11);
     const auto result = camera::gentl::makeCommonFrame(source);
     require(result.has_value(), "Opaque packed frame should remain available.");
     require((*result)->pixelPacking == camera::PixelPacking::Unknown &&
                 (*result)->strideBytes == 0,
-            "Invalid packed payload length was assigned a false row layout.");
+            "Invalid packed 14-bit payload length was assigned a false row layout.");
 }
 
 void testMono16ProjectionUsesReportedByteOrder() {
@@ -232,12 +264,16 @@ void testPackedBayer10pAnd12pPreservePatternAndByteLayout() {
     const FormatCase cases[] = {
         {UINT64_C(0x010A0056), camera::PixelColorFilterArray::GRBG, 10, 4, 8},
         {UINT64_C(0x010C0057), camera::PixelColorFilterArray::GRBG, 12, 5, 10},
+        {UINT64_C(0x010E0105), camera::PixelColorFilterArray::GRBG, 14, 6, 12},
         {UINT64_C(0x010A0058), camera::PixelColorFilterArray::RGGB, 10, 4, 8},
         {UINT64_C(0x010C0059), camera::PixelColorFilterArray::RGGB, 12, 5, 10},
+        {UINT64_C(0x010E0106), camera::PixelColorFilterArray::RGGB, 14, 6, 12},
         {UINT64_C(0x010A0054), camera::PixelColorFilterArray::GBRG, 10, 4, 8},
         {UINT64_C(0x010C0055), camera::PixelColorFilterArray::GBRG, 12, 5, 10},
+        {UINT64_C(0x010E0107), camera::PixelColorFilterArray::GBRG, 14, 6, 12},
         {UINT64_C(0x010A0052), camera::PixelColorFilterArray::BGGR, 10, 4, 8},
-        {UINT64_C(0x010C0053), camera::PixelColorFilterArray::BGGR, 12, 5, 10}
+        {UINT64_C(0x010C0053), camera::PixelColorFilterArray::BGGR, 12, 5, 10},
+        {UINT64_C(0x010E0108), camera::PixelColorFilterArray::BGGR, 14, 6, 12}
     };
     for (const auto& test : cases) {
         auto source = validMono8Frame();
@@ -254,9 +290,10 @@ void testPackedBayer10pAnd12pPreservePatternAndByteLayout() {
                 "Packed Bayer mosaic pattern was not preserved.");
         require(frame.pixelFormat == camera::PixelFormat::Raw8,
                 "Packed Bayer bytes were not represented as raw byte storage.");
-        require(frame.pixelPacking == (test.bits == 10
-                    ? camera::PixelPacking::PFNC10p
-                    : camera::PixelPacking::PFNC12p),
+        require(frame.pixelPacking ==
+                    (test.bits == 10 ? camera::PixelPacking::PFNC10p :
+                     test.bits == 12 ? camera::PixelPacking::PFNC12p :
+                                       camera::PixelPacking::PFNC14p),
                 "Packed Bayer PFNC packing identity was not preserved.");
         require(frame.pixelByteOrder == camera::PixelByteOrder::NotApplicable,
                 "Packed Bayer samples must not claim byte endianness.");
@@ -506,6 +543,7 @@ int main() {
         testMono8Projection();
         testRvalueProjectionTransfersPayload();
         testPackedMono10pAndMono12pPreserveByteLayout();
+        testPackedMono14pPreservesOffsetAndPadding();
         testPackedMonochromeRejectsIncorrectPayloadLength();
         testMono16ProjectionUsesReportedByteOrder();
         testUnpackedMono10Mono12Mono14Projection();

@@ -2,11 +2,11 @@
 
 **Repository:** `Shennagyp/MICROSCOPE_CPP`  
 **Target branch:** `OPTIKA-B293-DUALSLIDE-APP-v.0.9`  
-**Latest source/test commit:** `0d51df7b6e9c863c2e09ae25a2aeaf0c700a2e13`  
-**Architecture audit commit:** `983ae76c2502b38444f3f4dcad9782aeffae09d2`  
-**Verification:** [platform CI run 45929942838](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45929942838) passed Ubuntu GCC, macOS Clang and Windows MSVC. The macOS job includes the native Optika application build and tests.  
+**Latest source/test commit:** `1169363751a819b2a0a37f834ea7f7d5cda67b70`  
+**Architecture audit commit:** `cad2c5463ca728a3e1db335625b389f7092139e4`  
+**Verification:** [platform CI run 45943921361](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45943921361) passed Ubuntu GCC, macOS Clang and Windows MSVC for the preceding Core/Application baseline. The new registration/working-surface comparison and its tests are in the current change set; their three-platform workflow is pending.  
 **Camera dependency:** `camera-v.2.0` at `757f829406c27d2f5ee25032ffd9b5e7725c56b7`; separate from this branch and not yet integrated.  
-**Current C++ implementation:** `9f7b4f708c15b6635d8f67276d493a33e06ba7ad`. The ownership extraction passed three-platform CI. Follow-up changes make `SlideGeometry` axis-neutral and turn `SlideGeometry2D` into a compatibility-preserving adapter over the canonical value. `MicroscopeConfigurationSqliteStore` now enumerates current OperationModes by microscope identity. CI for these follow-up changes is pending.
+**Current C++ implementation:** `1169363751a819b2a0a37f834ea7f7d5cda67b70`. In addition to the verified Core ownership/geometry work and current OperationMode enumeration, this change set adds `Microscope.Application::SlideRegistrationWorkingSurfaceComparison`. It binds the physical four-corner registration and CAD rectangle only through an explicit cyclic/reflected corner correspondence, checks stage and axis identity, and reports per-corner deltas, independent geometry extents, both revision IDs, measurement provenance/uncertainty and registration fit residuals. It is a comparison snapshot, not a replacement transform or a motion command. The current platform CI result is pending.
 
 This document is the current continuation checkpoint for the Optika B293 application/domain model. It supersedes stale descriptions in older implementation-plan sections where they conflict with the ownership rules below.
 
@@ -91,13 +91,12 @@ This verifies the software build/test baseline, not physical microscope hardware
 The complete library audit and dependency-ordered completion plan are maintained in [Microscope Platform Completion Audit v0.9](MICROSCOPE_PLATFORM_COMPLETION_AUDIT_V0.9.md).
 
 Immediate next work is not more UI:
-1. Establish an explicit relationship between the four-corner physical carrier registration and CAD working-surface placement. Preserve the affine transform, measured-corner provenance, fit residuals and registration revisions; do not silently coerce the measured registration into an orthogonal CAD rectangle.
-2. Integrate the camera-v2.0 module as a controlled subtree, not a wholesale branch merge. Exclude the previously rejected AcquisitionIntegrityTracker and Qt adapters/preview; add a backend-neutral provider/session API.
-3. Add authoritative equipment-definition JSON loading and revision persistence, plus mode/profile enumeration and database migration ownership.
-4. Build the microscope-level Application composition root, observed-state snapshot and configuration reconciler.
-5. Complete stage/optical hardware adapters and operation cancellation/timeout/late-completion semantics.
-6. Add the Slide-to-Tile acquisition contract and one complete single-tile capture workflow.
-7. Move domain decisions and persistence behind the C++ Application API; leave SwiftUI as presentation.
+1. Verify the registration/working-surface comparison on all three CI platforms. Then add a revisioned persistence path for the CAD working-surface layout and its explicit per-slide corner correspondence. Keep physical carrier calibration records separate.
+2. Add authoritative equipment-definition JSON loading and revision persistence, ConfigurationProfileCatalog persistence/loading, and a central database migration owner with shared connection/transaction semantics.
+3. Build the microscope-level Application composition root, observed-state snapshot and configuration reconciler.
+4. Complete stage/optical hardware adapters and operation cancellation/timeout/late-completion semantics.
+5. Integrate the camera-v2.0 module only after the C++ platform baseline is established, as a controlled subtree rather than a wholesale branch merge. Exclude AcquisitionIntegrityTracker and Qt adapters/preview; preserve the Common abstraction over AmScope and GenTL.
+6. Integrate the existing Swift acquisition coordinator with authoritative physical `SlideId`, camera sessions and stage/optical services. Keep capture orchestration, image/tile organization, persistence and gallery lifecycle in Swift; do not introduce a duplicate C++ acquisition workflow.
 
 ## Preservation constraints
 

@@ -117,7 +117,7 @@ void testGenericConfigurationAndAxisCommandConstruction() {
         "Z working range is configuration-specific");
 
     const auto* x=spec.linearAxis(LinearAxisRole::X);
-    check(x&&x->homeCommand()==axisId("stage-x"),"LinearAxis builds its own home intent");
+    check(x&&x->homeAxisId()==axisId("stage-x"),"LinearAxis builds its own home intent");
     auto absolute=x->moveTo(5'000'000);
     auto relative=x->moveBy(5'000'000,2'000);
     check(absolute&&absolute.value().position==5'000'000,"LinearAxis uses nanometre absolute targets");
@@ -133,7 +133,7 @@ void testGenericConfigurationAndAxisCommandConstruction() {
         "linear measurement uncertainty cannot be negative");
 
     const auto* theta=spec.rotationAxis(axisId("stage-theta"));
-    check(theta&&theta->homeCommand()==axisId("stage-theta"),"RotationAxis builds its own home intent");
+    check(theta&&theta->homeAxisId()==axisId("stage-theta"),"RotationAxis builds its own home intent");
     auto angularAbsolute=theta->rotateTo(0.25);
     auto angularRelative=theta->rotateBy(0.25,0.1);
     check(angularAbsolute&&std::abs(angularAbsolute.value().angle-0.25)<1e-12,

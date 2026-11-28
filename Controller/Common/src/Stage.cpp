@@ -130,7 +130,7 @@ Nanometres LinearAxis::accuracy()const noexcept{return accuracy_;}
 Nanometres LinearAxis::precision()const noexcept{return precision_;}
 const std::optional<Nanometres>& LinearAxis::measurementUncertainty()const noexcept{return measurementUncertainty_;}
 
-StageAxisId LinearAxis::homeCommand() const { return id_; }
+StageAxisId LinearAxis::homeAxisId() const { return id_; }
 core::Result<LinearAxisTarget,StageModelError> LinearAxis::moveTo(Nanometres target) const {
     if(!mechanicalTravelRange_.contains(target))
         return core::Result<LinearAxisTarget,StageModelError>::failure(StageModelError::TargetOutsideWorkingRange);
@@ -166,7 +166,7 @@ Radians RotationAxis::accuracy()const noexcept{return accuracy_;}
 Radians RotationAxis::precision()const noexcept{return precision_;}
 const std::optional<Radians>& RotationAxis::measurementUncertainty()const noexcept{return measurementUncertainty_;}
 
-StageAxisId RotationAxis::homeCommand() const { return id_; }
+StageAxisId RotationAxis::homeAxisId() const { return id_; }
 core::Result<RotationAxisTarget,StageModelError> RotationAxis::rotateTo(Radians target) const {
     if(!mechanicalTravelRange_.contains(target))
         return core::Result<RotationAxisTarget,StageModelError>::failure(StageModelError::TargetOutsideWorkingRange);
@@ -325,12 +325,12 @@ core::Result<StageMotionPlan,StageModelError> Stage::home() {
     for(const auto& working:activeConfiguration().workingLinearAxes()) {
         const auto* axis=specification_.linearAxis(working.axisId);
         if(!axis) return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::UnknownWorkingAxis);
-        plan.axesToHome.push_back(axis->homeCommand());
+        plan.axesToHome.push_back(axis->homeAxisId());
     }
     for(const auto& working:activeConfiguration().workingRotationAxes()) {
         const auto* axis=specification_.rotationAxis(working.axisId);
         if(!axis) return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::UnknownWorkingAxis);
-        plan.axesToHome.push_back(axis->homeCommand());
+        plan.axesToHome.push_back(axis->homeAxisId());
     }
     pendingPlan_=plan;
     return core::Result<StageMotionPlan,StageModelError>::success(std::move(plan));

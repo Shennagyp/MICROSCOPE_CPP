@@ -79,7 +79,8 @@ public:
 
     // Constructs an axis command. Hardware execution is delegated through
     // Core's existing IStageMotionPort and correlated operation runtime.
-    StageAxisId homeCommand() const;
+    // Identifier submitted by Stage when it builds the grouped HomeAxes plan.
+    StageAxisId homeAxisId() const;
     core::Result<LinearAxisTarget,StageModelError> moveTo(Nanometres) const;
     core::Result<LinearAxisTarget,StageModelError> moveBy(
         Nanometres currentPosition,Nanometres displacement) const;
@@ -113,7 +114,7 @@ public:
     Radians precision() const noexcept;
     const std::optional<Radians>& measurementUncertainty() const noexcept;
 
-    StageAxisId homeCommand() const;
+    StageAxisId homeAxisId() const;
     core::Result<RotationAxisTarget,StageModelError> rotateTo(Radians) const;
     core::Result<RotationAxisTarget,StageModelError> rotateBy(Radians current,Radians delta) const;
 private:

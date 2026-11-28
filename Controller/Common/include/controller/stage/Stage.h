@@ -16,7 +16,8 @@ using EquipmentComponentId = core::EquipmentComponentId;
 
 enum class StageModelError {
     InvalidRange, InvalidAngularRange, InvalidAxisSpecification, InvalidSlotRange,
-    DuplicateAxisId, DuplicateConfigurationId, DuplicateWorkingAxis, DuplicateSlotId,
+    DuplicateAxisId, DuplicateLinearAxisRole, DuplicateConfigurationId,
+    DuplicateWorkingAxis, DuplicateSlotId,
     MissingXWorkingAxis, MissingYWorkingAxis, MissingZWorkingAxis, UnknownWorkingAxis,
     EffectiveRangeOutsideMechanicalRange, SlotOutsideWorkingRange, OverlappingSlots,
     NoSlots, ConfigurationNotFound, PositionUnknown, TargetOutsideWorkingRange,

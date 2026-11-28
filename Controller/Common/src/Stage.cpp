@@ -232,8 +232,13 @@ core::Result<StageSpecification,StageModelError> StageSpecification::create(
     std::vector<RotationAxis> r,std::vector<StageConfiguration> c){
     if(l.empty()||c.empty())return core::Result<StageSpecification,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
     std::set<StageAxisId> ids;
-    for(const auto& a:l)if(!ids.insert(a.id()).second)
-        return core::Result<StageSpecification,StageModelError>::failure(StageModelError::DuplicateAxisId);
+    std::set<LinearAxisRole> physicalLinearRoles;
+    for(const auto& a:l) {
+        if(!ids.insert(a.id()).second)
+            return core::Result<StageSpecification,StageModelError>::failure(StageModelError::DuplicateAxisId);
+        if(!physicalLinearRoles.insert(a.role()).second)
+            return core::Result<StageSpecification,StageModelError>::failure(StageModelError::DuplicateLinearAxisRole);
+    }
     for(const auto& a:r)if(!ids.insert(a.id()).second)
         return core::Result<StageSpecification,StageModelError>::failure(StageModelError::DuplicateAxisId);
     std::set<StageConfigurationId> configIds;

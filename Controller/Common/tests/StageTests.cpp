@@ -116,6 +116,18 @@ void testGenericConfigurationAndAxisCommandConstruction() {
     check(spec.configuration(slides)->workingLinearAxes()[2].effectiveRange.minimum()==8'000'000,
         "Z working range is configuration-specific");
 
+    auto duplicateX=take(LinearAxis::create(
+        axisId("duplicate-stage-x"),LinearAxisRole::X,nmRange(0,1'000'000'000),
+        100,2'000,500));
+    auto duplicateAxes=spec.linearAxes();
+    duplicateAxes.push_back(std::move(duplicateX));
+    auto duplicateRoleDefinition=StageSpecification::create(
+        componentId("duplicate-role-stage"),std::move(duplicateAxes),spec.rotationAxes(),
+        {*spec.configuration(slides)});
+    check(!duplicateRoleDefinition&&
+          duplicateRoleDefinition.error()==StageModelError::DuplicateLinearAxisRole,
+        "a physical Stage cannot contain two linear axes assigned the same X/Y/Z role");
+
     const auto* x=spec.linearAxis(LinearAxisRole::X);
     check(x&&x->homeAxisId()==axisId("stage-x"),"LinearAxis builds its own home intent");
     auto absolute=x->moveTo(5'000'000);

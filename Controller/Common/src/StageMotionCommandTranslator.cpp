@@ -63,8 +63,13 @@ core::Result<double,StageMotionTranslationError> toRotationUnit(
 core::Result<StageMotionCommandTranslation,StageMotionTranslationError>
 StageMotionCommandTranslator::translate(
     const StageMotionPlan& plan,
-    const StageSpecification& controllerStage,
+    const Stage& stage,
     const core::StageSpecification& installedStage) {
+    const auto validPlan=stage.validateForDispatch(plan);
+    if(!validPlan)
+        return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+            StageMotionTranslationError::StalePlan);
+    const auto& controllerStage=stage.specification();
     if(!plan.configurationId)
         return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
             StageMotionTranslationError::MissingPlanConfiguration);

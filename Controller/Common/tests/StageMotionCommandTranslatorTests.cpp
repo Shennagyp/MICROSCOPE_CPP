@@ -114,7 +114,7 @@ Fixture makeFixture() {
 void testHomeTranslationUsesCoreMotionContract() {
     auto fixture=makeFixture();
     auto plan=take(fixture.stage.home());
-    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),fixture.installedStage);
+    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage,fixture.installedStage);
     check(static_cast<bool>(translated),"translates Controller home plan");
     if(!translated) return;
     check(translated.value().planSequence==plan.sequence,"preserves plan correlation sequence");
@@ -129,7 +129,7 @@ void testLinearNanometresConvertToInstalledEquipmentUnit() {
     auto home=take(fixture.stage.home());
     check(static_cast<bool>(fixture.stage.recordCompletedHome(home,homeReference(home))),"home plan completion");
     auto plan=take(fixture.stage.moveTo({12'000'000,10'000'000},fixture.secondSlot));
-    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),fixture.installedStage);
+    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage,fixture.installedStage);
     check(static_cast<bool>(translated),"translates slot motion plan");
     if(!translated) return;
     const auto* move=std::get_if<core::MoveAxesTo>(&translated.value().command);
@@ -157,7 +157,7 @@ void testRadiansConvertToInstalledDegrees() {
     target.linear={10'000'000,10'000'000,10'000'000};
     target.rotations.push_back({axisId("theta"),0.25});
     auto plan=take(fixture.stage.moveTo(target));
-    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),fixture.installedStage);
+    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage,fixture.installedStage);
     check(static_cast<bool>(translated),"translates rotary motion plan");
     if(!translated) return;
     const auto* move=std::get_if<core::MoveAxesTo>(&translated.value().command);
@@ -178,7 +178,7 @@ void testRejectsControllerEquipmentAxisMismatch() {
             equipmentAxis(axisId("x"),core::AxisMotionType::Linear,
                 core::AxisCoordinateUnit::Micrometers,0,1'000'000)
         }));
-    const auto result=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),missingAxis);
+    const auto result=StageMotionCommandTranslator::translate(plan,fixture.stage,missingAxis);
     check(!result&&result.error()==StageMotionTranslationError::UnknownEquipmentAxis,
         "rejects plans containing an axis absent from the installed equipment definition");
 }
@@ -190,6 +190,7 @@ int main() {
     testLinearNanometresConvertToInstalledEquipmentUnit();
     testRadiansConvertToInstalledDegrees();
     testRejectsControllerEquipmentAxisMismatch();
+    testRejectsTamperedPlanBeforeEquipmentTranslation();
     if(failures) {
         std::cerr<<failures<<" Stage motion translation tests failed.\n";
         return 1;

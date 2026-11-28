@@ -11,6 +11,7 @@ namespace microscope::controller {
 
 enum class StageMotionTranslationError {
     MissingPlanConfiguration,
+    StalePlan,
     StageComponentMismatch,
     ConfigurationNotFound,
     ControllerAxisNotFound,
@@ -38,7 +39,7 @@ public:
     static core::Result<StageMotionCommandTranslation,StageMotionTranslationError>
     translate(
         const StageMotionPlan& plan,
-        const StageSpecification& controllerStage,
+        const Stage& stage,
         const core::StageSpecification& installedStage);
 };
 

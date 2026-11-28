@@ -23,7 +23,9 @@ enum class StageModelError {
     NoSlots, ConfigurationNotFound, PositionUnknown, TargetOutsideWorkingRange,
     TargetOutsideSlot, RotationTargetMismatch, CoordinateOverflow, MotionInProgress,
     StaleMotionPlan, RefreshNotReady, HomeReferenceEvidenceRequired,
-    InvalidHomeReferenceEvidence, MotionSequenceExhausted
+    InvalidHomeReferenceEvidence, MotionSequenceExhausted,
+    MissingEquipmentConfiguration, UnsupportedEquipmentAxis,
+    EquipmentCoordinateNotRepresentable
 };
 
 class NanometreRange final {
@@ -66,7 +68,8 @@ enum class LinearAxisRole { X,Y,Z };
 class LinearAxis final {
 public:
     static core::Result<LinearAxis,StageModelError> create(
-        StageAxisId,LinearAxisRole,NanometreRange,Nanometres,Nanometres,Nanometres,
+        StageAxisId,LinearAxisRole,NanometreRange,Nanometres,
+        std::optional<Nanometres> accuracy,std::optional<Nanometres> precision,
         std::optional<Nanometres> measurementUncertainty = std::nullopt);
     const StageAxisId& id() const noexcept;
     LinearAxisRole role() const noexcept;
@@ -74,8 +77,8 @@ public:
     // Minimum commandable increment, accuracy, precision and measurement
     // uncertainty are independent equipment properties, all in nanometres.
     Nanometres minimumIncrement() const noexcept;
-    Nanometres accuracy() const noexcept;
-    Nanometres precision() const noexcept;
+    const std::optional<Nanometres>& accuracy() const noexcept;
+    const std::optional<Nanometres>& precision() const noexcept;
     const std::optional<Nanometres>& measurementUncertainty() const noexcept;
 
     // Constructs an axis command. Hardware execution is delegated through
@@ -86,12 +89,13 @@ public:
     core::Result<LinearAxisTarget,StageModelError> moveBy(
         Nanometres currentPosition,Nanometres displacement) const;
 private:
-    LinearAxis(StageAxisId,LinearAxisRole,NanometreRange,Nanometres,Nanometres,Nanometres,
-        std::optional<Nanometres>);
+    LinearAxis(StageAxisId,LinearAxisRole,NanometreRange,Nanometres,
+        std::optional<Nanometres>,std::optional<Nanometres>,std::optional<Nanometres>);
     StageAxisId id_;
     LinearAxisRole role_;
     NanometreRange mechanicalTravelRange_;
-    Nanometres minimumIncrement_,accuracy_,precision_;
+    Nanometres minimumIncrement_;
+    std::optional<Nanometres> accuracy_,precision_;
     std::optional<Nanometres> measurementUncertainty_;
 };
 
@@ -103,7 +107,8 @@ struct RotationAxisGeometry final {
 class RotationAxis final {
 public:
     static core::Result<RotationAxis,StageModelError> create(
-        StageAxisId,RotationAxisGeometry,RadianRange,Radians,Radians,Radians,
+        StageAxisId,RotationAxisGeometry,RadianRange,Radians,
+        std::optional<Radians> accuracy,std::optional<Radians> precision,
         std::optional<Radians> measurementUncertainty = std::nullopt);
     const StageAxisId& id() const noexcept;
     const RotationAxisGeometry& geometry() const noexcept;
@@ -111,20 +116,21 @@ public:
     // Angular increment, accuracy, precision and measurement uncertainty
     // are independent equipment properties, all in radians.
     Radians minimumIncrement() const noexcept;
-    Radians accuracy() const noexcept;
-    Radians precision() const noexcept;
+    const std::optional<Radians>& accuracy() const noexcept;
+    const std::optional<Radians>& precision() const noexcept;
     const std::optional<Radians>& measurementUncertainty() const noexcept;
 
     StageAxisId homeAxisId() const;
     core::Result<RotationAxisTarget,StageModelError> rotateTo(Radians) const;
     core::Result<RotationAxisTarget,StageModelError> rotateBy(Radians current,Radians delta) const;
 private:
-    RotationAxis(StageAxisId,RotationAxisGeometry,RadianRange,Radians,Radians,Radians,
-        std::optional<Radians>);
+    RotationAxis(StageAxisId,RotationAxisGeometry,RadianRange,Radians,
+        std::optional<Radians>,std::optional<Radians>,std::optional<Radians>);
     StageAxisId id_;
     RotationAxisGeometry geometry_;
     RadianRange mechanicalTravelRange_;
-    Radians minimumIncrement_,accuracy_,precision_;
+    Radians minimumIncrement_;
+    std::optional<Radians> accuracy_,precision_;
     std::optional<Radians> measurementUncertainty_;
 };
 
@@ -215,6 +221,10 @@ class Stage final {
 public:
     static core::Result<Stage,StageModelError> create(
         StageSpecification,StageConfigurationId);
+    // One-way projection from the canonical installed Core equipment model.
+    // Runtime position, pending plans and completion state are initialized empty.
+    static core::Result<Stage,StageModelError> fromEquipmentSpecification(
+        const core::StageSpecification&,const StageConfigurationId&);
 
     core::Result<StageMotionPlan,StageModelError> home();
     core::Result<StageRefreshPlan,StageModelError> refreshPosition();

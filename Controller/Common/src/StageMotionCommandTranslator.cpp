@@ -29,6 +29,72 @@ const WorkingRotationAxis* findWorkingRotation(
     return it==configuration.workingRotationAxes().end()?nullptr:&*it;
 }
 
+const core::StageConfigurationSpecification* findEquipmentConfiguration(
+    const core::StageSpecification& stage,const StageConfigurationId& id) noexcept {
+    const auto it=std::find_if(stage.configurations().begin(),stage.configurations().end(),
+        [&id](const core::StageConfigurationSpecification& value){return value.id()==id;});
+    return it==stage.configurations().end()?nullptr:&*it;
+}
+
+core::StageLinearAxisRole toCoreRole(LinearAxisRole role) noexcept {
+    switch(role) {
+    case LinearAxisRole::X:return core::StageLinearAxisRole::X;
+    case LinearAxisRole::Y:return core::StageLinearAxisRole::Y;
+    case LinearAxisRole::Z:return core::StageLinearAxisRole::Z;
+    }
+    return core::StageLinearAxisRole::X;
+}
+core::StageRotationAxisDirection toCoreDirection(RotationAxisDirection direction) noexcept {
+    switch(direction) {
+    case RotationAxisDirection::X:return core::StageRotationAxisDirection::X;
+    case RotationAxisDirection::Y:return core::StageRotationAxisDirection::Y;
+    case RotationAxisDirection::Z:return core::StageRotationAxisDirection::Z;
+    }
+    return core::StageRotationAxisDirection::Z;
+}
+
+bool configurationMatches(
+    const StageConfiguration& controller,
+    const core::StageConfigurationSpecification& equipment) noexcept {
+    if(controller.id()!=equipment.id()||
+       controller.workingLinearAxes().size()!=equipment.workingLinearAxes().size()||
+       controller.workingRotationAxes().size()!=equipment.workingRotationAxes().size()||
+       controller.slots().size()!=equipment.slots().size()) return false;
+
+    for(const auto& axis:controller.workingLinearAxes()) {
+        const auto it=std::find_if(equipment.workingLinearAxes().begin(),
+            equipment.workingLinearAxes().end(),
+            [&axis](const core::StageWorkingLinearAxisSpecification& value){
+                return value.axisId==axis.axisId;
+            });
+        if(it==equipment.workingLinearAxes().end()||
+           it->effectiveRange.minimum()!=axis.effectiveRange.minimum()||
+           it->effectiveRange.maximum()!=axis.effectiveRange.maximum()) return false;
+    }
+    for(const auto& axis:controller.workingRotationAxes()) {
+        const auto it=std::find_if(equipment.workingRotationAxes().begin(),
+            equipment.workingRotationAxes().end(),
+            [&axis](const core::StageWorkingRotationAxisSpecification& value){
+                return value.axisId==axis.axisId;
+            });
+        if(it==equipment.workingRotationAxes().end()||
+           !approximatelyEqual(it->effectiveRange.minimum(),axis.effectiveRange.minimum())||
+           !approximatelyEqual(it->effectiveRange.maximum(),axis.effectiveRange.maximum())) return false;
+    }
+    for(const auto& slot:controller.slots()) {
+        const auto it=std::find_if(equipment.slots().begin(),equipment.slots().end(),
+            [&slot](const core::StageSlotSpecification& value){return value.id()==slot.id();});
+        if(it==equipment.slots().end()||
+           it->originInStageCoordinates().x!=slot.originInStageCoordinates().x||
+           it->originInStageCoordinates().y!=slot.originInStageCoordinates().y||
+           it->xRange().minimum()!=slot.xRange().minimum()||
+           it->xRange().maximum()!=slot.xRange().maximum()||
+           it->yRange().minimum()!=slot.yRange().minimum()||
+           it->yRange().maximum()!=slot.yRange().maximum()) return false;
+    }
+    return true;
+}
+
 core::Result<double,StageMotionTranslationError> toRotationUnit(
     Radians value,core::AxisCoordinateUnit unit);
 
@@ -109,6 +175,7 @@ StageMotionCommandTranslator::translate(
         return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
             StageMotionTranslationError::StalePlan);
     const auto& controllerStage=stage.specification();
+    const bool hasCanonicalConfigurations=!installedStage.configurations().empty();
     if(!plan.configurationId)
         return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
             StageMotionTranslationError::MissingPlanConfiguration);
@@ -120,6 +187,17 @@ StageMotionCommandTranslator::translate(
     if(configuration==nullptr)
         return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
             StageMotionTranslationError::ConfigurationNotFound);
+    if(hasCanonicalConfigurations) {
+        if(installedStage.configurations().size()!=controllerStage.configurations().size())
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                StageMotionTranslationError::EquipmentConfigurationMismatch);
+        const auto* installedConfiguration=findEquipmentConfiguration(
+            installedStage,*plan.configurationId);
+        if(installedConfiguration==nullptr||
+           !configurationMatches(*configuration,*installedConfiguration))
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                StageMotionTranslationError::EquipmentConfigurationMismatch);
+    }
 
     for(const auto& axis:controllerStage.linearAxes()) {
         const auto* equipment=findEquipmentAxis(installedStage,axis.id());
@@ -133,6 +211,10 @@ StageMotionCommandTranslator::translate(
         if(!rangeMatches.value())
             return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
                 StageMotionTranslationError::MechanicalRangeMismatch);
+        if(hasCanonicalConfigurations&&
+           (!equipment->linearRole()||*equipment->linearRole()!=toCoreRole(axis.role())))
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                StageMotionTranslationError::EquipmentConfigurationMismatch);
     }
     for(const auto& axis:controllerStage.rotationAxes()) {
         const auto* equipment=findEquipmentAxis(installedStage,axis.id());
@@ -146,6 +228,19 @@ StageMotionCommandTranslator::translate(
         if(!rangeMatches.value())
             return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
                 StageMotionTranslationError::MechanicalRangeMismatch);
+        if(hasCanonicalConfigurations) {
+            if(!equipment->rotationGeometry())
+                return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                    StageMotionTranslationError::EquipmentConfigurationMismatch);
+            const auto& expected=axis.geometry();
+            const auto& actual=*equipment->rotationGeometry();
+            if(actual.pointOnAxis.x!=expected.pointOnAxis.x||
+               actual.pointOnAxis.y!=expected.pointOnAxis.y||
+               actual.pointOnAxis.z!=expected.pointOnAxis.z||
+               actual.direction!=toCoreDirection(expected.direction))
+                return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                    StageMotionTranslationError::EquipmentConfigurationMismatch);
+        }
     }
 
     if(controllerStage.linearAxes().size()+controllerStage.rotationAxes().size()!=

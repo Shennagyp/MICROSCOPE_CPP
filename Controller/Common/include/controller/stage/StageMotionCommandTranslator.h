@@ -15,6 +15,7 @@ enum class StageMotionTranslationError {
     StageComponentMismatch,
     AxisInventoryMismatch,
     MechanicalRangeMismatch,
+    EquipmentConfigurationMismatch,
     ConfigurationNotFound,
     ControllerAxisNotFound,
     WorkingAxisMismatch,

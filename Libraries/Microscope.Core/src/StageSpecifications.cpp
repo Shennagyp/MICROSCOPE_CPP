@@ -356,7 +356,9 @@ Result<AxisSpecification, AxisSpecificationError> AxisSpecification::create(
             std::move(repeatability),
             std::move(measurementUncertainty),
             positionFeedback,
-            measurementLocation));
+            measurementLocation,
+            linearRole,
+            rotationGeometry));
 }
 
 const StageAxisId& AxisSpecification::id() const noexcept {

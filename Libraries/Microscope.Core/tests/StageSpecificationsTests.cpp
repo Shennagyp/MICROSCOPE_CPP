@@ -80,6 +80,30 @@ AxisMeasurementUncertaintySpecification uncertaintySpec(
         uncertainty(value), std::move(conditions)));
 }
 
+AxisSpecification configuredLinearAxis(
+    const char* id,StageLinearAxisRole role,double minimumUm,double maximumUm) {
+    return take(AxisSpecification::create(
+        makeId<StageAxisId>(id),AxisMotionType::Linear,AxisCoordinateUnit::Micrometers,
+        range(minimumUm,maximumUm,AxisCoordinateUnit::Micrometers),resolution(0.1),
+        std::nullopt,std::nullopt,std::nullopt,
+        AxisPositionFeedbackCapability::None,std::nullopt,role));
+}
+AxisSpecification configuredRotationAxis(
+    const char* id,StageRotationAxisDirection direction) {
+    return take(AxisSpecification::create(
+        makeId<StageAxisId>(id),AxisMotionType::Rotary,AxisCoordinateUnit::Degrees,
+        range(-180.0,180.0,AxisCoordinateUnit::Degrees),resolution(0.01),
+        std::nullopt,std::nullopt,std::nullopt,
+        AxisPositionFeedbackCapability::None,std::nullopt,std::nullopt,
+        StageRotationAxisGeometry{{0,0,15'000'000},direction}));
+}
+StageNanometreRange nmRange(StageNanometres minimum,StageNanometres maximum) {
+    return take(StageNanometreRange::create(minimum,maximum));
+}
+StageRadianRange radRange(double minimum,double maximum) {
+    return take(StageRadianRange::create(minimum,maximum));
+}
+
 AxisSpecification linearAxis(
     const char* id,
     std::optional<AxisAccuracySpecification> accuracyValue,
@@ -317,6 +341,112 @@ void testStageRequiresUniqueAxisIdentities() {
           "supports multiple independently specified axes in one stage");
 }
 
+void testGenericStageConfigurationsAndNPhysicalSlots() {
+    const auto xId=makeId<StageAxisId>("stage-x");
+    const auto yId=makeId<StageAxisId>("stage-y");
+    const auto zId=makeId<StageAxisId>("stage-z");
+    const auto thetaId=makeId<StageAxisId>("stage-theta");
+    auto x=configuredLinearAxis("stage-x",StageLinearAxisRole::X,0.0,900'000.0);
+    auto y=configuredLinearAxis("stage-y",StageLinearAxisRole::Y,0.0,300'000.0);
+    auto z=configuredLinearAxis("stage-z",StageLinearAxisRole::Z,0.0,100'000.0);
+    auto theta=configuredRotationAxis("stage-theta",StageRotationAxisDirection::Z);
+
+    const auto slidesId=makeId<StageConfigurationId>("slides-holder");
+    const auto petriId=makeId<StageConfigurationId>("petri-holder");
+    std::vector<StageSlotSpecification> slideSlots;
+    for(int index=0;index<10;++index) {
+        const auto name="slide-slot-"+std::to_string(index+1);
+        slideSlots.push_back(take(StageSlotSpecification::create(
+            makeId<StageSlotId>(name.c_str()),
+            {20'000'000+static_cast<StageNanometres>(index)*80'000'000,20'000'000},
+            nmRange(0,75'000'000),nmRange(0,25'000'000))));
+    }
+
+    auto slideConfiguration=take(StageConfigurationSpecification::create(
+        slidesId,
+        {{xId,nmRange(0,900'000'000)},
+         {yId,nmRange(0,300'000'000)},
+         {zId,nmRange(8'000'000,80'000'000)}},
+        {},std::move(slideSlots)));
+    auto petriSlot=take(StageSlotSpecification::create(
+        makeId<StageSlotId>("petri-dish-slot"),{0,0},
+        nmRange(0,150'000'000),nmRange(0,150'000'000)));
+    auto petriConfiguration=take(StageConfigurationSpecification::create(
+        petriId,
+        {{xId,nmRange(0,900'000'000)},
+         {yId,nmRange(0,300'000'000)},
+         {zId,nmRange(2'000'000,60'000'000)}},
+        {{thetaId,radRange(-1.5707963267948966,1.5707963267948966)}},
+        {std::move(petriSlot)}));
+
+    auto stage=take(StageSpecification::create(
+        makeId<EquipmentComponentId>("configured-stage"),
+        {std::move(x),std::move(y),std::move(z),std::move(theta)},
+        {std::move(slideConfiguration),std::move(petriConfiguration)}));
+    check(stage.configurations().size()==2,
+        "one installed Core Stage contains multiple working configurations");
+    check(stage.configurations()[0].slots().size()==10,
+        "holder configuration represents ten physical slots without a dual-slide type");
+    check(stage.configurations()[1].slots().size()==1,
+        "Petri-dish holder is represented as one generic slot");
+    check(stage.configurations()[0].workingRotationAxes().empty(),
+        "rotation is absent from a configuration that does not use it");
+    check(stage.configurations()[1].workingRotationAxes().size()==1,
+        "rotation is included only in the configuration that uses it");
+    check(stage.configurations()[0].workingLinearAxes()[2].effectiveRange.minimum()==8'000'000&&
+          stage.configurations()[1].workingLinearAxes()[2].effectiveRange.minimum()==2'000'000,
+        "each configuration owns its own effective Z working range");
+
+    auto tooWideSlot=take(StageSlotSpecification::create(
+        makeId<StageSlotId>("outside-slot"),{880'000'000,0},
+        nmRange(0,50'000'000),nmRange(0,25'000'000)));
+    auto invalidConfig=take(StageConfigurationSpecification::create(
+        makeId<StageConfigurationId>("outside-envelope"),
+        {{xId,nmRange(0,900'000'000)},
+         {yId,nmRange(0,300'000'000)},
+         {zId,nmRange(0,100'000'000)}},{},{std::move(tooWideSlot)}));
+    auto outside=StageSpecification::create(
+        makeId<EquipmentComponentId>("outside-stage"),
+        {configuredLinearAxis("stage-x",StageLinearAxisRole::X,0.0,900'000.0),
+         configuredLinearAxis("stage-y",StageLinearAxisRole::Y,0.0,300'000.0),
+         configuredLinearAxis("stage-z",StageLinearAxisRole::Z,0.0,100'000.0)},
+        {std::move(invalidConfig)});
+    check(!outside&&outside.error()==StageSpecificationError::SlotOutsideWorkingRange,
+        "rejects slots extending beyond the configuration's XY envelope");
+
+    auto invalidZ=take(StageConfigurationSpecification::create(
+        makeId<StageConfigurationId>("outside-z"),
+        {{xId,nmRange(0,900'000'000)},
+         {yId,nmRange(0,300'000'000)},
+         {zId,nmRange(0,110'000'000)}},{},
+        {take(StageSlotSpecification::create(
+            makeId<StageSlotId>("z-slot"),{0,0},
+            nmRange(0,50'000'000),nmRange(0,25'000'000)))}));
+    auto zOutside=StageSpecification::create(
+        makeId<EquipmentComponentId>("z-outside-stage"),
+        {configuredLinearAxis("stage-x",StageLinearAxisRole::X,0.0,900'000.0),
+         configuredLinearAxis("stage-y",StageLinearAxisRole::Y,0.0,300'000.0),
+         configuredLinearAxis("stage-z",StageLinearAxisRole::Z,0.0,100'000.0)},
+        {std::move(invalidZ)});
+    check(!zOutside&&zOutside.error()==StageSpecificationError::InvalidEffectiveAxisRange,
+        "rejects a configuration whose effective Z range exceeds mechanical travel");
+
+    auto missingZ=take(StageConfigurationSpecification::create(
+        makeId<StageConfigurationId>("missing-z"),
+        {{xId,nmRange(0,900'000'000)},{yId,nmRange(0,300'000'000)}},{},
+        {take(StageSlotSpecification::create(
+            makeId<StageSlotId>("missing-z-slot"),{0,0},
+            nmRange(0,50'000'000),nmRange(0,25'000'000)))}));
+    auto noZ=StageSpecification::create(
+        makeId<EquipmentComponentId>("missing-z-stage"),
+        {configuredLinearAxis("stage-x",StageLinearAxisRole::X,0.0,900'000.0),
+         configuredLinearAxis("stage-y",StageLinearAxisRole::Y,0.0,300'000.0),
+         configuredLinearAxis("stage-z",StageLinearAxisRole::Z,0.0,100'000.0)},
+        {std::move(missingZ)});
+    check(!noZ&&noZ.error()==StageSpecificationError::MissingZWorkingAxis,
+        "every active configuration must define an effective Z range");
+}
+
 void testEquipmentAggregateValidatesStageBinding() {
     const auto microscopeId = makeId<MicroscopeId>("stage-binding-microscope");
     const auto stageId = makeId<EquipmentComponentId>("stage-mechanical-assembly");
@@ -400,6 +530,7 @@ int main() {
     testFeedbackCapabilityAndLocationAreExplicit();
     testStageRequiresUniqueAxisIdentities();
     testEquipmentAggregateValidatesStageBinding();
+    testGenericStageConfigurationsAndNPhysicalSlots();
 
     if (failures != 0) {
         std::cerr << failures << " stage/axis contract test(s) failed.\n";

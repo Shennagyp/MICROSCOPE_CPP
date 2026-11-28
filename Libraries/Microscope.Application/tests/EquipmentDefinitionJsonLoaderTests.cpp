@@ -577,7 +577,7 @@ void parsesSchemaV2GenericStageConfigurations() {
 
     auto legacyCarrierField=replaceOnce(validV2Document(),
         "  \"filterSpecifications\": [",
-        "  \"dualSlideCarrierSpecifications\": [],\\n  \"filterSpecifications\": [");
+        "  \"dualSlideCarrierSpecifications\": [],\n  \"filterSpecifications\": [");
     const auto obsolete=EquipmentDefinitionJsonLoader::parse(legacyCarrierField);
     check(!obsolete&&obsolete.error().code==EquipmentDefinitionJsonErrorCode::UnknownField,
         "schema v2 rejects the retired fixed dual-slide carrier specification field");

@@ -351,7 +351,8 @@ void testMicroscopeInstanceOwnsStage() {
     auto spec=makeSpecification(slides,petri,second);
     auto stage=take(Stage::create(std::move(spec),slides));
     auto microscopeId=take(core::MicroscopeId::create("optika-b293-instance"));
-    MicroscopeInstance instance(std::move(microscopeId),std::move(stage));
+    MicroscopeInstance instance(std::move(microscopeId),
+        take(core::DeviceId::create("optika-b293-stage-device")),std::move(stage));
     check(instance.stage().specification().configurations().size()==2,
         "MicroscopeInstance owns one Stage with generic configurations");
     auto home=take(instance.stage().home());

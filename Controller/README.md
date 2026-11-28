@@ -6,7 +6,10 @@ not define a second hardware-driver interface.
 
 ## Object ownership
 
-`MicroscopeInstance` owns one live `Stage`. The Stage owns its installed
+`MicroscopeInstance` owns one live `Stage` and an explicit runtime `DeviceId`
+binding for the physical Stage controller. The binding is distinct from the
+Stage's equipment `EquipmentComponentId`; the dispatcher checks the runtime
+microscope ID and the bound Stage device ID independently. The Stage owns its installed
 `LinearAxis` and `RotationAxis` objects, available `StageConfiguration`
 objects, active configuration, and current position evidence.
 
@@ -38,7 +41,9 @@ The Stage and axis objects create typed `StageMotionPlan` values. A plan
 has a monotonically increasing sequence and the active configuration identity.
 Only one plan can be pending for a Stage at a time. The translator validates
 that the plan is exactly the live Stage's pending plan before generating Core
-commands.
+commands. For schema-v2 equipment, it also requires the selected runtime
+configuration, physical axis roles/rotation geometry, working ranges, and slot
+rectangles to match the canonical equipment definition.
 
 The Application `StageMotionPlanDispatcher` translates the plan and submits it
 through the existing correlated `StageMotionCommandDispatcher`,

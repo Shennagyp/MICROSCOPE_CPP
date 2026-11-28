@@ -51,8 +51,7 @@ public:
             return Result::failure(StageMotionPlanDispatchError{
                 StageMotionPlanIdentityError::MicroscopeIdentityMismatch});
         }
-        if(context.runtimeDevice().deviceId.value()!=
-           stage.specification().componentId().value()) {
+        if(context.runtimeDevice().deviceId!=microscope.stageDeviceId()) {
             (void)stage.cancelUndispatchedPlan(plan);
             return Result::failure(StageMotionPlanDispatchError{
                 StageMotionPlanIdentityError::StageDeviceIdentityMismatch});

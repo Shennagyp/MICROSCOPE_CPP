@@ -210,7 +210,8 @@ int main() {
     auto identityStage=take(controller::Stage::create(
         controllerStageSpecification(),id<core::StageConfigurationId>("slides")));
     controller::MicroscopeInstance wrongMicroscope(
-        id<core::MicroscopeId>("another-scope"),std::move(identityStage));
+        id<core::MicroscopeId>("another-scope"),
+        id<core::DeviceId>("stage"),std::move(identityStage));
     const auto identityPlan=take(wrongMicroscope.stage().home());
     const auto identityRejected=
         application::motion::StageMotionPlanDispatcher::dispatch(
@@ -232,7 +233,8 @@ int main() {
     auto wrongDeviceStage=take(controller::Stage::create(
         controllerStageSpecification(),id<core::StageConfigurationId>("slides")));
     controller::MicroscopeInstance wrongDeviceMicroscope(
-        id<core::MicroscopeId>("scope"),std::move(wrongDeviceStage));
+        id<core::MicroscopeId>("scope"),
+        id<core::DeviceId>("stage"),std::move(wrongDeviceStage));
     const auto wrongDevicePlan=take(wrongDeviceMicroscope.stage().home());
     const auto wrongDeviceRejected=
         application::motion::StageMotionPlanDispatcher::dispatch(
@@ -255,7 +257,8 @@ int main() {
     auto liveStage=take(controller::Stage::create(
         controllerStage,id<core::StageConfigurationId>("slides")));
     controller::MicroscopeInstance microscopeInstance(
-        id<core::MicroscopeId>("scope"),std::move(liveStage));
+        id<core::MicroscopeId>("scope"),
+        id<core::DeviceId>("stage"),std::move(liveStage));
     auto& ownedStage=microscopeInstance.stage();
     const auto homePlan=take(ownedStage.home());
     const auto planReceipt=take(

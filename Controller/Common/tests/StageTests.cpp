@@ -32,6 +32,20 @@ NanometreRange nmRange(Nanometres min,Nanometres max) {
 RadianRange radRange(Radians min,Radians max) {
     return take(RadianRange::create(min,max));
 }
+core::StageMotionActionCompletion actionCompletion(const StageMotionPlan& plan) {
+    std::vector<core::StageAxisId> axes;
+    core::StageMotionAction action=core::StageMotionAction::MoveAxesTo;
+    if(plan.action==StageMotionAction::Home) {
+        action=core::StageMotionAction::HomeAxes;
+        axes=plan.axesToHome;
+    } else {
+        for(const auto& target:plan.linearTargets) axes.push_back(target.axisId);
+        for(const auto& target:plan.rotationTargets) axes.push_back(target.axisId);
+    }
+    return take(core::StageMotionActionCompletion::create(
+        action,take(core::StageAxisSet::create(std::move(axes)))));
+}
+
 core::StageHomeReferenceObservation homeReference(const StageMotionPlan& plan) {
     std::vector<core::AxisPositionObservation> positions;
     positions.reserve(plan.axesToHome.size());
@@ -130,7 +144,7 @@ void testCorrelatedMotionPlansAndCurrentSlot() {
     check(home.action==StageMotionAction::Home&&home.axesToHome.size()==3,
         "home plan includes every active linear axis");
     check(!stage.home(),"does not create a second plan while one is pending");
-    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),
+    check(static_cast<bool>(stage.recordCompletedHome(home,actionCompletion(home),homeReference(home))),
         "home state is recorded only after correlated completion");
 
     auto move=take(stage.moveTo({12'000'000,10'000'000},second));
@@ -141,10 +155,10 @@ void testCorrelatedMotionPlansAndCurrentSlot() {
         "translates the local slot point into global stage coordinates");
     check(!stage.currentSlotId().has_value(),
         "creating a motion plan does not optimistically change current position");
-    check(static_cast<bool>(stage.recordCompletedMotion(move)),
+    check(static_cast<bool>(stage.recordCompletedMotion(move,actionCompletion(move))),
         "matching completion updates the command-derived position");
     check(stage.currentSlotId()==second,"current slot is derived from global XY position");
-    check(!stage.recordCompletedMotion(move),"duplicate completion is rejected");
+    check(!stage.recordCompletedMotion(move,actionCompletion(move)),"duplicate completion is rejected");
     check(!stage.moveTo({76'000'000,1},second),"rejects movement outside slot usable range");
 }
 
@@ -155,7 +169,7 @@ void testFailedMotionInvalidatesPosition() {
     auto stage=take(Stage::create(std::move(spec),slides));
 
     auto home=take(stage.home());
-    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),"initial home completes");
+    check(static_cast<bool>(stage.recordCompletedHome(home,actionCompletion(home),homeReference(home))),"initial home completes");
     auto move=take(stage.moveTo({10'000'000,10'000'000},second));
     check(static_cast<bool>(stage.recordFailedMotion(move)),
         "failed or indeterminate motion is reconciled explicitly");
@@ -172,14 +186,14 @@ void testRefreshPositionHomeAndRestoreWorkflow() {
     auto stage=take(Stage::create(std::move(spec),slides));
 
     auto home=take(stage.home());
-    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),"initial home completes");
+    check(static_cast<bool>(stage.recordCompletedHome(home,actionCompletion(home),homeReference(home))),"initial home completes");
     auto xy=take(stage.moveTo({4'000'000,5'000'000},second));
-    check(static_cast<bool>(stage.recordCompletedMotion(xy)),"slot XY movement completes");
+    check(static_cast<bool>(stage.recordCompletedMotion(xy,actionCompletion(xy))),"slot XY movement completes");
 
     StageAbsolutePosition target;
     target.linear={104'000'000,25'000'000,12'000'000};
     auto absolute=take(stage.moveTo(target));
-    check(static_cast<bool>(stage.recordCompletedMotion(absolute)),"absolute XYZ movement completes");
+    check(static_cast<bool>(stage.recordCompletedMotion(absolute,actionCompletion(absolute))),"absolute XYZ movement completes");
 
     auto refresh=take(stage.refreshPosition());
     check(refresh.homePlan.action==StageMotionAction::Home,"refresh begins with a home plan");
@@ -187,7 +201,7 @@ void testRefreshPositionHomeAndRestoreWorkflow() {
           refresh.restorePosition.linear.y==25'000'000&&
           refresh.restorePosition.linear.z==12'000'000,
         "refresh saves the exact global position");
-    check(static_cast<bool>(stage.recordCompletedHome(refresh.homePlan,homeReference(refresh.homePlan))),
+    check(static_cast<bool>(stage.recordCompletedHome(refresh.homePlan,actionCompletion(refresh.homePlan),homeReference(refresh.homePlan))),
         "refresh home completion is recorded");
     auto restore=take(stage.restorePositionAfterRefresh(refresh));
     check(restore.refreshRestoration&&restore.linearTargets.size()==3,
@@ -196,7 +210,7 @@ void testRefreshPositionHomeAndRestoreWorkflow() {
           restore.linearTargets[1].position==25'000'000&&
           restore.linearTargets[2].position==12'000'000,
         "restore plan retains the saved global coordinates");
-    check(static_cast<bool>(stage.recordCompletedMotion(restore)),
+    check(static_cast<bool>(stage.recordCompletedMotion(restore,actionCompletion(restore))),
         "restoration updates state only after completion");
     check(stage.currentPosition().x==104'000'000&&stage.currentPosition().y==25'000'000&&
           stage.currentPosition().z==12'000'000,"refresh ends at the saved position");
@@ -208,14 +222,14 @@ void testConfigurationActivationAndRotation() {
     auto spec=makeSpecification(slides,petri,second);
     auto stage=take(Stage::create(std::move(spec),slides));
     auto home=take(stage.home());
-    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),"home slide configuration");
+    check(static_cast<bool>(stage.recordCompletedHome(home,actionCompletion(home),homeReference(home))),"home slide configuration");
     check(static_cast<bool>(stage.activateConfiguration(petri)),
         "activates Petri configuration on same Stage");
     check(!stage.currentPosition().xyzKnown(),"different working axis set invalidates old evidence");
 
     auto petriHome=take(stage.home());
     check(petriHome.axesToHome.size()==4,"Petri config homes XYZ plus rotation");
-    check(static_cast<bool>(stage.recordCompletedHome(petriHome,homeReference(petriHome))),"Petri home completes");
+    check(static_cast<bool>(stage.recordCompletedHome(petriHome,actionCompletion(petriHome),homeReference(petriHome))),"Petri home completes");
 
     StageAbsolutePosition target;
     target.linear={10'000'000,10'000'000,10'000'000};
@@ -223,7 +237,7 @@ void testConfigurationActivationAndRotation() {
     auto move=take(stage.moveTo(target));
     check(move.rotationTargets.size()==1&&std::abs(move.rotationTargets[0].angle-0.25)<1e-12,
         "absolute move includes its rotation target in radians");
-    check(static_cast<bool>(stage.recordCompletedMotion(move)),"completed rotary move is recorded");
+    check(static_cast<bool>(stage.recordCompletedMotion(move,actionCompletion(move))),"completed rotary move is recorded");
 }
 
 void testMicroscopeInstanceOwnsStage() {

@@ -214,9 +214,12 @@ public:
 
     // A MoveTo changes the estimate only after its exact completion is accepted.
     // A home additionally requires the normalized machine-reference fact.
-    core::Status<StageModelError> recordCompletedMotion(const StageMotionPlan&);
+    core::Status<StageModelError> validateForDispatch(const StageMotionPlan&) const;
+    core::Status<StageModelError> cancelUndispatchedPlan(const StageMotionPlan&);
+    core::Status<StageModelError> recordCompletedMotion(
+        const StageMotionPlan&, const core::StageMotionActionCompletion&);
     core::Status<StageModelError> recordCompletedHome(
-        const StageMotionPlan&,
+        const StageMotionPlan&, const core::StageMotionActionCompletion&,
         const core::StageHomeReferenceObservation&);
     core::Status<StageModelError> recordFailedMotion(const StageMotionPlan&);
     void invalidatePosition() noexcept;

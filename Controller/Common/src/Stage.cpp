@@ -76,6 +76,18 @@ bool samePlan(const StageMotionPlan& left,const StageMotionPlan& right) noexcept
     }
     return true;
 }
+bool sameAxisSet(
+    const core::StageAxisSet& actual,
+    const std::vector<StageAxisId>& expected) {
+    if(actual.axes().size()!=expected.size()) return false;
+    std::set<StageAxisId> ids(expected.begin(),expected.end());
+    if(ids.size()!=expected.size()) return false;
+    for(const auto& id:actual.axes()) {
+        if(ids.erase(id)!=1) return false;
+    }
+    return ids.empty();
+}
+
 } // namespace
 
 NanometreRange::NanometreRange(Nanometres a,Nanometres b) noexcept:minimum_(a),maximum_(b){}
@@ -493,13 +505,30 @@ core::Status<StageModelError> Stage::validatePendingPlan(const StageMotionPlan& 
     return core::Status<StageModelError>::success();
 }
 
-core::Status<StageModelError> Stage::recordCompletedMotion(const StageMotionPlan& plan) {
+core::Status<StageModelError> Stage::validateForDispatch(const StageMotionPlan& plan) const {
+    return validatePendingPlan(plan);
+}
+core::Status<StageModelError> Stage::cancelUndispatchedPlan(const StageMotionPlan& plan) {
     auto valid=validatePendingPlan(plan);
     if(!valid) return valid;
-    if(plan.action==StageMotionAction::Home)
-        return core::Status<StageModelError>::failure(
-            StageModelError::HomeReferenceEvidenceRequired);
-    if(!plan.axesToHome.empty()||plan.linearTargets.empty())
+    pendingPlan_.reset();
+    return core::Status<StageModelError>::success();
+}
+
+core::Status<StageModelError> Stage::recordCompletedMotion(
+    const StageMotionPlan& plan,const core::StageMotionActionCompletion& completion) {
+    auto valid=validatePendingPlan(plan);
+    if(!valid) return valid;
+    if(plan.action!=StageMotionAction::MoveTo||
+       completion.action()!=core::StageMotionAction::MoveAxesTo||
+       !plan.axesToHome.empty()||plan.linearTargets.empty())
+        return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+
+    std::vector<StageAxisId> completionAxes;
+    completionAxes.reserve(plan.linearTargets.size()+plan.rotationTargets.size());
+    for(const auto& target:plan.linearTargets) completionAxes.push_back(target.axisId);
+    for(const auto& target:plan.rotationTargets) completionAxes.push_back(target.axisId);
+    if(!sameAxisSet(completion.axes(),completionAxes))
         return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
 
     // Validate against a copy first. Invalid or tampered completion payloads
@@ -556,11 +585,13 @@ core::Status<StageModelError> Stage::recordCompletedMotion(const StageMotionPlan
 
 core::Status<StageModelError> Stage::recordCompletedHome(
     const StageMotionPlan& plan,
+    const core::StageMotionActionCompletion& completion,
     const core::StageHomeReferenceObservation& observation) {
     auto valid=validatePendingPlan(plan);
     if(!valid) return valid;
-    if(plan.action!=StageMotionAction::Home||!plan.linearTargets.empty()||
-       !plan.rotationTargets.empty()||plan.refreshRestoration)
+    if(plan.action!=StageMotionAction::Home||
+       completion.action()!=core::StageMotionAction::HomeAxes||
+       !plan.linearTargets.empty()||!plan.rotationTargets.empty()||plan.refreshRestoration)
         return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
 
     std::vector<StageAxisId> expected;
@@ -569,7 +600,8 @@ core::Status<StageModelError> Stage::recordCompletedHome(
     for(const auto& axis:activeConfiguration().workingLinearAxes()) expected.push_back(axis.axisId);
     for(const auto& axis:activeConfiguration().workingRotationAxes()) expected.push_back(axis.axisId);
     auto expectedSet=core::StageAxisSet::create(std::move(expected));
-    if(!expectedSet||!observation.matchesAxes(expectedSet.value()))
+    if(!expectedSet||!sameAxisSet(completion.axes(),expected)||
+       !observation.matchesAxes(expectedSet.value()))
         return core::Status<StageModelError>::failure(
             StageModelError::InvalidHomeReferenceEvidence);
 

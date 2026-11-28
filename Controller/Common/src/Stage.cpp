@@ -8,6 +8,59 @@
 namespace microscope::controller {
 namespace {
 bool finite(Radians v) noexcept { return std::isfinite(v); }
+
+bool toNanometres(double value,core::AxisCoordinateUnit unit,Nanometres& output) noexcept {
+    if(!std::isfinite(value)) return false;
+    long double factor=0.0L;
+    switch(unit) {
+    case core::AxisCoordinateUnit::Micrometers: factor=1'000.0L; break;
+    case core::AxisCoordinateUnit::Millimeters: factor=1'000'000.0L; break;
+    default: return false;
+    }
+    const long double scaled=static_cast<long double>(value)*factor;
+    if(!std::isfinite(scaled)) return false;
+    const long double rounded=std::round(scaled);
+    // Reject sub-nanometre coordinates rather than silently rounding mechanical data.
+    if(std::abs(scaled-rounded)>1.0e-6L||
+       rounded<static_cast<long double>(std::numeric_limits<Nanometres>::min())||
+       rounded>static_cast<long double>(std::numeric_limits<Nanometres>::max()))
+        return false;
+    output=static_cast<Nanometres>(rounded);
+    return true;
+}
+
+bool toRadians(double value,core::AxisCoordinateUnit unit,Radians& output) noexcept {
+    if(!std::isfinite(value)) return false;
+    constexpr long double kPi=3.141592653589793238462643383279502884L;
+    switch(unit) {
+    case core::AxisCoordinateUnit::Radians:
+        output=value;
+        return true;
+    case core::AxisCoordinateUnit::Degrees:
+        output=static_cast<double>(static_cast<long double>(value)*kPi/180.0L);
+        return std::isfinite(output);
+    default:
+        return false;
+    }
+}
+
+bool toLinearRole(core::StageLinearAxisRole source,LinearAxisRole& output) noexcept {
+    switch(source) {
+    case core::StageLinearAxisRole::X: output=LinearAxisRole::X; return true;
+    case core::StageLinearAxisRole::Y: output=LinearAxisRole::Y; return true;
+    case core::StageLinearAxisRole::Z: output=LinearAxisRole::Z; return true;
+    }
+    return false;
+}
+bool toRotationDirection(core::StageRotationAxisDirection source,
+    RotationAxisDirection& output) noexcept {
+    switch(source) {
+    case core::StageRotationAxisDirection::X: output=RotationAxisDirection::X; return true;
+    case core::StageRotationAxisDirection::Y: output=RotationAxisDirection::Y; return true;
+    case core::StageRotationAxisDirection::Z: output=RotationAxisDirection::Z; return true;
+    }
+    return false;
+}
 bool validRole(LinearAxisRole v) noexcept {
     return v==LinearAxisRole::X || v==LinearAxisRole::Y || v==LinearAxisRole::Z;
 }
@@ -319,6 +372,181 @@ core::Result<Stage,StageModelError> Stage::create(
     return core::Result<Stage,StageModelError>::success(
         Stage(std::move(specification),std::move(active)));
 }
+core::Result<Stage,StageModelError> Stage::fromEquipmentSpecification(
+    const core::StageSpecification& equipment,const StageConfigurationId& active) {
+    if(equipment.configurations().empty()||
+       std::none_of(equipment.configurations().begin(),equipment.configurations().end(),
+           [&active](const core::StageConfigurationSpecification& value){return value.id()==active;}))
+        return core::Result<Stage,StageModelError>::failure(
+            StageModelError::MissingEquipmentConfiguration);
+
+    std::vector<LinearAxis> linearAxes;
+    std::vector<RotationAxis> rotationAxes;
+    linearAxes.reserve(equipment.axes().size());
+    rotationAxes.reserve(equipment.axes().size());
+
+    for(const auto& axis:equipment.axes()) {
+        if(axis.motionType()==core::AxisMotionType::Linear) {
+            if(!axis.linearRole())
+                return core::Result<Stage,StageModelError>::failure(
+                    StageModelError::UnsupportedEquipmentAxis);
+            LinearAxisRole role{};
+            if(!toLinearRole(*axis.linearRole(),role))
+                return core::Result<Stage,StageModelError>::failure(
+                    StageModelError::UnsupportedEquipmentAxis);
+
+            Nanometres minimum=0,maximum=0,increment=0;
+            if(!toNanometres(axis.operatingRange().minimum(),axis.coordinateUnit(),minimum)||
+               !toNanometres(axis.operatingRange().maximum(),axis.coordinateUnit(),maximum)||
+               !toNanometres(axis.nominalResolution(),axis.coordinateUnit(),increment)||
+               increment<=0)
+                return core::Result<Stage,StageModelError>::failure(
+                    StageModelError::EquipmentCoordinateNotRepresentable);
+            auto mechanical=NanometreRange::create(minimum,maximum);
+            if(!mechanical)
+                return core::Result<Stage,StageModelError>::failure(mechanical.error());
+
+            std::optional<Nanometres> accuracy,precision,uncertainty;
+            if(axis.accuracy()) {
+                Nanometres value=0;
+                if(!toNanometres(axis.accuracy()->maximumAbsoluteError(),
+                    axis.coordinateUnit(),value)||value<0)
+                    return core::Result<Stage,StageModelError>::failure(
+                        StageModelError::EquipmentCoordinateNotRepresentable);
+                accuracy=value;
+            }
+            if(axis.repeatability()) {
+                Nanometres value=0;
+                if(!toNanometres(axis.repeatability()->value(),
+                    axis.coordinateUnit(),value)||value<0)
+                    return core::Result<Stage,StageModelError>::failure(
+                        StageModelError::EquipmentCoordinateNotRepresentable);
+                precision=value;
+            }
+            if(axis.measurementUncertainty()) {
+                Nanometres value=0;
+                if(!toNanometres(axis.measurementUncertainty()->value(),
+                    axis.coordinateUnit(),value)||value<0)
+                    return core::Result<Stage,StageModelError>::failure(
+                        StageModelError::EquipmentCoordinateNotRepresentable);
+                uncertainty=value;
+            }
+            auto created=LinearAxis::create(axis.id(),role,mechanical.value(),
+                increment,accuracy,precision,uncertainty);
+            if(!created)
+                return core::Result<Stage,StageModelError>::failure(created.error());
+            linearAxes.push_back(std::move(created).value());
+        } else if(axis.motionType()==core::AxisMotionType::Rotary) {
+            if(!axis.rotationGeometry())
+                return core::Result<Stage,StageModelError>::failure(
+                    StageModelError::UnsupportedEquipmentAxis);
+            RotationAxisDirection direction{};
+            if(!toRotationDirection(axis.rotationGeometry()->direction,direction))
+                return core::Result<Stage,StageModelError>::failure(
+                    StageModelError::UnsupportedEquipmentAxis);
+            Radians minimum=0.0,maximum=0.0,increment=0.0;
+            if(!toRadians(axis.operatingRange().minimum(),axis.coordinateUnit(),minimum)||
+               !toRadians(axis.operatingRange().maximum(),axis.coordinateUnit(),maximum)||
+               !toRadians(axis.nominalResolution(),axis.coordinateUnit(),increment)||
+               !finite(increment)||increment<=0.0)
+                return core::Result<Stage,StageModelError>::failure(
+                    StageModelError::EquipmentCoordinateNotRepresentable);
+            auto mechanical=RadianRange::create(minimum,maximum);
+            if(!mechanical)
+                return core::Result<Stage,StageModelError>::failure(mechanical.error());
+
+            const auto& point=axis.rotationGeometry()->pointOnAxis;
+            RotationAxisGeometry geometry{
+                StagePosition3D{point.x,point.y,point.z},direction};
+            std::optional<Radians> accuracy,precision,uncertainty;
+            if(axis.accuracy()) {
+                Radians value=0.0;
+                if(!toRadians(axis.accuracy()->maximumAbsoluteError(),
+                    axis.coordinateUnit(),value)||value<0.0)
+                    return core::Result<Stage,StageModelError>::failure(
+                        StageModelError::EquipmentCoordinateNotRepresentable);
+                accuracy=value;
+            }
+            if(axis.repeatability()) {
+                Radians value=0.0;
+                if(!toRadians(axis.repeatability()->value(),
+                    axis.coordinateUnit(),value)||value<0.0)
+                    return core::Result<Stage,StageModelError>::failure(
+                        StageModelError::EquipmentCoordinateNotRepresentable);
+                precision=value;
+            }
+            if(axis.measurementUncertainty()) {
+                Radians value=0.0;
+                if(!toRadians(axis.measurementUncertainty()->value(),
+                    axis.coordinateUnit(),value)||value<0.0)
+                    return core::Result<Stage,StageModelError>::failure(
+                        StageModelError::EquipmentCoordinateNotRepresentable);
+                uncertainty=value;
+            }
+            auto created=RotationAxis::create(axis.id(),geometry,mechanical.value(),
+                increment,accuracy,precision,uncertainty);
+            if(!created)
+                return core::Result<Stage,StageModelError>::failure(created.error());
+            rotationAxes.push_back(std::move(created).value());
+        } else {
+            return core::Result<Stage,StageModelError>::failure(
+                StageModelError::UnsupportedEquipmentAxis);
+        }
+    }
+
+    std::vector<StageConfiguration> configurations;
+    configurations.reserve(equipment.configurations().size());
+    for(const auto& configuration:equipment.configurations()) {
+        std::vector<WorkingLinearAxis> workingLinear;
+        std::vector<WorkingRotationAxis> workingRotation;
+        std::vector<StageSlot> slots;
+        workingLinear.reserve(configuration.workingLinearAxes().size());
+        workingRotation.reserve(configuration.workingRotationAxes().size());
+        slots.reserve(configuration.slots().size());
+        for(const auto& axis:configuration.workingLinearAxes()) {
+            auto range=NanometreRange::create(
+                axis.effectiveRange.minimum(),axis.effectiveRange.maximum());
+            if(!range)
+                return core::Result<Stage,StageModelError>::failure(range.error());
+            workingLinear.push_back({axis.axisId,std::move(range).value()});
+        }
+        for(const auto& axis:configuration.workingRotationAxes()) {
+            auto range=RadianRange::create(
+                axis.effectiveRange.minimum(),axis.effectiveRange.maximum());
+            if(!range)
+                return core::Result<Stage,StageModelError>::failure(range.error());
+            workingRotation.push_back({axis.axisId,std::move(range).value()});
+        }
+        for(const auto& slot:configuration.slots()) {
+            auto xRange=NanometreRange::create(
+                slot.xRange().minimum(),slot.xRange().maximum());
+            auto yRange=NanometreRange::create(
+                slot.yRange().minimum(),slot.yRange().maximum());
+            if(!xRange||!yRange)
+                return core::Result<Stage,StageModelError>::failure(
+                    StageModelError::InvalidSlotRange);
+            const auto& origin=slot.originInStageCoordinates();
+            auto created=StageSlot::create(slot.id(),{origin.x,origin.y},
+                std::move(xRange).value(),std::move(yRange).value());
+            if(!created)
+                return core::Result<Stage,StageModelError>::failure(created.error());
+            slots.push_back(std::move(created).value());
+        }
+        auto created=StageConfiguration::create(configuration.id(),
+            std::move(workingLinear),std::move(workingRotation),std::move(slots));
+        if(!created)
+            return core::Result<Stage,StageModelError>::failure(created.error());
+        configurations.push_back(std::move(created).value());
+    }
+
+    auto runtimeSpecification=StageSpecification::create(
+        equipment.componentId(),std::move(linearAxes),std::move(rotationAxes),
+        std::move(configurations));
+    if(!runtimeSpecification)
+        return core::Result<Stage,StageModelError>::failure(runtimeSpecification.error());
+    return create(std::move(runtimeSpecification).value(),active);
+}
+
 const WorkingLinearAxis* Stage::workingLinearAxis(LinearAxisRole role) const noexcept {
     return findWorking(activeConfiguration(),specification_,role);
 }

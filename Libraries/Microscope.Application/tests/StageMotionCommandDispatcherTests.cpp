@@ -224,6 +224,28 @@ int main() {
           !wrongMicroscope.stage().validateForDispatch(identityPlan),
           "identity rejection does not reach hardware and releases the pending Stage plan");
 
+    RuntimeFixture wrongDeviceFixture;
+    wrongDeviceFixture.device.deviceId=id<core::DeviceId>("wrong-stage-device");
+    auto wrongDeviceContext=wrongDeviceFixture.prepare(
+        "wrong-device-operation","wrong-device-step","wrong-device-command");
+    RecordingStagePort wrongDevicePort;
+    auto wrongDeviceStage=take(controller::Stage::create(
+        controllerStageSpecification(),id<core::StageConfigurationId>("slides")));
+    controller::MicroscopeInstance wrongDeviceMicroscope(
+        id<core::MicroscopeId>("scope"),std::move(wrongDeviceStage));
+    const auto wrongDevicePlan=take(wrongDeviceMicroscope.stage().home());
+    const auto wrongDeviceRejected=
+        application::motion::StageMotionPlanDispatcher::dispatch(
+            wrongDeviceMicroscope,wrongDevicePlan,installedStageSpecification(),
+            wrongDeviceContext,wrongDevicePort,*wrongDeviceFixture.runtime);
+    check(!wrongDeviceRejected&&
+          std::holds_alternative<application::motion::StageMotionPlanIdentityError>(
+              wrongDeviceRejected.error().cause),
+          "rejects dispatch when the runtime device ID differs from the Stage component ID");
+    check(wrongDevicePort.homeCalls==0&&
+          !wrongDeviceMicroscope.stage().validateForDispatch(wrongDevicePlan),
+          "wrong-device rejection never reaches hardware and releases the pending plan");
+
     RuntimeFixture planFixture;
     auto planContext=planFixture.prepare(
         "controller-plan-operation","controller-plan-step","controller-plan-command");

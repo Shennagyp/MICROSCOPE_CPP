@@ -613,6 +613,25 @@ core::Status<StageModelError> Stage::recordCompletedHome(
         return core::Status<StageModelError>::failure(
             StageModelError::InvalidHomeReferenceEvidence);
 
+    for(const auto& measured:observation.positions()) {
+        const auto& id=measured.position().axisId();
+        const auto unit=measured.position().unit();
+        if(specification_.linearAxis(id)!=nullptr) {
+            if(unit!=core::AxisCoordinateUnit::Micrometers&&
+               unit!=core::AxisCoordinateUnit::Millimeters)
+                return core::Status<StageModelError>::failure(
+                    StageModelError::InvalidHomeReferenceEvidence);
+        } else if(specification_.rotationAxis(id)!=nullptr) {
+            if(unit!=core::AxisCoordinateUnit::Degrees&&
+               unit!=core::AxisCoordinateUnit::Radians)
+                return core::Status<StageModelError>::failure(
+                    StageModelError::InvalidHomeReferenceEvidence);
+        } else {
+            return core::Status<StageModelError>::failure(
+                StageModelError::InvalidHomeReferenceEvidence);
+        }
+    }
+
     StagePositionSnapshot nextPosition;
     nextPosition.x=0;
     nextPosition.y=0;

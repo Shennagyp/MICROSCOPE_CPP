@@ -179,7 +179,20 @@ void testHomeRequiresExactCompletionAndReferenceAxes() {
     check(!stage.recordCompletedHome(home,partialCompletion,correctReference),
         "partial axis completion cannot establish a complete XYZ reference");
 
+    std::vector<core::AxisPositionObservation> wrongUnitPositions;
+    for(const auto& id:home.axesToHome) {
+        const auto unit=id==axisId("stage-x")
+            ? core::AxisCoordinateUnit::Radians
+            : core::AxisCoordinateUnit::Micrometers;
+        auto position=take(core::AxisPosition::create(id,0.0,unit));
+        wrongUnitPositions.push_back(take(core::AxisPositionObservation::create(
+            std::move(position),0.0,core::StagePositionEvidence::PhysicalEndstop)));
+    }
+    const auto wrongUnitReference=take(
+        core::StageHomeReferenceObservation::create(std::move(wrongUnitPositions)));
     const auto correctCompletion=actionCompletion(home);
+    check(!stage.recordCompletedHome(home,correctCompletion,wrongUnitReference),
+        "a linear axis cannot accept a rotary coordinate unit as home evidence");
     check(static_cast<bool>(stage.recordCompletedHome(
         home,correctCompletion,correctReference)),
         "the same pending home plan can complete with exact action and complete reference evidence");

@@ -19,6 +19,7 @@ enum class AxisMotionType {
 };
 
 enum class AxisCoordinateUnit {
+    Nanometres,
     Micrometers,
     Millimeters,
     Degrees,

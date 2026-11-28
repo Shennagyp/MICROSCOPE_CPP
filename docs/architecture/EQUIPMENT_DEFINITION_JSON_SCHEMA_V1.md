@@ -1,14 +1,15 @@
-# Microscope Equipment Definition JSON — Schema v1
+# Microscope Equipment Definition JSON — Schema v1 (Legacy)
 
 **Owner:** `Microscope.Application` configuration boundary  
 **Domain model:** `Microscope.Core::MicroscopeEquipmentDefinition`  
-**Schema version:** `1`
+**Schema version:** `1`  
+**Status:** Legacy import/migration format. Schema v2 is canonical for constructing a runnable Controller Stage.
 
 ## Purpose and ownership
 
 An equipment-definition document is the authoritative, versioned description of the microscope's **installed static hardware model**. The loader reconstructs a `MicroscopeEquipmentDefinition` through Core value factories and Core graph validation.
 
-It contains physical component identities, ports, connections, ordered optical paths, selectable LightPaths, optical and camera capabilities, illumination characteristics, stage axes, and the dual-slide carrier's stage/axis binding.
+It contains physical component identities, ports, connections, ordered optical paths, selectable LightPaths, optical and camera capabilities, illumination characteristics and the original stage-axis declaration. It does not contain the current StageConfiguration/StageSlot model.
 
 It does not contain current device observations, controller sessions, encoder positions, homing state, calibration measurements, camera frames, acquisition operations, slide-folder paths, image/tile persistence, or gallery state. Those have different owners and lifecycles.
 
@@ -32,7 +33,6 @@ The root is an object with the following fields:
 | `condenserSpecifications` | array | optional | Condenser optical capability |
 | `illuminationSpecifications` | array | optional | Physical source and channel capabilities |
 | `stageSpecifications` | array | optional | Stage component and motion-axis specifications |
-| `dualSlideCarrierSpecifications` | array | optional | Binding of a two-slide carrier to a stage and two axes |
 | `filterSpecifications` | array | optional | Installed filter spectral response |
 | `opticalRelaySpecifications` | array | optional | Tube-lens, relay, adapter or reducer factors |
 
@@ -213,40 +213,31 @@ Intensity units: `percent`, `milliamperes`, `milliwatts`, `relative`, `device-de
 
 Relative spectral power is a normalized shape; it does not claim absolute irradiance. Absolute irradiance requires calibration owned by the calibration/runtime layer.
 
-## Stage and carrier
+## Stage representation in v1
 
-A stage contains `componentId` and `axes`.
+A v1 Stage contains componentId and axes only. Each axis contains:
+- id
+- motionType: linear, rotary, other or unknown
+- coordinateUnit
+- operatingRange: minimum, maximum and unit
+- nominalResolution
+- optional accuracy: maximumAbsoluteError and testConditions
+- optional repeatability: value, metric and testConditions
+- optional measurementUncertainty: value and testConditions
+- positionFeedback
+- optional measurementLocation
 
-Each axis contains:
+Coordinate units in the historical format include micrometers, millimeters, degrees, radians, device-defined and unknown. Linear performance values use the declared linear unit; rotary values use the declared angular unit. Accuracy, repeatability, resolution and measurement uncertainty remain independent.
 
-- `id`
-- `motionType`: `linear`, `rotary`, `other`, `unknown`
-- `coordinateUnit`
-- `operatingRange`: `minimum`, `maximum`, `unit`
-- `nominalResolution`
-- optional `accuracy`: `maximumAbsoluteError`, `testConditions`
-- optional `repeatability`: `value`, `metric`, `testConditions`
-- optional `measurementUncertainty`: `value`, `testConditions`
-- `positionFeedback`
-- optional `measurementLocation`
+V1 does not define linear X/Y/Z roles, rotation-axis geometry, per-configuration working ranges or StageSlots. The loader can preserve v1 static axis data for migration, but Controller::Stage::fromEquipmentSpecification cannot construct a runnable stage from v1 alone.
 
-Coordinate units: `micrometers`, `millimeters`, `degrees`, `radians`, `device-defined`, `unknown`.
-
-Repeatability metric: `maximum-deviation`, `standard-deviation`, `root-mean-square`, `unknown`.
-
-Feedback capability: `none`, `encoder`, `linear-scale`, `device-reported`, `external-sensor`, `other`, `unknown`.
-
-Measurement location: `motor`, `axis`, `specimen`, `external`, `other`, `unknown`.
-
-All axis performance values use the coordinate unit declared by that axis. Test conditions are retained as provenance; the loader does not collapse accuracy, repeatability and uncertainty into one number.
-
-A dual-slide carrier contains `stageComponentId`, `horizontalAxisId`, `transverseAxisId`, and `direction`. Direction values are `positive-stage-x-left-to-right` or `negative-stage-x-left-to-right`. The referenced StageSpecification must exist, and Core validates both axis identities and units.
+The dualSlideCarrierSpecifications field is not accepted. Fixed left/right carrier state is retired; holder layouts are represented by StageConfiguration with N StageSlots in schema v2.
 
 ## Validation, bounds and persistence
 
 The loader enforces:
 
-- schema version 1; no unknown fields or duplicate object keys;
+- schema version 1 for this legacy document format; no unknown fields or duplicate object keys;
 - valid JSON number and string syntax, including UTF-8 and Unicode surrogate pairs;
 - maximum document size 16 MiB, nesting depth 64, 500,000 JSON nodes, 50,000 array elements, 128 members per object, and 1 MiB per string;
 - exact integer parsing for revision and pixel/count fields;

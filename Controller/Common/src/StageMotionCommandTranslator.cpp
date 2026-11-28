@@ -103,6 +103,8 @@ core::Result<double,StageMotionTranslationError> toRotationUnit(
 core::Result<double,StageMotionTranslationError> toLinearUnit(
     Nanometres value,core::AxisCoordinateUnit unit) {
     switch(unit) {
+    case core::AxisCoordinateUnit::Nanometres:
+        return core::Result<double,StageMotionTranslationError>::success(static_cast<double>(value));
     case core::AxisCoordinateUnit::Micrometers:
         return core::Result<double,StageMotionTranslationError>::success(
             static_cast<double>(value)/1'000.0);

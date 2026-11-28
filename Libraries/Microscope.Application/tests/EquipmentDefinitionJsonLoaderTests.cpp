@@ -277,14 +277,6 @@ const std::string& validDocument() {
       ]
     }
   ],
-  "dualSlideCarrierSpecifications": [
-    {
-      "stageComponentId": "stage-main",
-      "horizontalAxisId": "stage-x",
-      "transverseAxisId": "stage-y",
-      "direction": "positive-stage-x-left-to-right"
-    }
-  ],
   "filterSpecifications": [
     {
       "componentId": "filter-excitation",
@@ -334,30 +326,30 @@ std::string validV2Document() {
     auto document=validDocument();
     document=replaceOnce(document,"\"schemaVersion\": 1,","\"schemaVersion\": 2,");
     const auto stageStart=document.find("  \"stageSpecifications\": [");
-    const auto carrierStart=document.find("  \"dualSlideCarrierSpecifications\": [",stageStart);
-    if(stageStart==std::string::npos||carrierStart==std::string::npos)
-        throw std::runtime_error("Schema v2 stage/carrier fixture anchors were not found.");
+    const auto filterStart=document.find("  \"filterSpecifications\": [",stageStart);
+    if(stageStart==std::string::npos||filterStart==std::string::npos)
+        throw std::runtime_error("Schema v2 stage/filter fixture anchors were not found.");
 
     std::string stageBlock=R"JSON(  "stageSpecifications": [
     {
       "componentId": "stage-main",
       "axes": [
         {
-          "id": "stage-x", "motionType": "linear", "coordinateUnit": "micrometers",
-          "operatingRange": {"minimum": 0.0, "maximum": 160000.0, "unit": "micrometers"},
-          "nominalResolution": 0.1, "positionFeedback": "linear-scale",
+          "id": "stage-x", "motionType": "linear", "coordinateUnit": "nanometres",
+          "operatingRange": {"minimum": 0.0, "maximum": 160000000.0, "unit": "nanometres"},
+          "nominalResolution": 100, "positionFeedback": "linear-scale",
           "measurementLocation": "axis", "linearRole": "x"
         },
         {
-          "id": "stage-y", "motionType": "linear", "coordinateUnit": "micrometers",
-          "operatingRange": {"minimum": 0.0, "maximum": 90000.0, "unit": "micrometers"},
-          "nominalResolution": 0.1, "positionFeedback": "device-reported",
+          "id": "stage-y", "motionType": "linear", "coordinateUnit": "nanometres",
+          "operatingRange": {"minimum": 0.0, "maximum": 90000000.0, "unit": "nanometres"},
+          "nominalResolution": 100, "positionFeedback": "device-reported",
           "measurementLocation": "axis", "linearRole": "y"
         },
         {
-          "id": "stage-z", "motionType": "linear", "coordinateUnit": "micrometers",
-          "operatingRange": {"minimum": 0.0, "maximum": 100000.0, "unit": "micrometers"},
-          "nominalResolution": 0.05, "positionFeedback": "encoder",
+          "id": "stage-z", "motionType": "linear", "coordinateUnit": "nanometres",
+          "operatingRange": {"minimum": 0.0, "maximum": 100000000.0, "unit": "nanometres"},
+          "nominalResolution": 50, "positionFeedback": "encoder",
           "measurementLocation": "axis", "linearRole": "z"
         },
         {
@@ -417,13 +409,7 @@ std::string validV2Document() {
     }
   ],
 )JSON";
-    document.replace(stageStart,carrierStart-stageStart,stageBlock);
-    const auto obsoleteCarrierStart=document.find(
-        "  \"dualSlideCarrierSpecifications\": [",stageStart);
-    const auto filterStart=document.find("  \"filterSpecifications\": [",obsoleteCarrierStart);
-    if(obsoleteCarrierStart==std::string::npos||filterStart==std::string::npos)
-        throw std::runtime_error("Schema v2 legacy carrier block anchors were not found.");
-    document.erase(obsoleteCarrierStart,filterStart-obsoleteCarrierStart);
+    document.replace(stageStart,filterStart-stageStart,stageBlock);
     return document;
 }
 
@@ -529,14 +515,6 @@ void parsesCompleteStaticEquipmentDefinition() {
             "preserves absent optional axis-performance facts instead of inferring them");
     }
 
-    check(equipment.dualSlideCarrierSpecifications().size() == 1 &&
-        equipment.dualSlideCarrierSpecifications()[0].stageComponentId().value() == "stage-main" &&
-        equipment.dualSlideCarrierSpecifications()[0].horizontalAxisId().value() == "stage-x" &&
-        equipment.dualSlideCarrierSpecifications()[0].transverseAxisId().value() == "stage-y" &&
-        equipment.dualSlideCarrierSpecifications()[0].horizontalDirection() ==
-            CarrierHorizontalDirection::PositiveStageXFromLeftToRight,
-        "restores the two-horizontal-slide carrier's physical stage/axis binding");
-
     check(equipment.filterSpecifications().size() == 1 &&
         equipment.filterSpecifications()[0].spectralResponse().size() == 3 &&
         equipment.filterSpecifications()[0].compatibilityId() &&
@@ -573,6 +551,12 @@ void parsesSchemaV2GenericStageConfigurations() {
         const auto* x=stages[0].linearAxis(StageLinearAxisRole::X);
         check(x&&x->linearRole()==StageLinearAxisRole::X,
             "retains the physical X role on the installed axis");
+        check(x&&x->coordinateUnit()==AxisCoordinateUnit::Nanometres&&
+              x->operatingRange().maximum()==160000000.0&&
+              stages[0].axes()[0].nominalResolution()==100.0&&
+              stages[0].linearAxis(StageLinearAxisRole::Y)->coordinateUnit()==AxisCoordinateUnit::Nanometres&&
+              stages[0].linearAxis(StageLinearAxisRole::Z)->coordinateUnit()==AxisCoordinateUnit::Nanometres,
+            "schema v2 stores linear mechanical travel and resolution in nanometres");
     }
 
     auto legacyCarrierField=replaceOnce(validV2Document(),
@@ -623,15 +607,14 @@ void rejectsMalformedOrAmbiguousJsonDocuments() {
         utf8.error().code == EquipmentDefinitionJsonErrorCode::JsonSyntaxError,
         "rejects invalid UTF-8 in raw JSON string data");
 
-    auto missingCarrierStageDocument = replaceOnce(
+    auto legacyCarrierField = replaceOnce(
         validDocument(),
-        "\"stageComponentId\": \"stage-main\"",
-        "\"stageComponentId\": \"missing-stage\"");
-    auto missingCarrierStage = EquipmentDefinitionJsonLoader::parse(
-        missingCarrierStageDocument);
-    check(!missingCarrierStage &&
-        missingCarrierStage.error().code == EquipmentDefinitionJsonErrorCode::InvalidValue,
-        "rejects a dual-slide carrier that references no decoded stage specification");
+        "  \"filterSpecifications\": [",
+        "  \"dualSlideCarrierSpecifications\": [],\n  \"filterSpecifications\": [");
+    auto obsoleteCarrier = EquipmentDefinitionJsonLoader::parse(legacyCarrierField);
+    check(!obsoleteCarrier &&
+        obsoleteCarrier.error().code == EquipmentDefinitionJsonErrorCode::UnknownField,
+        "rejects the retired fixed dual-slide carrier equipment field in legacy documents");
 
     auto wrongAxisUnitDocument = replaceOnce(
         validDocument(),

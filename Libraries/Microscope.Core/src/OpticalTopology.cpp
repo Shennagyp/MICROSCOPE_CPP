@@ -492,7 +492,6 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
     std::vector<CondenserSpecification> condenserSpecifications,
     std::vector<IlluminationSpecification> illuminationSpecifications,
     std::vector<StageSpecification> stageSpecifications,
-    std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
     std::vector<LightPath> lightPaths,
     std::vector<OpticalFilterSpecification> filterSpecifications,
     std::uint64_t revision,
@@ -509,8 +508,7 @@ MicroscopeEquipmentDefinition::MicroscopeEquipmentDefinition(
       cameraSpecifications_(std::move(cameraSpecifications)),
       condenserSpecifications_(std::move(condenserSpecifications)),
       illuminationSpecifications_(std::move(illuminationSpecifications)),
-      stageSpecifications_(std::move(stageSpecifications)),
-      dualSlideCarrierSpecifications_(std::move(dualSlideCarrierSpecifications)) {}
+      stageSpecifications_(std::move(stageSpecifications)) {}
 
 Result<
     MicroscopeEquipmentDefinition,
@@ -524,7 +522,6 @@ Result<
         std::vector<CondenserSpecification> condenserSpecifications,
         std::vector<IlluminationSpecification> illuminationSpecifications,
         std::vector<StageSpecification> stageSpecifications,
-        std::vector<DualSlideCarrierSpecification> dualSlideCarrierSpecifications,
         std::vector<LightPath> lightPaths,
         std::vector<OpticalFilterSpecification> filterSpecifications,
         std::uint64_t revision,
@@ -694,17 +691,6 @@ Result<
         }
     }
 
-    std::set<EquipmentComponentId> carrierStageIds;
-    for (const auto& carrier : dualSlideCarrierSpecifications) {
-        if (!carrierStageIds.insert(carrier.stageComponentId()).second) {
-            return Result<MicroscopeEquipmentDefinition, EquipmentDefinitionError>::failure(
-                EquipmentDefinitionError::DuplicateDualSlideCarrierSpecification);
-        }
-        if (stageComponentIds.find(carrier.stageComponentId()) == stageComponentIds.end()) {
-            return Result<MicroscopeEquipmentDefinition, EquipmentDefinitionError>::failure(
-                EquipmentDefinitionError::DualSlideCarrierReferencesUnknownStage);
-        }
-    }
 
     std::set<EquipmentComponentId> filterComponentIds;
     for (const auto& filter : filterSpecifications) {
@@ -1041,7 +1027,6 @@ Result<
                 std::move(condenserSpecifications),
                 std::move(illuminationSpecifications),
                 std::move(stageSpecifications),
-                std::move(dualSlideCarrierSpecifications),
                 std::move(lightPaths),
                 std::move(filterSpecifications),
                 revision,
@@ -1153,11 +1138,6 @@ MicroscopeEquipmentDefinition::illuminationSpecifications() const noexcept {
 const std::vector<StageSpecification>&
 MicroscopeEquipmentDefinition::stageSpecifications() const noexcept {
     return stageSpecifications_;
-}
-
-const std::vector<DualSlideCarrierSpecification>&
-MicroscopeEquipmentDefinition::dualSlideCarrierSpecifications() const noexcept {
-    return dualSlideCarrierSpecifications_;
 }
 
 Result<

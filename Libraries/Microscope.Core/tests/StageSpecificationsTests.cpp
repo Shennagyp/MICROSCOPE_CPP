@@ -198,6 +198,18 @@ void testTypedAxisUnitsRemainDistinct() {
           rangeUnitMismatch.error() ==
               AxisSpecificationError::OperatingRangeUnitMismatch,
           "requires operating range units to match the axis coordinate unit");
+
+    const auto canonicalNanometreAxis=AxisSpecification::create(
+        makeId<StageAxisId>("linear-nanometre-axis"),
+        AxisMotionType::Linear,
+        AxisCoordinateUnit::Nanometres,
+        range(0.0,100000000.0,AxisCoordinateUnit::Nanometres),
+        resolution(100.0),
+        std::nullopt,std::nullopt,std::nullopt,
+        AxisPositionFeedbackCapability::None,std::nullopt,
+        StageLinearAxisRole::X);
+    check(static_cast<bool>(canonicalNanometreAxis),
+        "accepts nanometres as the canonical linear equipment coordinate unit");
 }
 
 void testResolutionAccuracyRepeatabilityAndUncertaintyAreIndependent() {

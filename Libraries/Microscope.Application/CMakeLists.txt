@@ -36,13 +36,9 @@ add_library(microscope_application STATIC
     src/InstalledCameraModelEnricher.cpp
     src/MicroscopeConfigurationSqliteStore.cpp
     src/SampleSlideSqliteStore.cpp
-    src/DualSlideCarrierSqliteStore.cpp
-    src/SlideCornerCorrespondence.cpp
     src/StageSlotAssignments.cpp
     src/StageSlotRegistration.cpp
     src/StageSlotAssignmentsSqliteStore.cpp
-    src/SlideRegistrationWorkingSurfaceComparison.cpp
-    src/StageWorkingSurfaceSqliteStore.cpp
     src/ConfigurationProfileCatalogSqliteStore.cpp
     src/EquipmentDefinitionJsonLoader.cpp
     src/EquipmentDefinitionSqliteStore.cpp)
@@ -149,17 +145,6 @@ if(BUILD_TESTING)
         NAME microscope_application_stage_slot_assignments_tests
         COMMAND microscope_application_stage_slot_assignments_tests)
 
-    add_executable(microscope_application_dual_slide_carrier_store_tests
-        tests/DualSlideCarrierSqliteStoreTests.cpp)
-    target_link_libraries(microscope_application_dual_slide_carrier_store_tests
-        PRIVATE Microscope::Application SQLite::SQLite3)
-    set_target_properties(microscope_application_dual_slide_carrier_store_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_dual_slide_carrier_store_tests
-        COMMAND microscope_application_dual_slide_carrier_store_tests)
 
     add_executable(microscope_application_camera_model_catalog_store_tests
         tests/CameraModelCatalogSqliteStoreTests.cpp)
@@ -173,29 +158,6 @@ if(BUILD_TESTING)
         NAME microscope_application_camera_model_catalog_store_tests
         COMMAND microscope_application_camera_model_catalog_store_tests)
 
-    add_executable(microscope_application_slide_registration_working_surface_comparison_tests
-        tests/SlideRegistrationWorkingSurfaceComparisonTests.cpp)
-    target_link_libraries(microscope_application_slide_registration_working_surface_comparison_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_slide_registration_working_surface_comparison_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_slide_registration_working_surface_comparison_tests
-        COMMAND microscope_application_slide_registration_working_surface_comparison_tests)
-
-    add_executable(microscope_application_stage_working_surface_store_tests
-        tests/StageWorkingSurfaceSqliteStoreTests.cpp)
-    target_link_libraries(microscope_application_stage_working_surface_store_tests
-        PRIVATE Microscope::Application SQLite::SQLite3)
-    set_target_properties(microscope_application_stage_working_surface_store_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_working_surface_store_tests
-        COMMAND microscope_application_stage_working_surface_store_tests)
 
     add_executable(microscope_application_configuration_profile_catalog_store_tests
         tests/ConfigurationProfileCatalogSqliteStoreTests.cpp)
@@ -270,29 +232,6 @@ if(BUILD_TESTING)
         NAME microscope_application_serialized_runtime_worker_tests
         COMMAND microscope_application_serialized_runtime_worker_tests)
 
-    add_executable(microscope_application_stage_position_feedback_reducer_tests
-        tests/StagePositionFeedbackReducerTests.cpp)
-    target_link_libraries(microscope_application_stage_position_feedback_reducer_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_position_feedback_reducer_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_position_feedback_reducer_tests
-        COMMAND microscope_application_stage_position_feedback_reducer_tests)
-
-    add_executable(microscope_application_stage_position_3d_feedback_reducer_tests
-        tests/StagePosition3DFeedbackReducerTests.cpp)
-    target_link_libraries(microscope_application_stage_position_3d_feedback_reducer_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_position_3d_feedback_reducer_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_position_3d_feedback_reducer_tests
-        COMMAND microscope_application_stage_position_3d_feedback_reducer_tests)
 
     add_executable(microscope_application_stage_motion_dispatcher_tests
         tests/StageMotionCommandDispatcherTests.cpp)
@@ -306,87 +245,5 @@ if(BUILD_TESTING)
         NAME microscope_application_stage_motion_dispatcher_tests
         COMMAND microscope_application_stage_motion_dispatcher_tests)
 
-    add_executable(microscope_application_stage_navigation_executor_tests
-        tests/StageNavigationExecutorTests.cpp)
-    target_link_libraries(microscope_application_stage_navigation_executor_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_navigation_executor_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_navigation_executor_tests
-        COMMAND microscope_application_stage_navigation_executor_tests)
 
-    add_executable(microscope_application_stage_navigation_plan_dispatcher_tests
-        tests/StageNavigationPlanDispatcherTests.cpp)
-    target_link_libraries(microscope_application_stage_navigation_plan_dispatcher_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_navigation_plan_dispatcher_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_navigation_plan_dispatcher_tests
-        COMMAND microscope_application_stage_navigation_plan_dispatcher_tests)
-
-    add_executable(microscope_application_stage_position_command_reducer_tests
-        tests/StagePositionCommandReducerTests.cpp)
-    target_link_libraries(microscope_application_stage_position_command_reducer_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_position_command_reducer_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_position_command_reducer_tests
-        COMMAND microscope_application_stage_position_command_reducer_tests)
-
-    add_executable(microscope_application_stage_navigation_runtime_tests
-        tests/StageNavigationRuntimeTests.cpp)
-    target_link_libraries(microscope_application_stage_navigation_runtime_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_navigation_runtime_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_navigation_runtime_tests
-        COMMAND microscope_application_stage_navigation_runtime_tests)
-
-    add_executable(microscope_application_working_surface_navigation_runtime_tests
-        tests/StageWorkingSurfaceNavigationRuntimeTests.cpp)
-    add_executable(microscope_application_stage_working_surface_verification_policy_tests
-        tests/StageWorkingSurfaceNavigationVerificationPolicyTests.cpp)
-    target_link_libraries(microscope_application_stage_working_surface_verification_policy_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_working_surface_verification_policy_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_working_surface_verification_policy_tests
-        COMMAND microscope_application_stage_working_surface_verification_policy_tests)
-
-    add_executable(microscope_application_stage_worker_integration_tests
-        tests/StageWorkingSurfaceNavigationWorkerIntegrationTests.cpp)
-    target_link_libraries(microscope_application_stage_worker_integration_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_stage_worker_integration_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_stage_worker_integration_tests
-        COMMAND microscope_application_stage_worker_integration_tests)
-
-    target_link_libraries(microscope_application_working_surface_navigation_runtime_tests
-        PRIVATE Microscope::Application)
-    set_target_properties(microscope_application_working_surface_navigation_runtime_tests PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES
-        CXX_EXTENSIONS OFF)
-    add_test(
-        NAME microscope_application_working_surface_navigation_runtime_tests
-        COMMAND microscope_application_working_surface_navigation_runtime_tests)
 endif()

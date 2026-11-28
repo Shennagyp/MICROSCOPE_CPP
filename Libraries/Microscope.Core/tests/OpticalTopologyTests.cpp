@@ -240,8 +240,7 @@ void testLightPathDerivesOnlyConnectedCameraEndpoints() {
         "Dual camera splitter path",
         {imagingPathA.id(), imagingPathB.id()}));
 
-    auto definition = MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    auto definition = MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         {imagingPathA, imagingPathB},
@@ -249,7 +248,6 @@ void testLightPathDerivesOnlyConnectedCameraEndpoints() {
         {cameraSpecification(fixture.cameraAId, "camera-a-mode"),
          cameraSpecification(fixture.cameraBId, "camera-b-mode"),
          cameraSpecification(cameraCId, "camera-disconnected-mode")},
-        {},
         {},
         {},
         {},
@@ -305,12 +303,10 @@ void testLightPathMustContainAnImagingRoute() {
         "Illumination-only route",
         {fixture.paths.front().id()}));
 
-    auto definition = MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    auto definition = MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         fixture.paths,
-        {},
         {},
         {},
         {},
@@ -357,15 +353,13 @@ void testMultipleCameraLightPathRequiresPhysicalSplitter() {
         "Invalid dual camera path",
         {imagingPathA.id(), imagingPathB.id()}));
 
-    auto definition = MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    auto definition = MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         {imagingPathA, imagingPathB},
         {},
         {cameraSpecification(fixture.cameraAId, "camera-a-mode"),
          cameraSpecification(fixture.cameraBId, "camera-b-mode")},
-        {},
         {},
         {},
         {},
@@ -425,12 +419,16 @@ void testInstalledFilterSpecificationsMatchOpticalFunctionsAndCompatibility() {
          {take(PositiveNanometers::create(500.0)), 0.9, std::nullopt}},
         compatibilityId));
 
-    auto valid = MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    auto valid = MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         fixture.paths,
-        {}, {}, {}, {}, {}, {}, {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
         {matchingFilter});
     check(static_cast<bool>(valid),
           "accepts an installed excitation filter whose role and compatibility match its optical function");
@@ -441,12 +439,16 @@ void testInstalledFilterSpecificationsMatchOpticalFunctionsAndCompatibility() {
         {{take(PositiveNanometers::create(400.0)), 0.1, std::nullopt},
          {take(PositiveNanometers::create(500.0)), 0.9, std::nullopt}},
         makeId<OpticalCompatibilityId>("fluorescence-cube-set-B")));
-    auto mismatch = MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    auto mismatch = MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         fixture.paths,
-        {}, {}, {}, {}, {}, {}, {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
         {wrongCompatibility});
     check(!mismatch &&
           mismatch.error() == EquipmentDefinitionError::FilterCompatibilityMismatch,
@@ -458,12 +460,16 @@ void testInstalledFilterSpecificationsMatchOpticalFunctionsAndCompatibility() {
         {{take(PositiveNanometers::create(400.0)), 0.1, std::nullopt},
          {take(PositiveNanometers::create(500.0)), 0.9, std::nullopt}},
         compatibilityId));
-    auto roleMismatch = MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    auto roleMismatch = MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         fixture.paths,
-        {}, {}, {}, {}, {}, {}, {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
         {wrongRole});
     check(!roleMismatch &&
           roleMismatch.error() == EquipmentDefinitionError::FilterOpticalFunctionMismatch,
@@ -981,8 +987,7 @@ void testLightPathCameraResolverDerivesSingleConnectedEndpoint() {
         EquipmentComponentKind::ImagingDevice,
         {makePort("camera-outside-selected-path-input", OpticalPortDirection::Input)})));
 
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         imaging.imagingPaths,
@@ -990,7 +995,10 @@ void testLightPathCameraResolverDerivesSingleConnectedEndpoint() {
         {cameraSpecification(fixture.cameraAId, "camera-resolver-mode-a"),
          cameraSpecification(fixture.cameraBId, "camera-resolver-mode-b"),
          cameraSpecification(cameraCId, "camera-resolver-mode-c")},
-        {}, {}, {}, {}, {imaging.lightPath}));
+        {},
+        {},
+        {},
+        {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
         fixture, ContrastMethod::Brightfield);
@@ -1015,14 +1023,16 @@ void testManualConnectedCameraRemainsSelectedWithSuitabilityWarnings() {
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
         fixture, "camera-resolver-manual-path", false);
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         imaging.imagingPaths,
         {},
         {cameraSpecification(fixture.cameraAId, "camera-resolver-manual-mode")},
-        {}, {}, {}, {}, {imaging.lightPath}));
+        {},
+        {},
+        {},
+        {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
         fixture, ContrastMethod::Fluorescence);
@@ -1052,15 +1062,17 @@ void testManualCameraOutsideSelectedLightPathIsUnsupported() {
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
         fixture, "camera-resolver-reject-path", false);
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         imaging.imagingPaths,
         {},
         {cameraSpecification(fixture.cameraAId, "camera-resolver-reject-mode"),
          cameraSpecification(fixture.cameraBId, "camera-resolver-other-mode")},
-        {}, {}, {}, {}, {imaging.lightPath}));
+        {},
+        {},
+        {},
+        {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
         fixture, ContrastMethod::Brightfield);
@@ -1088,15 +1100,17 @@ void testMultipleConnectedCamerasRequireSelectionWhenNoUniqueRecommendationExist
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
         fixture, "camera-resolver-dual-path", true);
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         imaging.imagingPaths,
         {},
         {cameraSpecification(fixture.cameraAId, "camera-resolver-dual-mode-a"),
          cameraSpecification(fixture.cameraBId, "camera-resolver-dual-mode-b")},
-        {}, {}, {}, {}, {imaging.lightPath}));
+        {},
+        {},
+        {},
+        {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
         fixture, ContrastMethod::Brightfield);
@@ -1121,8 +1135,7 @@ void testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie() {
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
         fixture, "camera-resolver-shutter-tie", true);
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         imaging.imagingPaths,
@@ -1133,7 +1146,10 @@ void testGlobalShutterIsRecommendedOnlyWhenOtherSuitabilityMetricsTie() {
          cameraSpecificationWithSensor(
              fixture.cameraBId, "camera-resolver-rolling-mode",
              CameraShutterType::Rolling, 1.2, 0.90)},
-        {}, {}, {}, {}, {imaging.lightPath}));
+        {},
+        {},
+        {},
+        {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
         fixture, ContrastMethod::Fluorescence);
@@ -1165,15 +1181,17 @@ void testLightPathRequestFactoryDerivesCameraAndAllRouteIds() {
         fixture, "camera-request-factory-path", true);
     const auto cameraModeB =
         makeId<CameraModeId>("camera-request-factory-mode-b");
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         imaging.imagingPaths,
         {},
         {cameraSpecification(fixture.cameraAId, "camera-request-factory-mode-a"),
          cameraSpecification(fixture.cameraBId, "camera-request-factory-mode-b")},
-        {}, {}, {}, {}, {imaging.lightPath}));
+        {},
+        {},
+        {},
+        {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
         fixture, ContrastMethod::Brightfield);
@@ -1283,14 +1301,16 @@ void testCameraDiscoveryDoesNotDependOnHardwareRealization() {
     auto fixture = makeSharedSplitterFixture();
     const auto imaging = makeImagingLightPath(
         fixture, "camera-resolver-unconfigured-path", false);
-    const auto equipment = take(MicroscopeEquipmentDefinition::create(
-        fixture.microscopeId,
+    const auto equipment = take(MicroscopeEquipmentDefinition::create(fixture.microscopeId,
         fixture.components,
         fixture.connections,
         imaging.imagingPaths,
         {},
         {cameraSpecification(fixture.cameraAId, "camera-resolver-unconfigured-mode")},
-        {}, {}, {}, {}, {imaging.lightPath}));
+        {},
+        {},
+        {},
+        {imaging.lightPath}));
 
     const auto mode = makeCameraResolverMode(
         fixture, ContrastMethod::Brightfield);
@@ -1361,14 +1381,19 @@ void testImagingMagnificationUsesOnlyRelayOpticsOnSelectedPath() {
     const auto components = std::vector<EquipmentComponent>{
         objectiveComponent, relayComponent, cameraComponent, unselectedRelayComponent};
     const auto makeEquipment = [&](std::vector<OpticalRelaySpecification> relaySpecs) {
-        return MicroscopeEquipmentDefinition::create(
-            microscopeId,
-            components,
-            connections,
-            {path},
-            {objective},
-            {cameraSpecification(cameraId, "magnification-mono8")},
-            {}, {}, {}, {}, {}, {}, 1, std::move(relaySpecs));
+        return MicroscopeEquipmentDefinition::create(microscopeId,
+        components,
+        connections,
+        {path},
+        {objective},
+        {cameraSpecification(cameraId, "magnification-mono8")},
+        {},
+        {},
+        {},
+        {},
+        {},
+        1,
+        std::move(relaySpecs));
     };
     const auto equipment = take(makeEquipment({reducer, unselectedRelay}));
 

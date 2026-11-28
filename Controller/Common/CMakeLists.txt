@@ -1,3 +1,16 @@
+cmake_minimum_required(VERSION 3.21)
+
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    project(ControllerCommon VERSION 0.9.0 LANGUAGES CXX)
+    include(CTest)
+endif()
+
+if(NOT TARGET Microscope::Core)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../../Libraries/Microscope.Core"
+        "${CMAKE_CURRENT_BINARY_DIR}/microscope_core")
+endif()
+
 add_library(controller_common STATIC src/Stage.cpp src/StageMotionCommandTranslator.cpp)
 add_library(Controller::Common ALIAS controller_common)
 target_compile_features(controller_common PUBLIC cxx_std_17)

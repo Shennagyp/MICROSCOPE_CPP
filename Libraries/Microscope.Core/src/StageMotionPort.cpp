@@ -6,7 +6,7 @@
 namespace microscope::core {
 namespace {
 bool physicalUnit(AxisCoordinateUnit u) noexcept {
-    return u==AxisCoordinateUnit::Micrometers || u==AxisCoordinateUnit::Millimeters ||
+    return u==AxisCoordinateUnit::Nanometres || u==AxisCoordinateUnit::Micrometers || u==AxisCoordinateUnit::Millimeters ||
            u==AxisCoordinateUnit::Degrees || u==AxisCoordinateUnit::Radians;
 }
 template<class T> bool uniqueAxes(const std::vector<T>& values) {

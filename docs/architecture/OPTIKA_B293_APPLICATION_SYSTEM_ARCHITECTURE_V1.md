@@ -15,7 +15,7 @@ Use the following authority hierarchy:
 
 1. **This document** governs the complete OPTIKA B293 application: application object ownership, composition, state lifecycle, capability interactions, concurrency and UI boundaries.
 2. [Microscope Platform Architecture v0.9](MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md) governs the microscope-domain model, equipment/configuration semantics, operation and feedback facts, calibration, acquisition records and persistence invariants.
-3. [Stage Working Surface and Axis Reference v2](STAGE_WORKING_SURFACE_AND_AXIS_REFERENCE_V2.md) governs the physical stage XY canvas, slide rectangles, axis position and focus-Z referencing.
+3. [Controller Stage and Hardware Adapter Contract](CONTROLLER_STAGE_AND_HARDWARE_ADAPTER_CONTRACT_V1.md) governs the sole runtime Stage OOP model, StageConfiguration/StageSlot geometry, motion plans, position lifecycle and IStageMotionPort adapter boundary.
 4. [OPTIKA B293 Dual-Slide Application Architecture](OPTIKA_B293_DUALSLIDE_APPLICATION_ARCHITECTURE.md) remains the implementation-specific reference for the existing native camera/preview path and its performance/lifetime constraints.
 
 When details overlap, use the document that owns that concern. These documents are complementary; none should be interpreted as permission to duplicate state or add another framework.
@@ -43,7 +43,7 @@ Likewise, the stage does not own camera acquisition, and the UI does not own eit
 | Equipment definition | Relatively static description of installed hardware and capabilities | Current device state |
 | Device session | One connected/usable lifetime of one hardware device | The whole microscope runtime |
 | Microscope configuration | Requested/selected optical and operating configuration | Verified physical state |
-| Stage working surface | User-defined machine-coordinate XY workspace and slide registrations | A camera image or preview pane |
+| Stage | One Controller-owned physical machine coordinate system, installed axes and active configuration | A UI workspace or camera image |
 | Physical Slide | A physical preparation with stable identity and its own registration | A presentation pane |
 | Slide document | Image/source data and its annotations/measurements | Physical stage occupancy |
 | Workspace | Current UI organization, selection and layout | Authoritative slide or hardware state |
@@ -51,7 +51,7 @@ Likewise, the stage does not own camera acquisition, and the UI does not own eit
 | Acquisition run | What the instrument actually attempted and recorded | A saved preview screenshot |
 | Calibration | A versioned relationship supported by evidence | A nominal specification or a guessed constant |
 
-A physical stage may contain a variable number of user-defined slide rectangles. The current two-pane preview layout is a presentation arrangement and does not define the number of physical slides, slide identities or stage locations. The UI must not use `Slide 1`/`Slide 2` pane identities as the authoritative physical `SlideId` model.
+A physical StageConfiguration owns a variable N-element collection of physical StageSlots. A StageSlot is a holder region, not a Slide. Application SlideIds and immutable Slide revisions are associated with StageSlotIds through StageSlotAssignments; the current two-pane preview layout is presentation state and never defines physical slot count or identity.
 
 ## 3. Application lifetime and object graph
 
@@ -73,11 +73,12 @@ NSApplication
         │   ├── OpticalCalibration             (revisioned records)
         │   ├── CameraCapability               (persistent controller/model)
         │   │   └── Camera device session      (opened/closed by lifecycle)
-        │   ├── StageCapability                (persistent stage owner)
-        │   │   ├── StageWorkingSurface2D      (current layout snapshot)
-        │   │   ├── StagePosition3D            (current XYZ evidence)
-        │   │   ├── Axis reference state       (per axis)
-        │   │   └── Stage driver adapter       (long-lived dependency)
+        │   ├── Controller::MicroscopeInstance (runtime mechanics owner)
+        │   │   └── Stage                      (single physical stage authority)
+        │   │       ├── LinearAxis[N]
+        │   │       ├── RotationAxis[N]
+        │   │       └── StageConfiguration[N] → StageSlot[N]
+        │   └── Stage hardware adapter          (IStageMotionPort implementation)
         │   ├── Microscope workflows           (configuration/acquisition/etc.)
         │   └── Active operation state         (owned by its workflow/runtime)
         ├── WorkspaceModel                     (UI selection/layout state)
@@ -103,7 +104,7 @@ Do not introduce an additional `Session`, `Manager`, `Coordinator` or `Context` 
 The microscope runtime retains capability objects; each capability owns its own device-specific lifecycle and state.
 
 - **Camera capability:** owns its camera controller, open device session, acquisition lifecycle, feature state and frame delivery contract.
-- **Stage capability:** owns the stage's current working-surface layout, machine position, per-axis references, accumulated position uncertainty, active navigation and stage command lifecycle.
+- **Stage capability:** Controller::MicroscopeInstance owns one live Controller::Stage. That Stage owns installed axes, active StageConfiguration, N StageSlots, global machine position/evidence and correlated motion-plan lifecycle. The adapter owns only device I/O.
 - **Optics capability:** owns the selected/desired optical configuration, objective-specific exposure profiles and calibration references.
 - **Acquisition workflow:** coordinates camera, stage, optics and the active physical slide when a planned capture sequence requires more than one capability.
 - **Slide/document workspace:** owns opened slide records and image-document state. It does not own the camera or stage device session.
@@ -119,7 +120,7 @@ Object-oriented design and functional programming have different jobs.
 - Identity and lifetime of the microscope and its devices.
 - Hardware handles, controller instances, worker threads and queues.
 - Current camera connection/acquisition lifecycle.
-- Current stage canvas, position, homing/reference state and active movement.
+- Controller::Stage global position evidence, active configuration, pending motion plan and homing/reference lifecycle.
 - Current microscope configuration and active workflow.
 - Open slide documents, acquisition runs and persistence handles.
 - The authoritative current state and its transition lifecycle.
@@ -130,7 +131,7 @@ These objects expose explicit methods. Their internal mutable state is changed o
 
 Pure functions and value types are used for deterministic behavior that does not need to own a lifecycle:
 
-- Stage geometry, four-corner slide solving, coordinate transforms, bounds and overlap tests.
+- Installed StageConfiguration/StageSlot geometry and validation in Core/Controller; measured Slide-to-StageSlot registration transforms in Application.
 - Navigation-plan selection and axis-unit conversion.
 - Optical magnification, pixel-to-specimen transforms and sampling policy.
 - Configuration validation and compatibility resolution.
@@ -219,9 +220,10 @@ Every state item has one authoritative owner. Other components receive observati
 | Optical calibration | Calibration owner/store | Revisioned; bound to geometry-affecting configuration |
 | Camera feature descriptors/readbacks | Camera capability | Invalidated on session/feature generation changes |
 | Camera frame bytes and leases | Camera driver/frame pipeline | Not copied into generic UI state |
-| Stage XY canvas and slide registrations | Stage capability | Variable number of rectangles; initially empty |
-| Stage machine XYZ position | Stage capability | One machine-coordinate authority |
-| Per-axis home/reference and uncertainty | Stage capability | Independent axis lifecycle; XY and focus Z are separate |
+| Installed stage axes and mechanical limits | Core equipment definition projected into Controller::Stage | Immutable installed hardware specification |
+| Stage configurations and physical slots | Controller::Stage | Each configuration selects working axes/ranges and owns N StageSlots |
+| Global machine position and active configuration | Controller::Stage | One runtime stage authority; current slot is derived |
+| Slide-to-slot occupancy and registration | Application StageSlotAssignments / StageSlotRegistration | References existing Slide revisions; does not redefine StageSlot geometry |
 | Active operation and step status | The workflow/capability that created it | One owner; correlation is not caller-generated state |
 | Physical Slide state and pinned SampleType definition | Slide aggregate plus shared versioned SampleType definition | Slide is loaded by SlideId; its exact SampleTypeId/revision must be resolved separately; independent of current stage position |
 | Workspace active selection and dock state | Workspace model | UI state, not physical device state |
@@ -281,46 +283,51 @@ Calibration has its own identity and lifecycle. Nominal pixel scale is an estima
 
 The current automatic-readout interpretation remains provisional until the camera's sensor/readout behavior has been independently confirmed. A passing arithmetic test is not hardware evidence.
 
-### 7.3 Stage and physical slide workspace
+### 7.3 Controller Stage and physical StageSlots
 
-The stage capability owns one physical machine coordinate system and one XY working surface.
+The C++ runtime mechanics model lives in Controller/, beside Camera/. Controller::MicroscopeInstance owns one live Stage. It is the sole runtime authority for installed physical axes, active StageConfiguration, physical StageSlots, global machine position and stage motion lifecycle. No second stage state model exists in Microscope.Application or SwiftUI.
 
-The working surface is created empty. The user defines:
-- The canvas origin in machine coordinates `(x, y)`.
-- The positive X and Y travel extents.
+The object hierarchy is:
 
-The canvas far boundary is derived from origin plus travel extents and validated against the physical stage axis ranges. The canvas origin is not the implicit origin of any slide.
+~~~text
+MicroscopeInstance
+└── Stage
+    ├── LinearAxis[N]
+    ├── RotationAxis[N]
+    └── StageConfiguration[N]
+        ├── selected working axes/effective ranges
+        └── StageSlot[N]
+~~~
 
-Each user-drawn slide registration contains:
-- A separately supplied mechanical stop-point endpoint, which defines that slide's local origin.
-- The initial opposite-corner CAD handle, which defines the direction signs.
-- The length-axis assignment (StageX or StageY).
-- Constrained length and width.
-- The solved opposite corner and all four stage-coordinate corners.
-- A unique registration revision.
+Core equipment definitions describe the installed physical axis inventory, mechanical ranges, minimum increments, accuracy, precision/repeatability, measurement uncertainty, axis roles and rotation-axis geometry. Controller::Stage::fromEquipmentSpecification performs the one-way projection from the equipment Stage specification into runtime mechanics. A StageConfiguration selects the installed axes it uses, defines effective X/Y/Z working ranges and may include optional rotation axes.
 
-The number of slide rectangles is variable. The stage does not contain a fixed left/right or fixed-ten slide slot model. Slide registrations must fit the canvas, cannot have positive-area overlap, and cannot be edited in-place under a reused revision. Edge contact is allowed unless an explicit holder-clearance rule is introduced from physical evidence.
+All Controller linear coordinates, travel ranges, slot origins/ranges, minimum increments and linear tolerances use integer nanometres. Runtime angular values use radians. Equipment schema v2 is the canonical runtime format and requires nanometres for linear axis coordinates, travel, resolution and tolerances. A schema-v1 Stage can be imported for migration but is not a runnable configuration because it has no StageConfiguration/StageSlot setup.
 
-Stage state:
-- `StagePosition3D` owns machine X, Y and focus Z state.
-- The canvas and slide registrations provide XY mapping only.
-- Focus Z travel/reference is independent and is never encoded as slide thickness or slide-local Z.
-- Each axis has its own reference state, evidence and uncertainty.
-- XY navigation homes X/Y only when required; a focus operation may reference Z independently.
-- A real global device/session feedback loss may invalidate the whole machine state. An XY movement fault must not invalidate an independent valid focus-Z reference.
+A StageSlot describes a physical holder region; it is not a Slide. It contains a global XY origin and local X/Y usable ranges. Every StageConfiguration owns N non-overlapping StageSlots, so two-slide holders, ten-slot carriers and Petri-dish holders share one model. The Stage has one global coordinate system whose origin is established by homing. A slot-relative target is translated by its StageSlot origin. Current StageSlot identity is derived from current global XY position and the active configuration, not stored as a separately mutable value.
 
-The application-level stage owner retains the stage runtime, operation state and bounded control queue for the lifetime of the controlling microscope runtime. UI producers submit a revision-bound target value. They do not supply operation/step/command identities or mutate stage state.
+Controller exposes typed operations:
+- moveTo(SlotRelativePosition, StageSlotId) plans a local XY movement and preserves known focus Z/rotation.
+- moveTo(StageAbsolutePosition) plans a global XYZ position and active rotary targets.
+- moveBy(StageDisplacement) computes an absolute target from known position.
+- home() plans homing for all axes active in the selected configuration.
+- refreshPosition() captures the exact global position, homes, then permits a separate restoration plan after the exact home completion and reference observation.
 
-The stage driver is a separate persistent adapter. It owns controller communication and real-time execution. The stage capability owns micrometer coordinates, slide transforms, position evidence, accumulated error, homing policy and navigation. The driver reports typed completion/position/reference observations; the stage owner evaluates them and updates the authoritative state.
+Planning does not optimistically mutate position. Each plan is tied to its Stage sequence and active configuration, and only the exact pending plan can be translated or reconciled. A completed move updates a command-derived estimate only after the correlated action and exact axis set are accepted. An uncertain/failed move invalidates position. A completed HomeAxes action is insufficient to establish the global origin; the host must also provide a complete normalized StageHomeReferenceObservation for every requested axis.
 
-The focus-Z full-range sweep without an endstop remains an explicit reference workflow. It depends on the configured travel envelope and the declared continuous-knob-rotation-without-clash capability. Without independent position feedback, the result is a calibrated estimate, not measured position.
+The existing Core IStageMotionPort remains the adapter boundary. StageMotionCommandTranslator converts Controller plans to Core MoveAxesTo/HomeAxes commands and validates them against the installed equipment specification. A concrete adapter implements this port and owns device communication, channel mapping, controller-unit/step conversion, direction, homing procedure, trajectories, readback, faults and session lifecycle. It does not own Stage policy or create another stage model.
+
+### 7.3.1 Slide association belongs to the application
+
+The application retains physical Slide identities and immutable Slide revisions. StageSlotAssignments is the sparse application-owned mapping from StageSlotId to SlideId/revision. StageSlotRegistration may retain a measured four-corner transform between one Slide revision's local coordinates and its assigned StageSlot's coordinate plane. StageSlotAssignmentsSqliteStore persists these immutable mapping/registration snapshots and references the existing Slide revision store.
+
+These records do not redefine StageSlot geometry or store a second stage canvas. The application resolves a Slide-local target through its current assignment and registration, then sends a slot-relative target to Controller::Stage. Stage does not import Slide IDs, SampleType, stain or acquisition state.
 
 ### 7.4 Workspace, slides and image documents
 
 There are three separate models:
 
 1. **Workspace UI model:** active view, selected document/slide, dock visibility, tab selection, pane layout and other transient interaction state.
-2. **Physical slide/workspace model:** stable SlideIds, human-facing Slide codes, physical geometry, user-authored stage registrations, observed SlidePreparation facts, zero-or-more Stain references, physical occupancy and slide selection. Each Slide directly pins a SampleTypeId and exact SampleType revision and may carry an optional OriginLabId. There is no Sample instance, SampleId, patient identity or SlideType entity in this microscope model.
+2. **Physical Slide and slot association model:** stable SlideIds, human-facing Slide codes, physical geometry, Slide-to-StageSlot assignments and measured registrations, observed SlidePreparation facts, zero-or-more Stain references, occupancy and slide selection. Each Slide directly pins a SampleTypeId and exact SampleType revision and may carry an optional OriginLabId. There is no Sample instance, SampleId, patient identity or SlideType entity in this microscope model.
 
 A Slide's Stains describe the applied staining identity, not a SampleType requirement and not a required preparation checklist. A Stain has a stable StainId, name and optional description. Its optional MicroscopySuitability metadata contains advisory recommended contrast methods; a Stain without suitability metadata is valid. A Slide may have no Stains or multiple Stains. These recommendations cannot override SampleType's Required, Supported or Prohibited technique constraints and cannot make an otherwise invalid microscope configuration compatible.
 3. **Slide image document:** source image identity/payload, image-space overlays, measurements, annotations, view state and provenance.
@@ -468,7 +475,7 @@ Do not route high-frequency camera frames through this operation-feedback path. 
 Failure does not fabricate the requested state. The owner preserves the last trustworthy observation, marks uncertain state explicitly, terminates or pauses the relevant operation and exposes a recoverable condition.
 
 Invalidation follows ownership scope:
-- A malformed/off-target XY navigation result affects the stage XY movement/reference according to its evidence; it does not silently erase an independent focus-Z reference.
+- A malformed/off-target slot-relative motion result affects the relevant Stage movement/reference according to its evidence; it does not silently erase an independent focus-Z reference.
 - A whole-device/session loss may invalidate all affected axes and outstanding device operations.
 - A camera acquisition fault changes camera acquisition state and frame availability; it does not mutate stage position.
 - A persistence failure does not delete an already completed capture or original payload.
@@ -484,13 +491,13 @@ Concurrency is chosen per real resource, not imposed uniformly across the applic
 | Swift `MainActor` | App lifecycle, Swift observable presentation models, window/workspace UI state | Blocking camera/stage I/O or per-frame processing |
 | Camera command executor | Serialized camera lifecycle and feature commands | Update Swift state directly or run the AppKit renderer |
 | Camera acquisition worker | SDK image pull, frame-pool and mailbox publication | UI calls, rendering, unbounded buffering |
-| Stage owner thread | Stage commands, feedback reduction, position/canvas state and operation transitions | Share mutable stage state with UI or driver callbacks |
+| Stage owner thread | Controller Stage commands, validated feedback reconciliation, position evidence and operation transitions | Share mutable stage state with UI or driver callbacks |
 | Hardware callback threads | Copy/enqueue bounded event or feedback facts | Mutate runtime state or perform lengthy SDK/controller work |
 | Image/persistence workers | Explicit image processing, encoding and file operations | Retain a live camera lease longer than the job requires or mutate device state |
 
 Each stateful aggregate has one logical writer. Frontend and background producers pass typed values/commands. Observers receive immutable copies/snapshots or narrow read-only projections.
 
-The stage owner and camera controller may run concurrently because they own different physical devices and state. A microscope-level workflow coordinates their results without merging their device internals or forcing camera frames through the workflow operation queue.
+The Controller Stage owner and camera controller may run concurrently because they own different physical devices and state. A microscope-level workflow coordinates their results without merging their device internals or forcing camera frames through the workflow operation queue.
 
 ## 10. Application startup and shutdown
 
@@ -529,14 +536,15 @@ This section distinguishes repository facts from architecture targets.
 | Workspace | Swift two-pane active target and dock model | Keep UI layout separate from physical SlideIds and variable-count stage registrations |
 | Image document | AppKit image panes, source-pixel overlay/measurement state and geometry functions | Persist source image/document/annotation identities and calibration provenance |
 | Preview capture | Gallery saves currently displayed frame to PNG | Keep distinct from true still acquisition and domain AcquisitionRun |
-| Stage Core | C++17 XY working surface, slide geometry, machine XYZ state, axis reference and planners | Continue with stateful owner/runtime and hardware integration |
-| Stage Application | Generic navigation executor/runtime/queue code exists as an incomplete migration slice | Reconcile against this ownership model before further implementation; no physical stage adapter is currently integrated |
-| C++ platform | Core and Application libraries exist as separate CMake targets; the native app CMake target now links both | The Swift/Objective-C++ composition does not yet instantiate the stage runtime or call the C++ model; real stage specifications, a narrow bridge and the physical-stage adapter remain outstanding |
+| Controller Stage | Controller/Common contains MicroscopeInstance, Stage, LinearAxis, RotationAxis, StageConfiguration, StageSlot, motion plans and a Core command translator | The new OOP model is implemented; concrete physical adapter and full measured-feedback reconciliation remain outstanding |
+| Legacy stage design | Retired Core canvas/carrier/navigation/state types and old Application stage navigation/persistence paths | Removed from the canonical build; no compatibility stage runtime is maintained |
+| Application Slide association | StageSlotAssignments, StageSlotRegistration and StageSlotAssignmentsSqliteStore | Retain Slide ownership in Application while consuming StageSlot IDs from Controller equipment configuration |
+| C++ platform | Core, Controller/Common and Application are separate CMake targets; Application links Controller::Common | Native composition still needs to instantiate/retain MicroscopeInstance and bind the concrete physical IStageMotionPort adapter |
 | Persistence | UserDefaults for current configuration/layout preference and PNG files for gallery | Implement versioned records plus on-demand in-memory materialization, active-object residency and transactional commits; do not reread records during ordinary object use |
 | Processing | No complete processing subsystem | Add concrete image processing as pure operations over immutable source data when required |
 | Runtime verification | Test sources and CMake registrations exist | Compilation, test execution, hardware checks and UI acceptance remain separate evidence gates |
 
-The existence of a class or test target—and even a CMake link dependency—does not mean the capability is instantiated or connected to the manufactured hardware. The native app CMake target now links `Microscope::Core` and `Microscope::Application`; the remaining host integration is to supply real installed-axis specifications, create and retain the stateful C++ objects through the existing composition lifetime, and connect a narrow Objective-C++ bridge to the real physical-stage adapter. Do not construct a dummy stage specification or mock driver in production composition.
+The existence of a class or test target—and even a CMake link dependency—does not mean the capability is instantiated or connected to the manufactured hardware. The platform build links Microscope::Core, Controller::Common and Microscope::Application; the remaining host integration is to load a schema-v2 Stage configuration, create and retain MicroscopeInstance, bind the adapter DeviceId/port and connect a narrow host bridge to the feedback owner. Do not construct a dummy stage specification or mock driver in production composition.
 
 ## 12. Implementation order
 
@@ -547,31 +555,30 @@ Implementation follows the dependency graph and current real consumers. Do not a
 - Keep the existing application delegate and composition as the lifetime root.
 - Define the per-microscope runtime/capability ownership and teardown contract.
 - Identify the authoritative owner for each state item before moving code.
-- Remove contradictions between fixed-slot navigation and variable-count physical slide layout.
+- Keep Controller::Stage as the sole physical stage authority and keep Slide-to-StageSlot assignment in the application.
 - Keep camera lifecycle and preview invariants unchanged.
 
 **Exit:** one documented owner per runtime state/resource; no per-command construction of stateful devices or controllers.
 
-### B. Complete one stateful stage vertical slice
+### B. Implement the concrete physical stage adapter
 
-- Reconcile the current generic stage planner/executor/runtime/queue against the single-owner contract.
-- The persistent stage owner retains its canvas, XYZ position, axis references, active navigation and identity sequence.
-- The queue accepts a revision-bound target only. The stage owner allocates operation identities and owns the operation lifecycle.
-- Integrate the real external driver library through one long-lived `IStageMotionPort` adapter.
-- Complete direct XY movement, X/Y homing and exact correlated restoration.
-- Implement safe focus-Z reference lifecycle separately, including the no-switch full-range sweep.
-- Publish immutable state to the application host/UI.
+- Implement the existing IStageMotionPort for the selected physical controller. Do not add a second Stage or motion-port abstraction.
+- Add a fake controller/protocol harness and verify axis binding, unit conversion, signs, travel limits, homing and correlated completion before connecting hardware.
+- Implement moveAxesTo, controlled stop, device lifecycle/session generations, normalized feedback and fault semantics.
+- Verify that the adapter normalizes the configured home reference to the global Stage origin and reports the exact requested axis set.
+- Add hardware smoke tests for each axis, coordinated movement, full travel, homing repeatability, backlash and readback.
 
-**Exit:** a real slide-local target is translated to a physical XY move, feedback updates the existing stage object, and a failure cannot leave false position or operation state.
+**Exit:** the adapter can accept/reject a real move, report its exact completion/reference evidence and fail without creating false position state.
 
-### C. Compose stage into the application lifetime
+### C. Compose the Controller runtime into the application lifetime
 
-- Add the stage adapter/controller to `OptikaB293Composition`/the per-microscope runtime once.
-- Bind the device identity and stage owner thread once for that runtime lifetime.
-- Expose a narrow Objective-C++/Swift command and snapshot bridge.
-- Keep SwiftUI as a producer/observer; do not let it own the stage driver or mutable C++ stage state.
+- Load the installed schema-v2 equipment definition and select an existing StageConfiguration.
+- Construct one Controller::MicroscopeInstance that owns one Controller::Stage.
+- Bind the concrete IStageMotionPort implementation and its DeviceId for the lifetime of that microscope runtime.
+- Provide one feedback owner that correlates Core runtime receipts and applies validated position observations/faults to Stage.
+- Expose a narrow Objective-C++/Swift command and immutable-snapshot bridge. SwiftUI remains a producer/observer; it does not own stage state or driver objects.
 
-**Exit:** the native UI controls the same long-lived stage object for the complete application runtime.
+**Exit:** the native UI controls the same long-lived Controller Stage and observes its validated position/motion state.
 
 ### D. Migrate optics and calibration by ownership
 

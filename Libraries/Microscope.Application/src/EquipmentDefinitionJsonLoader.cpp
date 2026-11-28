@@ -1957,13 +1957,19 @@ bool parseStageAxisSpecification(
          {"unknown", core::AxisMotionType::Unknown}},
         motionType, error) ||
         !requiredEnumField(*object, "coordinateUnit", path,
-        {{"micrometers", core::AxisCoordinateUnit::Micrometers},
+        {{"nanometres", core::AxisCoordinateUnit::Nanometres},
+         {"micrometers", core::AxisCoordinateUnit::Micrometers},
          {"millimeters", core::AxisCoordinateUnit::Millimeters},
          {"degrees", core::AxisCoordinateUnit::Degrees},
          {"radians", core::AxisCoordinateUnit::Radians},
          {"device-defined", core::AxisCoordinateUnit::DeviceDefined},
          {"unknown", core::AxisCoordinateUnit::Unknown}},
         coordinateUnit, error)) return false;
+
+    if(schemaVersion>=2 && motionType==core::AxisMotionType::Linear &&
+       coordinateUnit!=core::AxisCoordinateUnit::Nanometres)
+        return fail(error,ErrorCode::InvalidValue,path+".coordinateUnit",
+            "Schema-v2 LinearAxis coordinates, travel, resolution and tolerances must use nanometres.");
 
     const JsonObject* rangeObject = nullptr;
     if (!requiredObject(*object, "operatingRange", path, rangeObject, error) ||
@@ -1976,7 +1982,8 @@ bool parseStageAxisSpecification(
         !requiredNumber(*rangeObject, "maximum", path + ".operatingRange",
             maximum, error) ||
         !requiredEnumField(*rangeObject, "unit", path + ".operatingRange",
-            {{"micrometers", core::AxisCoordinateUnit::Micrometers},
+            {{"nanometres", core::AxisCoordinateUnit::Nanometres},
+             {"micrometers", core::AxisCoordinateUnit::Micrometers},
              {"millimeters", core::AxisCoordinateUnit::Millimeters},
              {"degrees", core::AxisCoordinateUnit::Degrees},
              {"radians", core::AxisCoordinateUnit::Radians},
@@ -2175,51 +2182,6 @@ bool parseStageSpecification(
     return true;
 }
 
-bool parseDualSlideCarrierSpecification(
-    const JsonValue& value,
-    const std::string& path,
-    const std::vector<core::StageSpecification>& stages,
-    std::optional<core::DualSlideCarrierSpecification>& output,
-    Error& error) {
-    const JsonObject* object = nullptr;
-    if (!objectValue(value, path, object, error) ||
-        !allowedKeys(*object,
-            {"stageComponentId", "horizontalAxisId", "transverseAxisId", "direction"},
-            path, error)) return false;
-
-    std::optional<core::EquipmentComponentId> stageId;
-    std::optional<core::StageAxisId> horizontal;
-    std::optional<core::StageAxisId> transverse;
-    core::CarrierHorizontalDirection direction{};
-    if (!requiredId(*object, "stageComponentId", path, stageId, error) ||
-        !requiredId(*object, "horizontalAxisId", path, horizontal, error) ||
-        !requiredId(*object, "transverseAxisId", path, transverse, error) ||
-        !requiredEnumField(*object, "direction", path,
-            {{"positive-stage-x-left-to-right",
-                core::CarrierHorizontalDirection::PositiveStageXFromLeftToRight},
-             {"negative-stage-x-left-to-right",
-                core::CarrierHorizontalDirection::NegativeStageXFromLeftToRight}},
-            direction, error)) return false;
-
-    const auto stage = std::find_if(stages.begin(), stages.end(),
-        [&stageId](const core::StageSpecification& item) {
-            return item.componentId() == *stageId;
-        });
-    if (stage == stages.end()) {
-        return fail(error, ErrorCode::InvalidValue, path + ".stageComponentId",
-            "Carrier references a stage that is not present in stageSpecifications.");
-    }
-
-    auto created = core::DualSlideCarrierSpecification::create(
-        *stage, std::move(*horizontal), std::move(*transverse), direction);
-    if (!created) return fail(error, ErrorCode::DomainValidationFailed,
-        path, "Core rejected the dual-slide carrier-to-stage binding.");
-    output = std::move(created).value();
-    return true;
-}
-
-
-
 template <typename T, typename Parser>
 bool parseOptionalArrayField(
     const JsonObject& object,
@@ -2260,7 +2222,7 @@ bool decodeEquipmentDefinition(
              "components","connections","opticalPaths","lightPaths",
              "objectiveSpecifications","cameraSpecifications",
              "condenserSpecifications","illuminationSpecifications",
-             "stageSpecifications","dualSlideCarrierSpecifications",
+             "stageSpecifications",
              "filterSpecifications","opticalRelaySpecifications"},
             "$",error)) return false;
     } else {
@@ -2331,17 +2293,6 @@ bool decodeEquipmentDefinition(
             return parseStageSpecification(item,itemPath,parsed,itemError,schemaVersion);
         })) return false;
 
-    std::vector<core::DualSlideCarrierSpecification> carriers;
-    if(schemaVersion==EquipmentDefinitionJsonLoader::kLegacySchemaVersion) {
-        if(!parseOptionalArrayField(*object,"dualSlideCarrierSpecifications","$",
-            carriers,error,
-            [&stages](const JsonValue& item,const std::string& itemPath,
-                std::optional<core::DualSlideCarrierSpecification>& parsed,
-                Error& itemError) {
-                return parseDualSlideCarrierSpecification(
-                    item,itemPath,stages,parsed,itemError);
-            })) return false;
-    }
 
     std::vector<core::OpticalFilterSpecification> filters;
     if (!parseOptionalArrayField(*object, "filterSpecifications", "$",
@@ -2361,14 +2312,13 @@ bool decodeEquipmentDefinition(
         std::move(condensers),
         std::move(illuminations),
         std::move(stages),
-        std::move(carriers),
         std::move(lightPaths),
         std::move(filters),
         revision,
         std::move(relays));
     if (!created) {
         return fail(error, ErrorCode::DomainValidationFailed, "$",
-            "Core rejected the equipment graph. Check component/port identities, connection ownership, path direction and adjacency, LightPath camera endpoints, stage/carrier bindings, and specification component kinds.");
+            "Core rejected the equipment graph. Check component/port identities, connection ownership, path direction and adjacency, LightPath camera endpoints, Stage axis/configuration references, and specification component kinds.");
     }
     output = std::move(created).value();
     return true;

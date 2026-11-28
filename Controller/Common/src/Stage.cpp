@@ -13,6 +13,7 @@ bool toNanometres(double value,core::AxisCoordinateUnit unit,Nanometres& output)
     if(!std::isfinite(value)) return false;
     long double factor=0.0L;
     switch(unit) {
+    case core::AxisCoordinateUnit::Nanometres: factor=1.0L; break;
     case core::AxisCoordinateUnit::Micrometers: factor=1'000.0L; break;
     case core::AxisCoordinateUnit::Millimeters: factor=1'000'000.0L; break;
     default: return false;
@@ -878,7 +879,8 @@ core::Status<StageModelError> Stage::recordCompletedHome(
         const auto& id=measured.position().axisId();
         const auto unit=measured.position().unit();
         if(specification_.linearAxis(id)!=nullptr) {
-            if(unit!=core::AxisCoordinateUnit::Micrometers&&
+            if(unit!=core::AxisCoordinateUnit::Nanometres&&
+               unit!=core::AxisCoordinateUnit::Micrometers&&
                unit!=core::AxisCoordinateUnit::Millimeters)
                 return core::Status<StageModelError>::failure(
                     StageModelError::InvalidHomeReferenceEvidence);

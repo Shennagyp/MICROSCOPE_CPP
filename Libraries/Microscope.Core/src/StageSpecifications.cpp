@@ -27,6 +27,7 @@ namespace {
 
 [[nodiscard]] bool isKnownAxisCoordinateUnit(AxisCoordinateUnit value) noexcept {
     switch (value) {
+    case AxisCoordinateUnit::Nanometres:
     case AxisCoordinateUnit::Micrometers:
     case AxisCoordinateUnit::Millimeters:
     case AxisCoordinateUnit::Degrees:
@@ -49,7 +50,8 @@ namespace {
 
     switch (motion) {
     case AxisMotionType::Linear:
-        return unit == AxisCoordinateUnit::Micrometers ||
+        return unit == AxisCoordinateUnit::Nanometres ||
+               unit == AxisCoordinateUnit::Micrometers ||
                unit == AxisCoordinateUnit::Millimeters;
     case AxisMotionType::Rotary:
         return unit == AxisCoordinateUnit::Degrees ||
@@ -435,6 +437,8 @@ bool slotOverlaps(const StageSlotSpecification& a,const StageSlotSpecification& 
     return ax0<=bx1&&bx0<=ax1&&ay0<=by1&&by0<=ay1;
 }
 std::optional<long double> linearValueNm(double value,AxisCoordinateUnit unit) noexcept {
+    if(unit==AxisCoordinateUnit::Nanometres)
+        return static_cast<long double>(value);
     if(unit==AxisCoordinateUnit::Micrometers)
         return static_cast<long double>(value)*1'000.0L;
     if(unit==AxisCoordinateUnit::Millimeters)

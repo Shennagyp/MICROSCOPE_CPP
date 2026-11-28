@@ -1,124 +1,122 @@
 # Controller
 
-The C++ Controller capability lives beside `Camera/`. It owns the backend-
-neutral microscope mechanics model and generates typed motion plans. It does
-not define a second hardware-driver interface.
+Controller/ is the C++ runtime mechanics capability beside Camera/. It is the sole runtime owner of the physical microscope stage. It is not another Application navigation layer and it does not depend on the retired canvas, fixed-carrier or slide-navigation models.
 
-## Object ownership
+## Authority and dependency direction
 
-`MicroscopeInstance` owns one live `Stage` and an explicit runtime `DeviceId`
-binding for the physical Stage controller. Construct that runtime Stage with
-`Stage::fromEquipmentSpecification(coreStage, activeConfigurationId)`: this is
-the one-way projection from persisted Core equipment into runtime mechanics,
-so axes, geometry, configuration ranges and StageSlots are not separately
-re-authored in Controller. The binding is distinct from the
-Stage's equipment `EquipmentComponentId`; the dispatcher checks the runtime
-microscope ID and the bound Stage device ID independently. The Stage owns its installed
-`LinearAxis` and `RotationAxis` objects, available `StageConfiguration`
-objects, active configuration, and current position evidence.
+- Microscope.Core defines immutable installed-equipment specifications and the backend-neutral motion command/feedback contract.
+- Controller::Common projects the canonical equipment Stage specification into one live OOP Stage owned by MicroscopeInstance.
+- A physical adapter implements the existing Core IStageMotionPort. It performs hardware I/O and reports normalized feedback.
+- The Swift/Application layer owns physical Slide documents and associates their existing Slide IDs with configured StageSlot IDs. It does not own stage axes, position, homing, motion planning or physical stage geometry.
 
-Each configuration selects working axes and owns a variable collection of
-generic `StageSlot` regions. The application owns physical Slide objects and
-associates Slide IDs with StageSlot IDs. Two-slide, ten-slide, Petri-dish and
-other holders are all represented by the same N-slot model.
+There is no second stage model in Microscope.Application. StageWorkingSurface2D, DualSlideNavigation, fixed left/right carrier state and their navigation runtimes are retired.
 
-Application navigation exposes `StageSlotAssignments`, a sparse collection of
-occupied slot mappings. Each record contains `StageSlotId`, existing
-`SlideId`, and the exact immutable Slide revision. The aggregate is scoped to
-the installed Stage component, equipment-definition revision and active
-StageConfiguration. It rejects slots outside that configuration, duplicate
-slot assignments, duplicate Slide occupancy and zero Slide revisions. Empty
-slots are represented by absence of an assignment.
+## Runtime object model
 
-`StageSlotAssignmentsSqliteStore` persists append-only assignment snapshots.
-It references the existing `SampleSlideSqliteStore` `slide_revision` rows by
-foreign key rather than storing Slide payloads again. Writes validate the
-supplied current Slide revision, use an expected-current-revision check, and
-commit assignment revision, per-slot rows and current pointer in one SQLite
-transaction. Historical snapshots continue to pin their original Slide
-revisions.
+~~~text
+MicroscopeInstance
+└── Stage
+    ├── LinearAxis[N]
+    ├── RotationAxis[N]
+    ├── StageConfiguration[N]
+    │   ├── WorkingLinearAxis[N]
+    │   ├── WorkingRotationAxis[N]   (optional)
+    │   └── StageSlot[N]
+    ├── active configuration
+    ├── current position evidence
+    └── one pending correlated motion plan
 
-This assignment model replaces the fixed left/right relationship for new
-workflows. The legacy `DualSlideCarrierSqliteStore` still contains fixed
-left/right schema and the old four-corner registration payload; that
-registration/persistence migration is not complete yet and must not be
-treated as the new canonical assignment store.
+StageMotionCommandTranslator
+        |
+        v
+Core MoveAxesTo / HomeAxes
+        |
+        v
+IStageMotionPort
+        |
+        v
+Controller adapter
+        |
+        v
+physical controller / motors / feedback
+~~~
 
-## Coordinates and mechanical properties
+Stage::fromEquipmentSpecification(coreStage, activeConfigurationId) is the only supported construction path from persisted equipment to the runtime Stage model. It projects the installed axis inventory, mechanical limits, axis roles, rotation geometry, configurations and slots into the runtime aggregate. The installed equipment specification remains the source for translator verification; runtime state is not persisted back into the equipment definition.
 
-All linear positions, travel ranges, slot dimensions, accuracy, precision,
-minimum increments and measurement uncertainty use integer nanometres.
-Minimum increment, accuracy, precision and measurement uncertainty are stored
-independently; unavailable measurements remain absent rather than becoming
-zero. The Core equipment axis's nominal resolution supplies the runtime
-minimum increment. Accuracy maps from the independent maximum absolute error;
-precision maps from the repeatability value (the original metric and test
-conditions remain in the canonical Core specification).
-Rotation uses radians. A rotation axis is
-specified by a point in global stage XYZ coordinates and a cardinal direction
-(X, Y, or Z). Rotary accuracy, precision, minimum increment and measurement
-uncertainty use radians.
+MicroscopeInstance owns one live Stage and the runtime DeviceId binding used by the dispatch boundary.
 
-Each configuration defines effective X, Y and Z ranges. Rotation axes are
-optional per configuration. A StageSlot has a global XY origin and local X/Y
-usable ranges. Slot-relative targets are translated to global stage
-coordinates. The current slot is derived from active configuration and current
-XY position; there is no separately mutable current-slot field.
+## Canonical mechanics model
 
-## Motion and completion lifecycle
+### Axes
 
-The Stage and axis objects create typed `StageMotionPlan` values. A plan
-has a monotonically increasing sequence and the active configuration identity.
-Only one plan can be pending for a Stage at a time. The translator validates
-that the plan is exactly the live Stage's pending plan before generating Core
-commands. For schema-v2 equipment, it also requires the selected runtime
-configuration, physical axis roles/rotation geometry, working ranges, and slot
-rectangles to match the canonical equipment definition.
+- LinearAxis has a stable StageAxisId, X/Y/Z role, mechanical travel range, minimum increment, optional accuracy, precision/repeatability and measurement uncertainty.
+- RotationAxis has a stable StageAxisId, a point on its global machine axis, cardinal direction X/Y/Z, angular travel, minimum increment and independent accuracy/precision/uncertainty.
+- Accuracy, precision, minimum increment and measurement uncertainty are not interchangeable. Missing values remain absent.
+- Runtime linear values use integer nanometres. Runtime angular values use radians. Equipment schema v2 must express linear coordinate, mechanical range, resolution and tolerances in nanometres. Schema-v1 equipment remains a legacy migration input; a v1 Stage without v2 configurations is not a runnable Controller configuration.
 
-The Application `StageMotionPlanDispatcher` translates the plan and submits it
-through the existing correlated `StageMotionCommandDispatcher`,
-`SerializedOperationRuntime`, and Core `IStageMotionPort`. It returns the
-plan sequence with the adapter-submission receipt. Submission acceptance is
-not treated as physical completion.
+### Configurations and slots
 
-After the runtime correlates the exact Core `StageMotionActionCompletion`,
-the host passes that fact to `Stage::recordCompletedMotion`. The Stage checks
-the action type and exact axis set before atomically applying command-derived
-position state. That state is a command-derived estimate, not a measured
-position; subsequent Core position observations remain a separate feedback fact. An uncertain or failed execution is sent to
-`recordFailedMotion`, which invalidates position. A definite pre-submission
-or adapter rejection cancels the pending plan without changing known position.
+Each StageConfiguration selects the installed axes active for one holder setup and owns a variable N-element collection of StageSlot values. X, Y and Z working ranges are mandatory; rotation is optional. Every effective range must fit within the corresponding installed mechanical range.
 
-Homing has a stricter two-fact contract. The host supplies both the correlated
-`StageMotionActionCompletion` for `HomeAxes` and Core's normalized
-`StageHomeReferenceObservation` to `recordCompletedHome`. The latter fact
-is emitted only after the configured reference procedure has established all
-requested axis references. A generic successful HomeAxes action does not by
-itself establish a valid global coordinate origin.
+A StageSlot describes a physical holder region, not a Slide. It has:
+- A global XY origin in the Stage machine coordinate system.
+- Local non-negative X and Y usable ranges, in nanometres.
 
-## Stage operations
+The Stage has one global coordinate system. Homing establishes the global machine origin. Slot-relative target coordinates are translated by adding the selected slot origin. Slot overlap and out-of-envelope geometry are rejected at configuration construction. currentSlotId() is derived from the current global XY position and active configuration; it is not a separately mutable state field.
 
-- `moveTo(SlotRelativePosition, StageSlotId)`: plan absolute XY movement
-  relative to a slot origin; preserve current Z and rotation.
-- `moveTo(StageAbsolutePosition)`: plan absolute global XYZ and all active
-  rotation targets.
-- `moveBy(StageDisplacement)`: calculate a target from known current position.
-- `home()`: plan homing of every axis used by the active configuration.
-- `refreshPosition()`: capture the saved global position and produce a home
-  plan; after the home action and reference observation are accepted,
-  `restorePositionAfterRefresh()` produces the return movement plan. Refresh
-changes neither mechanical calibration nor slot geometry; it is a home-and-
-return position-reference operation. The separate `calibrate()` procedure is
-not implemented by this Stage command model yet.
+Two slides, ten slides, a Petri dish or any other holder are represented by the same StageConfiguration + N StageSlots model.
 
-## Equipment-unit boundary
+## Stage command and position lifecycle
 
-Controller geometry remains in nanometres and radians. The
-`StageMotionCommandTranslator` validates component/axis identity and converts
-targets to the coordinate units declared by the installed Core equipment
-definition (µm, mm, degrees or radians). It does not perform hardware I/O.
-The existing motion adapter remains responsible for device-specific unit
-conversion, trajectories, feedback, timeouts and faults.
+The Stage exposes:
+- moveTo(SlotRelativePosition, StageSlotId) for a local XY target in one slot.
+- moveTo(StageAbsolutePosition) for an absolute global XYZ target and all active rotation axes.
+- moveBy(StageDisplacement) based on a known current position.
+- home() for all axes active in the selected configuration.
+- refreshPosition() as a two-stage home-and-return transaction.
 
-Slide identity, acquisition orchestration, image/tile persistence and UI
-ownership remain outside Controller.
+Motion planning does not update position. A plan has a monotonic sequence and active configuration identity; only one plan may be pending. A plan must be the exact pending plan before translation or completion reconciliation.
+
+A completed move updates a command-derived estimate only after the correlated StageMotionActionCompletion matches the exact action and axis set. An uncertain/failed motion invalidates position. A successful HomeAxes action alone does not establish the coordinate origin: the host must also provide a matching normalized StageHomeReferenceObservation covering every requested axis.
+
+refreshPosition() privately retains the saved pre-home position. After the exact home and reference facts are accepted, restorePositionAfterRefresh() creates the return plan. Callers cannot modify the saved restoration coordinates; cancelled undispatched restoration can be retried, while a completed/failed/superseded refresh cannot be replayed. Refresh does not change calibration or slot geometry. It does not by itself eliminate mechanical backlash; any consistent final-approach or compensation policy must be based on the actual mechanics.
+
+Stage calibration is separate from position refresh. A complete Stage calibration procedure/record lifecycle is not yet implemented by the runtime Stage API.
+
+## Application-owned Slide association
+
+The application retains the actual Slide aggregate and slide revisions. These generic records remain in Microscope.Application:
+- StageSlotAssignments: sparse occupied-slot mapping from StageSlotId to existing SlideId and exact Slide revision.
+- StageSlotRegistration: four measured corners and a revision-bound transform between one Slide's local coordinates and its assigned StageSlot's stage coordinates.
+- StageSlotAssignmentsSqliteStore: immutable, revisioned assignment/registration snapshots linked to the existing Slide revision store.
+
+These records consume StageSlot identities from the canonical equipment configuration. They do not redefine slot geometry or maintain an alternative stage coordinate system.
+
+## Motion port and adapter boundary
+
+The existing Core port is the hardware boundary. A driver implements IStageMotionPort:
+- moveAxesTo
+- moveAxesBy
+- homeAxes
+- stopAxes
+
+The Controller translator currently emits Core HomeAxes and MoveAxesTo commands. The port also exposes MoveAxesBy for an adapter/runtime path when needed. The application dispatch bridge forwards translated commands through the existing correlated operation runtime; it does not own Stage state.
+
+Adapter submission acceptance means only that the adapter accepted responsibility for the operation. It is not physical completion. The adapter reports correlated acknowledgements, progress, exact action completion, axis position observations, home-reference observations, limits and faults through the supplied feedback ingress. It must not mutate Stage state from a device callback thread.
+
+The adapter owns:
+- Vendor/controller connection and session lifecycle.
+- Logical StageAxisId to physical controller channel mapping.
+- Device-unit/step/encoder conversion and direction polarity.
+- Hardware-specific homing sequence and switch/index interpretation.
+- Motion profile generation, synchronized multi-axis movement and trajectory limits.
+- Controller communication, cancellation, timeouts, disconnection and fault normalization.
+- Backlash or approach-direction behavior where the mechanism requires it.
+
+stopAxes is a controlled motion stop, not a safety-rated emergency-stop circuit.
+
+## Build and tests
+
+Controller/Common is a standalone CMake target and is linked by the platform composition. Its tests validate the Stage object model, configuration validation, slot-relative/global transformations, plan identity, completion/homing semantics, refresh transaction and Core command translation.
+
+A hardware adapter should be added as a separate target under Controller/Adapters/<vendor-or-controller> and implement the existing port. It must not add another Stage type, coordinate system or driver interface.

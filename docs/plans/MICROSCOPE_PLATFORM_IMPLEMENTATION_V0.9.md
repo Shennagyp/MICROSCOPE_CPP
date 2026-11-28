@@ -1,576 +1,121 @@
-# Microscope Platform — v0.9 Implementation Plan
+# Microscope Platform Implementation Plan v0.9
 
-**Architecture reference:** ../architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md  
 **Target branch:** OPTIKA-B293-DUALSLIDE-APP-v.0.9  
-**Status:** Phases 1 and 2 completed; Phase 3 declarative configuration and Phase 4 operation runtime/stage navigation are in progress. Core now has the stage/navigation model, bounded feedback inbox and serialized operation-state owner. Application now has the runtime wake primitive, owner-loop entry point and legacy dual-slide X/Y feedback reducer. A 3D working-surface CAD model, axis-reference contract and XYZ position projection have been added as the target model for hardware-coordinate migration.
+**Authority:** docs/architecture/MICROSCOPE_PLATFORM_ARCHITECTURE_V0.9.md and docs/architecture/CONTROLLER_STAGE_AND_HARDWARE_ADAPTER_CONTRACT_V1.md  
+**Status:** Core equipment contracts and the Controller Stage OOP model exist. Concrete physical stage adapters and host integration remain outstanding.
+
+This plan is the current dependency-ordered implementation sequence. It supersedes earlier Phase 4 stage-navigation/canvas/carrier descriptions in this file. The previous Core working-surface canvas, fixed dual-slide carrier, dual-slide navigation state, Application stage navigation runtimes and their split persistence stores are retired. They must not be restored as compatibility dependencies.
+
+## 1. Current ownership model
+
+- Camera/ owns camera discovery, driver lifecycle, streaming, frame ownership and vendor SDK integration.
+- Microscope.Core owns static installed-equipment specifications, microscope-domain values, backend-neutral command/feedback contracts and serialized operation primitives.
+- Controller/ owns the live physical microscope mechanics model. MicroscopeInstance owns Stage; Stage owns LinearAxis/RotationAxis objects, StageConfigurations, N StageSlots, global machine position evidence and motion-plan lifecycle.
+- Microscope.Application owns application persistence, Slide records, Slide-to-StageSlot assignment and registration persistence, and capability dispatch integration. It does not own another Stage model.
+- Swift owns the acquisition workflow, image/tile organization, slide-folder persistence, gallery and application presentation.
+- ImageProcessing remains a separate project.
+
+## 2. Implemented baseline
+
+### Core equipment and command contracts
+
+Present:
+- Installed equipment topology and component specifications.
+- Stage physical axis metadata, axis roles, rotary-axis geometry and StageConfiguration/StageSlot specifications.
+- Schema-v2 Stage configuration with nanometre linear geometry and radian rotation configuration.
+- Typed motion commands, observations, home-reference facts, limits and faults.
+- Existing IStageMotionPort contract and correlated operation runtime.
+
+### Controller Stage
+
+Present:
+- MicroscopeInstance → Stage ownership.
+- LinearAxis and RotationAxis runtime models.
+- StageConfiguration with selected working axes/ranges and N StageSlots.
+- Slot-relative and absolute movement planning, home, refreshPosition and restore-position transaction.
+- Derived currentSlotId.
+- Exact pending-plan identity checks and correlated completion/failure handling.
+- Translator from Controller plans to Core HomeAxes/MoveAxesTo commands.
+- Contract tests for configuration, coordinate conversion, plans, homing and refresh lifecycle.
+
+### Application Slide association and persistence
+
+Present:
+- Existing physical Slide aggregate/revisions.
+- StageSlotAssignments for sparse SlideId/revision to StageSlotId association.
+- StageSlotRegistration for measured four-corner transforms tied to the exact Slide revision.
+- StageSlotAssignmentsSqliteStore for append-only assignment/registration snapshots.
+- StageMotionCommandDispatcher and StageMotionPlanDispatcher as command dispatch integration.
+
+## 3. Next work: concrete Stage adapter
+
+Create a controller-specific implementation under Controller/Adapters/<controller>. It must implement the existing IStageMotionPort; no second Stage type or driver interface is required.
+
+Implementation sequence:
+1. Record exact controller model, firmware, host API/protocol and transport.
+2. Define StageAxisId → physical controller channel mapping for all installed linear/rotary axes.
+3. Record measured mechanical travel, safe limits, scale/encoder conversion, axis direction and backlash.
+4. Specify the exact homing sequence per axis, including switch/index type, polarity, search direction, backoff, latch, offset and safe speed.
+5. Build a deterministic fake controller/protocol harness for unit conversion, sign mapping, bounds, coordinated moves, home and failure cases.
+6. Implement device/session lifecycle and axis binding.
+7. Implement moveAxesTo, controlled stop, homeAxes, normalized completion, readback, limit and fault feedback.
+8. Add physical hardware smoke tests for each axis, homing, full travel, coordinated motion, repeatability, readback and stop/fault behavior.
+
+Adapter rules:
+- Device-unit/step/encoder scaling occurs exactly once in the adapter/controller chain.
+- The adapter preserves the supplied runtime/device/operation correlation.
+- Submission Accepted is not physical completion.
+- Home requires exact HomeAxes completion and a complete normalized StageHomeReferenceObservation.
+- A partial or indeterminate move must not be reported as complete.
+- stopAxes is controlled stop, not a safety-rated E-stop.
+
+See CONTROLLER_STAGE_AND_HARDWARE_ADAPTER_CONTRACT_V1.md for the required physical inputs and full feedback contract.
+
+## 4. Required Controller integration alongside the adapter
+
+The current Stage API updates command-derived position after exact completion and establishes global origin after normalized homing evidence. It does not yet expose a complete per-axis measured-position/uncertainty reconciliation API.
+
+Implement:
+- A Controller-owned or explicitly host-owned serialized feedback reconciliation path.
+- Per-axis position state retaining measured value, evidence source/provenance and uncertainty.
+- Fault/limit/feedback-loss semantics, including partial moves and reconnects.
+- Conservative position invalidation/reconciliation rules for timeout, ambiguous submission, late callback and device-session replacement.
+- An accumulated positioning-error model only where it is grounded in measured motion behavior; do not treat controller-reported coordinates as proof of physical accuracy.
+
+The adapter can be developed against IStageMotionPort while this work proceeds, but closed-loop position feedback must not be treated as authoritative until the Stage reconciliation path exists.
+
+## 5. Stage calibration
+
+Stage calibration is separate from refreshPosition:
+- refreshPosition performs a home-and-return position-reference transaction.
+- calibration measures physical relationships such as scale, repeatability, backlash/approach behavior and uncertainty.
+- calibration must produce explicit revisioned measurement evidence and remain independent of StageSlot equipment geometry.
+- a calibration procedure must not be implemented by pretending that homing removes scale error or backlash.
+
+## 6. Host composition
+
+After the concrete adapter and feedback owner exist:
+1. Load a schema-v2 installed equipment definition and select a valid StageConfiguration.
+2. Construct one long-lived Controller::MicroscopeInstance per controlled physical microscope.
+3. Bind one long-lived IStageMotionPort adapter and its DeviceId.
+4. Retain the Stage, adapter and feedback owner for the microscope runtime lifetime.
+5. Publish immutable position/motion snapshots through a narrow host bridge.
+6. Keep SwiftUI as producer/observer. Do not recreate stage state, coordinates, homing or navigation in Swift.
+
+No dummy equipment definition or fake driver should be installed into production composition.
 
-## Objective
+## 7. Independent remaining platform work
 
-Migrate from the current native-app-centered microscope configuration into two independent C++ libraries:
+- Preserve the Camera-v2.0 architecture and integrate it as a controlled camera capability change; do not merge camera SDK types into Core or Controller.
+- Keep objective/illumination/optical adapters separate from the stage adapter and preserve their own command/feedback lifecycles.
+- Maintain equipment and calibration revision provenance.
+- Keep acquisition, Slide image/tile data, file persistence and gallery in Swift.
+- Keep ImageProcessing in its separate project.
 
-- Microscope.Core: complete microscope model and behavior.
-- Microscope.Application: JSON definition loading, adapter composition, runtime management and frontend-neutral application API.
+## 8. Acceptance gates
 
-Keep the current macOS application as one frontend. Preserve the existing camera/preview pipeline. Do not create speculative empty libraries or duplicate active implementations.
-
-## Current repository baseline
-
-The current branch contains:
-- A root CMake project with optional native macOS application and AmScope targets. Core and Application are included independently; `OPTIKA_BUILD_AMSCOPE=OFF` permits a platform-only root configuration.
-- `Microscope::Core` and `Microscope::Application` as separate C++17 static libraries with standalone CMake configuration; Application brings in Core as its source dependency when configured independently.
-- `Camera/Amscope` as the existing reusable camera capability and `Application/OptikaB293` as the current SwiftUI/AppKit frontend, Objective-C++ bridge and transitional Swift microscope configuration/resolution implementation.
-- Core contracts for strong IDs, distinct runtime/device-session generations, [[nodiscard]] Result/Status, validated diagnostics, operation/step status values, typed feedback correlation and ingress/receipt metadata.
-- Application value contracts for runtime/operation handles, factory-created immutable RuntimeSnapshot values with validated lifecycle/positive revision, and Core-snapshot-backed OperationView with validated composite identity.
-- Core identity/diagnostic/feedback and Application handle/projection test sources registered with CTest. They have not been built or executed here.
-- Architecture, public-contract and standalone-library documentation.
-
-The two libraries began as an initial Phase 1 source slice, not a completed platform implementation. Later work has added typed equipment/configuration contracts, stage navigation, a bounded feedback inbox, a serialized operation-state owner, and Application wake/owner-loop and stage-feedback-reduction primitives. Full configuration-plan execution, JSON loading, deployment adapter composition, persistence, calibrated motion execution, acquisition orchestration and hardware workflow integration are still outstanding.
-
-## Migration rules
-
-1. Preserve existing behavior unless a change is explicitly intended.
-2. Do not rewrite the camera acquisition worker, frame pool, frame lease, latest-frame mailbox or preview pipeline as part of the library extraction.
-3. Move one coherent behavior at a time: define Core contract, implement/test Core behavior, integrate through Application, then migrate the frontend.
-4. Never keep two authoritative implementations of the same microscope rule. During a vertical-slice migration, the new C++ path becomes authoritative before the old Swift path is removed.
-5. Keep JSON parsing outside Core.
-6. Keep concrete hardware SDKs outside Core and Application.
-7. Use simulated adapter implementations for Core runtime tests; do not require a connected microscope for pure/domain tests.
-8. Distinguish dispatch, adapter/device acknowledgment, hardware completion, observation and Core verification.
-9. Do not claim runtime or hardware success without evidence from the user's environment.
-
-## Phases
-
-### Phase 0 — Architecture baseline (documentation)
-- Establish one authoritative platform architecture.
-- Define Core/Application boundaries.
-- Specify operation and feedback semantics.
-- Record calibration, slide, acquisition and persistence invariants.
-- Identify existing native app code as transitional migration source.
-
-**Exit:** architecture and implementation plan are committed and linked from the architecture index.
-
-### Phase 1 — C++ library foundations and public contracts
-
-**Completed**
-
-**Accepted evidence**
-- Core and Application are separate C++17 static libraries; Core depends only on the C++ standard library, and Application links publicly to Core.
-- Each target configures independently; Application's standalone project adds its Core source dependency. The root project can configure the platform libraries with AmScope and the native macOS application disabled.
-- Strong identity values, [[nodiscard]] Result/Status, validated diagnostics, operation/step status values, immutable feedback envelopes/receipts, feedback correlation/provenance validation, device/runtime session generations, and immutable runtime/operation snapshots are implemented.
-- Feedback ingress overflow, wakeup, ordering, provenance and correlation invariants are specified as contracts. The actual queue/executor is reserved for Phase 4.
-- Core, Application and the root platform-only composition all built and passed their registered CTest suites on Ubuntu GCC, macOS Clang and Windows MSVC in [GitHub Actions run 6](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45583316832).
-- The existing AmScope driver and Camera::Common pipeline remain separate targets; no camera acquisition/preview rewrite was part of Phase 1.
-
-**Boundary of completion**
-This closes the initial library/build/API foundation only. It does not claim a microscope equipment model, configuration resolver, operation executor, JSON loader, adapter registry, persistence, calibration, acquisition or frontend migration.
-
-**Exit:** satisfied. Further runtime feedback lifecycle tests, simulated-device execution and hardware acceptance remain assigned to Phase 4 and hardware acceptance respectively.
-
-### Phase 2 — Core equipment and optical model
-
-**Completed — 2A through 2E validated**
-
-#### 2A — Installed equipment identity and optical topology
-
-- Added strong IDs for installed equipment components, optical ports, optical connections and optical paths.
-- Added factory-created immutable OpticalPort, EquipmentComponent, OpticalConnection, OpticalPathStep and OpticalPath values.
-- Added MicroscopeEquipmentDefinition as the immutable aggregate for one installed microscope definition.
-- Component kind constrains port capability: optical elements need input/output capability; imaging devices need input; illumination devices need output; mechanical assemblies have no optical ports.
-- Physical OpticalConnection is undirected adjacency between ports on different components. Ordered OpticalPathStep values define propagation direction. One physical connection can be reused in opposite directions when port capabilities permit.
-- Shared components are stored once and referenced from multiple optical paths. The tests cover a shared condenser and beam splitter with alternative camera output paths, and one physical adjacency traversed in opposite directions.
-- Validation covers duplicate/foreign identities, port ownership/direction, one connection per physical port, same-component connection rejection, required interior path ports and route continuity.
-- Cross-platform CI passed: [run 22](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45587716888).
-
-#### 2B — Objective and camera specifications
-
-- Added distinct positive finite domain values for micrometers, nominal magnification and numerical aperture; no general-purpose units framework.
-- ObjectiveSpecification attaches to the installed EquipmentComponentId and stores magnification, NA, working distance, chromatic/field correction, immersion medium and optional design coverglass thickness.
-- CameraSpecification attaches to the installed imaging component and stores active sensor dimensions, independent X/Y pixel pitch and unique output modes.
-- CameraOutputMode stores sensor ROI, binning, delivered dimensions, pixel layout and stable pixel-format code. Net sensor-pixels-per-delivered-pixel X/Y mapping is derived independently from ROI and delivered dimensions; hardware binning remains a separate fact.
-- Aggregate validation rejects unknown/wrong-kind component references and duplicate specialized records.
-- Tests cover NA above 1, finite/positive constraints, anisotropic pitch/mapping, ROI/binned output, invalid pixel modes, duplicate modes and invalid component associations.
-- Cross-platform CI passed: [run 33](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45589429447).
-
-#### 2C — Illumination and condenser specifications
-
-- IlluminationSpecification attaches to an installed IlluminationDevice and supports multiple independently identified channels.
-- Each channel may have an optional spectral band, an intensity-control kind and a unit-bearing intensity range. Continuous control requires a finite non-negative increasing range.
-- CondenserSpecification attaches to an installed OpticalElement and stores aperture NA range (minimum may be zero), design, immersion medium and optional working distance.
-- Aggregate validation rejects unknown/wrong-kind references and duplicate specifications.
-- Tests cover spectral ranges, intensity units/control semantics, multiple channels, condenser aperture bounds and invalid roles.
-- Cross-platform CI passed: [run 46](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45590795457).
-
-#### 2D — Stage and axis specifications
-
-- StageSpecification attaches to an installed MechanicalAssembly and contains one or more StageAxisId values.
-- Axis specifications distinguish linear/rotary/other/unknown motion and micrometer/millimeter/degree/radian/device-defined/unknown coordinate units.
-- Each axis stores a finite signed operating range and positive nominal resolution.
-- Optional accuracy, repeatability/precision and measurement uncertainty are separate values. Accuracy/repeatability preserve test conditions; repeatability preserves its metric. No metric is derived from resolution.
-- Position-feedback capability and measurement location are explicit; no-feedback axes cannot claim a measurement location.
-- Tests cover linear/rotary units, signed ranges, unit mismatches, independent performance values, test conditions, feedback semantics and stage-axis identity.
-- Cross-platform CI passed: [run 58](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45592166839).
-
-#### 2E — Complete definition validation
-
-- MicroscopeEquipmentDefinition validates non-empty installed component sets; uniqueness of component, port, connection and path IDs; component and port ownership; path entry/exit direction; adjacency continuity; and physical component sharing.
-- Objective, camera, condenser, illumination and stage specifications bind to installed component identities of the correct broad component kind.
-- Duplicate specialization records are rejected. One physical OpticalElement cannot simultaneously be classified by both ObjectiveSpecification and CondenserSpecification.
-- Stage axes are unique within their stage; camera output modes and illumination channels are unique within their owning device specification.
-- Tests cover route reversal across one shared physical connection and conflicting optical specialization roles.
-- Full Core standalone, Application standalone and root platform-only build/test matrices passed on Ubuntu GCC, macOS Clang and Windows MSVC: [run 72](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45595205508).
-
-**Phase 2 boundary**
-The equipment definition now describes installed topology and static capabilities/specifications. It does not store current device state, selected objective, aperture position, current illumination intensity, camera online status, calibrated positions or adapter-specific bindings. Those belong to configuration/runtime/calibration/deployment phases.
-
-**Exit:** satisfied. Phase 2 equipment model and contract validation are complete. JSON parsing remains Phase 5; calibration remains Phase 6; operation execution remains Phase 4.
-
-### Phase 3 — Declarative configuration
-
-**Phase 3A–3E baseline implemented; Phase 3 is being extended for editable composable modes, candidate selection, route-derived cameras and optical sampling. Phase 3 is not exit-ready against the revised requirements until 3F–3H are implemented and validated.**
-
-**Objective:** resolve a requested microscope configuration from installed equipment and declarative profile data using deterministic pure functions. The resolver must produce a validated desired configuration, diagnostics and a transition/dependency description; it must not communicate with hardware or execute transitions.
-
-**Modeling sequence**
-1. **3A — Configuration vocabulary:** objective selection, optical path, contrast method, camera output mode, illumination channel/preset, condenser configuration, phase/DIC/polarization components, exposure preset and exposure policy.
-2. **3B — Profile applicability:** declarative profile requirements, selectors and compatibility constraints over installed component identity/capability data. Profiles must not contain C++ class names, SDK calls or executable callbacks.
-3. **3C — Pure resolution:** request + equipment definition + profile catalog → resolved desired configuration + typed diagnostics. Current/effective state comparison is not part of this pure target-compatibility step.
-4. **3D — Transition description:** emit the full desired requirement set and dependency DAG from ResolvedConfiguration, including safety preconditions and final verification. The current planner does not diff unverified current state; Phase 4 reconciles against verified effective state and executes.
-5. **3E — Representative data-driven profiles:** brightfield, phase contrast, DIC and polarization cases, including unavailable/mismatched installed equipment.
-
-
-**Phase 3A committed source progress — cross-platform CI passed**
-- Added ConfigurationProfileId, immutable ConfigurationProfile and ConfigurationProfileCatalog values. Profiles declare compatible installed objective/condenser/path/camera/illumination identities and optional required path components.
-- Added immutable ConfigurationRequest with explicit contrast method, installed component selections, one-or-more unique optical path IDs, camera output mode, illumination channel and explicit exposure policy.
-- Added pure ConfigurationResolver over typed equipment/profile/request values. It validates profile membership, installed specifications, camera mode/channel availability and component membership across the union of selected paths.
-- Multiple paths are supported by design; a split illumination route and imaging route can jointly satisfy one configuration without requiring all components on every path.
-- Resolution returns either the immutable accepted request or stable Error diagnostics. It does not access current runtime state, issue hardware commands or claim hardware completion.
-- Added contract tests for a valid brightfield path, separate illumination/imaging paths, unavailable camera modes/channels, profile conflicts, missing paths, required path components and invalid request/profile/catalog values.
-- Cross-platform CI passed on Ubuntu GCC, Windows MSVC and macOS Clang for Core standalone, Application standalone and root platform-only builds/tests: [GitHub Actions run 85](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45597867770).
-
-**Phase 3B committed source progress — cross-platform CI passed**
-- Added OpticalElementFunction and OpticalFunctionCapability on installed optical components, including phase plate/annulus, polarizer, analyzer, DIC prism, excitation/emission filters, dichroic mirror and darkfield stop.
-- Added optional OpticalCompatibilityId on capabilities so mating optical components can be matched by data rather than class behavior.
-- Added OpticalFunctionRequirement to profiles with optional compatibility identity and minimum distinct-component count. Duplicate function/compatibility requirements and zero counts are rejected.
-- Extended ConfigurationRequest with explicit additional optical component selections. Duplicate selections and overlap with primary objective/condenser selections are rejected.
-- Resolver verifies each additional selection is installed, is an OpticalElement, belongs to a selected path and satisfies at least one optical-function requirement in the selected profile.
-- Resolver counts required functions across the selected objective, condenser and additional optical components. One physical component counts once; compatibility identity must match exactly when specified.
-- Added split-path data-driven phase-contrast and DIC tests. Phase plate/annulus may lie on the illumination/condenser path, while downstream DIC prism/analyzer and camera components are validated over the imaging path. DIC requires a matching polarizer, analyzer and two prisms.
-- Negative tests cover mismatched compatibility identities, insufficient prism count and unrelated additional optical component selection.
-
-**Phase 3C committed source progress — cross-platform CI passed**
-- Added CameraSpecification exposure-time capability range as an optional installed camera capability, expressed in positive microseconds.
-- Added profile target values for condenser aperture NA, unit-bearing illumination intensity and an initial exposure preset.
-- Resolver validates aperture against the selected condenser range, illumination target against the selected channel's continuous range and exact unit, and exposure preset against the selected camera's declared exposure-time range.
-- Missing exposure-time capability data rejects a profile preset rather than treating the camera as unlimited.
-- Added microscope-scoped ResolvedConfiguration, retaining MicroscopeId, immutable request, optional condenser aperture target, optional illumination intensity target and optional exposure preset.
-- The request's ExposurePolicy remains separate. A retained preset does not issue a command or overwrite Manual/Automatic/ConstrainedAutomatic.
-- Added tests for valid retained targets, aperture/intensity/exposure out-of-range values, intensity unit mismatch, missing camera exposure capability and microscope-scoped resolved output.
-- Full Core standalone, Application standalone and root platform-only build/test matrix passed on Ubuntu GCC, macOS Clang and Windows MSVC: [GitHub Actions run 114](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45629930294).
-
-**Phase 3E committed profile coverage — current-head CI pending**
-- The Core resolver suite now exercises brightfield, phase contrast, DIC and polarized-light profiles using declarative optical-function requirements.
-- Phase contrast requires a matched phase plate and condenser phase annulus across the selected path set.
-- DIC requires a compatible polarizer, analyzer and two DIC prism components. The transition planner emits one typed selection requirement per explicitly selected additional optical component.
-- Polarized light requires a compatible polarizer/analyzer pair; a negative case rejects the missing analyzer.
-- The DIC transition-plan test checks that every additional component selection precedes dependent camera-output and illumination-channel requirements.
-- Representative profiles are constructed as typed test data. This does not seed a universal profile catalog or bind profile values to a vendor microscope; JSON profile loading remains Application Phase 5.
-- The representative profile suite passed the complete three-platform matrix in [run 122](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45636792527).
-
-**Implementation constraints**
-- Objective, contrast method, optical path, camera mode and illumination remain independent dimensions. The resolver combines them; behavior is not implemented in Objective4x/PhaseObjective/DICObjective subclasses.
-- Objective selection may select an initial exposure preset, but ExposurePreset and ExposurePolicy are distinct. Manual/automatic/constrained-auto policies must not be overwritten implicitly by a profile.
-- Phase contrast requirements describe the compatible phase ring/condenser arrangement. DIC requirements describe the required polarizer/analyzer/prism arrangement and their optical route. The installed definition determines whether the arrangement exists.
-- Profiles are data and constraints. Pure resolver functions are deterministic and testable without a microscope, JSON parser, frontend or adapter.
-- Unknown/unspecified equipment data is not silently treated as compatible. Return explicit diagnostics when required information is absent.
-- Resolver output must not claim hardware state was changed or verified. Transition execution and device feedback remain Phase 4.
-- Keep JSON schema/loading in Application Phase 5. Phase 3 operates on typed Core values.
-
-**Phase 3D committed source progress — cross-platform CI passed**
-- Added ConfigurationTransitionStepId, typed ConfigurationTransitionRequirement variants, immutable ConfigurationTransitionStep and prerequisite-to-dependent ConfigurationTransitionDependency values.
-- Added microscope-scoped ConfigurationTransitionPlan with step/edge identity validation, reference validation, duplicate/self-edge rejection and cycle detection.
-- The plan requires one AcquisitionMustBeInactive root and one DesiredConfigurationMustBeVerified sink. Every requirement is directly gated by acquisition inactivity and directly precedes final verification.
-- Added deterministic Kahn topological execution layers; independent path/objective/condenser selections can share a layer while dependent camera/illumination/target requirements follow their declared prerequisites.
-- Added ConfigurationTransitionPlanner to emit the complete desired requirement set from ResolvedConfiguration: optical paths, objective/condenser/additional optics, camera mode, illumination channel, optional aperture/intensity/exposure targets and explicit exposure policy.
-- The planner does not diff current observations, issue commands or claim completion. Phase 4 owns verified-effective-state reconciliation and hardware execution.
-- Added tests for required typed nodes, root/sink ordering, parallel selection layers, optional-target omission, malformed path requirements, self-dependencies and cycles.
-- The corrected transition model and expanded representative-profile tests passed the complete current-head matrix on Ubuntu GCC, macOS Clang and Windows MSVC, including Core standalone, Application standalone and root platform-only builds/tests: [run 122](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45636792527).
-
-**Phase 3A–3C exit:** satisfied and cross-platform validated. **Phase 3D source exit:** the deterministic adapter-neutral dependency DAG, safety root, verification sink, cycle checks and execution layers are implemented; final current-head cross-platform validation is pending. **Phase 3E source exit:** representative brightfield, phase, DIC and polarized-light profile cases are present; current-head CI is pending. Verified-state reconciliation and execution remain Phase 4.
-
-**Revised Phase 3 work — required before Phase 3 exit**
-
-The earlier 3A–3E implementation established useful typed equipment, optical-function, resolver and transition-plan foundations. Its current request shape requires explicit component identities and treats camera compatibility as a profile list. Those semantics are too restrictive for the revised operating model. The following work replaces those assumptions; it is not a reason to restart the already completed Phase 4 runtime work.
-
-**3F — Composable, editable operation-mode model**
-- Add stable TechniqueId identities and reusable declarative TechniqueDefinition values. Each definition declares required component functions, compatibility, optical-plane/pupil placement, route-role requirements, dependencies, exclusions and typed setting contributions. Definitions are data, not executable callbacks or one subclass per objective/technique combination.
-- Separate the independent optical dimensions instead of treating one ContrastMethod enum as the entire acquisition intent: at minimum represent illumination geometry (transmitted/reflected), imaging modality (widefield/spinning-disk/point-scanning where supported), and the selected contrast/optical techniques. A mode may compose multiple technique definitions; explicit incompatibility rules decide whether the union is physically realizable.
-- Evolve OperationMode into an editable, revisioned aggregate containing a set of TechniqueIds, objective constraints, optional microscope-specific objective bindings and existing per-LightPath operating/calibration settings. Preserve manual operation: exact component selections remain optional hard constraints; omitted identities activate equipment-based discovery.
-- Add required and preferred objective bindings scoped to one microscope/equipment revision. A required objective ID is a hard constraint and cannot silently fall back. A preferred objective ID ranks otherwise valid candidates and may fall back with a warning if unavailable. A selected manual objective remains selected when physically valid, even if a soft preference ranks another candidate higher.
-- Keep SampleType as a reusable, versioned technical requirement profile. Its microscopy and optional slide-preparation requirements remain portable across microscope models; it may express NA ranges, allowed/required techniques, camera/condenser/illumination constraints and preparation limits, but never microscope-specific component IDs.
-- Migrate OperationMode, ConfigurationRequest/ResolvedConfiguration, SampleType requirements, Slide details and the requirement assessor together. The assessor must evaluate the selected Slide's actual preparation facts and exact SampleType revision against the resolved configuration. It must not accept a Sample or Patient entity. Current OperationMode and ConfigurationRequest each store one ContrastMethod; MicroscopyRequirements permits a vector but currently rejects more than one Required technique. Multiple required techniques become conjunctive constraints only when their TechniqueDefinition combination rules permit them.
-- Merge technique contributions explicitly and report conflicts when multiple selected techniques demand incompatible components, pupil geometry, routes or settings. Never use last-write-wins for shared settings.
-- Core remains persistence-free. Extend the existing Application MicroscopeConfigurationSqliteStore and its revision/schema migration for the expanded OperationMode; do not create a second competing mode store. The mode/calibration SQLite persistence already exists. Implement the separate durable microscope-equipment-constitution store in Application; it is currently outstanding. Core receives the exact loaded typed equipment/mode values from memory.
-
-**3G — Complete candidate resolution and path-derived camera**
-- Preserve the current `OpticalPath` as one ordered, directed, physically validated route. Its Imaging/Illumination/Other role determines endpoint and physics semantics.
-- Preserve the equipment-owned `LightPath` as the named selectable arrangement of route IDs that operate together. Nikon NIS-Elements uses the same user-visible distinction: a hardware configuration describes active devices and a LightPath describes devices used together in one observation mode; per-path Optical Configurations hold device settings.
-- The camera-to-LightPath OOP relationship is already implemented and must not be duplicated: every Imaging route terminates at an installed ImagingDevice component with a CameraSpecification bound to the same component ID, and the terminal camera input is connected to the preceding route step. `cameraEndpointIds(lightPathId)` derives the unique camera endpoint identities from those routes. Do not add an independent camera-ID list or a direct Objective.Camera relationship.
-- The current `LightPathCameraResolver` already discovers camera and output-mode candidates only from those derived endpoints. `LightPathConfigurationRequestFactory` already derives route IDs and revision-binds the selected endpoint; `ConfigurationResolver` revalidates that binding. This is a partial bridge, not yet the canonical whole-configuration resolver.
-- Migrate the public ConfigurationRequest to LightPath-first intent. Camera identity must not be independently chosen from an unrelated installed-camera list. A supplied manual camera is an assertion/constraint and must be one of the selected LightPath's imaging endpoints.
-- Make camera acquisition intent explicit when a LightPath has multiple endpoints. Define a supported single-endpoint capture selection separately from a multi-camera synchronized capture arrangement. A splitter proves an optical branch, not trigger simultaneity, common clock, exposure synchronization or supported adapter behavior. Multi-camera execution requires those additional capabilities; until then, do not infer synchronized capture from endpoint count.
-- Bind each selected camera endpoint to its own supported CameraOutputMode. A camera installed elsewhere, enumerated by a driver but absent from the selected LightPath, or connected only to a different LightPath is never eligible. Keep camera live-session/operability checks in Application, not in the static Core constitution.
-- Enumerate complete LightPath/route/component combinations, not independent allowlists. Discover objective, condenser, phase/DIC/polarization/darkfield elements, illumination source/channel and camera endpoints only within the selected candidate LightPath route set. The path set can include separate illumination and imaging routes, so a phase annulus may correctly occur on the illumination route while the phase plate occurs on the imaging route.
-- Current topology models component/port adjacency and route order, but does not yet identify optical conjugate planes or detailed pupil geometry. The next optical-capability slice must add the minimum plane/geometry relationships required by the selected techniques; route co-membership alone does not prove conjugacy or correct component positioning.
-- Return a complete ResolvedConfiguration: equipment/mode revisions; selected LightPath and active route/branch set; derived camera endpoint(s) and per-camera output mode(s); objective, condenser, illumination source/channel, phase/DIC/polarization/darkfield/filter components; actual desired setpoints; exposure policy; and the evidence/ranking used. Transition planning must consume this resolved value, not re-read incomplete caller selections.
-- If multiple complete configurations remain equally preferred, return SelectionRequired with full alternatives and reasons. Return InputRequired only when a required semantic input/evidence is missing; null magnification alone is not an error when NA and sampling data allow a lowest-adequate-magnification choice. Return Unsupported with diagnostics when no candidate survives hard constraints.
-- In a multi-microscope host, evaluate the same portable semantic requirements against each microscope's own equipment constitution. Component IDs and saved objective bindings are local to one microscope and cannot be reused across instruments.
-
-**3G topology and camera-resolution bridge — source implemented; canonical request migration and whole-configuration resolution remain pending**
-- Added strong `LightPathId`, `OpticalPathRole` (`Imaging`, `Illumination`, `Other`) and the immutable named `LightPath` aggregate, which owns route IDs rather than a copied camera list.
-- Added `LightPath` ownership to `MicroscopeEquipmentDefinition`. Its factory validates route references and requires every selectable acquisition LightPath to include at least one Imaging route.
-- An Imaging `OpticalPath` must terminate at an installed `ImagingDevice` component with a matching `CameraSpecification`. Existing port ownership, direction and connection-continuity checks ensure that the terminal camera input is physically connected to the preceding route step.
-- Added `MicroscopeEquipmentDefinition::cameraEndpointIds(lightPathId)`; it derives unique camera component IDs from the final steps of the selected LightPath's Imaging routes. Camera IDs are not duplicated inside LightPath.
-- Added `BeamSplitter` as an optical-function capability. A LightPath deriving multiple distinct camera endpoints is accepted only when its imaging routes share a declared beam-splitter component, use the same physical input port and use distinct output ports.
-- Added topology contract cases for two camera branches, excluding an unrelated installed camera, non-camera imaging terminals, LightPaths without imaging routes, and multi-camera paths without a declared splitter. These tests are authored; no current-head build/test is claimed here.
-- Added the partial LightPath camera-resolution bridge in Core: `LightPathCameraResolver` derives camera/output-mode candidates from the LightPath endpoints; `LightPathConfigurationRequestFactory` creates the legacy request using the LightPath-owned route IDs and binds the chosen camera/mode to mode and equipment revisions; `ConfigurationResolver` checks the binding, route set and connected endpoint. The remaining 3G work is to remove mandatory independent camera/path fields from the canonical request and integrate path-derived camera selection into complete objective/technique/illumination candidate enumeration. This is not a topology-only state.
-
-**3H — Objective constraints and camera sampling**
-- Add an objective requirement with a hard minimum NA and optional requested nominal magnification. If magnification is omitted, choose the lowest available *effective imaging magnification* that satisfies NA, the selected modality's optical-resolution model, both-axis camera sampling, field-of-view needs and all physical compatibility constraints. Do not choose from objective markings alone when tube/system/relay optics affect the image scale.
-- Add typed magnification-factor specifications to the installed imaging train. Record factors on the actual route and their optical location: objective magnification; system/tube-lens magnification between specimen and intermediate optical planes; and detector/camera-relay magnification. The current source has ObjectiveSpecification nominal magnification but no typed tube-lens/system/relay-factor specification, so M_eff cannot currently be calculated from equipment data. Missing factors remain unknown, never implicit 1×.
-- Extend objective/equipment compatibility facts where supplied by the manufacturer: reference tube-lens or finite tube-length system, correction design, immersion medium, working distance, coverglass design, field number and compatible sensor image circle. A high-NA candidate can be rejected by insufficient working clearance, wrong immersion/coverslip, correction or sensor/FOV mismatch even when its nominal magnification and NA match.
-- Distinguish condenser maximum aperture capability from the actual selected aperture setting and the effective illumination pupil. The current CondenserSpecification stores an aperture-NA range; it does not prove the current iris opening or selected phase-annulus pupil. OperationMode/ResolvedConfiguration must carry a desired aperture/annulus setting, and runtime observation must separately prove the effective setting.
-- Extend optical-function capability beyond (function, optional compatibility ID) with the minimum technique-specific optical placement and pupil data. Phase contrast requires the objective phase ring in the objective rear focal plane and a geometrically matched, centered condenser annulus in the condenser front focal plane; the planes are conjugate. Matching an ID alone is insufficient. Phase annulus compatibility may depend on objective NA/magnification and ring geometry.
-- Model DIC prism position/orientation/shear and the instrument-specific polarizer/analyzer arrangement; model polarization-axis relation where adjustable. Model darkfield stop annular inner/outer NA so the direct illumination cone is excluded from the objective collection cone and remains within condenser capability. Do not infer these optical conditions from a function enum or component count.
-- Keep phase contrast, polarization, DIC and other techniques composable only where their combined pupil/plane/axis requirements can coexist. A PhaseContrast + PolarizedLight request is not inherently valid or invalid: evaluate its actual installed optical design and return a diagnostic if components/settings conflict.
-- Treat optical resolution as a property of the selected imaging modality and illumination/detection geometry, not one universal objective equation. For transmitted widefield brightfield, use (r_{lat}=1.22\lambda_{img}/(NA_{obj}+NA_{cond})), where lambda_img is the declared effective image-forming/detected wavelength and NA_cond is the selected effective condenser aperture. Nikon's calculator uses 546 nm as a representative diascopic reference; this is not a universal wavelength for broadband H&E. For reflected widefield reflectance, use (r_{lat}=0.61\lambda_{img}/NA_{obj}) under the objective-as-illuminator approximation. For epi-fluorescence, a scalar widefield Rayleigh estimate based on detected emission wavelength may be retained as an explicitly labelled approximation (Nikon's calculator uses this form); the full fluorescence model must account for both excitation and emission PSFs/transfer functions, spectral bands and the illumination/collection pupils. Phase annular pupil, DIC, darkfield and polarization require their own supported transfer models; otherwise report adequacy unknown. Confocal requires a model that accounts for excitation wavelength, pinhole/Airy units and factor location relative to the pinhole.
-- Evaluate the path-derived camera's physical X/Y pixel pitch and selected CameraOutputMode mapping. Derive sensor-pixels-per-delivered-pixel independently for X/Y from the sensor ROI, true hardware binning and delivered dimensions; do not double-count a binning operation. Interpolation/upscaling cannot create independent sensor samples. Physical pixel pitch/readout mapping determine sampling; active pixel count determines FOV and coverage, not finer sampling by itself.
-- For camera-based widefield sampling, calculate (p_obj,a = p_sensor,a * s_a / M_eff) on both axes and require r_lat/p_obj,a >= k (default k=2.3). Keep k as an explicit policy factor, not a Rayleigh constant. The equivalent M_eff lower bound must be computed from the selected camera's pitch and readout mapping on both axes. Nikon documents a 2.3–4× range for high-resolution imaging; the selected project default is 2.3 and remains configurable.
-- In spinning-disk confocal, distinguish system magnification before the disk (affects back-projected pinhole) from camera relay magnification after the disk (affects detector sampling but not pinhole projection). Do not put both factors into one undifferentiated M_eff for pinhole calculations. Point-scanning confocal uses virtual scan-pixel spacing and scan zoom rather than camera sensor pitch; unsupported detector configurations must return unknown.
-- The resolution wavelength must be selected from the mode's declared spectral model, not blindly from the illuminator's nominal peak. For broadband visible brightfield, preserve the selected wavelength/reference-band policy and its provenance; for fluorescence, retain excitation and emission bands separately.
-- Candidate ranking occurs only after all hard NA, optical geometry, path, camera-sampling, working-distance, correction, immersion and field constraints pass. Use SampleType technical preferences and microscope-specific OperationMode preferences as soft ranking inputs. A SampleType may express a preferred NA range or technique, but not a microscope-specific objective ID. The user's valid manual choice is preserved and may receive a preference warning.
-
-**3F–3H acceptance**
-- A 20× phase request discovers a valid matched phase plate/annulus without requiring the user to name those components; the annulus may be on the selected illumination route and the phase plate on the selected imaging route.
-- Phase contrast and polarization may be composed only when their conjugate-plane, pupil and polarization-axis requirements are jointly satisfiable; mere presence of both component functions is not sufficient.
-- A missing or mismatched component invalidates only the relevant candidate; another valid LightPath may still be offered.
-- Every imaging route terminates at a Camera component with a matching CameraSpecification, and its input port is physically connected to the previous path step. A non-camera terminal is invalid for an Imaging route.
-- A camera installed elsewhere or present on another LightPath is never eligible. One-camera LightPaths derive exactly one camera; a multi-camera LightPath requires explicitly modelled splitter branches and a declared supported capture mode.
-- Once a connected camera is manually assigned and driver-operable, a camera performance/profile mismatch is advisory only. The resolver returns warning diagnostics and retains the user's selection; it does not reject or silently replace the camera.
-- Automatically discovered cameras are ranked by technical evidence declared in the selected SampleType and OperationMode. Global shutter is a final preference tie-breaker among otherwise equivalently suitable cameras, not a universal hard requirement.
-- Camera profile matching is by manufacturer/model/variant. If runtime discovery omits a variant and multiple catalog profiles match, return an ambiguous model-profile result instead of choosing one arbitrarily.
-- Two valid connected LightPaths/camera candidates are returned as alternatives; equal-ranked candidates require explicit selection.
-- A per-microscope preferred objective resolves a valid tie; a required objective binding rejects fallback.
-- For two 20× objectives with NA 0.4 and 0.75, a SampleType preference for the higher NA ranks 0.75 higher only when both otherwise satisfy the hard optical, field, working-distance, correction and camera-sampling constraints. The profile contains no microscope-specific component ID.
-- When magnification is unspecified, the lowest effective magnification is selected only after NA, actual pupil state, route magnification factors, modality-specific resolution, both camera sensor axes and field coverage have been evaluated.
-- Transmitted widefield tests use objective NA plus the selected effective condenser pupil; reflected widefield tests use the objective collection/illumination NA; phase and darkfield tests use annular-pupil geometry; epi-fluorescence uses excitation/emission image-formation data; confocal tests distinguish pinhole-side system magnification from detector relay magnification. Unsupported technique models remain unknown instead of passing through a generic widefield formula.
-- Tests cover non-square pixel pitch, active pixel count versus field of view, binned/unbinned/decimated/downscaled modes, upscaling that must not improve sampling, objective and condenser NA, separate illumination/imaging routes, relay magnification, missing wavelength/relay/pixel mapping, camera endpoint connectivity, camera outside selected LightPath, splitter-backed multi-camera routes and all resolution outcomes.
-- Missing mandatory intent such as a minimum objective NA may produce InputRequired; null magnification by itself does not.
-
-**Commercial and physics reference set for this phase**
-- Nikon NIS-Elements documents Light Paths as arrangements of cameras and illumination devices used together, and associates Optical Configurations with a Light Path: [Device Manager](https://www.nisoftware.net/NikonSaleApplication/Help/Docs-AR/eng_ar/visual.device.manager.html) and [Experiment Acquisition](https://www.nisoftware.net/NikonSaleApplication/Help/Docs-D/eng_d/experiment.acquisition.html).
-- ZEISS ZEN documents Smart Setup and reproducible acquisition settings: [ZEN microscopy software](https://www.zeiss.com/microscopy/en/products/software/zeiss-zen.html).
-- Evident cellSens documents encoded-device setting recall and simultaneous multicolor imaging using two cameras or an image splitter: [cellSens](https://evidentscientific.com/en/products/software/cellsens).
-- Physics inputs are cross-checked against the [Nikon microscopy resolution calculator](https://www.microscope.healthcare.nikon.com/microtools/resolution-calculator/) and [Hamamatsu camera sampling guide](https://camera.hamamatsu.com/jp/en/learn/technical_information/thechnical_guide/dissecting_camera/dissecting_camera02.html).
-
-**3I — Camera model catalog and fluorescence suitability**
-- **Implemented in Camera/Common:** `CameraModelProfile`/`CameraModelCatalog` use normalized manufacturer/model/optional-variant identity, catalog/profile revisions and evidence references. Exact matching is distinct from candidate matching; incomplete/empty variant identity remains ambiguous when multiple variants or generic-plus-specific profiles exist.
-- **Implemented in Camera/Amscope discovery only:** AmScope enumeration maps global-shutter, monochrome, CMOS and CCD descriptor facts into the common camera discovery model and identifies the manufacturer as AmScope. The acquisition, frame-buffer, stream and preview path was not modified. QE/noise/pixel-pitch/full-well data are not invented by the driver.
-- **Implemented in Core:** `CameraSpecification` carries optional sensor technology, shutter, color mode, QE, read noise, dark current, full well, frame rate and provenance. `CameraSuitabilityAssessor` returns warning diagnostics and advisory ranking. A performance/profile mismatch is warning-only for a connected, driver-operable camera; the user selection is not silently replaced.
-- **Implemented in Application:** `CameraModelDiscoveryEnricher` merges only an exact catalog profile into live discovery, preserves live facts, emits conflict warnings, and returns candidates rather than guessing when identity is incomplete.
-- **Implemented persistence:** `CameraModelCatalogSqliteStore` stores the shared manufacturer/model/variant catalog, capability-known/supported masks, sensor characteristics, QE curves and profile/catalog revisions. Writes are transactional and use optimistic revision checks.
-- **Tests authored and registered:** catalog identity/ambiguity/provenance and SQLite round-trip/stale writes; camera component binding round-trip, stale writer/profile revision, equipment scoping, invalid component/model keys and LightPath-scoped Application composition; discovery bound/unbound enrichment, ambiguity/conflicts, exact-only Core projection and component-identity mismatch; Core QE validation, warning-only manual selection and global-shutter tie-breaking. Tests have not been run.
-- **Implemented in Application:** `CameraModelDiscoveryEnricher::projectToCoreCameraSpecification` requires an exact model-profile match, enriches missing Core sensor-characteristic values, preserves existing sensor facts and the installed CameraSpecification geometry/output modes, and reports profile-vs-equipment conflicts as warnings. Ambiguous/no-match discovery cannot be projected.
-- **Implemented persistence:** `CameraComponentModelBindingSqliteStore` persists the installed camera component → exact manufacturer/model/variant/profile-revision binding, scoped to microscope ID and equipment-definition revision. Binding sets use optimistic revisions; loads reject missing/stale catalog profiles and invalid component/specification references. Transient SDK IDs and serial numbers are not persisted as model identity.
-- **Implemented Application composition:** `InstalledCameraModelEnricher` composes a loaded revision-scoped binding set, selected LightPath camera endpoint, live `CameraDeviceInfo` and current catalog. It verifies microscope/equipment scope, LightPath endpoint membership and unique component binding, invokes `enrichBoundDevice`, projects to the installed Core CameraSpecification and returns all revision identities with warnings.
-- **Implemented Application contract:** `CameraModelDiscoveryEnricher::enrichBoundDevice` fills missing live identity from the selected component's persisted binding, rejects conflicting live identity and stale profile revisions, and retains the component identity. The Core projector rejects a projection onto a different component.
-- **Remaining:** load the binding set and associate the actual live SDK camera/session with the selected installed component in the active camera capability composition before invoking `InstalledCameraModelEnricher`; persist the full per-microscope equipment constitution. Historical profile-version retention is also required before old equipment bindings can be reconstructed after the shared catalog advances.
-- **Remaining:** make the configuration resolver consume `LightPathId` and derive camera endpoint/output-mode candidates from its Imaging routes, removing the legacy camera ID as the primary selection source. Retain warnings and any manual selection/acknowledgement in the resolved configuration and acquisition snapshot.
-- **Implemented in Core:** `FluorescenceEmissionSpectrum` represents relative spectral photon-flux density; `OpticalFilterSpecification` exposes bounded transmission/reflection interpolation. When the emission spectrum, dichroic and emission filter are supplied, the assessor integrates emission × dichroic transmission × emission-filter transmission × camera QE using three-point Gauss–Legendre quadrature over the union of the curves' sample knots.
-- **Implemented in Core:** the weighted assessor requires complete coverage of the requested band and returns unknown/warning rather than extrapolating. The unweighted QE band mean remains an explicitly warned coarse fallback when spectral inputs are not supplied. Tests are authored for a weighted result and incomplete-coverage diagnostics; they have not been run.
-- **Remaining:** connect filter selection to validated route membership/direction, provide the fluorophore emission profile from the operation/task definition, and ensure the Core requirement is populated from the exact installed dichroic/emission-filter specifications. This weighted QE is detector-side only; excitation efficiency, optical collection throughput, exposure, readout mapping and noise/dose behavior remain in the complete image-quality model.
-- **Remaining:** refine advisory ranking across QE, read noise, dark current, full well, pitch, active readout/mode, frame rate and color-filter-array penalty. Global shutter remains a preference tie-breaker unless a task explicitly makes temporal behavior mandatory.
-
-**3J — Spectral illumination sources and optical filters**
-- **Source groundwork implemented:** `IlluminationSourceTechnology` includes LED, halogen, xenon arc, mercury arc, metal-halide arc and laser; illumination channels can carry an ordered spectral power distribution.
-- **Source groundwork implemented:** `OpticalFilterSpecification` represents excitation, emission, dichroic, neutral-density and other filter roles with wavelength-dependent transmission and optional reflection response. Equipment-definition validation binds filter role and compatibility identity to the installed optical-function capability.
-- **Source tests authored:** illumination spectrum ordering/values, filter spectral response, dichroic transmission/reflection energy validation, filter role/function matching and compatibility identity. Tests have not been run.
-- **Implemented in Core:** filter transmission/reflection curves expose bounded linear interpolation; fluorophore emission spectra are typed separately from illumination-source spectral power distributions.
-- **Implemented in Core:** detector-side emission × dichroic transmission × emission-filter transmission × camera QE integration is available through the fluorescence suitability assessor.
-- **Remaining:** validate each filter/source against actual LightPath membership and direction; compose source SPD × excitation filter × dichroic reflection for specimen excitation and include the excitation side in the full task suitability model. Preserve manufacturer/measured response provenance, wavelength step/resolution, AOI and polarization conditions where they materially affect the filter response.
-- **Remaining:** model source channel control ranges and fixed-output sources consistently with adapters. A relative source SPD is not a specimen irradiance measurement. Keep per-channel output data and the optical route's attenuation/throughput separate.
-
-**3K — Contrast intent and separate calibrated LightPath realization**
-
-- **Implemented in Core:** `OperationMode` is an immutable, microscope-scoped revision containing name and ContrastMethod only. A mode is valid without any selected LightPath, calibration, objective, illumination source or camera identity.
-- **Implemented in Core:** `OperationModeHardwareConfiguration` is a separate optional value bound to one exact OperationMode ID/revision and one equipment-definition revision. It contains non-empty per-LightPath `LightPathModeSetting` values, each with a specimen-plane irradiance target and exact `CalibrationRevisionId`. Duplicate paths, mixed microscope/mode/equipment revisions and empty realizations are rejected.
-- **Implemented in Core:** `LightPathCalibration` stores measured source-drive-to-specimen-irradiance points and uncertainty. It validates the exact optical/source/channel binding and never extrapolates outside its measured interval.
-- **Implemented in Application persistence:** `MicroscopeConfigurationSqliteStore` saves the OperationMode intent row independently and optionally saves its hardware realization in the same transaction. `loadCurrentOperationMode` returns contrast intent only; `loadOperationModeHardwareConfiguration` returns the optional calibrated realization. The existing per-LightPath SQL child tables are retained; this semantic split requires no schema migration. Historical rows remain tied to their exact mode revision.
-- **Tests authored and registered:** intent-only mode construction, independent hardware-realization validation, exact calibration binding, multi-LightPath settings, SQLite round-trip of mode and realization, intent-only persistence, stale-writer rejection and invalid calibration binding. Current CI execution is pending.
-- **Remaining:** replace/supplement the component-ID list with a canonical optical-state fingerprint covering selected route revision, objective, condenser/annulus/stop, source and channel, filters, beam splitters, aperture/iris/selector settings and all other adjustable states affecting irradiance. Capture measurement plane/instrument, instrument calibration, conditions, date, uncertainty and source-drive limits.
-- **Remaining:** persist the microscope equipment constitution and its revision so calibration and hardware-realization records can be validated against durable authoritative hardware.
-- **Remaining:** connect a calibrated target to real source commands, observations and verified effective irradiance. A source drive percentage is never treated as irradiance. Fixed or unregulated sources may retain measured fixed output but must not be presented as controllable.
-- **Mode example:** 4× Brightfield, 40× Brightfield and 4× Darkfield may use different calibrated specimen-plane targets. Store those targets in separate hardware-realization records associated with the exact mode revision. No universal intensity-versus-magnification formula is assumed; darkfield stop/condenser geometry and filter attenuation affect calibration.
-
-**3L — LightPath-derived camera selection and SampleType/Stain OperatingMode recommendation**
-
-- **Implemented in Core:** `LightPathCameraResolver` derives camera/output-mode candidates exclusively from Imaging route terminal devices of the selected physical LightPath. It validates that the OperationMode belongs to the same microscope but does not require calibration or a saved hardware realization for camera discovery.
-- **Implemented in Core:** `LightPathConfigurationRequestFactory` converts the resolved camera choice to the established `ConfigurationRequest` by taking every optical route ID from the selected LightPath. It separately validates the supplied `OperationModeHardwareConfiguration` against exact mode and equipment revisions and requires the requested LightPath setting only at this application-configuration boundary.
-- **Implemented in Core:** `SampleMicroscopyRequirementAssessor` accepts the separate hardware realization for specimen-plane irradiance requirements. It requires that value only when the SampleType has illumination constraints; otherwise it does not demand a calibration object.
-- **Implemented in Core:** `OperatingModeRecommender` filters candidate contrast-intent modes through SampleType Required/Supported/Prohibited technique rules. SampleType Preferred techniques are admissible candidates (including when a Supported set is also declared) and rank ahead of optional Stain suitability recommendations. Stain advice is ignored as a standalone selector when SampleType has no technique context; equal top-ranked candidates remain ambiguous. It returns evidence/ranking and does not switch hardware or claim compatibility.
-- **Stain contract:** a Slide carries zero-or-more descriptive Stain identities. Optional Stain MicroscopySuitability recommendations are advisory data only; they are not stain requirements and cannot override SampleType constraints or make an unsupported mode eligible.
-- **Tests authored and registered:** topology-derived camera selection, camera discovery with stale calibration, stale hardware-realization rejection at request creation, SampleType constraint precedence, stain recommendation tie handling, identity-only Stains, no stain-only selection and Slide/SampleType identity boundaries. Current CI execution is pending.
-- **Remaining:** migrate the canonical public ConfigurationRequest away from independent camera/path fields and integrate the LightPath-first candidate resolver into a complete objective/condenser/filter/illumination candidate enumeration. Acquisition snapshot persistence and operator acknowledgement remain outstanding.
-- **Remaining:** prove physical simultaneity for multi-camera acquisition separately through trigger/clock/adapter capability models. A splitter topology alone does not prove synchronized capture.
-
-### Phase 4 — Core operation runtime
-
-**In progress — 4A lifecycle reducer validated; 4B stage/navigation/position-state contracts implemented; 4C bounded feedback ingress, single-writer runtime, wake/worker primitives, X/Y reducer, Application StageNavigationRuntime and a bounded typed stage-control queue are implemented. Live host callback composition, real drivers and verified feedback-loss reconciliation remain outstanding.**
-
-**Objective:** execute adapter-neutral configuration plans through capability-specific ports while keeping one serialized state owner per microscope runtime. An operation may succeed only after its required completion evidence has been evaluated by Core.
-
-**Implementation sequence**
-1. **4A — Lifecycle semantics:** immutable operation/step state and pure legal-transition functions. Distinguish CommandDispatched, AdapterAccepted, DeviceAcknowledged, DeviceProgress, DeviceActionCompleted, DeviceStateObserved and StepVerified. DeviceActionCompleted moves to AwaitingObservation; it never marks a step verified by itself.
-2. **4B — Command and port contracts:** define command correlation scope and capability-specific command values/ports. Implement the typed stage-motion port (MoveAxesTo, MoveAxesBy, HomeAxes, StopAxes) in physical axis units. Keep logical DeviceId separate from SDK handles and controller-native steps/protocol values. The adapter's synchronous dispatch result reports only accepted/rejected responsibility; it is not device acknowledgement. Do not add a generic string-command API.
-3. **4C — Serialized runtime and ingress:** implement one single-writer operation runtime per microscope incarnation, thread-safe feedback ingress, bounded FIFO receipts and atomic Core-assigned ingress sequence. SDK callbacks enqueue only; they never mutate operation state directly. Application supplies RuntimeWakeSignal and a worker-loop entry point that binds the runtime to a host-owned thread, drains feedback before host-typed controls and waits against the pre-drain wake generation.
-4. **4D — Plan execution:** execute ConfigurationTransitionPlan dependency layers through the relevant typed ports, retain command/step correlation and dispatch dependent work only when its prerequisites reach required state. Resource claims, not topological-layer membership alone, determine safe concurrency.
-5. **4E — Verification and failure lifecycle:** evaluate typed observations against step requirements and evidence policies; implement timeout, cancellation, adapter failure, stale generation/late feedback, queue overflow, partial completion and verified-state reconciliation.
-
-**4A committed source progress**
-- Added OperationLifecycleEvent and StepLifecycleEvent plus pure applyOperationLifecycleEvent / applyStepLifecycleEvent transitions.
-- Operation success is allowed only from Verifying. Cancellation remains requested until cancellation confirmation.
-- Command dispatch, adapter acceptance and device acknowledgement are separate step transitions.
-- DeviceActionCompleted moves a step to AwaitingObservation; DeviceStateObserved moves it to Verifying. Core also has an explicit VerificationStarted control transition from AwaitingObservation for a calibrated command-derived estimate; only a Core VerificationSucceeded event marks it Verified.
-- Manual steps have an AwaitingOperator path. OperatorConfirmed enters Verifying and is not itself proof of completion.
-- Timeout, adapter failure/rejection, partial completion and terminal-state behavior have focused tests.
-- Core standalone, Application standalone and root platform-only build/tests passed on Ubuntu GCC, Windows MSVC and macOS Clang: [run 124](https://github.com/Shennagyp/MICROSCOPE_CPP/actions/runs/45639182251).
-
-**4B source progress — initial stage/navigation contracts**
-- Added IStageMotionPort with absolute/relative multi-axis movement, homing and controlled stop. Multi-axis intent must be preserved or rejected; the adapter cannot silently serialize it.
-- Added typed motion values, operation/device/command correlation, immediate adapter submission result and normalized position/state/limit/action/fault feedback payloads.
-- Position feedback uses AxisPositionObservation: axis coordinate, measurement class and uncertainty in that coordinate's declared unit. The feedback envelope carries source provenance and correlation separately. Command-derived estimates are produced by Core, not sent back as device measurements.
-- Added DualSlideCarrierSpecification to the installed equipment definition. The OPTIKA arrangement is two horizontal side-by-side slots on one X/Y plane, not a vertical rack.
-- Added independent SlideGeometry/SlideRegistration values. Four measured corners are fitted to an affine mapping; individual residuals and maximum/RMS fit residuals are retained and an acceptance threshold gates registration.
-- Added DualSlideCarrierState with left/right occupancy and separate SlideId registrations. A requested SlideId/local point resolves through its own registration to a common stage-plane target, converts micrometers into the declared X/Y axis units and rejects targets outside installed stage travel.
-- Added StageAxisPositionState. Command-derived movement accumulates a conservative error bound; controller-reported coordinates do not reset open-loop uncertainty; encoder/external measurements may reset it to their measurement uncertainty; invalid reference or unknown/exceeded error requires homing.
-- Added StagePositionState, an immutable aggregate for the carrier's in-plane X/Y position. It updates absolute/relative commanded positions, measurement observations and verified homing observations per axis; reference invalidation applies to both axes as one plane. It maps current machine coordinates back to slide-local coordinates only for the same installed stage.
-- Added the application-facing StageNavigationPlanner::planToSlidePoint entry point using the complete StagePositionState aggregate. It creates the revision-bound target, checks physical slide bounds/stage travel and rejects cross-stage state. The aggregate resolveAfterHoming path re-resolves the preserved slide-local target through the unchanged registration after verified homing.
-
-- Bound every StageAxisPositionState to its installed EquipmentComponentId and StageAxisId; planning and slide position estimation reject cross-stage state even where two microscopes reuse the same axis identifiers.
-- Retain the registration's configured fit-residual acceptance threshold with the CalibrationRevisionId, alongside actual per-corner, maximum and RMS residual evidence.
-- Added CalibrationRevisionId to each SlideRegistration and SlideNavigationTarget to preserve the exact slide placement used by a navigation request.
-- Implemented BoundedFeedbackInbox<TPayload> as a fixed-capacity thread-safe ring with Core-assigned FIFO sequences, runtime-scope rejection, explicit close and an IFeedbackRuntimeSignal control path. The noexcept signal distinguishes successful enqueue, feedback loss and ingress closure. QueueFull does not consume a sequence; overflow remains latched until the runtime acknowledges reconciliation.
-- Added RuntimeDeviceSessionBinding and ActiveOperationStepBinding to reject feedback from prior device-session generations and superseded operation-step/command identities before state reduction.
-- Implemented SerializedOperationRuntime<TPayload> as a Core single-writer operation/step state owner. It binds mutations to one owner thread, validates runtime/device/session/operation/step/command identity, applies the lifecycle reducers, returns the typed payload with its receipt to the owner, and retires active work when a device session is replaced or closed.
-- Added Application RuntimeWakeSignal implementing IFeedbackRuntimeSignal and SerializedRuntimeWorker::run. The host starts the worker thread; the worker binds Core ownership, drains feedback FIFO before the host's non-blocking typed control drain, and waits against a wake generation captured before draining.
-- Added StagePositionFeedbackReducer. It applies only fresh current-session AxisPositionObservation payloads to the configured X/Y plane, ignores non-position and non-planar feedback, and invalidates both machine references while feedback loss remains unresolved. Normal telemetry never establishes a home reference.
-- Added `StageHomeReferenceObservation` and `HomeReferenceEstablished` feedback. The fact carries a complete set of referenced-axis coordinates and exact HomeAxes command correlation; Core moves the matching step to Verifying only. Application restores X/Y machine references only after validating the exact HomeAxes request and live Core step status Verified.
-- Feedback queue loss blocks command dispatch and step/operation verification until the inbox is drained and the owner acknowledges reconciliation. A completed device action remains AwaitingObservation; only an explicit verification transition marks a step Verified. Application now has RuntimeWakeSignal and SerializedRuntimeWorker; the worker drains receipts on the Core owner thread and runs the host-provided typed control-request drain. Subscriber notification delivery and the concrete host control queue remain outstanding.
-- Added tests for capacity/closure, queue overflow and loss callback, runtime-scope rejection, gap-free sequence assignment and concurrent multi-producer FIFO order.
-- Added StageNavigationPlanner and StageHomingPolicy. It validates the target and registration before planning, selects direct coordinated X/Y movement while within both error thresholds, or homes both axes otherwise. After verified homing it re-resolves the saved slide-local point only if the registration revision is unchanged.
-- Propagates slide-registration uncertainty through the inverse affine transform with the rectangular affine interpolation L1 bound and refuses slide-local position estimates outside the selected slide geometry.
-- Added focused Core tests and CMake targets for the motion port, dual-slide mapping, position tracking and homing/navigation planning. Hardware drivers and serialized runtime execution are not part of this slice.
-
-**Stage-navigation owner integration — source implemented; current-head CI pending**
-- Added Application StageNavigationRuntime as the owner-thread stage subsystem. It owns the active dual-slide carrier, X/Y StagePositionState, homing policy, calibrated movement-error budget, verification policy and one active navigation execution.
-- It consumes the existing StageNavigationPlanner, StageNavigationExecutor, StagePositionCommandReducer and StagePositionFeedbackReducer rather than duplicating their calculations.
-- BoundedCommandEstimate mode supports open-loop drivers: after correlated DeviceActionCompleted, Core applies the calibrated error contribution and the Application evidence policy starts verification through the explicit VerificationStarted control transition. No synthetic position observation is created.
-- DevicePositionObservations mode requires fresh, command-correlated X and Y position observations and checks target deviation plus the retained uncertainty bound before verification.
-- A complete, correlated HomeReferenceEstablished fact is checked against the requested two-axis home and its uncertainty policy. Only then is the home step verified, the X/Y reference restored, and a new absolute move resolved from the preserved SlideId/local point/registration revision.
-- Added focused Application tests for bounded open-loop completion, measured X/Y completion and home-then-restored-move. The test target is registered in Microscope.Application/CMakeLists.txt; no build or test result is claimed here.
-- Added StageNavigationControlQueue, a bounded stage-specific FIFO that wakes RuntimeWakeSignal and rejects full/closed submissions explicitly. Its owner-thread drain creates operation/step state through StageNavigationRuntime::beginRequest and starts at most one active navigation; queued work remains ordered until the active navigation completes.
-- The control drain also observes the independent feedback-loss latch. It invalidates both X/Y machine references even when no feedback receipt is available, leaves the loss latch unacknowledged, and suspends dispatch until host reconciliation.
-- StageNavigationRuntime binds to the serialized operation-runtime owner thread. The first feedback callback can bind it after SerializedRuntimeWorker has bound Core; the control-queue drain also ensures binding before dispatch.
-- The application host still owns the dedicated worker thread, invokes StageNavigationRuntime::processFeedback from the feedback handler and StageNavigationControlQueue::drain from the control handler, and publishes the resulting immutable operation/position projections. No thread or universal command bus is created by these stage-specific types.
-
-**Implementation constraints**
-- Per-runtime state transitions have one logical owner. Adapter callbacks enqueue immutable feedback and never call the reducer directly from device/SDK threads.
-- Every operation-correlated feedback item must match MicroscopeId, RuntimeId, RuntimeGeneration, DeviceId, DeviceSessionGeneration, OperationId and StepId; CommandId is required where the fact is command-specific.
-- Unsolicited telemetry has no operation correlation and cannot satisfy an operation step.
-- A timeout/cancellation request is not evidence that hardware stopped. Late feedback is correlated and reconciled; it cannot silently revive a terminal operation.
-- Queue overflow must latch feedback loss and mark affected state unknown through a control path independent of the saturated feedback queue.
-- Core must not fabricate hardware feedback or promote operator confirmation/calibrated estimates into stronger evidence than the selected completion policy allows.
-- Current operation/step snapshots are runtime state, not event sourcing. Persist only the history required by recovery/audit use cases.
-- Existing camera acquisition workers, frame pool, leases and mailbox remain separate from the operation event channel.
-
-**Exit:** no operation is marked complete solely because a command was dispatched, accepted or reported action-complete. It succeeds only after every required step and the final desired configuration satisfy their explicit evidence predicates.
-### Phase 5 — JSON and application composition
-- Define versioned microscope-definition JSON schema.
-- Define deployment JSON schema for adapter bindings.
-- Add Application-owned definition catalog/loader.
-- Add explicit adapter factory registration and binding.
-- Add per-device resource claims and runtime manager.
-- Create/open/close multiple microscope instances.
-
-**Exit:** application can load a JSON definition, resolve its adapter factories and create a validated Core runtime.
-
-### Phase 6 — Calibration and slide navigation
-
-**Partially implemented in Phase 4B/4C. Stage physical calibration and durable storage remain outstanding. The initial per-mode LightPath irradiance calibration value contracts are now present in Core; measurement workflow, physical state fingerprint, hardware feedback and persistence remain outstanding.**
-- **Source groundwork implemented under Phase 3K:** `LightPathCalibration` and `LightPathModeSetting` model a per-mode measured drive-to-specimen-irradiance relationship. They are not yet a hardware calibration workflow or persistence implementation.
-- **Implemented:** slide geometry; OPTIKA two-slot horizontal carrier specification; independent four-corner affine registrations; fit residual and uncertainty propagation; slide-local/stage-plane transforms; slide and stage boundary validation.
-- **Implemented:** X/Y machine-reference and position state; accumulated conservative command-error bounds; homing threshold policy; preserved slide-local target and registration-revision validation after homing.
-- **Implemented:** Application navigation execution for both bounded command-derived estimates and correlated controller position observations.
-- Implement nominal optical estimation and measured ruler calibration; define optical calibration keys and reuse/invalidation.
-- Implement linear/rotary physical-axis calibration and evidence quality, distinct from controller steps-per-unit configuration. The current StageMotionErrorBudget is supplied by the host; no fitted calibration model produces its contributions yet.
-- Add slide-corner acquisition/registration workflows, registration acceptance, occupancy changes and reseat invalidation.
-- Persist immutable motion-calibration and slide-registration revisions through appropriate persistence ports.
-- Integrate host typed control requests, a real driver binding and feedback-loss reconciliation before claiming hardware navigation acceptance.
-
-**Exit:** Core can navigate to any accepted point on either registered slide with a traceable physical error bound; both slide maps remain independent; homing does not imply slide re-registration or erase motion-calibration error.
-
-### Phase 7 — SampleType, independent slides and persistence
-- Retain SampleType as a versioned reusable requirement profile. It contains microscopy requirements and optional slide-preparation requirements, with no patient, individual Sample or accession identity.
-- Remove the Sample instance model, SampleId and all Sample-parent ownership semantics. Do not introduce a Sample table/package or a reverse Sample-to-Slide collection.
-- Remove SlideType as a separate taxonomy. Reusable allowed-preparation requirements belong to SampleType; actual preparation facts belong to each Slide.
-- Extend SampleType to own both `MicroscopyRequirements` and the optional reusable `SlidePreparationRequirements` envelope. Keep SampleType revisioned; Slides pin an exact revision.
-- Replace `SampleMicroscopyRequirementAssessor::assess(equipment, sampleType, sample, specimen, configuration, mode)` with a slide-oriented assessor contract such as `SlideMicroscopyRequirementAssessor::assess(equipment, sampleType, slide, configuration, mode)`. Read actual preparation facts from Slide; do not accept Sample, Specimen-parent or Patient objects.
-- Remove Sample/SampleId and SlideType/SlideTypeId strong identities and APIs. Preserve SlideId because it is also the mechanical identity used by stage registration/navigation.
-- Define Slide with a stable SlideId/revision, required SampleTypeId and exact SampleTypeRevision, display label, physical SlideGeometry and actual preparation/details snapshot.
-- Add optional OriginLabId as an opaque external reference on Slide. If IDs are only unique within a source system, persist its namespace/issuer with the value. Do not create a Lab entity or perform lab lookups.
-- Persist each Slide's independent stage registration and four corner correspondences, fit residuals, provenance and calibration revision. Registration remains mechanical and independent of SampleType.
-- Define acquisition-field metadata as a run-owned optional field/target, with optional slide-local/stage-machine position evidence. Display order is never a physical coordinate.
-- A SampleType can be referenced by many Slides; each Slide references exactly one SampleType revision. Do not store an authoritative SlideIds collection on SampleType; provide a query by SampleTypeId.
-- Implement on-demand materialization for SampleType, Slide, registration, acquisition and image aggregates; do not load the entire imaging workspace at startup.
-- Retain each active persistent identity as one canonical in-memory object within its workspace/runtime scope; consumers access it through its owner API or read-only projections, and only the designated owner mutates it.
-- Load required related metadata in bounded batches. Do not use database-backed lazy properties, getter-triggered reads, per-command rereads or N+1 relationship loading.
-- Apply changes to the resident object and persist at explicit transaction/save or recovery-checkpoint boundaries. A failed save must retain the dirty in-memory object; it must not be replaced by a stale reload.
-- Release clean objects only after they are no longer referenced by an open document or active workflow. Reopening after release loads the latest durable revision.
-- Keep large image payloads file-backed or tile/frame-decoded through bounded buffers while their document and metadata objects remain resident.
-- Define portable relative payload references and a rebuildable workspace catalog/index.
-- Define deterministic safe storage-key encoding/mapping for opaque IDs; do not use raw IDs as filesystem path segments.
-- Require a valid Slide and stage registration only for operations that actually navigate in slide-local coordinates. Direct camera capture and calibration-target workflows must not require an artificial Sample/Slide parent record.
-- Support opening/browsing Slide records and SampleType definitions without a microscope connected.
-
-**Exit:** one SampleType definition can be referenced by many independent Slide records; no SampleId relationship exists; optional OriginLabId is preserved as an external reference; stage registration remains independent from SampleType; unpositioned acquisition fields remain valid.
-
-### Phase 8 — Acquisition
-- Define distinct AcquisitionPlanId, AcquisitionRunId and ImageFrameId identities.
-- Allow an AcquisitionPlan and AcquisitionRun to reference a Slide when the acquisition targets a physical slide; that reference is optional for calibration and direct imaging.
-- When a Slide is referenced, capture its exact Slide revision and SampleTypeId/revision used for assessment in the immutable plan/run snapshot. Preserve OriginLabId only when supplied and needed for external correlation.
-- Remove the Sample context lookup through Slide.SampleId; no SampleId exists in this model.
-- Define AcquisitionField as a run-owned field/target. A run can contain multiple fields; repeat acquisitions create new frames against the relevant run/field provenance.
-- Require each ImageFrame to reference exactly one AcquisitionRun and, when field-addressed, one AcquisitionField belonging to that run.
-- Define ImageFrame metadata: immutable frame identity, run/field references, payload reference and integrity metadata, capture timestamp, delivered dimensions/pixel format, camera/readout context and actual settings when available.
-- Preserve original frame payloads immutably and separate payload storage from capture metadata.
-- Keep requested values distinct from actual device observations; missing readbacks remain unknown.
-- Commit a recoverable run identity before dispatch; persist payload/integrity metadata before publishing a frame as available.
-- Add optional position evidence, explicit missing/failed frames, Z planes, exposure brackets and partial-run persistence.
-- Integrate existing camera frame delivery through its adapter without changing the existing bounded frame/lease/preview pipeline.
-
-**Exit:** plans and actual runs remain distinct; slide-targeted runs retain the exact Slide and SampleType revisions used; direct/calibration captures work without a Slide; every frame has valid run/field provenance; incomplete runs recover correctly; original frames remain immutable; no additional preview queues or pixel copies are introduced.
-
-### Phase 9 — Image documents and annotation
-- Define persistent annotation document and geometry types.
-- Keep geometry in source-image coordinates.
-- Store measurement calibration revision, unit, result and provenance.
-- Add image processing provenance for HDR/focus stack.
-
-**Exit:** reopening a saved image reconstructs the same original pixels and annotation state without a connected microscope.
-
-### Phase 10 — Frontend migration
-- Add Objective-C++ bridge to Microscope.Application.
-- Replace Swift-owned microscope configuration behavior with the C++ application API.
-- Keep SwiftUI/AppKit presentation and transient interaction state.
-- Preserve native frame streaming as a separate path.
-- Add CLI/service host only when needed.
-
-**Exit:** frontends consume one application API and do not contain microscope policy.
-
-## Verification strategy
-
-- **Static/model validation:** identity integrity, graph/topology consistency, schema validation and dependency direction.
-- **SampleType/slide contract tests:** SampleType revision pinning, many Slides referencing one SampleType, rejection of unknown SampleType revisions, actual slide-details assessment, optional OriginLabId round-trip, no SampleId or SlideTypeId dependency, stable identities after storage moves and revision-safe updates.
-- **Acquisition contract tests:** plan/run distinction, actual MicroscopeId capture, optional Slide context, SampleType revision snapshot consistency, frame-to-run/field consistency, multiple fields, idempotent duplicate frame delivery and interrupted-run recovery.
-- **Pure unit tests:** configuration resolution, calibration fitting, unit conversion, transition planning and state reducers.
-- **Runtime contract tests:** simulated adapter responses, delayed callbacks, duplicates, stale/late events, queue saturation/feedback-loss latching, reconciliation before verification, timeout, failure and manual confirmation.
-- **Application integration tests:** definition loading, adapter registration, resource conflicts, runtime lifecycle and frontend projections.
-- **Hardware acceptance:** separate user-run checks for actual camera, stage, objective selector, illumination, optical selectors and calibration equipment.
-
-Do not run hardware tests in CI. Do not interpret pure test success as proof of actual hardware precision or device behavior.
-
-## Immediate next implementation task
-
-The Core inbox/runtime and Application stage-navigation runtime now provide the state and execution path for stage navigation over the selected slide registration. The runtime worker still accepts a host-supplied typed control drain; it does not create a thread or a universal command bus.
-
-**Next implementation work**
-1. Compose StageNavigationControlQueue::drain and StageNavigationRuntime::processFeedback into the live host's SerializedRuntimeWorker callbacks; publish operation snapshots and machine/slide-local position projections through the Application API.
-2. Implement the physical motion-calibration model that supplies StageMotionErrorBudget contributions from measured displacement, residuals and uncertainty. The current budget is an injected value, not a fitted calibration.
-3. Implement feedback-loss reconciliation: stop/inspect the controller, read back or re-home as appropriate, re-establish references, and acknowledge the runtime latch only after reconciliation.
-4. Add stage motion-state, limit and fault reduction plus controlled-stop/timeout handling.
-5. Bind real external driver libraries through IStageMotionPort and perform user-side hardware acceptance. The main library must not implement STEP/DIR pulse generation or vendor protocols.
-
-Controller-specific STEP/DIR generation and vendor protocols remain in external driver libraries.
-
-
-## Current stage coordinate model
-
-The active Core model is split by physical responsibility:
-
-- StageWorkingSurface2D is created as an empty XY canvas from a user-defined stage-coordinate origin and positive X/Y travel extents. It derives the far boundaries and validates the complete canvas against the configured X/Y axis operating ranges.
-- The canvas starts with zero slide rectangles; the user adds, replaces or removes slide rectangles as immutable layout snapshots. The workspace origin is not silently reused as any slide's stop-point origin.
-- Each CAD rectangle retains its fixed mechanical stop-point endpoint, initial opposite-corner handle, solved opposite endpoint and constrained length/width. The Core API exposes all four stage-coordinate corners derived from those constraints; the two adjacent corners are not independent measurements.
-- SlidePlacement2D maps between stage XY and the selected slide's local XY. It stores no Z, slide thickness, drawing tolerance or stop-point uncertainty.
-- StagePosition3D tracks machine X/Y plus microscope focus Z. positionOnSlide() requires referenced X/Y only; the current focus Z coordinate is exposed independently and cannot affect slide-local XY.
-
-The microscope focus Z operating range is an AxisOperatingRange on the microscope's axis specification. A physical endstop uses an active matching limit-switch observation. A no-switch axis can use FullRangeSweep toward the configured upper or lower boundary: the workflow commands one complete configured travel range in that direction from an unknown starting coordinate that is assumed to be within the physical travel envelope. The sweep is permitted only when the focus mechanism declares ContinuousKnobRotationWithoutClash, so continued knob rotation after the carriage reaches the travel boundary cannot collide. Without independent encoder/external measurement, the datum is a calibrated estimate, never a measured position.
-
-Core geometry, the full-range reference state transition, position projection and tests are implemented. Application execution of the correlated sweep command, promotion of its resulting snapshot into the Z position state, host composition, persisted CAD layout revisions and frontend projection remain outstanding.
-
-### Stage feedback update — XYZ position reducer
-
-The Application layer now has StagePosition3DFeedbackReducer for serialized worker use. It applies current-session XYZ position observations to the immutable Core aggregate, ignores non-position payloads and unrelated axes, and invalidates all three absolute references on true whole-device feedback loss. Its verified-home path accepts exactly the non-empty requested subset of the stage's X/Y/Z axes, validates exact axis-set equality and command correlation, and applies the home fact only after Core marks the associated operation step Verified. Slide-plane navigation therefore references X/Y only; focus Z retains an independent reference lifecycle.
-
-Physical endstop datum evidence is represented separately from encoder and external measurement and from command-derived estimates. The Core and Application tests were registered; they were not executed here. The existing application worker still requires a concrete host composition to invoke the reducer and publish its resulting snapshots.
-
-
-### Remaining CAD authoring work
-
-Core can now create a blank workspace from the user's origin and travel extents, then add, replace or remove slide rectangles through immutable snapshots. The rectangle's first endpoint remains a user-supplied slide stop-point coordinate; it is never inferred from the workspace origin.
-
-Interactive pointer-driven drawing/editing, incremental constraint solving while dragging, undo/redo, persisted layout revisions and a configurable positive clearance distance remain outstanding. Core validates that every solved rectangle fits inside the workspace, slide identities are unique, and distinct rectangles do not have positive-area overlap. Exact edge/corner contact is allowed; no arbitrary clearance is imposed.
-
-## Authoritative correction — empty XY canvas and variable slide count
-
-This section supersedes any earlier plan language that assumes a fixed ten-slide layout, two permanent slide slots, or an implicit slide rectangle. The active model is one stage with an initially empty XY canvas and a user-defined, variable number of slide rectangles.
-
-### Canvas and geometry
-
-- The user defines the workspace origin as a stage-coordinate `(x, y)` point and defines positive X and Y travel extents. The far workspace boundaries are origin plus the respective travel extents.
-- The new canvas contains zero slide rectangles. No slide geometry, count or slide-local origin is inferred.
-- Each slide is drawn independently. The user supplies that slide's mechanical stop-point endpoint, the initial opposite-corner handle, the length-axis assignment (StageX or StageY), and constrained length and width.
-- The Core model exposes all four constrained stage-coordinate corners. The slide's stop point is independent of the workspace origin.
-- A slide must fit wholly inside the workspace. Distinct rectangles may share exact edges/corners, but positive-area overlap is rejected. A positive clearance margin requires an explicit mechanical-holder rule and is not inferred.
-- Layout edits are immutable snapshots: add, replace and remove. This gives undo/redo a stable basis, but durable revision storage is still outstanding.
-
-### Generic navigation implementation
-
-Core now contains a revision-bound slide navigation target and a slot-independent planner. A target stores the slide identity, local XY point and slide registration revision. It is rejected if that registration is replaced before execution. A planned movement is an absolute two-axis X/Y command; focus Z remains a separate machine coordinate.
-
-The Application library now contains the generic executor, owner-thread runtime and bounded control queue. It preserves device/session/operation/step/command correlation, verifies exact home-reference axis sets, homes X/Y only for slide-plane navigation, restores the same slide-local target after verified homing, and supports bounded command estimates or fresh device position observations. XY operation failures invalidate XY only; true whole-device feedback loss invalidates X/Y/Z.
-
-The previous `DualSlideCarrierState`-based runtime and queue remain compiled for compatibility and regression coverage. They are legacy and must not be used for new navigation.
-
-### Verification status and remaining work
-
-Core and Application test executables have been added to their respective CMake test configurations. Source-level assertions cover empty-canvas construction, input validation, independent slide origins, four-corner geometry, overlap rules, arbitrary slide identities, revision invalidation, unit conversion, X/Y-only homing, independent focus Z, correlated feedback, malformed XY observations, off-target measured poses, adapter rejection and bounded queue behavior. **No build, test, debugger or CI execution has been performed here.** Do not describe these tests as passing.
-
-The generic C++ runtime is not yet wired into the SwiftUI composition or the physical stage-driver host. The next implementation boundary is the long-lived host composition that owns the C++ stage objects and the concrete physical-stage `IStageMotionPort` adapter. The host supplies the microscope/runtime/device-session correlation once for that session; the persistent `StageWorkingSurfaceNavigationRuntime` allocates operation, step and command identities internally. Hardware observations enter the retained serialized feedback ingress, and the same owner thread advances the existing objects through their lifecycles.
-
-The Z full-range sweep still requires its Application execution state machine and correlated completion handling. The CAD editor, undo/redo, durable layout persistence, calibration workflow, holder-clearance specification and recovery UI also remain outstanding.
-
-## Stateful OOP application and functional-core boundary
-
-The application is one long-lived native process with an object graph rooted in `OptikaB293Composition` and retained by `OptikaB293ApplicationDelegate`. It is not a collection of stateless REST endpoints and must not reconstruct device/session state for individual UI commands.
-
-For the stage capability, the intended retained object graph is:
-- Application composition / microscope session owns the stage subsystem and driver adapter.
-- The stage subsystem owns one current `StageWorkingSurface2D`, one current `StagePosition3D`, calibration/reference state, homing and verification policy, active navigation and the navigation-identity sequence.
-- The session retains one `SerializedOperationRuntime` for device-session and operation/step/command state, one typed control queue and one wake signal.
-- A dedicated owner thread processes feedback and control commands serially. The physical adapter remains alive for the session and submits feedback through the ingress only.
-- UI-facing models hold immutable projections/snapshots and submit domain commands. They do not share or mutate the worker-owned C++ state directly.
-
-The new control queue now contains only a revision-bound `SlideNavigationTarget2D`. It does not carry `OperationId`, `StepId`, `CommandId`, or raw `SlideId + local point` fields. The persistent stage runtime allocates operation correlation identities when it accepts the target. The target's stored registration revision prevents a queued click from being reinterpreted after a slide is redrawn.
-
-The functional-core boundary remains explicit: geometry, coordinate conversion, navigation planning, error-budget evaluation and reducers are deterministic calculations over values. The stateful Application objects own their lifetimes, choose when a candidate result is accepted, mutate the current session state on the owner thread, and publish new immutable snapshots.
-
-The current camera composition already follows the long-lived-object approach. Stage hardware integration remains incomplete because the concrete physical-stage `IStageMotionPort` adapter and its device lifecycle are not yet present in this repository. Do not create a fake adapter or a per-request runtime to fill that gap. Implement the concrete adapter and compose it once into the existing application lifetime root.
+A stage adapter is not hardware-ready merely because it compiles. Require separate evidence for:
+- Protocol-level fake tests: units, signs, axis mapping, range rejection, coordinated commands, stale sessions, partial failures and timeouts.
+- Controller contract tests: exact plan/correlation, completion, home-reference and position invalidation semantics.
+- Hardware tests: actual travel, homing repeatability, position readback, directional backlash, motion accuracy, stop and fault recovery.
+- Host integration: one long-lived MicroscopeInstance, adapter and feedback owner; no duplicate stage authority.

@@ -60,24 +60,24 @@ const WorkingRotationAxis* findWorkingRotation(const StageConfiguration& c,
 }
 } // namespace
 
-NanometreRange::NanometreRange(Nanometres a,Nanometres b) noexcept:min_(a),max_(b){}
+NanometreRange::NanometreRange(Nanometres a,Nanometres b) noexcept:minimum_(a),maximum_(b){}
 core::Result<NanometreRange,StageModelError> NanometreRange::create(Nanometres a,Nanometres b){
     if(a>=b)return core::Result<NanometreRange,StageModelError>::failure(StageModelError::InvalidRange);
     return core::Result<NanometreRange,StageModelError>::success(NanometreRange(a,b));
 }
-Nanometres NanometreRange::minimum()const noexcept{return min_;}
-Nanometres NanometreRange::maximum()const noexcept{return max_;}
-bool NanometreRange::contains(Nanometres v)const noexcept{return v>=min_&&v<=max_;}
+Nanometres NanometreRange::minimum()const noexcept{return minimum_;}
+Nanometres NanometreRange::maximum()const noexcept{return maximum_;}
+bool NanometreRange::contains(Nanometres v)const noexcept{return v>=minimum_&&v<=maximum_;}
 
-RadianRange::RadianRange(Radians a,Radians b)noexcept:min_(a),max_(b){}
+RadianRange::RadianRange(Radians a,Radians b)noexcept:minimum_(a),maximum_(b){}
 core::Result<RadianRange,StageModelError> RadianRange::create(Radians a,Radians b){
     if(!finite(a)||!finite(b)||a>=b)
         return core::Result<RadianRange,StageModelError>::failure(StageModelError::InvalidAngularRange);
     return core::Result<RadianRange,StageModelError>::success(RadianRange(a,b));
 }
-Radians RadianRange::minimum()const noexcept{return min_;}
-Radians RadianRange::maximum()const noexcept{return max_;}
-bool RadianRange::contains(Radians v)const noexcept{return finite(v)&&v>=min_&&v<=max_;}
+Radians RadianRange::minimum()const noexcept{return minimum_;}
+Radians RadianRange::maximum()const noexcept{return maximum_;}
+bool RadianRange::contains(Radians v)const noexcept{return finite(v)&&v>=minimum_&&v<=maximum_;}
 
 LinearAxis::LinearAxis(StageAxisId id,LinearAxisRole role,
     NanometreRange r,Nanometres inc,Nanometres a,Nanometres p)

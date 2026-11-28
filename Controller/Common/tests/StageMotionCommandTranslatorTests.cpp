@@ -197,6 +197,19 @@ void testRejectsControllerEquipmentAxisMismatch() {
         "rejects plans containing an axis absent from the installed equipment definition");
 }
 
+void testRejectsTamperedPlanBeforeEquipmentTranslation() {
+    auto fixture=makeFixture();
+    auto home=take(fixture.stage.home());
+    auto forged=home;
+    forged.axesToHome.pop_back();
+    const auto translated=StageMotionCommandTranslator::translate(
+        forged,fixture.stage,fixture.installedStage);
+    check(!translated&&translated.error()==StageMotionTranslationError::StalePlan,
+        "translator rejects a tampered plan with the same sequence number");
+    check(static_cast<bool>(fixture.stage.cancelUndispatchedPlan(home)),
+        "original unsubmitted plan can be cancelled after forged-plan rejection");
+}
+
 } // namespace
 
 int main() {

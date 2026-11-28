@@ -22,6 +22,28 @@ generic `StageSlot` regions. The application owns physical Slide objects and
 associates Slide IDs with StageSlot IDs. Two-slide, ten-slide, Petri-dish and
 other holders are all represented by the same N-slot model.
 
+Application navigation exposes `StageSlotAssignments`, a sparse collection of
+occupied slot mappings. Each record contains `StageSlotId`, existing
+`SlideId`, and the exact immutable Slide revision. The aggregate is scoped to
+the installed Stage component, equipment-definition revision and active
+StageConfiguration. It rejects slots outside that configuration, duplicate
+slot assignments, duplicate Slide occupancy and zero Slide revisions. Empty
+slots are represented by absence of an assignment.
+
+`StageSlotAssignmentsSqliteStore` persists append-only assignment snapshots.
+It references the existing `SampleSlideSqliteStore` `slide_revision` rows by
+foreign key rather than storing Slide payloads again. Writes validate the
+supplied current Slide revision, use an expected-current-revision check, and
+commit assignment revision, per-slot rows and current pointer in one SQLite
+transaction. Historical snapshots continue to pin their original Slide
+revisions.
+
+This assignment model replaces the fixed left/right relationship for new
+workflows. The legacy `DualSlideCarrierSqliteStore` still contains fixed
+left/right schema and the old four-corner registration payload; that
+registration/persistence migration is not complete yet and must not be
+treated as the new canonical assignment store.
+
 ## Coordinates and mechanical properties
 
 All linear positions, travel ranges, slot dimensions, accuracy, precision,

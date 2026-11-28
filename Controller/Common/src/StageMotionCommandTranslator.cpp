@@ -43,6 +43,42 @@ core::Result<double,StageMotionTranslationError> toLinearUnit(
             StageMotionTranslationError::UnsupportedCoordinateUnit);
     }
 }
+bool approximatelyEqual(double left,double right) noexcept {
+    const double scale=std::max({1.0,std::abs(left),std::abs(right)});
+    return std::abs(left-right)<=scale*1e-12;
+}
+
+core::Result<bool,StageMotionTranslationError> axisRangeMatches(
+    const LinearAxis& axis,const core::AxisSpecification& installed) {
+    if(installed.motionType()!=core::AxisMotionType::Linear)
+        return core::Result<bool,StageMotionTranslationError>::failure(
+            StageMotionTranslationError::AxisMotionTypeMismatch);
+    const auto minimum=toLinearUnit(
+        axis.mechanicalTravelRange().minimum(),installed.coordinateUnit());
+    const auto maximum=toLinearUnit(
+        axis.mechanicalTravelRange().maximum(),installed.coordinateUnit());
+    if(!minimum) return core::Result<bool,StageMotionTranslationError>::failure(minimum.error());
+    if(!maximum) return core::Result<bool,StageMotionTranslationError>::failure(maximum.error());
+    return core::Result<bool,StageMotionTranslationError>::success(
+        approximatelyEqual(minimum.value(),installed.operatingRange().minimum())&&
+        approximatelyEqual(maximum.value(),installed.operatingRange().maximum()));
+}
+core::Result<bool,StageMotionTranslationError> axisRangeMatches(
+    const RotationAxis& axis,const core::AxisSpecification& installed) {
+    if(installed.motionType()!=core::AxisMotionType::Rotary)
+        return core::Result<bool,StageMotionTranslationError>::failure(
+            StageMotionTranslationError::AxisMotionTypeMismatch);
+    const auto minimum=toRotationUnit(
+        axis.mechanicalTravelRange().minimum(),installed.coordinateUnit());
+    const auto maximum=toRotationUnit(
+        axis.mechanicalTravelRange().maximum(),installed.coordinateUnit());
+    if(!minimum) return core::Result<bool,StageMotionTranslationError>::failure(minimum.error());
+    if(!maximum) return core::Result<bool,StageMotionTranslationError>::failure(maximum.error());
+    return core::Result<bool,StageMotionTranslationError>::success(
+        approximatelyEqual(minimum.value(),installed.operatingRange().minimum())&&
+        approximatelyEqual(maximum.value(),installed.operatingRange().maximum()));
+}
+
 core::Result<double,StageMotionTranslationError> toRotationUnit(
     Radians value,core::AxisCoordinateUnit unit) {
     constexpr double degreesPerRadian=57.2957795130823208768;
@@ -81,6 +117,38 @@ StageMotionCommandTranslator::translate(
     if(configuration==nullptr)
         return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
             StageMotionTranslationError::ConfigurationNotFound);
+
+    if(controllerStage.linearAxes().size()+controllerStage.rotationAxes().size()!=
+       installedStage.axes().size())
+        return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+            StageMotionTranslationError::AxisInventoryMismatch);
+
+    for(const auto& axis:controllerStage.linearAxes()) {
+        const auto* equipment=findEquipmentAxis(installedStage,axis.id());
+        if(equipment==nullptr)
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                StageMotionTranslationError::UnknownEquipmentAxis);
+        const auto rangeMatches=axisRangeMatches(axis,*equipment);
+        if(!rangeMatches)
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                rangeMatches.error());
+        if(!rangeMatches.value())
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                StageMotionTranslationError::MechanicalRangeMismatch);
+    }
+    for(const auto& axis:controllerStage.rotationAxes()) {
+        const auto* equipment=findEquipmentAxis(installedStage,axis.id());
+        if(equipment==nullptr)
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                StageMotionTranslationError::UnknownEquipmentAxis);
+        const auto rangeMatches=axisRangeMatches(axis,*equipment);
+        if(!rangeMatches)
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                rangeMatches.error());
+        if(!rangeMatches.value())
+            return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+                StageMotionTranslationError::MechanicalRangeMismatch);
+    }
 
     if(plan.action==StageMotionAction::Home) {
         if(plan.axesToHome.empty()||!plan.linearTargets.empty()||

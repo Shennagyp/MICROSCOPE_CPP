@@ -197,6 +197,30 @@ void testRejectsControllerEquipmentAxisMismatch() {
         "rejects plans containing an axis absent from the installed equipment definition");
 }
 
+void testRejectsMechanicalRangeMismatch() {
+    auto fixture=makeFixture();
+    auto home=take(fixture.stage.home());
+    const auto xId=axisId("x");
+    auto changedX=equipmentAxis(
+        xId,core::AxisMotionType::Linear,core::AxisCoordinateUnit::Micrometers,0,900'000);
+    const auto mismatched=take(core::StageSpecification::create(
+        componentId("stage"),{
+            std::move(changedX),
+            equipmentAxis(axisId("y"),core::AxisMotionType::Linear,
+                core::AxisCoordinateUnit::Micrometers,0,500'000),
+            equipmentAxis(axisId("z"),core::AxisMotionType::Linear,
+                core::AxisCoordinateUnit::Micrometers,0,100'000),
+            equipmentAxis(axisId("theta"),core::AxisMotionType::Rotary,
+                core::AxisCoordinateUnit::Degrees,-180,180)
+        }));
+    const auto translated=StageMotionCommandTranslator::translate(
+        home,fixture.stage,mismatched);
+    check(!translated&&translated.error()==StageMotionTranslationError::MechanicalRangeMismatch,
+        "rejects an equipment file whose X mechanical travel differs from the Stage model");
+    check(static_cast<bool>(fixture.stage.cancelUndispatchedPlan(home)),
+        "mismatched equipment binding does not consume the Stage plan");
+}
+
 void testRejectsTamperedPlanBeforeEquipmentTranslation() {
     auto fixture=makeFixture();
     auto home=take(fixture.stage.home());
@@ -217,6 +241,7 @@ int main() {
     testLinearNanometresConvertToInstalledEquipmentUnit();
     testRadiansConvertToInstalledDegrees();
     testRejectsControllerEquipmentAxisMismatch();
+    testRejectsMechanicalRangeMismatch();
     testRejectsTamperedPlanBeforeEquipmentTranslation();
     if(failures) {
         std::cerr<<failures<<" Stage motion translation tests failed.\n";

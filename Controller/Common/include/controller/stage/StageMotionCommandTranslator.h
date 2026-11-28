@@ -13,6 +13,8 @@ enum class StageMotionTranslationError {
     MissingPlanConfiguration,
     StalePlan,
     StageComponentMismatch,
+    AxisInventoryMismatch,
+    MechanicalRangeMismatch,
     ConfigurationNotFound,
     ControllerAxisNotFound,
     WorkingAxisMismatch,

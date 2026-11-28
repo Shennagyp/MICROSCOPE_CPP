@@ -330,6 +330,103 @@ std::string replaceOnce(
     return source;
 }
 
+std::string validV2Document() {
+    auto document=validDocument();
+    document=replaceOnce(document,"\\"schemaVersion\\": 1,","\\"schemaVersion\\": 2,");
+    const auto stageStart=document.find("  \\"stageSpecifications\\": [");
+    const auto carrierStart=document.find("  \\"dualSlideCarrierSpecifications\\": [",stageStart);
+    if(stageStart==std::string::npos||carrierStart==std::string::npos)
+        throw std::runtime_error("Schema v2 stage/carrier fixture anchors were not found.");
+
+    std::string stageBlock=R"JSON(  "stageSpecifications": [
+    {
+      "componentId": "stage-main",
+      "axes": [
+        {
+          "id": "stage-x", "motionType": "linear", "coordinateUnit": "micrometers",
+          "operatingRange": {"minimum": 0.0, "maximum": 160000.0, "unit": "micrometers"},
+          "nominalResolution": 0.1, "positionFeedback": "linear-scale",
+          "measurementLocation": "axis", "linearRole": "x"
+        },
+        {
+          "id": "stage-y", "motionType": "linear", "coordinateUnit": "micrometers",
+          "operatingRange": {"minimum": 0.0, "maximum": 90000.0, "unit": "micrometers"},
+          "nominalResolution": 0.1, "positionFeedback": "device-reported",
+          "measurementLocation": "axis", "linearRole": "y"
+        },
+        {
+          "id": "stage-z", "motionType": "linear", "coordinateUnit": "micrometers",
+          "operatingRange": {"minimum": 0.0, "maximum": 100000.0, "unit": "micrometers"},
+          "nominalResolution": 0.05, "positionFeedback": "encoder",
+          "measurementLocation": "axis", "linearRole": "z"
+        },
+        {
+          "id": "stage-theta", "motionType": "rotary", "coordinateUnit": "degrees",
+          "operatingRange": {"minimum": -180.0, "maximum": 180.0, "unit": "degrees"},
+          "nominalResolution": 0.01, "positionFeedback": "encoder",
+          "measurementLocation": "axis",
+          "rotationGeometry": {
+            "pointOnAxisNanometres": {"x": 0, "y": 0, "z": 15000000},
+            "direction": "z"
+          }
+        }
+      ],
+      "configurations": [
+        {
+          "id": "slides",
+          "workingLinearAxes": [
+            {"axisId": "stage-x", "effectiveRangeNanometres": {"minimum": 0, "maximum": 160000000}},
+            {"axisId": "stage-y", "effectiveRangeNanometres": {"minimum": 0, "maximum": 90000000}},
+            {"axisId": "stage-z", "effectiveRangeNanometres": {"minimum": 8000000, "maximum": 80000000}}
+          ],
+          "workingRotationAxes": [],
+          "slots": [
+)JSON";
+    for(int index=0;index<10;++index) {
+        if(index!=0) stageBlock+=",\n";
+        const auto x=10'000'000+static_cast<std::int64_t>(index)*9'000'000;
+        stageBlock+="            {\\"id\\": \\"slide-slot-"+std::to_string(index+1)+
+            "\\", \\"originInStageNanometres\\": {\\"x\\": "+
+            std::to_string(x)+", \\"y\\": 10000000}, \\"xRangeNanometres\\": "+
+            "{\\"minimum\\": 0, \\"maximum\\": 8000000}, \\"yRangeNanometres\\": "+
+            "{\\"minimum\\": 0, \\"maximum\\": 25000000}}";
+    }
+    stageBlock+=R"JSON(
+          ]
+        },
+        {
+          "id": "petri",
+          "workingLinearAxes": [
+            {"axisId": "stage-x", "effectiveRangeNanometres": {"minimum": 0, "maximum": 160000000}},
+            {"axisId": "stage-y", "effectiveRangeNanometres": {"minimum": 0, "maximum": 90000000}},
+            {"axisId": "stage-z", "effectiveRangeNanometres": {"minimum": 2000000, "maximum": 60000000}}
+          ],
+          "workingRotationAxes": [
+            {"axisId": "stage-theta", "effectiveRangeRadians": {"minimum": -1.5707963267948966, "maximum": 1.5707963267948966}}
+          ],
+          "slots": [
+            {
+              "id": "petri-dish-slot",
+              "originInStageNanometres": {"x": 0, "y": 0},
+              "xRangeNanometres": {"minimum": 0, "maximum": 30000000},
+              "yRangeNanometres": {"minimum": 0, "maximum": 30000000}
+            }
+          ]
+        }
+      ]
+    }
+  ],
+)JSON";
+    document.replace(stageStart,carrierStart-stageStart,stageBlock);
+    const auto obsoleteCarrierStart=document.find(
+        "  \\"dualSlideCarrierSpecifications\\": [",stageStart);
+    const auto filterStart=document.find("  \\"filterSpecifications\\": [",obsoleteCarrierStart);
+    if(obsoleteCarrierStart==std::string::npos||filterStart==std::string::npos)
+        throw std::runtime_error("Schema v2 legacy carrier block anchors were not found.");
+    document.erase(obsoleteCarrierStart,filterStart-obsoleteCarrierStart);
+    return document;
+}
+
 void parsesCompleteStaticEquipmentDefinition() {
     const auto parsed = EquipmentDefinitionJsonLoader::parse(validDocument());
     check(static_cast<bool>(parsed),
@@ -453,6 +550,39 @@ void parsesCompleteStaticEquipmentDefinition() {
         "restores relay role and calibrated magnification factor");
 }
 
+void parsesSchemaV2GenericStageConfigurations() {
+    const auto parsed=EquipmentDefinitionJsonLoader::parse(validV2Document());
+    check(static_cast<bool>(parsed),
+        "parses schema v2 equipment definitions with generic Stage configurations");
+    if(!parsed) {
+        std::cerr<<"Schema v2 loader error at "<<parsed.error().path<<": "
+                 <<parsed.error().detail<<'\\n';
+        return;
+    }
+    const auto& stages=parsed.value().stageSpecifications();
+    check(stages.size()==1&&stages[0].configurations().size()==2,
+        "retains both equipment-defined working configurations in Core");
+    if(stages.size()==1&&stages[0].configurations().size()==2) {
+        check(stages[0].configurations()[0].slots().size()==10,
+            "persists a generic ten-slot slide holder through equipment JSON");
+        check(stages[0].configurations()[1].slots().size()==1,
+            "persists a one-slot Petri holder through equipment JSON");
+        check(stages[0].configurations()[0].workingRotationAxes().empty()&&
+              stages[0].configurations()[1].workingRotationAxes().size()==1,
+            "persists configuration-specific optional rotary axes");
+        const auto* x=stages[0].linearAxis(core::StageLinearAxisRole::X);
+        check(x&&x->linearRole()==core::StageLinearAxisRole::X,
+            "retains the physical X role on the installed axis");
+    }
+
+    auto legacyCarrierField=replaceOnce(validV2Document(),
+        "  \\"filterSpecifications\\": [",
+        "  \\"dualSlideCarrierSpecifications\\": [],\\n  \\"filterSpecifications\\": [");
+    const auto obsolete=EquipmentDefinitionJsonLoader::parse(legacyCarrierField);
+    check(!obsolete&&obsolete.error().code==EquipmentDefinitionJsonErrorCode::UnknownField,
+        "schema v2 rejects the retired fixed dual-slide carrier specification field");
+}
+
 void rejectsMalformedOrAmbiguousJsonDocuments() {
     auto malformed = EquipmentDefinitionJsonLoader::parse("{ \"schemaVersion\": 1,");
     check(!malformed &&
@@ -547,6 +677,7 @@ void handlesEmptyFilesAndFileLoadingErrors() {
 int main() {
     try {
         parsesCompleteStaticEquipmentDefinition();
+        parsesSchemaV2GenericStageConfigurations();
         rejectsMalformedOrAmbiguousJsonDocuments();
         handlesEmptyFilesAndFileLoadingErrors();
     } catch (const std::exception& error) {

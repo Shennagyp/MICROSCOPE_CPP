@@ -332,9 +332,9 @@ std::string replaceOnce(
 
 std::string validV2Document() {
     auto document=validDocument();
-    document=replaceOnce(document,"\\"schemaVersion\\": 1,","\\"schemaVersion\\": 2,");
-    const auto stageStart=document.find("  \\"stageSpecifications\\": [");
-    const auto carrierStart=document.find("  \\"dualSlideCarrierSpecifications\\": [",stageStart);
+    document=replaceOnce(document,"\"schemaVersion\": 1,","\"schemaVersion\": 2,");
+    const auto stageStart=document.find("  \"stageSpecifications\": [");
+    const auto carrierStart=document.find("  \"dualSlideCarrierSpecifications\": [",stageStart);
     if(stageStart==std::string::npos||carrierStart==std::string::npos)
         throw std::runtime_error("Schema v2 stage/carrier fixture anchors were not found.");
 
@@ -385,11 +385,11 @@ std::string validV2Document() {
     for(int index=0;index<10;++index) {
         if(index!=0) stageBlock+=",\n";
         const auto x=10'000'000+static_cast<std::int64_t>(index)*9'000'000;
-        stageBlock+="            {\\"id\\": \\"slide-slot-"+std::to_string(index+1)+
-            "\\", \\"originInStageNanometres\\": {\\"x\\": "+
-            std::to_string(x)+", \\"y\\": 10000000}, \\"xRangeNanometres\\": "+
-            "{\\"minimum\\": 0, \\"maximum\\": 8000000}, \\"yRangeNanometres\\": "+
-            "{\\"minimum\\": 0, \\"maximum\\": 25000000}}";
+        stageBlock+="            {\"id\": \"slide-slot-"+std::to_string(index+1)+
+            "\", \"originInStageNanometres\": {\"x\": "+
+            std::to_string(x)+", \"y\": 10000000}, \"xRangeNanometres\": "+
+            "{\"minimum\": 0, \"maximum\": 8000000}, \"yRangeNanometres\": "+
+            "{\"minimum\": 0, \"maximum\": 25000000}}";
     }
     stageBlock+=R"JSON(
           ]
@@ -419,8 +419,8 @@ std::string validV2Document() {
 )JSON";
     document.replace(stageStart,carrierStart-stageStart,stageBlock);
     const auto obsoleteCarrierStart=document.find(
-        "  \\"dualSlideCarrierSpecifications\\": [",stageStart);
-    const auto filterStart=document.find("  \\"filterSpecifications\\": [",obsoleteCarrierStart);
+        "  \"dualSlideCarrierSpecifications\": [",stageStart);
+    const auto filterStart=document.find("  \"filterSpecifications\": [",obsoleteCarrierStart);
     if(obsoleteCarrierStart==std::string::npos||filterStart==std::string::npos)
         throw std::runtime_error("Schema v2 legacy carrier block anchors were not found.");
     document.erase(obsoleteCarrierStart,filterStart-obsoleteCarrierStart);

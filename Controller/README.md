@@ -17,10 +17,11 @@ other holders are all represented by the same N-slot model.
 
 ## Coordinates and mechanical properties
 
-All linear positions, travel ranges, slot dimensions, accuracy, precision and
-increments use integer nanometres. Rotation uses radians. A rotation axis is
+All linear positions, travel ranges, slot dimensions, accuracy, precision,
+minimum increments and measurement uncertainty use integer nanometres. Rotation uses radians. A rotation axis is
 specified by a point in global stage XYZ coordinates and a cardinal direction
-(X, Y, or Z).
+(X, Y, or Z). Rotary accuracy, precision, minimum increment and measurement
+uncertainty use radians.
 
 Each configuration defines effective X, Y and Z ranges. Rotation axes are
 optional per configuration. A StageSlot has a global XY origin and local X/Y

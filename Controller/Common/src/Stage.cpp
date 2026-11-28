@@ -110,14 +110,17 @@ Radians RadianRange::maximum()const noexcept{return maximum_;}
 bool RadianRange::contains(Radians v)const noexcept{return finite(v)&&v>=minimum_&&v<=maximum_;}
 
 LinearAxis::LinearAxis(StageAxisId id,LinearAxisRole role,
-    NanometreRange r,Nanometres inc,Nanometres a,Nanometres p)
-    :id_(std::move(id)),role_(role),mechanicalTravelRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
+    NanometreRange r,Nanometres inc,Nanometres a,Nanometres p,
+    std::optional<Nanometres> uncertainty)
+    :id_(std::move(id)),role_(role),mechanicalTravelRange_(r),minimumIncrement_(inc),
+     accuracy_(a),precision_(p),measurementUncertainty_(uncertainty){}
 core::Result<LinearAxis,StageModelError> LinearAxis::create(
-    StageAxisId id,LinearAxisRole role,NanometreRange r,Nanometres inc,Nanometres a,Nanometres p){
-    if(!validRole(role)||inc<=0||a<0||p<0||!r.contains(0))
+    StageAxisId id,LinearAxisRole role,NanometreRange r,Nanometres inc,Nanometres a,Nanometres p,
+    std::optional<Nanometres> uncertainty){
+    if(!validRole(role)||inc<=0||a<0||p<0||(uncertainty&&*uncertainty<0)||!r.contains(0))
         return core::Result<LinearAxis,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
     return core::Result<LinearAxis,StageModelError>::success(
-        LinearAxis(std::move(id),role,r,inc,a,p));
+        LinearAxis(std::move(id),role,r,inc,a,p,uncertainty));
 }
 const StageAxisId& LinearAxis::id()const noexcept{return id_;}
 LinearAxisRole LinearAxis::role()const noexcept{return role_;}
@@ -125,6 +128,7 @@ const NanometreRange& LinearAxis::mechanicalTravelRange()const noexcept{return m
 Nanometres LinearAxis::minimumIncrement()const noexcept{return minimumIncrement_;}
 Nanometres LinearAxis::accuracy()const noexcept{return accuracy_;}
 Nanometres LinearAxis::precision()const noexcept{return precision_;}
+const std::optional<Nanometres>& LinearAxis::measurementUncertainty()const noexcept{return measurementUncertainty_;}
 
 StageAxisId LinearAxis::homeCommand() const { return id_; }
 core::Result<LinearAxisTarget,StageModelError> LinearAxis::moveTo(Nanometres target) const {
@@ -141,15 +145,18 @@ core::Result<LinearAxisTarget,StageModelError> LinearAxis::moveBy(
 }
 
 RotationAxis::RotationAxis(StageAxisId id,RotationAxisGeometry g,
-    RadianRange r,Radians inc,Radians a,Radians p)
-    :id_(std::move(id)),geometry_(g),mechanicalTravelRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
+    RadianRange r,Radians inc,Radians a,Radians p,std::optional<Radians> uncertainty)
+    :id_(std::move(id)),geometry_(g),mechanicalTravelRange_(r),minimumIncrement_(inc),
+     accuracy_(a),precision_(p),measurementUncertainty_(uncertainty){}
 core::Result<RotationAxis,StageModelError> RotationAxis::create(
-    StageAxisId id,RotationAxisGeometry g,RadianRange r,Radians inc,Radians a,Radians p){
+    StageAxisId id,RotationAxisGeometry g,RadianRange r,Radians inc,Radians a,Radians p,
+    std::optional<Radians> uncertainty){
     if(!validDirection(g.direction)||!finite(inc)||!finite(a)||!finite(p)||
+       (uncertainty&&(!finite(*uncertainty)||*uncertainty<0))||
        inc<=0||a<0||p<0||!r.contains(0))
         return core::Result<RotationAxis,StageModelError>::failure(StageModelError::InvalidAxisSpecification);
     return core::Result<RotationAxis,StageModelError>::success(
-        RotationAxis(std::move(id),g,r,inc,a,p));
+        RotationAxis(std::move(id),g,r,inc,a,p,uncertainty));
 }
 const StageAxisId& RotationAxis::id()const noexcept{return id_;}
 const RotationAxisGeometry& RotationAxis::geometry()const noexcept{return geometry_;}
@@ -157,6 +164,7 @@ const RadianRange& RotationAxis::mechanicalTravelRange()const noexcept{return me
 Radians RotationAxis::minimumIncrement()const noexcept{return minimumIncrement_;}
 Radians RotationAxis::accuracy()const noexcept{return accuracy_;}
 Radians RotationAxis::precision()const noexcept{return precision_;}
+const std::optional<Radians>& RotationAxis::measurementUncertainty()const noexcept{return measurementUncertainty_;}
 
 StageAxisId RotationAxis::homeCommand() const { return id_; }
 core::Result<RotationAxisTarget,StageModelError> RotationAxis::rotateTo(Radians target) const {

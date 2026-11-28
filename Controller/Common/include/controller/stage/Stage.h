@@ -65,13 +65,15 @@ enum class LinearAxisRole { X,Y,Z };
 class LinearAxis final {
 public:
     static core::Result<LinearAxis,StageModelError> create(
-        StageAxisId,LinearAxisRole,NanometreRange,Nanometres,Nanometres,Nanometres);
+        StageAxisId,LinearAxisRole,NanometreRange,Nanometres,Nanometres,Nanometres,
+        std::optional<Nanometres> measurementUncertainty = std::nullopt);
     const StageAxisId& id() const noexcept;
     LinearAxisRole role() const noexcept;
     const NanometreRange& mechanicalTravelRange() const noexcept;
     Nanometres minimumIncrement() const noexcept;
     Nanometres accuracy() const noexcept;
     Nanometres precision() const noexcept;
+    const std::optional<Nanometres>& measurementUncertainty() const noexcept;
 
     // Constructs an axis command. Hardware execution is delegated through
     // Core's existing IStageMotionPort and correlated operation runtime.
@@ -80,11 +82,13 @@ public:
     core::Result<LinearAxisTarget,StageModelError> moveBy(
         Nanometres currentPosition,Nanometres displacement) const;
 private:
-    LinearAxis(StageAxisId,LinearAxisRole,NanometreRange,Nanometres,Nanometres,Nanometres);
+    LinearAxis(StageAxisId,LinearAxisRole,NanometreRange,Nanometres,Nanometres,Nanometres,
+        std::optional<Nanometres>);
     StageAxisId id_;
     LinearAxisRole role_;
     NanometreRange mechanicalTravelRange_;
     Nanometres minimumIncrement_,accuracy_,precision_;
+    std::optional<Nanometres> measurementUncertainty_;
 };
 
 enum class RotationAxisDirection { X,Y,Z };
@@ -95,23 +99,27 @@ struct RotationAxisGeometry final {
 class RotationAxis final {
 public:
     static core::Result<RotationAxis,StageModelError> create(
-        StageAxisId,RotationAxisGeometry,RadianRange,Radians,Radians,Radians);
+        StageAxisId,RotationAxisGeometry,RadianRange,Radians,Radians,Radians,
+        std::optional<Radians> measurementUncertainty = std::nullopt);
     const StageAxisId& id() const noexcept;
     const RotationAxisGeometry& geometry() const noexcept;
     const RadianRange& mechanicalTravelRange() const noexcept;
     Radians minimumIncrement() const noexcept;
     Radians accuracy() const noexcept;
     Radians precision() const noexcept;
+    const std::optional<Radians>& measurementUncertainty() const noexcept;
 
     StageAxisId homeCommand() const;
     core::Result<RotationAxisTarget,StageModelError> rotateTo(Radians) const;
     core::Result<RotationAxisTarget,StageModelError> rotateBy(Radians current,Radians delta) const;
 private:
-    RotationAxis(StageAxisId,RotationAxisGeometry,RadianRange,Radians,Radians,Radians);
+    RotationAxis(StageAxisId,RotationAxisGeometry,RadianRange,Radians,Radians,Radians,
+        std::optional<Radians>);
     StageAxisId id_;
     RotationAxisGeometry geometry_;
     RadianRange mechanicalTravelRange_;
     Radians minimumIncrement_,accuracy_,precision_;
+    std::optional<Radians> measurementUncertainty_;
 };
 
 struct WorkingLinearAxis final { StageAxisId axisId; NanometreRange effectiveRange; };

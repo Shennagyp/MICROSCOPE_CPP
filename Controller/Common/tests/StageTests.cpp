@@ -123,6 +123,14 @@ void testGenericConfigurationAndAxisCommandConstruction() {
     check(absolute&&absolute.value().position==5'000'000,"LinearAxis uses nanometre absolute targets");
     check(relative&&relative.value().position==5'002'000,"LinearAxis uses nanometre relative targets");
     check(!x->moveTo(2'000'000'000),"LinearAxis rejects targets beyond mechanical travel");
+    const auto measuredX=take(LinearAxis::create(
+        axisId("measured-x"),LinearAxisRole::X,nmRange(0,100'000),10,100,25,40));
+    check(measuredX.accuracy()==100&&measuredX.precision()==25&&
+          measuredX.measurementUncertainty()==std::optional<Nanometres>(40),
+        "linear accuracy, precision and measurement uncertainty remain independent");
+    check(!LinearAxis::create(
+        axisId("invalid-uncertainty-x"),LinearAxisRole::X,nmRange(0,100'000),10,100,25,-1),
+        "linear measurement uncertainty cannot be negative");
 
     const auto* theta=spec.rotationAxis(axisId("stage-theta"));
     check(theta&&theta->homeCommand()==axisId("stage-theta"),"RotationAxis builds its own home intent");
@@ -132,6 +140,18 @@ void testGenericConfigurationAndAxisCommandConstruction() {
         "RotationAxis uses radian absolute targets");
     check(angularRelative&&std::abs(angularRelative.value().angle-0.35)<1e-12,
         "RotationAxis uses radian relative targets");
+    const auto measuredTheta=take(RotationAxis::create(
+        axisId("measured-theta"),RotationAxisGeometry{{0,0,0},RotationAxisDirection::Z},
+        radRange(-1.0,1.0),0.001,0.01,0.002,0.0005));
+    check(std::abs(measuredTheta.accuracy()-0.01)<1e-12&&
+          std::abs(measuredTheta.precision()-0.002)<1e-12&&
+          measuredTheta.measurementUncertainty()==std::optional<Radians>(0.0005),
+        "rotary accuracy, precision and measurement uncertainty remain independent");
+    check(!RotationAxis::create(
+        axisId("invalid-uncertainty-theta"),
+        RotationAxisGeometry{{0,0,0},RotationAxisDirection::Z},
+        radRange(-1.0,1.0),0.001,0.01,0.002,-0.0005),
+        "rotary measurement uncertainty cannot be negative");
 }
 
 void testHomeRequiresExactCompletionAndReferenceAxes() {

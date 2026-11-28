@@ -33,10 +33,10 @@ void testGenericSlotAffineRegistrationInNanometres() {
     // 90-degree in-plane rotation plus a fixed global translation:
     // X = 100 mm + local Y; Y = 200 mm + local X.
     const std::array<StageSlotCornerMeasurement,4> corners{
-        corner(SlideCorner::TopLeft,100'000'000.0,200'000'000.0),
-        corner(SlideCorner::TopRight,100'000'000.0,275'000'000.0),
-        corner(SlideCorner::BottomRight,125'000'000.0,275'000'000.0),
-        corner(SlideCorner::BottomLeft,125'000'000.0,200'000'000.0)};
+        corner(StageSlotRegistrationCorner::TopLeft,100'000'000.0,200'000'000.0),
+        corner(StageSlotRegistrationCorner::TopRight,100'000'000.0,275'000'000.0),
+        corner(StageSlotRegistrationCorner::BottomRight,125'000'000.0,275'000'000.0),
+        corner(StageSlotRegistrationCorner::BottomLeft,125'000'000.0,200'000'000.0)};
     const auto registration=take(StageSlotRegistration::create(
         slot,slide,3,calibration,geometry,corners,1.0));
     check(registration.stageSlotId()==slot&&registration.slideId()==slide&&
@@ -59,7 +59,7 @@ void testGenericSlotAffineRegistrationInNanometres() {
     const auto estimate=take(registration.estimateSlidePosition(
         stage,100.0,200.0,
         StagePositionEvidence::EncoderMeasured,StagePositionEvidence::ExternalMeasured,
-        ObservationSource::HardwareReadback,ObservationSource::ExternalSensor));
+        ObservationSource::HardwareReadback,ObservationSource::CalibratedEstimate));
     check(std::abs(estimate.position.x-10'000'000.0)<1e-4&&
           estimate.xErrorBoundNanometres>0.0&&estimate.yErrorBoundNanometres>0.0&&
           estimate.horizontalEvidence==StagePositionEvidence::EncoderMeasured,
@@ -70,10 +70,10 @@ void testRegistrationValidation() {
     const auto geometry=take(SlideGeometry::create(75'000.0,25'000.0));
     const auto makeCorners=[] {
         return std::array<StageSlotCornerMeasurement,4>{
-            corner(SlideCorner::TopLeft,0,0),
-            corner(SlideCorner::TopRight,75'000'000,0),
-            corner(SlideCorner::BottomRight,75'000'000,25'000'000),
-            corner(SlideCorner::BottomLeft,0,25'000'000)};
+            corner(StageSlotRegistrationCorner::TopLeft,0,0),
+            corner(StageSlotRegistrationCorner::TopRight,75'000'000,0),
+            corner(StageSlotRegistrationCorner::BottomRight,75'000'000,25'000'000),
+            corner(StageSlotRegistrationCorner::BottomLeft,0,25'000'000)};
     };
     const auto slot=makeId<StageSlotId>("stage-slot-validation");
     const auto slide=makeId<SlideId>("slide-validation");
@@ -88,16 +88,16 @@ void testRegistrationValidation() {
     check(!invalidResidual&&invalidResidual.error()==StageSlotRegistrationError::InvalidResidualLimit,
         "rejects a negative accepted fit residual");
     auto duplicate=makeCorners();
-    duplicate[3]=corner(SlideCorner::TopLeft,0,25'000'000);
+    duplicate[3]=corner(StageSlotRegistrationCorner::TopLeft,0,25'000'000);
     auto duplicateResult=StageSlotRegistration::create(
         slot,slide,1,calibration,geometry,duplicate,1);
     check(!duplicateResult&&duplicateResult.error()==StageSlotRegistrationError::DuplicateCorner,
         "rejects duplicate corner identity");
     auto degenerate=std::array<StageSlotCornerMeasurement,4>{
-        corner(SlideCorner::TopLeft,10,10),
-        corner(SlideCorner::TopRight,20,20),
-        corner(SlideCorner::BottomRight,30,30),
-        corner(SlideCorner::BottomLeft,40,40)};
+        corner(StageSlotRegistrationCorner::TopLeft,10,10),
+        corner(StageSlotRegistrationCorner::TopRight,20,20),
+        corner(StageSlotRegistrationCorner::BottomRight,30,30),
+        corner(StageSlotRegistrationCorner::BottomLeft,40,40)};
     auto degenerateResult=StageSlotRegistration::create(
         slot,slide,1,calibration,geometry,degenerate,100);
     check(!degenerateResult&&degenerateResult.error()==StageSlotRegistrationError::DegenerateTransform,

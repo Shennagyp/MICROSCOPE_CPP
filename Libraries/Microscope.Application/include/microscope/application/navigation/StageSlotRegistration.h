@@ -11,6 +11,8 @@
 
 namespace microscope::application::navigation {
 
+enum class StageSlotRegistrationCorner { TopLeft, TopRight, BottomRight, BottomLeft };
+
 // Coordinates in this registration are expressed in nanometres. Floating
 // representation is retained for fitted/interpolated coordinates and error
 // propagation; Stage motion targets remain integer nanometres.
@@ -26,20 +28,20 @@ class StageSlotCornerMeasurement final {
 public:
     [[nodiscard]] static core::Result<StageSlotCornerMeasurement,
         StageSlotCornerMeasurementError> create(
-            core::SlideCorner corner,
+            StageSlotRegistrationCorner corner,
             StagePlanePointNanometres stagePosition,
             core::ObservationSource source,
             double uncertaintyNanometres);
 
-    [[nodiscard]] core::SlideCorner corner() const noexcept;
+    [[nodiscard]] StageSlotRegistrationCorner corner() const noexcept;
     [[nodiscard]] const StagePlanePointNanometres& stagePosition() const noexcept;
     [[nodiscard]] core::ObservationSource source() const noexcept;
     [[nodiscard]] double uncertaintyNanometres() const noexcept;
 
 private:
-    StageSlotCornerMeasurement(core::SlideCorner,StagePlanePointNanometres,
+    StageSlotCornerMeasurement(StageSlotRegistrationCorner,StagePlanePointNanometres,
         core::ObservationSource,double);
-    core::SlideCorner corner_;
+    StageSlotRegistrationCorner corner_;
     StagePlanePointNanometres stagePosition_;
     core::ObservationSource source_;
     double uncertaintyNanometres_;

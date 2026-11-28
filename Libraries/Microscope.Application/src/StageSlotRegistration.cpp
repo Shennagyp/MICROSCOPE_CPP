@@ -9,12 +9,12 @@
 namespace microscope::application::navigation {
 namespace {
 
-std::size_t cornerIndex(core::SlideCorner corner) noexcept {
+std::size_t cornerIndex(StageSlotRegistrationCorner corner) noexcept {
     switch(corner) {
-    case core::SlideCorner::TopLeft:return 0;
-    case core::SlideCorner::TopRight:return 1;
-    case core::SlideCorner::BottomRight:return 2;
-    case core::SlideCorner::BottomLeft:return 3;
+    case StageSlotRegistrationCorner::TopLeft:return 0;
+    case StageSlotRegistrationCorner::TopRight:return 1;
+    case StageSlotRegistrationCorner::BottomRight:return 2;
+    case StageSlotRegistrationCorner::BottomLeft:return 3;
     }
     return 4;
 }
@@ -44,14 +44,14 @@ double slideYExtentNanometres(const core::SlideGeometry& geometry) noexcept {
 } // namespace
 
 StageSlotCornerMeasurement::StageSlotCornerMeasurement(
-    core::SlideCorner corner,StagePlanePointNanometres stagePosition,
+    StageSlotRegistrationCorner corner,StagePlanePointNanometres stagePosition,
     core::ObservationSource source,double uncertainty)
     :corner_(corner),stagePosition_(stagePosition),source_(source),
      uncertaintyNanometres_(uncertainty) {}
 
 core::Result<StageSlotCornerMeasurement,StageSlotCornerMeasurementError>
 StageSlotCornerMeasurement::create(
-    core::SlideCorner corner,StagePlanePointNanometres position,
+    StageSlotRegistrationCorner corner,StagePlanePointNanometres position,
     core::ObservationSource source,double uncertainty) {
     if(cornerIndex(corner)>=4)
         return core::Result<StageSlotCornerMeasurement,
@@ -78,7 +78,7 @@ StageSlotCornerMeasurement::create(
             StageSlotCornerMeasurement(corner,position,source,uncertainty));
 }
 
-core::SlideCorner StageSlotCornerMeasurement::corner() const noexcept { return corner_; }
+StageSlotRegistrationCorner StageSlotCornerMeasurement::corner() const noexcept { return corner_; }
 const StagePlanePointNanometres&
 StageSlotCornerMeasurement::stagePosition() const noexcept { return stagePosition_; }
 core::ObservationSource StageSlotCornerMeasurement::source() const noexcept { return source_; }

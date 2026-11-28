@@ -166,16 +166,8 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
         const auto narrowerConfiguration=makeStageConfiguration(true);
         const auto narrowerStage=makeInstalledStage(narrowerConfiguration);
         const auto geometryRejected=assignmentsStore->saveCurrentState(
-            microscopeId,narrowerStage,initial,{slideA1,slideB1},0);
-        if(geometryRejected.isSuccess()||
-           geometryRejected.error().code!=StageSlotAssignmentsStoreErrorCode::SlideGeometryMismatch) {
-            std::cerr<<"GEOMETRY REJECTION DIAGNOSTIC: success="
-                     <<geometryRejected.isSuccess();
-            if(!geometryRejected.isSuccess())
-                std::cerr<<" code="<<static_cast<int>(geometryRejected.error().code)
-                         <<" detail="<<geometryRejected.error().detail;
-            std::cerr<<'\\n';
-        }
+            makeId<MicroscopeId>("assignment-geometry-negative-case"),
+            narrowerStage,initial,{slideA1,slideB1},0);
         check(!geometryRejected.isSuccess()&&
               geometryRejected.error().code==StageSlotAssignmentsStoreErrorCode::SlideGeometryMismatch,
             "rejects a 75 mm Slide assigned to a 70 mm StageSlot even when IDs and revisions match");

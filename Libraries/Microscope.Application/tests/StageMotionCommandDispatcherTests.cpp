@@ -203,6 +203,27 @@ int main() {
         }
     };
 
+    RuntimeFixture identityFixture;
+    auto identityContext=identityFixture.prepare(
+        "wrong-scope-operation","wrong-scope-step","wrong-scope-command");
+    RecordingStagePort identityPort;
+    auto identityStage=take(controller::Stage::create(
+        controllerStageSpecification(),id<core::StageConfigurationId>("slides")));
+    controller::MicroscopeInstance wrongMicroscope(
+        id<core::MicroscopeId>("another-scope"),std::move(identityStage));
+    const auto identityPlan=take(wrongMicroscope.stage().home());
+    const auto identityRejected=
+        application::motion::StageMotionPlanDispatcher::dispatch(
+            wrongMicroscope,identityPlan,installedStageSpecification(),
+            identityContext,identityPort,*identityFixture.runtime);
+    check(!identityRejected&&
+          std::holds_alternative<application::motion::StageMotionPlanIdentityError>(
+              identityRejected.error().cause),
+          "rejects dispatch from a different microscope identity");
+    check(identityPort.homeCalls==0&&
+          !wrongMicroscope.stage().validateForDispatch(identityPlan),
+          "identity rejection does not reach hardware and releases the pending Stage plan");
+
     RuntimeFixture planFixture;
     auto planContext=planFixture.prepare(
         "controller-plan-operation","controller-plan-step","controller-plan-command");

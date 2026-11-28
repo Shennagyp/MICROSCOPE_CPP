@@ -39,7 +39,8 @@ struct EquipmentDefinitionJsonError final {
 // represented here.
 class EquipmentDefinitionJsonLoader final {
 public:
-    static constexpr std::uint32_t kSupportedSchemaVersion = 1;
+    static constexpr std::uint32_t kLegacySchemaVersion = 1;
+    static constexpr std::uint32_t kSupportedSchemaVersion = 2;
     static constexpr std::size_t kMaximumDocumentBytes = 16U * 1024U * 1024U;
 
     [[nodiscard]] static core::Result<

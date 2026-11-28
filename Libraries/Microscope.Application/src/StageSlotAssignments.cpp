@@ -38,6 +38,17 @@ StageSlotAssignments::create(
         if(assignment.slideRevision==0)
             return core::Result<StageSlotAssignments,StageSlotAssignmentsError>::failure(
                 StageSlotAssignmentsError::ZeroSlideRevision);
+        if(assignment.registration) {
+            if(assignment.registration->stageSlotId()!=assignment.stageSlotId)
+                return core::Result<StageSlotAssignments,StageSlotAssignmentsError>::failure(
+                    StageSlotAssignmentsError::RegistrationStageSlotMismatch);
+            if(assignment.registration->slideId()!=assignment.slideId)
+                return core::Result<StageSlotAssignments,StageSlotAssignmentsError>::failure(
+                    StageSlotAssignmentsError::RegistrationSlideMismatch);
+            if(assignment.registration->slideRevision()!=assignment.slideRevision)
+                return core::Result<StageSlotAssignments,StageSlotAssignmentsError>::failure(
+                    StageSlotAssignmentsError::RegistrationSlideRevisionMismatch);
+        }
         if(!assignedSlotIds.insert(assignment.stageSlotId).second)
             return core::Result<StageSlotAssignments,StageSlotAssignmentsError>::failure(
                 StageSlotAssignmentsError::DuplicateStageSlotAssignment);

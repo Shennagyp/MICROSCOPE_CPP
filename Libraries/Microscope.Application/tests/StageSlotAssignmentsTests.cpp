@@ -107,6 +107,46 @@ void testRejectsInvalidAndAmbiguousAssignments() {
     check(!duplicateSlide&&
           duplicateSlide.error()==StageSlotAssignmentsError::SlideAssignedToMultipleSlots,
         "one physical Slide cannot be assigned to two StageSlots at once");
+
+    const auto geometry=take(SlideGeometry::create(75'000.0,25'000.0));
+    const std::array<StageSlotCornerMeasurement,4> corners{
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::TopLeft,
+            {0,0},ObservationSource::HardwareReadback,1)),
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::TopRight,
+            {75'000'000,0},ObservationSource::HardwareReadback,1)),
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::BottomRight,
+            {75'000'000,25'000'000},ObservationSource::HardwareReadback,1)),
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::BottomLeft,
+            {0,25'000'000},ObservationSource::HardwareReadback,1))};
+    const auto registration=take(StageSlotRegistration::create(
+        s1,a,1,makeId<CalibrationRevisionId>("assignment-calibration"),
+        geometry,corners,1));
+    auto matchingRegistration=StageSlotAssignments::create(
+        componentId("stage-main"),17,configuration,{{s1,a,1,registration}});
+    check(static_cast<bool>(matchingRegistration),
+        "accepts registration whose StageSlot, Slide and immutable revision match the assignment");
+    auto wrongSlideRegistration=StageSlotRegistration::create(
+        s1,b,1,makeId<CalibrationRevisionId>("wrong-slide-calibration"),
+        geometry,corners,1);
+    check(static_cast<bool>(wrongSlideRegistration),"constructs a distinct Slide registration fixture");
+    if(wrongSlideRegistration) {
+        auto rejected=StageSlotAssignments::create(
+            componentId("stage-main"),17,configuration,
+            {{s1,a,1,std::move(wrongSlideRegistration).value()}});
+        check(!rejected&&rejected.error()==StageSlotAssignmentsError::RegistrationSlideMismatch,
+            "does not attach a different Slide's calibration to an assignment");
+    }
+    auto wrongRevisionRegistration=StageSlotRegistration::create(
+        s1,a,2,makeId<CalibrationRevisionId>("wrong-slide-revision-calibration"),
+        geometry,corners,1);
+    check(static_cast<bool>(wrongRevisionRegistration),"constructs a newer Slide revision registration fixture");
+    if(wrongRevisionRegistration) {
+        auto rejected=StageSlotAssignments::create(
+            componentId("stage-main"),17,configuration,
+            {{s1,a,1,std::move(wrongRevisionRegistration).value()}});
+        check(!rejected&&rejected.error()==StageSlotAssignmentsError::RegistrationSlideRevisionMismatch,
+            "does not reuse calibration measured against another Slide revision");
+    }
 }
 }
 

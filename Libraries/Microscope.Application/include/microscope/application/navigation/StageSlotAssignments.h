@@ -1,6 +1,7 @@
 #pragma once
 
 #include "microscope/core/equipment/StageSpecifications.h"
+#include "microscope/application/navigation/StageSlotRegistration.h"
 #include "microscope/core/result/Result.h"
 
 #include <cstdint>
@@ -16,6 +17,7 @@ struct StageSlotAssignment final {
     core::StageSlotId stageSlotId;
     core::SlideId slideId;
     std::uint64_t slideRevision = 0;
+    std::optional<StageSlotRegistration> registration = std::nullopt;
 };
 
 enum class StageSlotAssignmentsError {
@@ -24,7 +26,10 @@ enum class StageSlotAssignmentsError {
     SlotNotInConfiguration,
     ZeroSlideRevision,
     DuplicateStageSlotAssignment,
-    SlideAssignedToMultipleSlots
+    SlideAssignedToMultipleSlots,
+    RegistrationStageSlotMismatch,
+    RegistrationSlideMismatch,
+    RegistrationSlideRevisionMismatch
 };
 
 // Application-owned mapping between physical StageSlots and existing Slide

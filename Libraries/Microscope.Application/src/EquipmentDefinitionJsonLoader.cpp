@@ -1760,18 +1760,190 @@ bool parseIlluminationSpecification(
 
 
 
+
+bool signedIntegerValue(
+    const JsonValue& value,const std::string& path,
+    std::int64_t& output,Error& error) {
+    if(value.kind!=JsonValue::Kind::Number)
+        return fail(error,ErrorCode::WrongType,path,"Expected a signed integer.");
+    if(value.text.empty()||value.text.find_first_of(".eE")!=std::string::npos)
+        return fail(error,ErrorCode::InvalidValue,path,
+            "Expected an integer without a fraction or exponent.");
+    const auto parsed=std::from_chars(
+        value.text.data(),value.text.data()+value.text.size(),output);
+    if(parsed.ec!=std::errc{}||parsed.ptr!=value.text.data()+value.text.size())
+        return fail(error,ErrorCode::InvalidValue,path,
+            "Integer is outside the signed 64-bit range.");
+    return true;
+}
+
+bool requiredSignedInteger(
+    const JsonObject& object,const char* key,const std::string& path,
+    std::int64_t& output,Error& error) {
+    const JsonValue* value=nullptr;
+    return required(object,key,path,value,error)&&
+        signedIntegerValue(*value,path+"."+key,output,error);
+}
+
+bool parseStageNanometreRange(
+    const JsonValue& value,const std::string& path,
+    std::optional<core::StageNanometreRange>& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"minimum","maximum"},path,error)) return false;
+    std::int64_t minimum=0,maximum=0;
+    if(!requiredSignedInteger(*object,"minimum",path,minimum,error)||
+       !requiredSignedInteger(*object,"maximum",path,maximum,error)) return false;
+    auto created=core::StageNanometreRange::create(minimum,maximum);
+    if(!created) return fail(error,ErrorCode::DomainValidationFailed,path,
+        "Core rejected the nanometre range.");
+    output=std::move(created).value();
+    return true;
+}
+
+bool parseStageRadianRange(
+    const JsonValue& value,const std::string& path,
+    std::optional<core::StageRadianRange>& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"minimum","maximum"},path,error)) return false;
+    double minimum=0.0,maximum=0.0;
+    if(!requiredNumber(*object,"minimum",path,minimum,error)||
+       !requiredNumber(*object,"maximum",path,maximum,error)) return false;
+    auto created=core::StageRadianRange::create(minimum,maximum);
+    if(!created) return fail(error,ErrorCode::DomainValidationFailed,path,
+        "Core rejected the radian range.");
+    output=std::move(created).value();
+    return true;
+}
+
+bool parseStagePosition2D(
+    const JsonValue& value,const std::string& path,
+    core::StagePosition2DNanometres& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"x","y"},path,error)) return false;
+    return requiredSignedInteger(*object,"x",path,output.x,error)&&
+        requiredSignedInteger(*object,"y",path,output.y,error);
+}
+
+bool parseStagePosition3D(
+    const JsonValue& value,const std::string& path,
+    core::StagePosition3DNanometres& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"x","y","z"},path,error)) return false;
+    return requiredSignedInteger(*object,"x",path,output.x,error)&&
+        requiredSignedInteger(*object,"y",path,output.y,error)&&
+        requiredSignedInteger(*object,"z",path,output.z,error);
+}
+
+bool parseStageSlotSpecification(
+    const JsonValue& value,const std::string& path,
+    std::optional<core::StageSlotSpecification>& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"id","originInStageNanometres",
+           "xRangeNanometres","yRangeNanometres"},path,error)) return false;
+    std::optional<core::StageSlotId> id;
+    const JsonValue *originNode=nullptr,*xNode=nullptr,*yNode=nullptr;
+    if(!requiredId(*object,"id",path,id,error)||
+       !required(*object,"originInStageNanometres",path,originNode,error)||
+       !required(*object,"xRangeNanometres",path,xNode,error)||
+       !required(*object,"yRangeNanometres",path,yNode,error)) return false;
+    core::StagePosition2DNanometres origin;
+    std::optional<core::StageNanometreRange> xRange,yRange;
+    if(!parseStagePosition2D(*originNode,path+".originInStageNanometres",origin,error)||
+       !parseStageNanometreRange(*xNode,path+".xRangeNanometres",xRange,error)||
+       !parseStageNanometreRange(*yNode,path+".yRangeNanometres",yRange,error)) return false;
+    auto created=core::StageSlotSpecification::create(
+        std::move(*id),origin,std::move(*xRange),std::move(*yRange));
+    if(!created) return fail(error,ErrorCode::DomainValidationFailed,path,
+        "Core rejected the StageSlot specification.");
+    output=std::move(created).value();
+    return true;
+}
+
+bool parseStageWorkingLinearAxis(
+    const JsonValue& value,const std::string& path,
+    std::optional<core::StageWorkingLinearAxisSpecification>& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"axisId","effectiveRangeNanometres"},path,error)) return false;
+    std::optional<core::StageAxisId> axisId;
+    const JsonValue* rangeNode=nullptr;
+    if(!requiredId(*object,"axisId",path,axisId,error)||
+       !required(*object,"effectiveRangeNanometres",path,rangeNode,error)) return false;
+    std::optional<core::StageNanometreRange> range;
+    if(!parseStageNanometreRange(*rangeNode,path+".effectiveRangeNanometres",range,error))
+        return false;
+    output=core::StageWorkingLinearAxisSpecification{std::move(*axisId),std::move(*range)};
+    return true;
+}
+
+bool parseStageWorkingRotationAxis(
+    const JsonValue& value,const std::string& path,
+    std::optional<core::StageWorkingRotationAxisSpecification>& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"axisId","effectiveRangeRadians"},path,error)) return false;
+    std::optional<core::StageAxisId> axisId;
+    const JsonValue* rangeNode=nullptr;
+    if(!requiredId(*object,"axisId",path,axisId,error)||
+       !required(*object,"effectiveRangeRadians",path,rangeNode,error)) return false;
+    std::optional<core::StageRadianRange> range;
+    if(!parseStageRadianRange(*rangeNode,path+".effectiveRangeRadians",range,error))
+        return false;
+    output=core::StageWorkingRotationAxisSpecification{std::move(*axisId),std::move(*range)};
+    return true;
+}
+
+bool parseStageConfigurationSpecification(
+    const JsonValue& value,const std::string& path,
+    std::optional<core::StageConfigurationSpecification>& output,Error& error) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)||
+       !allowedKeys(*object,{"id","workingLinearAxes","workingRotationAxes","slots"},
+           path,error)) return false;
+    std::optional<core::StageConfigurationId> id;
+    const JsonValue *linearNode=nullptr,*rotationNode=nullptr,*slotsNode=nullptr;
+    if(!requiredId(*object,"id",path,id,error)||
+       !requiredArray(*object,"workingLinearAxes",path,linearNode,error)||
+       !requiredArray(*object,"workingRotationAxes",path,rotationNode,error)||
+       !requiredArray(*object,"slots",path,slotsNode,error)) return false;
+    std::vector<core::StageWorkingLinearAxisSpecification> linear;
+    std::vector<core::StageWorkingRotationAxisSpecification> rotary;
+    std::vector<core::StageSlotSpecification> slots;
+    if(!parseArray(*linearNode,path+".workingLinearAxes",linear,error,
+           parseStageWorkingLinearAxis)||
+       !parseArray(*rotationNode,path+".workingRotationAxes",rotary,error,
+           parseStageWorkingRotationAxis)||
+       !parseArray(*slotsNode,path+".slots",slots,error,parseStageSlotSpecification))
+        return false;
+    auto created=core::StageConfigurationSpecification::create(
+        std::move(*id),std::move(linear),std::move(rotary),std::move(slots));
+    if(!created) return fail(error,ErrorCode::DomainValidationFailed,path,
+        "Core rejected the StageConfiguration specification.");
+    output=std::move(created).value();
+    return true;
+}
+
 bool parseStageAxisSpecification(
     const JsonValue& value,
     const std::string& path,
     std::optional<core::AxisSpecification>& output,
-    Error& error) {
-    const JsonObject* object = nullptr;
-    if (!objectValue(value, path, object, error) ||
-        !allowedKeys(*object,
-            {"id", "motionType", "coordinateUnit", "operatingRange",
-             "nominalResolution", "accuracy", "repeatability",
-             "measurementUncertainty", "positionFeedback", "measurementLocation"},
-            path, error)) return false;
+    Error& error,std::uint64_t schemaVersion) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)) return false;
+    if(schemaVersion==EquipmentDefinitionJsonLoader::kLegacySchemaVersion) {
+        if(!allowedKeys(*object,
+            {"id","motionType","coordinateUnit","operatingRange","nominalResolution",
+             "accuracy","repeatability","measurementUncertainty","positionFeedback",
+             "measurementLocation"},path,error)) return false;
+    } else if(!allowedKeys(*object,
+        {"id","motionType","coordinateUnit","operatingRange","nominalResolution",
+         "accuracy","repeatability","measurementUncertainty","positionFeedback",
+         "measurementLocation","linearRole","rotationGeometry"},path,error)) return false;
 
     std::optional<core::StageAxisId> id;
     if (!requiredId(*object, "id", path, id, error)) return false;
@@ -1921,10 +2093,45 @@ bool parseStageAxisSpecification(
          {"unknown", core::AxisMeasurementLocation::Unknown}},
         location, error)) return false;
 
+    std::optional<core::StageLinearAxisRole> linearRole;
+    std::optional<core::StageRotationAxisGeometry> rotationGeometry;
+    if(schemaVersion>=2) {
+        if(!optionalEnumField(*object,"linearRole",path,
+            {{"x",core::StageLinearAxisRole::X},
+             {"y",core::StageLinearAxisRole::Y},
+             {"z",core::StageLinearAxisRole::Z}},linearRole,error)) return false;
+        const JsonValue* geometryNode=find(*object,"rotationGeometry");
+        if(geometryNode!=nullptr&&geometryNode->kind!=JsonValue::Kind::Null) {
+            const JsonObject* geometryObject=nullptr;
+            if(!objectValue(*geometryNode,path+".rotationGeometry",geometryObject,error)||
+               !allowedKeys(*geometryObject,{"pointOnAxisNanometres","direction"},
+                   path+".rotationGeometry",error)) return false;
+            const JsonValue* pointNode=nullptr;
+            core::StagePosition3DNanometres point;
+            core::StageRotationAxisDirection direction{};
+            if(!required(*geometryObject,"pointOnAxisNanometres",
+                    path+".rotationGeometry",pointNode,error)||
+               !parseStagePosition3D(*pointNode,
+                    path+".rotationGeometry.pointOnAxisNanometres",point,error)||
+               !requiredEnumField(*geometryObject,"direction",path+".rotationGeometry",
+                    {{"x",core::StageRotationAxisDirection::X},
+                     {"y",core::StageRotationAxisDirection::Y},
+                     {"z",core::StageRotationAxisDirection::Z}},direction,error))
+                return false;
+            rotationGeometry=core::StageRotationAxisGeometry{point,direction};
+        }
+        if(motionType==core::AxisMotionType::Linear&&!linearRole)
+            return fail(error,ErrorCode::MissingField,path+".linearRole",
+                "Schema version 2 requires a linear X/Y/Z role.");
+        if(motionType==core::AxisMotionType::Rotary&&!rotationGeometry)
+            return fail(error,ErrorCode::MissingField,path+".rotationGeometry",
+                "Schema version 2 requires rotary-axis geometry.");
+    }
+
     auto created = core::AxisSpecification::create(
         std::move(*id), motionType, coordinateUnit, std::move(range).value(),
         std::move(*resolution), std::move(accuracy), std::move(repeatability),
-        std::move(uncertainty), feedback, location);
+        std::move(uncertainty), feedback, location,linearRole,rotationGeometry);
     if (!created) return fail(error, ErrorCode::DomainValidationFailed,
         path, "Core rejected the stage-axis specification.");
     output = std::move(created).value();
@@ -1935,19 +2142,33 @@ bool parseStageSpecification(
     const JsonValue& value,
     const std::string& path,
     std::optional<core::StageSpecification>& output,
-    Error& error) {
-    const JsonObject* object = nullptr;
-    if (!objectValue(value, path, object, error) ||
-        !allowedKeys(*object, {"componentId", "axes"}, path, error)) return false;
+    Error& error,std::uint64_t schemaVersion) {
+    const JsonObject* object=nullptr;
+    if(!objectValue(value,path,object,error)) return false;
+    if(schemaVersion==EquipmentDefinitionJsonLoader::kLegacySchemaVersion) {
+        if(!allowedKeys(*object,{"componentId","axes"},path,error)) return false;
+    } else if(!allowedKeys(*object,{"componentId","axes","configurations"},path,error))
+        return false;
     std::optional<core::EquipmentComponentId> component;
     if (!requiredId(*object, "componentId", path, component, error)) return false;
     const JsonValue* axesNode = nullptr;
     if (!requiredArray(*object, "axes", path, axesNode, error)) return false;
     std::vector<core::AxisSpecification> axes;
-    if (!parseArray(*axesNode, path + ".axes", axes, error,
-        parseStageAxisSpecification)) return false;
+    if(!parseArray(*axesNode,path+".axes",axes,error,
+        [&schemaVersion](const JsonValue& item,const std::string& itemPath,
+            std::optional<core::AxisSpecification>& parsed,Error& itemError) {
+            return parseStageAxisSpecification(item,itemPath,parsed,itemError,schemaVersion);
+        })) return false;
+
+    std::vector<core::StageConfigurationSpecification> configurations;
+    if(schemaVersion>=2) {
+        const JsonValue* configurationsNode=nullptr;
+        if(!requiredArray(*object,"configurations",path,configurationsNode,error)||
+           !parseArray(*configurationsNode,path+".configurations",configurations,error,
+               parseStageConfigurationSpecification)) return false;
+    }
     auto created = core::StageSpecification::create(
-        std::move(*component), std::move(axes));
+        std::move(*component),std::move(axes),std::move(configurations));
     if (!created) return fail(error, ErrorCode::DomainValidationFailed,
         path, "Core rejected the stage or its axes.");
     output = std::move(created).value();

@@ -556,7 +556,7 @@ void parsesSchemaV2GenericStageConfigurations() {
         "parses schema v2 equipment definitions with generic Stage configurations");
     if(!parsed) {
         std::cerr<<"Schema v2 loader error at "<<parsed.error().path<<": "
-                 <<parsed.error().detail<<'\\n';
+                 <<parsed.error().detail<<'\n';
         return;
     }
     const auto& stages=parsed.value().stageSpecifications();
@@ -570,14 +570,14 @@ void parsesSchemaV2GenericStageConfigurations() {
         check(stages[0].configurations()[0].workingRotationAxes().empty()&&
               stages[0].configurations()[1].workingRotationAxes().size()==1,
             "persists configuration-specific optional rotary axes");
-        const auto* x=stages[0].linearAxis(core::StageLinearAxisRole::X);
-        check(x&&x->linearRole()==core::StageLinearAxisRole::X,
+        const auto* x=stages[0].linearAxis(StageLinearAxisRole::X);
+        check(x&&x->linearRole()==StageLinearAxisRole::X,
             "retains the physical X role on the installed axis");
     }
 
     auto legacyCarrierField=replaceOnce(validV2Document(),
-        "  \\"filterSpecifications\\": [",
-        "  \\"dualSlideCarrierSpecifications\\": [],\\n  \\"filterSpecifications\\": [");
+        "  \"filterSpecifications\": [",
+        "  \"dualSlideCarrierSpecifications\": [],\\n  \"filterSpecifications\": [");
     const auto obsolete=EquipmentDefinitionJsonLoader::parse(legacyCarrierField);
     check(!obsolete&&obsolete.error().code==EquipmentDefinitionJsonErrorCode::UnknownField,
         "schema v2 rejects the retired fixed dual-slide carrier specification field");

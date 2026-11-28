@@ -1,5 +1,6 @@
 #include "microscope/core/equipment/StageSpecifications.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <set>

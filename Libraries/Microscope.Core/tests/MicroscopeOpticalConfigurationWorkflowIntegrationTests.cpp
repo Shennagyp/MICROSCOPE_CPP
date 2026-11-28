@@ -194,7 +194,7 @@ Fixture makeFixture() {
         {camera},
         {condenser},
         {illumination},
-        {}, {}, {lightPath},
+        {}, {lightPath},
         {}, 7));
 
     const auto calibrationRevision =
@@ -506,7 +506,6 @@ void testEquipmentRevisionChangeInvalidatesModeBoundLightPath() {
         fixture.equipment.condenserSpecifications(),
         fixture.equipment.illuminationSpecifications(),
         fixture.equipment.stageSpecifications(),
-        fixture.equipment.dualSlideCarrierSpecifications(),
         fixture.equipment.lightPaths(),
         fixture.equipment.filterSpecifications(),
         fixture.equipment.revision() + 1));

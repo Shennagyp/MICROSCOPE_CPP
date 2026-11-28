@@ -1566,7 +1566,6 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
         fixture.equipment.condenserSpecifications(),
         fixture.equipment.illuminationSpecifications(),
         fixture.equipment.stageSpecifications(),
-        fixture.equipment.dualSlideCarrierSpecifications(),
         {},
         fixture.equipment.filterSpecifications(),
         0);
@@ -1591,7 +1590,6 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
         fixture.equipment.condenserSpecifications(),
         fixture.equipment.illuminationSpecifications(),
         fixture.equipment.stageSpecifications(),
-        fixture.equipment.dualSlideCarrierSpecifications(),
         {lightPath},
         fixture.equipment.filterSpecifications()));
 
@@ -1649,7 +1647,6 @@ void testLightPathCameraDiagnosticsSurviveConfigurationResolution() {
         fixture.equipment.condenserSpecifications(),
         fixture.equipment.illuminationSpecifications(),
         fixture.equipment.stageSpecifications(),
-        fixture.equipment.dualSlideCarrierSpecifications(),
         {lightPath},
         fixture.equipment.filterSpecifications(),
         2));
@@ -1904,7 +1901,6 @@ void testSampleRequirementsUseModeBoundSlidePlaneIrradiance() {
         fixture.equipment.condenserSpecifications(),
         fixture.equipment.illuminationSpecifications(),
         fixture.equipment.stageSpecifications(),
-        fixture.equipment.dualSlideCarrierSpecifications(),
         {lightPath},
         fixture.equipment.filterSpecifications(),
         fixture.equipment.revision()));

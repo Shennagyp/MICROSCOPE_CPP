@@ -600,7 +600,7 @@ core::Status<StageModelError> Stage::recordCompletedHome(
     for(const auto& axis:activeConfiguration().workingLinearAxes()) expected.push_back(axis.axisId);
     for(const auto& axis:activeConfiguration().workingRotationAxes()) expected.push_back(axis.axisId);
     auto expectedSet=core::StageAxisSet::create(std::move(expected));
-    if(!expectedSet||!sameAxisSet(completion.axes(),expected)||
+    if(!expectedSet||!sameAxisSet(completion.axes(),expectedSet.value().axes())||
        !observation.matchesAxes(expectedSet.value()))
         return core::Status<StageModelError>::failure(
             StageModelError::InvalidHomeReferenceEvidence);

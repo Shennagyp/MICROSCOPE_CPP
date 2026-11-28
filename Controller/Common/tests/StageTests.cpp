@@ -134,6 +134,39 @@ void testGenericConfigurationAndAxisCommandConstruction() {
         "RotationAxis uses radian relative targets");
 }
 
+void testHomeRequiresExactCompletionAndReferenceAxes() {
+    StageConfigurationId slides=configId("slides");
+    StageConfigurationId petri=configId("petri");
+    StageSlotId second=slotId("slide-slot-2");
+    auto spec=makeSpecification(slides,petri,second);
+    auto stage=take(Stage::create(std::move(spec),slides));
+    auto home=take(stage.home());
+
+    const auto wrongAction=take(core::StageMotionActionCompletion::create(
+        core::StageMotionAction::MoveAxesTo,
+        take(core::StageAxisSet::create(home.axesToHome))));
+    const auto correctReference=homeReference(home);
+    check(!stage.recordCompletedHome(home,wrongAction,correctReference),
+        "a MoveAxesTo completion cannot establish the Stage home reference");
+    check(!stage.currentPosition().xyzKnown(),
+        "rejected completion leaves the position unknown");
+
+    auto wrongAxes=home.axesToHome;
+    wrongAxes.pop_back();
+    const auto partialCompletion=take(core::StageMotionActionCompletion::create(
+        core::StageMotionAction::HomeAxes,
+        take(core::StageAxisSet::create(std::move(wrongAxes)))));
+    check(!stage.recordCompletedHome(home,partialCompletion,correctReference),
+        "partial axis completion cannot establish a complete XYZ reference");
+
+    const auto correctCompletion=actionCompletion(home);
+    check(static_cast<bool>(stage.recordCompletedHome(
+        home,correctCompletion,correctReference)),
+        "the same pending home plan can complete with exact action and complete reference evidence");
+    check(stage.currentPosition().xyzKnown(),
+        "only complete home evidence establishes the XYZ reference");
+}
+
 void testCorrelatedMotionPlansAndCurrentSlot() {
     StageConfigurationId slides=configId("slides"),petri=configId("petri");
     StageSlotId second=slotId("slide-slot-2");
@@ -258,6 +291,7 @@ void testMicroscopeInstanceOwnsStage() {
 
 int main() {
     testGenericConfigurationAndAxisCommandConstruction();
+    testHomeRequiresExactCompletionAndReferenceAxes();
     testCorrelatedMotionPlansAndCurrentSlot();
     testFailedMotionInvalidatesPosition();
     testRefreshPositionHomeAndRestoreWorkflow();

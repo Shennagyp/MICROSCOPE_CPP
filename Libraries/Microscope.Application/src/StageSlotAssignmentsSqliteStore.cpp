@@ -3,6 +3,8 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <limits>
 #include <utility>
 

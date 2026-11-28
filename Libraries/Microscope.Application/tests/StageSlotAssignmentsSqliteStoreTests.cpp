@@ -79,6 +79,27 @@ StageConfigurationSpecification makeStageConfiguration(bool narrowFirstSlot=fals
         {},std::move(slots)));
 }
 
+StageSlotRegistration makeRegistration(
+    const StageSlotId& slot,const SlideId& slide,std::uint64_t slideRevision,
+    const char* calibrationRevision,double originXNanometres) {
+    const auto geometry=take(SlideGeometry::create(75'000.0,25'000.0));
+    const std::array<StageSlotCornerMeasurement,4> corners{
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::TopLeft,
+            {originXNanometres,200'000'000.0},ObservationSource::HardwareReadback,12.0)),
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::TopRight,
+            {originXNanometres+75'000'000.0,200'000'000.0},
+            ObservationSource::DeviceEvent,15.0)),
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::BottomRight,
+            {originXNanometres+75'000'000.0,225'000'000.0},
+            ObservationSource::SdkStatus,18.0)),
+        take(StageSlotCornerMeasurement::create(StageSlotRegistrationCorner::BottomLeft,
+            {originXNanometres,225'000'000.0},
+            ObservationSource::OperatorConfirmation,20.0))};
+    return take(StageSlotRegistration::create(
+        slot,slide,slideRevision,makeId<CalibrationRevisionId>(calibrationRevision),
+        geometry,corners,100.0));
+}
+
 StageSpecification makeInstalledStage(const StageConfigurationSpecification& config) {
     const auto makeLinear=[](const char* id,StageLinearAxisRole role,double maximum) {
         auto operating=take(AxisOperatingRange::create(
@@ -130,9 +151,14 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
         if(!assignmentsOpened) { removeDatabaseFiles(path); return; }
         auto assignmentsStore=std::move(assignmentsOpened).value();
 
+        const auto registrationA1=makeRegistration(
+            slot1,slideAId,1,"calibration-slide-a-r1",10'000'000.0);
+        const auto registrationB1=makeRegistration(
+            slot4,slideBId,1,"calibration-slide-b-r1",100'000'000.0);
         auto initial=take(StageSlotAssignments::create(
             stageComponent,12,stageConfig,
-            {{slot1,slideAId,1},{slot4,slideBId,1}}));
+            {{slot1,slideAId,1,registrationA1},
+             {slot4,slideBId,1,registrationB1}}));
         check(assignmentsStore->saveCurrentState(
             microscopeId,installedStage,initial,{slideA1,slideB1},0).isSuccess(),
             "creates assignment revision one using expected revision zero");
@@ -166,6 +192,17 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
                   loaded1.value()->assignments.forSlot(
                       makeId<StageSlotId>("assignment-slot-2"))==nullptr,
                 "persists sparse occupancy across a ten-slot holder");
+            check(assignment&&assignment->registration&&
+                  assignment->registration->calibrationRevision()==
+                      makeId<CalibrationRevisionId>("calibration-slide-a-r1")&&
+                  assignment->registration->cornerMeasurements().size()==4,
+                "round-trips the exact registration revision and four raw corner measurements");
+            if(assignment&&assignment->registration) {
+                const auto mapped=assignment->registration->toStage({10'000'000.0,5'000'000.0});
+                check(mapped&&std::abs(mapped.value().x-20'000'000.0)<1e-4&&
+                      std::abs(mapped.value().y-205'000'000.0)<1e-4,
+                    "rebuilds the persisted affine transform from its corner measurements");
+            }
         }
 
         const auto slideA2=makeSlide(slideA2Id,2,sampleType);
@@ -173,7 +210,9 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
             "appends a new immutable Slide revision");
         auto updated=take(StageSlotAssignments::create(
             stageComponent,12,stageConfig,
-            {{slot1,slideAId,2},{slot4,slideBId,1}}));
+            {{slot1,slideAId,2,makeRegistration(
+                slot1,slideAId,2,"calibration-slide-a-r2",10'000'000.0)},
+             {slot4,slideBId,1,registrationB1}}));
         check(assignmentsStore->saveCurrentState(
             microscopeId,installedStage,updated,{slideA2,slideB1},1).isSuccess(),
             "appends assignment revision two pinned to the new Slide revision");
@@ -183,12 +222,22 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
         check(historical&&historical.value()&&historical.value()->revision==1&&
               historical.value()->assignments.forSlide(slideAId)->slideRevision==1,
             "historical assignment revision retains its original Slide revision pin");
+        check(historical&&historical.value()&&
+              historical.value()->assignments.forSlide(slideAId)->registration&&
+              historical.value()->assignments.forSlide(slideAId)->registration->calibrationRevision()==
+                  makeId<CalibrationRevisionId>("calibration-slide-a-r1"),
+            "historical assignment snapshot retains its original four-corner calibration revision");
 
         auto current=assignmentsStore->loadCurrentState(
             microscopeId,12,installedStage,stageConfig.id());
         check(current&&current.value()&&current.value()->revision==2&&
               current.value()->assignments.forSlide(slideAId)->slideRevision==2,
             "current assignment state resolves the latest immutable Slide revision");
+        check(current&&current.value()&&
+              current.value()->assignments.forSlide(slideAId)->registration&&
+              current.value()->assignments.forSlide(slideAId)->registration->calibrationRevision()==
+                  makeId<CalibrationRevisionId>("calibration-slide-a-r2"),
+            "current Slide revision uses its own measured calibration and does not reuse the older transform");
 
         const auto staleSave=assignmentsStore->saveCurrentState(
             microscopeId,installedStage,initial,{slideA1,slideB1},2);

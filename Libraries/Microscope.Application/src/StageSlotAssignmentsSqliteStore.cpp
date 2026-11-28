@@ -486,6 +486,11 @@ StageSlotAssignmentsSqliteStore::loadCurrentState(
         return core::Result<std::optional<PersistedStageSlotAssignments>,
             StageSlotAssignmentsStoreError>::failure(
                 makeError(ErrorCode::InvalidRevision,database_));
+    if(findConfiguration(installedStage,configurationId)==nullptr)
+        return core::Result<std::optional<PersistedStageSlotAssignments>,
+            StageSlotAssignmentsStoreError>::failure(
+                makeError(ErrorCode::EquipmentBindingMismatch,database_,
+                    "The requested StageConfiguration is absent from the installed Stage equipment."));
     std::optional<std::uint64_t> revision;
     if(!readCurrentAssignmentRevision(database_,microscopeId,equipmentDefinitionRevision,
         installedStage.componentId(),configurationId,revision))

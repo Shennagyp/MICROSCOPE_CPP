@@ -137,7 +137,8 @@ void testGenericConfigurationAndAxisCommandConstruction() {
     check(!x->moveTo(2'000'000'000),"LinearAxis rejects targets beyond mechanical travel");
     const auto measuredX=take(LinearAxis::create(
         axisId("measured-x"),LinearAxisRole::X,nmRange(0,100'000),10,100,25,40));
-    check(measuredX.accuracy()==100&&measuredX.precision()==25&&
+    check(measuredX.accuracy()==std::optional<Nanometres>(100)&&
+          measuredX.precision()==std::optional<Nanometres>(25)&&
           measuredX.measurementUncertainty()==std::optional<Nanometres>(40),
         "linear accuracy, precision and measurement uncertainty remain independent");
     check(!LinearAxis::create(
@@ -155,8 +156,8 @@ void testGenericConfigurationAndAxisCommandConstruction() {
     const auto measuredTheta=take(RotationAxis::create(
         axisId("measured-theta"),RotationAxisGeometry{{0,0,0},RotationAxisDirection::Z},
         radRange(-1.0,1.0),0.001,0.01,0.002,0.0005));
-    check(std::abs(measuredTheta.accuracy()-0.01)<1e-12&&
-          std::abs(measuredTheta.precision()-0.002)<1e-12&&
+    check(measuredTheta.accuracy()==std::optional<Radians>(0.01)&&
+          measuredTheta.precision()==std::optional<Radians>(0.002)&&
           measuredTheta.measurementUncertainty()==std::optional<Radians>(0.0005),
         "rotary accuracy, precision and measurement uncertainty remain independent");
     check(!RotationAxis::create(
@@ -164,6 +165,12 @@ void testGenericConfigurationAndAxisCommandConstruction() {
         RotationAxisGeometry{{0,0,0},RotationAxisDirection::Z},
         radRange(-1.0,1.0),0.001,0.01,0.002,-0.0005),
         "rotary measurement uncertainty cannot be negative");
+    const auto unspecifiedAxis=take(LinearAxis::create(
+        axisId("unspecified-axis-quality"),LinearAxisRole::X,
+        nmRange(0,100'000),10,std::nullopt,std::nullopt));
+    check(!unspecifiedAxis.accuracy()&&!unspecifiedAxis.precision()&&
+          !unspecifiedAxis.measurementUncertainty(),
+        "unspecified accuracy, precision and measurement uncertainty remain absent");
 }
 
 void testHomeRequiresExactCompletionAndReferenceAxes() {

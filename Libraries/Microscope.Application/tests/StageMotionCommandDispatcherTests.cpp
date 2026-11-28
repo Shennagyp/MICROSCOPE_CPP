@@ -1,5 +1,7 @@
 #include "microscope/application/motion/StageMotionCommandDispatcher.h"
+#include "microscope/application/motion/StageMotionPlanDispatcher.h"
 #include "microscope/application/runtime/RuntimeWakeSignal.h"
+#include "controller/MicroscopeInstance.h"
 
 #include <iostream>
 #include <memory>
@@ -106,6 +108,57 @@ struct RuntimeFixture final {
     }
 };
 
+controller::StageSpecification controllerStageSpecification() {
+    const auto xId=id<core::StageAxisId>("controller-x");
+    const auto yId=id<core::StageAxisId>("controller-y");
+    const auto zId=id<core::StageAxisId>("controller-z");
+    auto x=take(controller::LinearAxis::create(
+        xId,controller::LinearAxisRole::X,
+        take(controller::NanometreRange::create(0,500'000'000)),
+        100,1'000,500));
+    auto y=take(controller::LinearAxis::create(
+        yId,controller::LinearAxisRole::Y,
+        take(controller::NanometreRange::create(0,300'000'000)),
+        100,1'000,500));
+    auto z=take(controller::LinearAxis::create(
+        zId,controller::LinearAxisRole::Z,
+        take(controller::NanometreRange::create(0,100'000'000)),
+        50,500,250));
+    const auto configId=id<core::StageConfigurationId>("slides");
+    auto slot=take(controller::StageSlot::create(
+        id<core::StageSlotId>("slot-1"),{0,0},
+        take(controller::NanometreRange::create(0,75'000'000)),
+        take(controller::NanometreRange::create(0,25'000'000))));
+    auto config=take(controller::StageConfiguration::create(configId,
+        {{xId,take(controller::NanometreRange::create(0,500'000'000))},
+         {yId,take(controller::NanometreRange::create(0,300'000'000))},
+         {zId,take(controller::NanometreRange::create(0,100'000'000))}},
+        {},{std::move(slot)}));
+    return take(controller::StageSpecification::create(
+        id<core::EquipmentComponentId>("stage"),
+        {std::move(x),std::move(y),std::move(z)},{},{std::move(config)}));
+}
+
+core::AxisSpecification installedAxis(
+    core::StageAxisId id,double minimum,double maximum) {
+    const auto range=take(core::AxisOperatingRange::create(
+        minimum,maximum,core::AxisCoordinateUnit::Micrometers));
+    const auto resolution=take(core::PositiveAxisResolution::create(0.1));
+    return take(core::AxisSpecification::create(
+        std::move(id),core::AxisMotionType::Linear,
+        core::AxisCoordinateUnit::Micrometers,range,resolution,
+        std::nullopt,std::nullopt,std::nullopt,
+        core::AxisPositionFeedbackCapability::None));
+}
+
+core::StageSpecification installedStageSpecification() {
+    return take(core::StageSpecification::create(id<core::EquipmentComponentId>("stage"),{
+        installedAxis(id<core::StageAxisId>("controller-x"),0,500'000),
+        installedAxis(id<core::StageAxisId>("controller-y"),0,300'000),
+        installedAxis(id<core::StageAxisId>("controller-z"),0,100'000)
+    }));
+}
+
 core::MoveAxesTo moveTarget() {
     const auto x = take(core::AxisPosition::create(
         id<core::StageAxisId>("x"), 1200.0,
@@ -149,6 +202,24 @@ int main() {
             std::cerr << "FAIL: " << message << '\n';
         }
     };
+
+    RuntimeFixture planFixture;
+    auto planContext=planFixture.prepare(
+        "controller-plan-operation","controller-plan-step","controller-plan-command");
+    RecordingStagePort planPort;
+    auto controllerStage=controllerStageSpecification();
+    auto installedStage=installedStageSpecification();
+    auto liveStage=take(controller::Stage::create(
+        controllerStage,id<core::StageConfigurationId>("slides")));
+    const auto homePlan=take(liveStage.home());
+    const auto planReceipt=take(
+        application::motion::StageMotionPlanDispatcher::dispatch(
+            homePlan,controllerStage,installedStage,planContext,
+            planPort,*planFixture.runtime));
+    check(planReceipt.planSequence==homePlan.sequence&&
+          planReceipt.dispatch.action==core::StageMotionAction::HomeAxes&&
+          planPort.homeCalls==1,
+          "Controller Stage home plans reach the existing correlated Core motion dispatcher");
 
     RuntimeFixture acceptedFixture;
     auto acceptedContext = acceptedFixture.prepare(

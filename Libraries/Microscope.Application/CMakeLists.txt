@@ -19,6 +19,12 @@ if(NOT TARGET Camera::Common)
         "${CMAKE_CURRENT_BINARY_DIR}/camera_common")
 endif()
 
+if(NOT TARGET Controller::Common)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../../Controller/Common"
+        "${CMAKE_CURRENT_BINARY_DIR}/controller_common")
+endif()
+
 find_package(SQLite3 REQUIRED)
 
 add_library(microscope_application STATIC
@@ -46,7 +52,7 @@ target_include_directories(microscope_application
         "$<INSTALL_INTERFACE:include>")
 
 target_link_libraries(microscope_application
-    PUBLIC Microscope::Core Camera::Common
+    PUBLIC Microscope::Core Camera::Common Controller::Common
     PRIVATE SQLite::SQLite3)
 
 set_target_properties(microscope_application PROPERTIES

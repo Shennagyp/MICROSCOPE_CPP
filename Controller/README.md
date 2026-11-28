@@ -1,19 +1,19 @@
 # Controller
 
 The C++ Controller capability lives beside `Camera/`. It owns the backend-
-neutral microscope mechanics model and produces typed motion plans. It does not
-define a second hardware-driver interface.
+neutral microscope mechanics model and generates typed motion plans. It does
+not define a second hardware-driver interface.
 
 ## Object ownership
 
-`MicroscopeInstance` owns one live `Stage`. The Stage owns the installed
-`LinearAxis` and `RotationAxis` objects, its available `StageConfiguration`
-objects, active configuration, and runtime position evidence.
+`MicroscopeInstance` owns one live `Stage`. The Stage owns its installed
+`LinearAxis` and `RotationAxis` objects, available `StageConfiguration`
+objects, active configuration, and current position evidence.
 
-Each configuration selects its working axes and owns a variable collection of
+Each configuration selects working axes and owns a variable collection of
 generic `StageSlot` regions. The application owns physical Slide objects and
-associates Slide IDs with StageSlot IDs. A two-slide holder is simply a
-configuration with two StageSlots; a ten-slide holder has ten.
+associates Slide IDs with StageSlot IDs. Two-slide, ten-slide, Petri-dish and
+other holders are all represented by the same N-slot model.
 
 ## Coordinates and mechanical properties
 
@@ -28,32 +28,54 @@ usable ranges. Slot-relative targets are translated to global stage
 coordinates. The current slot is derived from active configuration and current
 XY position; there is no separately mutable current-slot field.
 
-## Command and lifecycle boundary
+## Motion and completion lifecycle
 
-The Stage and axis objects create `StageMotionPlan` values. They do not call
-hardware directly or treat command acceptance as movement completion. The
-host dispatches plans through the existing Core `IStageMotionPort` and
-correlated serialized-operation runtime. After the exact operation completion
-is accepted, the host calls `recordCompletedMotion`. Failed or indeterminate
-movement calls `recordFailedMotion` or `invalidatePosition`.
+The Stage and axis objects create immutable `StageMotionPlan` values. A plan
+has a monotonically increasing sequence and the active configuration identity.
+Only one plan can be pending for a Stage at a time. The translator validates
+that the plan is exactly the live Stage's pending plan before generating Core
+commands.
 
-This preserves the existing lifecycle distinction between command submission,
-device completion, and position verification. Hardware adapters retain
-responsibility for STEP/DIR conversion, intelligent-controller commands,
-feedback, timeouts, device faults and transport behavior.
+The Application `StageMotionPlanDispatcher` translates the plan and submits it
+through the existing correlated `StageMotionCommandDispatcher`,
+`SerializedOperationRuntime`, and Core `IStageMotionPort`. It returns the
+plan sequence with the adapter-submission receipt. Submission acceptance is
+not treated as physical completion.
 
-## Operations
+After the runtime correlates the exact Core `StageMotionActionCompletion`,
+the host passes that fact to `Stage::recordCompletedMotion`. The Stage checks
+the action type and exact axis set before atomically applying command-derived
+position state. An uncertain or failed execution is sent to
+`recordFailedMotion`, which invalidates position. A definite pre-submission
+or adapter rejection cancels the pending plan without changing known position.
+
+Homing has a stricter two-fact contract. The host supplies both the correlated
+`StageMotionActionCompletion` for `HomeAxes` and Core's normalized
+`StageHomeReferenceObservation` to `recordCompletedHome`. The latter fact
+is emitted only after the configured reference procedure has established all
+requested axis references. A generic successful HomeAxes action does not by
+itself establish a valid global coordinate origin.
+
+## Stage operations
 
 - `moveTo(SlotRelativePosition, StageSlotId)`: plan absolute XY movement
-  relative to a slot origin; leave Z and rotation unchanged.
+  relative to a slot origin; preserve current Z and rotation.
 - `moveTo(StageAbsolutePosition)`: plan absolute global XYZ and all active
   rotation targets.
 - `moveBy(StageDisplacement)`: calculate a target from known current position.
 - `home()`: plan homing of every axis used by the active configuration.
 - `refreshPosition()`: capture the saved global position and produce a home
-  plan; after home completion, `restorePositionAfterRefresh()` produces the
-  return movement plan.
+  plan; after the home action and reference observation are accepted,
+  `restorePositionAfterRefresh()` produces the return movement plan.
 
-Refresh is a two-step host workflow. The Stage updates position only from
-correlated completion calls. Slide identity, acquisition, image/tile
-persistence and UI ownership remain outside this library.
+## Equipment-unit boundary
+
+Controller geometry remains in nanometres and radians. The
+`StageMotionCommandTranslator` validates component/axis identity and converts
+targets to the coordinate units declared by the installed Core equipment
+definition (µm, mm, degrees or radians). It does not perform hardware I/O.
+The existing motion adapter remains responsible for device-specific unit
+conversion, trajectories, feedback, timeouts and faults.
+
+Slide identity, acquisition orchestration, image/tile persistence and UI
+ownership remain outside Controller.

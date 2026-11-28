@@ -32,6 +32,20 @@ NanometreRange nmRange(Nanometres a,Nanometres b) {
     return take(NanometreRange::create(a,b));
 }
 RadianRange radRange(Radians a,Radians b) { return take(RadianRange::create(a,b)); }
+core::StageMotionActionCompletion actionCompletion(const StageMotionPlan& plan) {
+    std::vector<core::StageAxisId> axes;
+    core::StageMotionAction action=core::StageMotionAction::MoveAxesTo;
+    if(plan.action==StageMotionAction::Home) {
+        action=core::StageMotionAction::HomeAxes;
+        axes=plan.axesToHome;
+    } else {
+        for(const auto& target:plan.linearTargets) axes.push_back(target.axisId);
+        for(const auto& target:plan.rotationTargets) axes.push_back(target.axisId);
+    }
+    return take(core::StageMotionActionCompletion::create(
+        action,take(core::StageAxisSet::create(std::move(axes)))));
+}
+
 core::StageHomeReferenceObservation homeReference(const StageMotionPlan& plan) {
     std::vector<core::AxisPositionObservation> positions;
     positions.reserve(plan.axesToHome.size());
@@ -127,7 +141,7 @@ void testHomeTranslationUsesCoreMotionContract() {
 void testLinearNanometresConvertToInstalledEquipmentUnit() {
     auto fixture=makeFixture();
     auto home=take(fixture.stage.home());
-    check(static_cast<bool>(fixture.stage.recordCompletedHome(home,homeReference(home))),"home plan completion");
+    check(static_cast<bool>(fixture.stage.recordCompletedHome(home,actionCompletion(home),homeReference(home))),"home plan completion");
     auto plan=take(fixture.stage.moveTo({12'000'000,10'000'000},fixture.secondSlot));
     auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage,fixture.installedStage);
     check(static_cast<bool>(translated),"translates slot motion plan");
@@ -151,7 +165,7 @@ void testRadiansConvertToInstalledDegrees() {
     check(static_cast<bool>(fixture.stage.activateConfiguration(configId("petri"))),
         "switches to Petri working configuration");
     auto home=take(fixture.stage.home());
-    check(static_cast<bool>(fixture.stage.recordCompletedHome(home,homeReference(home))),"Petri home completion");
+    check(static_cast<bool>(fixture.stage.recordCompletedHome(home,actionCompletion(home),homeReference(home))),"Petri home completion");
 
     StageAbsolutePosition target;
     target.linear={10'000'000,10'000'000,10'000'000};

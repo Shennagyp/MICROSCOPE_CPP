@@ -608,7 +608,7 @@ void rejectsMalformedOrAmbiguousJsonDocuments() {
         "rejects unknown fields so misspellings and accidental runtime-state leakage are not ignored");
 
     auto unsupportedVersionDocument = replaceOnce(
-        validDocument(), "\"schemaVersion\": 1,", "\"schemaVersion\": 2,");
+        validDocument(), "\"schemaVersion\": 1,", "\"schemaVersion\": 3,");
     auto unsupportedVersion = EquipmentDefinitionJsonLoader::parse(unsupportedVersionDocument);
     check(!unsupportedVersion &&
         unsupportedVersion.error().code ==

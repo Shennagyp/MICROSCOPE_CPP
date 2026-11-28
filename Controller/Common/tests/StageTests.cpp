@@ -238,6 +238,19 @@ void testCorrelatedMotionPlansAndCurrentSlot() {
     check(stage.currentSlotId()==second,"current slot is derived from global XY position");
     check(!stage.recordCompletedMotion(move,actionCompletion(move)),"duplicate completion is rejected");
     check(!stage.moveTo({76'000'000,1},second),"rejects movement outside slot usable range");
+
+    auto touchingSlot=take(StageSlot::create(
+        slotId("touching-slot"),{95'000'000,20'000'000},
+        nmRange(0,75'000'000),nmRange(0,25'000'000)));
+    auto touchingDefinition=StageConfiguration::create(
+        configId("touching-slots"),
+        {{axisId("stage-x"),nmRange(0,1'000'000'000)},
+         {axisId("stage-y"),nmRange(0,500'000'000)},
+         {axisId("stage-z"),nmRange(0,100'000'000)}},{},
+        {take(StageSlot::create(slotId("first-slot"),{20'000'000,20'000'000},
+            nmRange(0,75'000'000),nmRange(0,25'000'000))),std::move(touchingSlot)});
+    check(!touchingDefinition&&touchingDefinition.error()==StageModelError::OverlappingSlots,
+        "runtime configuration rejects slots whose inclusive rectangles share an edge");
 }
 
 void testFailedMotionInvalidatesPosition() {

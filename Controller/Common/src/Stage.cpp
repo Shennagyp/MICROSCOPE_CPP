@@ -36,7 +36,7 @@ bool bounds(const StageSlot& s,Nanometres& x0,Nanometres& x1,
 bool overlaps(const StageSlot& a,const StageSlot& b) noexcept {
     Nanometres ax0=0,ax1=0,ay0=0,ay1=0,bx0=0,bx1=0,by0=0,by1=0;
     if(!bounds(a,ax0,ax1,ay0,ay1)||!bounds(b,bx0,bx1,by0,by1)) return true;
-    return ax0<bx1 && bx0<ax1 && ay0<by1 && by0<ay1;
+    return ax0<=bx1 && bx0<=ax1 && ay0<=by1 && by0<=ay1;
 }
 const WorkingLinearAxis* findWorking(const StageConfiguration& c,
     const StageSpecification& s,LinearAxisRole role) noexcept {

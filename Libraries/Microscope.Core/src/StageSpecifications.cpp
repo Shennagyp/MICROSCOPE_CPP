@@ -432,7 +432,7 @@ bool slotBounds(const StageSlotSpecification& slot,
 bool slotOverlaps(const StageSlotSpecification& a,const StageSlotSpecification& b) noexcept {
     StageNanometres ax0=0,ax1=0,ay0=0,ay1=0,bx0=0,bx1=0,by0=0,by1=0;
     if(!slotBounds(a,ax0,ax1,ay0,ay1)||!slotBounds(b,bx0,bx1,by0,by1)) return true;
-    return ax0<bx1&&bx0<ax1&&ay0<by1&&by0<ay1;
+    return ax0<=bx1&&bx0<=ax1&&ay0<=by1&&by0<=ay1;
 }
 std::optional<long double> linearValueNm(double value,AxisCoordinateUnit unit) noexcept {
     if(unit==AxisCoordinateUnit::Micrometers)

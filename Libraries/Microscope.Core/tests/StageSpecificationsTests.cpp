@@ -445,6 +445,22 @@ void testGenericStageConfigurationsAndNPhysicalSlots() {
         {std::move(missingZ)});
     check(!noZ&&noZ.error()==StageSpecificationError::MissingZWorkingAxis,
         "every active configuration must define an effective Z range");
+
+    auto touchingA=take(StageSlotSpecification::create(
+        makeId<StageSlotId>("touching-a"),{0,0},
+        nmRange(0,10'000),nmRange(0,10'000)));
+    auto touchingB=take(StageSlotSpecification::create(
+        makeId<StageSlotId>("touching-b"),{10'000,0},
+        nmRange(0,10'000),nmRange(0,10'000)));
+    auto touchingConfiguration=StageConfigurationSpecification::create(
+        makeId<StageConfigurationId>("touching-slots"),
+        {{xId,nmRange(0,900'000'000)},
+         {yId,nmRange(0,300'000'000)},
+         {zId,nmRange(0,100'000'000)}},{},
+        {std::move(touchingA),std::move(touchingB)});
+    check(!touchingConfiguration&&
+          touchingConfiguration.error()==StageConfigurationSpecificationError::OverlappingSlots,
+        "rejects slots sharing a boundary because slot ranges are inclusive");
 }
 
 void testEquipmentAggregateValidatesStageBinding() {

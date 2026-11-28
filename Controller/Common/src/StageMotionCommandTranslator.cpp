@@ -29,6 +29,9 @@ const WorkingRotationAxis* findWorkingRotation(
     return it==configuration.workingRotationAxes().end()?nullptr:&*it;
 }
 
+core::Result<double,StageMotionTranslationError> toRotationUnit(
+    Radians value,core::AxisCoordinateUnit unit);
+
 core::Result<double,StageMotionTranslationError> toLinearUnit(
     Nanometres value,core::AxisCoordinateUnit unit) {
     switch(unit) {
@@ -118,11 +121,6 @@ StageMotionCommandTranslator::translate(
         return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
             StageMotionTranslationError::ConfigurationNotFound);
 
-    if(controllerStage.linearAxes().size()+controllerStage.rotationAxes().size()!=
-       installedStage.axes().size())
-        return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
-            StageMotionTranslationError::AxisInventoryMismatch);
-
     for(const auto& axis:controllerStage.linearAxes()) {
         const auto* equipment=findEquipmentAxis(installedStage,axis.id());
         if(equipment==nullptr)
@@ -149,6 +147,11 @@ StageMotionCommandTranslator::translate(
             return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
                 StageMotionTranslationError::MechanicalRangeMismatch);
     }
+
+    if(controllerStage.linearAxes().size()+controllerStage.rotationAxes().size()!=
+       installedStage.axes().size())
+        return core::Result<StageMotionCommandTranslation,StageMotionTranslationError>::failure(
+            StageMotionTranslationError::AxisInventoryMismatch);
 
     if(plan.action==StageMotionAction::Home) {
         if(plan.axesToHome.empty()||!plan.linearTargets.empty()||

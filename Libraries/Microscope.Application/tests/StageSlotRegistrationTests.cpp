@@ -20,7 +20,7 @@ T take(Result<T,E> result) {
 template<class T>T makeId(const char* value){return take(T::create(value));}
 
 StageSlotCornerMeasurement corner(
-    SlideCorner c,double x,double y,double uncertainty=10.0) {
+    StageSlotRegistrationCorner c,double x,double y,double uncertainty=10.0) {
     return take(StageSlotCornerMeasurement::create(c,{x,y},
         ObservationSource::HardwareReadback,uncertainty));
 }

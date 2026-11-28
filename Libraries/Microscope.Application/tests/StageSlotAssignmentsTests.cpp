@@ -18,6 +18,8 @@ T take(Result<T,E> result) {
     if(!result) throw std::runtime_error("Stage-slot assignment fixture failed.");
     return std::move(result).value();
 }
+template<class T>
+T makeId(const char* value) { return take(T::create(value)); }
 StageAxisId axisId(const char* value){return take(StageAxisId::create(value));}
 StageSlotId slotId(const char* value){return take(StageSlotId::create(value));}
 StageConfigurationId configurationId(const char* value){

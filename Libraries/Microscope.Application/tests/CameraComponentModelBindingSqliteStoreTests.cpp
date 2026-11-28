@@ -161,7 +161,6 @@ microscope::core::MicroscopeEquipmentDefinition makeEquipment(
         {},
         {},
         {},
-        {},
         std::move(lightPaths),
         {},
         equipmentRevision));

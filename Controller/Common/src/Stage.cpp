@@ -237,8 +237,8 @@ core::Result<StageSpecification,StageModelError> StageSpecification::create(
         StageSpecification(std::move(id),std::move(l),std::move(r),std::move(c)));
 }
 const EquipmentComponentId& StageSpecification::componentId()const noexcept{return componentId_;}
-const std::vector<LinearAxis>& StageSpecification::linearAxes()const noexcept{return workingLinearAxes_;}
-const std::vector<RotationAxis>& StageSpecification::rotationAxes()const noexcept{return workingRotationAxes_;}
+const std::vector<LinearAxis>& StageSpecification::linearAxes()const noexcept{return linearAxes_;}
+const std::vector<RotationAxis>& StageSpecification::rotationAxes()const noexcept{return rotationAxes_;}
 const std::vector<StageConfiguration>& StageSpecification::configurations()const noexcept{return configurations_;}
 const StageConfiguration* StageSpecification::configuration(const StageConfigurationId& id)const noexcept{
     const auto i=std::find_if(configurations_.begin(),configurations_.end(),[&](const auto& v){return v.id()==id;});

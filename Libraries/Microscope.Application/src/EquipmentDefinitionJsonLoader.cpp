@@ -419,7 +419,7 @@ bool allowedKeys(
     for (const auto& item : object) {
         const bool known = std::find(allowed.begin(), allowed.end(), item.first) != allowed.end();
         if (!known) return fail(error, ErrorCode::UnknownField,
-            path + "." + item.first, "Unknown field in schema version 1.");
+            path + "." + item.first, "Unknown field for the declared schema version.");
     }
     return true;
 }
@@ -2022,23 +2022,34 @@ bool decodeEquipmentDefinition(
     std::optional<core::MicroscopeEquipmentDefinition>& output,
     Error& error) {
     const JsonObject* object = nullptr;
-    if (!objectValue(root, "$", object, error) ||
-        !allowedKeys(*object,
-            {"schemaVersion", "microscopeId", "revision",
-             "components", "connections", "opticalPaths", "lightPaths",
-             "objectiveSpecifications", "cameraSpecifications",
-             "condenserSpecifications", "illuminationSpecifications",
-             "stageSpecifications", "dualSlideCarrierSpecifications",
-             "filterSpecifications", "opticalRelaySpecifications"},
-            "$", error)) return false;
+    if(!objectValue(root,"$",object,error)) return false;
 
-    const JsonValue* schemaNode = nullptr;
-    std::uint64_t schemaVersion = 0;
-    if (!required(*object, "schemaVersion", "$", schemaNode, error) ||
-        !unsignedValue(*schemaNode, "$.schemaVersion", schemaVersion, error)) return false;
-    if (schemaVersion != EquipmentDefinitionJsonLoader::kSupportedSchemaVersion) {
-        return fail(error, ErrorCode::UnsupportedSchemaVersion, "$.schemaVersion",
-            "Only equipment-definition JSON schema version 1 is supported.");
+    const JsonValue* schemaNode=nullptr;
+    std::uint64_t schemaVersion=0;
+    if(!required(*object,"schemaVersion","$",schemaNode,error)||
+       !unsignedValue(*schemaNode,"$.schemaVersion",schemaVersion,error)) return false;
+    if(schemaVersion!=EquipmentDefinitionJsonLoader::kLegacySchemaVersion&&
+       schemaVersion!=EquipmentDefinitionJsonLoader::kSupportedSchemaVersion) {
+        return fail(error,ErrorCode::UnsupportedSchemaVersion,"$.schemaVersion",
+            "Supported equipment-definition JSON schema versions are 1 and 2.");
+    }
+    if(schemaVersion==EquipmentDefinitionJsonLoader::kLegacySchemaVersion) {
+        if(!allowedKeys(*object,
+            {"schemaVersion","microscopeId","revision",
+             "components","connections","opticalPaths","lightPaths",
+             "objectiveSpecifications","cameraSpecifications",
+             "condenserSpecifications","illuminationSpecifications",
+             "stageSpecifications","dualSlideCarrierSpecifications",
+             "filterSpecifications","opticalRelaySpecifications"},
+            "$",error)) return false;
+    } else {
+        if(!allowedKeys(*object,
+            {"schemaVersion","microscopeId","revision",
+             "components","connections","opticalPaths","lightPaths",
+             "objectiveSpecifications","cameraSpecifications",
+             "condenserSpecifications","illuminationSpecifications",
+             "stageSpecifications","filterSpecifications","opticalRelaySpecifications"},
+            "$",error)) return false;
     }
 
     std::optional<core::MicroscopeId> microscopeId;
@@ -2092,18 +2103,24 @@ bool decodeEquipmentDefinition(
         illuminations, error, parseIlluminationSpecification)) return false;
 
     std::vector<core::StageSpecification> stages;
-    if (!parseOptionalArrayField(*object, "stageSpecifications", "$",
-        stages, error, parseStageSpecification)) return false;
+    if(!parseOptionalArrayField(*object,"stageSpecifications","$",
+        stages,error,
+        [schemaVersion](const JsonValue& item,const std::string& itemPath,
+            std::optional<core::StageSpecification>& parsed,Error& itemError) {
+            return parseStageSpecification(item,itemPath,parsed,itemError,schemaVersion);
+        })) return false;
 
     std::vector<core::DualSlideCarrierSpecification> carriers;
-    if (!parseOptionalArrayField(*object, "dualSlideCarrierSpecifications", "$",
-        carriers, error,
-        [&stages](const JsonValue& item, const std::string& itemPath,
-            std::optional<core::DualSlideCarrierSpecification>& parsed,
-            Error& itemError) {
-            return parseDualSlideCarrierSpecification(
-                item, itemPath, stages, parsed, itemError);
-        })) return false;
+    if(schemaVersion==EquipmentDefinitionJsonLoader::kLegacySchemaVersion) {
+        if(!parseOptionalArrayField(*object,"dualSlideCarrierSpecifications","$",
+            carriers,error,
+            [&stages](const JsonValue& item,const std::string& itemPath,
+                std::optional<core::DualSlideCarrierSpecification>& parsed,
+                Error& itemError) {
+                return parseDualSlideCarrierSpecification(
+                    item,itemPath,stages,parsed,itemError);
+            })) return false;
+    }
 
     std::vector<core::OpticalFilterSpecification> filters;
     if (!parseOptionalArrayField(*object, "filterSpecifications", "$",

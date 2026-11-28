@@ -668,17 +668,32 @@ core::Status<StageModelError> Stage::activateConfiguration(const StageConfigurat
     const auto* next=specification_.configuration(id);
     if(!next) return core::Status<StageModelError>::failure(StageModelError::ConfigurationNotFound);
     if(id==activeConfigurationId_) return core::Status<StageModelError>::success();
+
     const auto* old=specification_.configuration(activeConfigurationId_);
-    bool same=old&&old->workingLinearAxes().size()==next->workingLinearAxes().size()&&
-        old->workingRotationAxes().size()==next->workingRotationAxes().size();
-    if(same) {
-        for(const auto& axis:old->workingLinearAxes())
-            if(!findWorking(*next,axis.axisId)){same=false;break;}
-        for(const auto& axis:old->workingRotationAxes())
-            if(!findWorkingRotation(*next,axis.axisId)){same=false;break;}
+    if(old) {
+        // XYZ is one global machine coordinate system. Switching a holder
+        // configuration must not discard known linear position merely because
+        // that configuration enables/disables a rotary axis.
+        for(const auto& previous:old->workingLinearAxes()) {
+            if(findWorking(*next,previous.axisId)) continue;
+            const auto* axis=specification_.linearAxis(previous.axisId);
+            if(!axis) continue;
+            if(axis->role()==LinearAxisRole::X) position_.x.reset();
+            if(axis->role()==LinearAxisRole::Y) position_.y.reset();
+            if(axis->role()==LinearAxisRole::Z) position_.z.reset();
+        }
     }
+
+    // Keep feedback/estimate only for rotary axes which remain active.
+    // Newly enabled rotary axes stay unknown until the new configuration is homed.
+    position_.rotations.erase(
+        std::remove_if(position_.rotations.begin(),position_.rotations.end(),
+            [next](const RotationAxisTarget& value) {
+                return findWorkingRotation(*next,value.axisId)==nullptr;
+            }),
+        position_.rotations.end());
+
     activeConfigurationId_=id;
-    if(!same) invalidatePosition();
     return core::Status<StageModelError>::success();
 }
 

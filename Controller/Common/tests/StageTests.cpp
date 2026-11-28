@@ -316,7 +316,16 @@ void testConfigurationActivationAndRotation() {
     check(static_cast<bool>(stage.recordCompletedHome(home,actionCompletion(home),homeReference(home))),"home slide configuration");
     check(static_cast<bool>(stage.activateConfiguration(petri)),
         "activates Petri configuration on same Stage");
-    check(!stage.currentPosition().xyzKnown(),"different working axis set invalidates old evidence");
+    check(stage.currentPosition().xyzKnown(),
+        "enabling an optional rotary axis preserves the known global XYZ position");
+    check(stage.currentPosition().rotations.empty(),
+        "a newly enabled rotary axis remains unknown until that configuration is homed");
+
+    StageAbsolutePosition beforeRotaryHome;
+    beforeRotaryHome.linear={10'000'000,10'000'000,10'000'000};
+    beforeRotaryHome.rotations.push_back({axisId("stage-theta"),0.25});
+    check(!stage.moveTo(beforeRotaryHome),
+        "absolute motion waits until every newly enabled rotary axis has a reference");
 
     auto petriHome=take(stage.home());
     check(petriHome.axesToHome.size()==4,"Petri config homes XYZ plus rotation");
@@ -329,6 +338,11 @@ void testConfigurationActivationAndRotation() {
     check(move.rotationTargets.size()==1&&std::abs(move.rotationTargets[0].angle-0.25)<1e-12,
         "absolute move includes its rotation target in radians");
     check(static_cast<bool>(stage.recordCompletedMotion(move,actionCompletion(move))),"completed rotary move is recorded");
+
+    check(static_cast<bool>(stage.activateConfiguration(slides)),
+        "switches back to the slide holder configuration");
+    check(stage.currentPosition().xyzKnown()&&stage.currentPosition().rotations.empty(),
+        "disabling the optional rotary axis preserves XYZ and drops only its inactive state");
 }
 
 void testMicroscopeInstanceOwnsStage() {

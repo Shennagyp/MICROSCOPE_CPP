@@ -57,7 +57,7 @@ Slide makeSlide(const SlideId& id,std::uint64_t revision,const SampleType& sampl
         std::move(preparation)));
 }
 
-StageConfigurationSpecification makeStageConfiguration() {
+StageConfigurationSpecification makeStageConfiguration(bool narrowFirstSlot=false) {
     const auto xId=makeId<StageAxisId>("assignment-stage-x");
     const auto yId=makeId<StageAxisId>("assignment-stage-y");
     const auto zId=makeId<StageAxisId>("assignment-stage-z");
@@ -67,7 +67,8 @@ StageConfigurationSpecification makeStageConfiguration() {
         slots.push_back(take(StageSlotSpecification::create(
             makeId<StageSlotId>(name.c_str()),
             {static_cast<std::int64_t>(i)*80'000'000,0},
-            take(StageNanometreRange::create(0,75'000'000)),
+            take(StageNanometreRange::create(0,
+                narrowFirstSlot&&i==0?70'000'000:75'000'000)),
             take(StageNanometreRange::create(0,25'000'000)))));
     }
     return take(StageConfigurationSpecification::create(
@@ -135,6 +136,14 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
         check(assignmentsStore->saveCurrentState(
             microscopeId,installedStage,initial,{slideA1,slideB1},0).isSuccess(),
             "creates assignment revision one using expected revision zero");
+
+        const auto narrowerConfiguration=makeStageConfiguration(true);
+        const auto narrowerStage=makeInstalledStage(narrowerConfiguration);
+        const auto geometryRejected=assignmentsStore->saveCurrentState(
+            microscopeId,narrowerStage,initial,{slideA1,slideB1},0);
+        check(!geometryRejected.isSuccess()&&
+              geometryRejected.error().code==StageSlotAssignmentsStoreErrorCode::SlideGeometryMismatch,
+            "rejects a 75 mm Slide assigned to a 70 mm StageSlot even when IDs and revisions match");
 
         auto loaded1=assignmentsStore->loadCurrentState(
             microscopeId,12,installedStage,stageConfig.id());

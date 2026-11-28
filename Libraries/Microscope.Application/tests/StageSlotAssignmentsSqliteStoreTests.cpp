@@ -198,6 +198,18 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
         check(absent&&!absent.value(),
             "returns an empty optional for an unknown assignment revision");
 
+        auto emptyAssignments=take(StageSlotAssignments::create(
+            stageComponent,12,stageConfig,{}));
+        check(assignmentsStore->saveCurrentState(
+            microscopeId,installedStage,emptyAssignments,{},2).isSuccess(),
+            "appends an explicit empty occupancy snapshot when every Slide is removed from the holder");
+        const auto emptyCurrent=assignmentsStore->loadCurrentState(
+            microscopeId,12,installedStage,stageConfig.id());
+        check(emptyCurrent&&emptyCurrent.value()&&
+              emptyCurrent.value()->revision==3&&
+              emptyCurrent.value()->assignments.assignments().empty(),
+            "an empty StageSlot occupancy snapshot is distinguishable from no assignment history");
+
         const auto wrongConfig=assignmentsStore->loadCurrentState(
             microscopeId,12,installedStage,makeId<StageConfigurationId>("missing-config"));
         check(!wrongConfig&&

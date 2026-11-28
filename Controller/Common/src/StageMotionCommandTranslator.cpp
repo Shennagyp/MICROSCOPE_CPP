@@ -29,6 +29,8 @@ const WorkingRotationAxis* findWorkingRotation(
     return it==configuration.workingRotationAxes().end()?nullptr:&*it;
 }
 
+bool approximatelyEqual(double left,double right) noexcept;
+
 const core::StageConfigurationSpecification* findEquipmentConfiguration(
     const core::StageSpecification& stage,const StageConfigurationId& id) noexcept {
     const auto it=std::find_if(stage.configurations().begin(),stage.configurations().end(),

@@ -32,6 +32,21 @@ NanometreRange nmRange(Nanometres a,Nanometres b) {
     return take(NanometreRange::create(a,b));
 }
 RadianRange radRange(Radians a,Radians b) { return take(RadianRange::create(a,b)); }
+core::StageHomeReferenceObservation homeReference(const StageMotionPlan& plan) {
+    std::vector<core::AxisPositionObservation> positions;
+    positions.reserve(plan.axesToHome.size());
+    for(const auto& id:plan.axesToHome) {
+        const auto unit=id.value().find("theta")!=std::string::npos
+            ? core::AxisCoordinateUnit::Radians
+            : core::AxisCoordinateUnit::Micrometers;
+        auto axisPosition=take(core::AxisPosition::create(id,0.0,unit));
+        positions.push_back(take(core::AxisPositionObservation::create(
+            std::move(axisPosition),0.0,core::StagePositionEvidence::PhysicalEndstop)));
+    }
+    return take(core::StageHomeReferenceObservation::create(std::move(positions)));
+}
+
+
 
 core::AxisSpecification equipmentAxis(
     core::StageAxisId id,core::AxisMotionType type,core::AxisCoordinateUnit unit,
@@ -99,7 +114,7 @@ Fixture makeFixture() {
 void testHomeTranslationUsesCoreMotionContract() {
     auto fixture=makeFixture();
     auto plan=take(fixture.stage.home());
-    auto translated=StageMotionCommandTranslator::translate(plan,fixture.installedStage);
+    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),fixture.installedStage);
     check(static_cast<bool>(translated),"translates Controller home plan");
     if(!translated) return;
     check(translated.value().planSequence==plan.sequence,"preserves plan correlation sequence");
@@ -112,9 +127,9 @@ void testHomeTranslationUsesCoreMotionContract() {
 void testLinearNanometresConvertToInstalledEquipmentUnit() {
     auto fixture=makeFixture();
     auto home=take(fixture.stage.home());
-    check(static_cast<bool>(fixture.stage.recordCompletedMotion(home)),"home plan completion");
+    check(static_cast<bool>(fixture.stage.recordCompletedHome(home,homeReference(home))),"home plan completion");
     auto plan=take(fixture.stage.moveTo({12'000'000,10'000'000},fixture.secondSlot));
-    auto translated=StageMotionCommandTranslator::translate(plan,fixture.installedStage);
+    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),fixture.installedStage);
     check(static_cast<bool>(translated),"translates slot motion plan");
     if(!translated) return;
     const auto* move=std::get_if<core::MoveAxesTo>(&translated.value().command);
@@ -136,13 +151,13 @@ void testRadiansConvertToInstalledDegrees() {
     check(static_cast<bool>(fixture.stage.activateConfiguration(configId("petri"))),
         "switches to Petri working configuration");
     auto home=take(fixture.stage.home());
-    check(static_cast<bool>(fixture.stage.recordCompletedMotion(home)),"Petri home completion");
+    check(static_cast<bool>(fixture.stage.recordCompletedHome(home,homeReference(home))),"Petri home completion");
 
     StageAbsolutePosition target;
     target.linear={10'000'000,10'000'000,10'000'000};
     target.rotations.push_back({axisId("theta"),0.25});
     auto plan=take(fixture.stage.moveTo(target));
-    auto translated=StageMotionCommandTranslator::translate(plan,fixture.installedStage);
+    auto translated=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),fixture.installedStage);
     check(static_cast<bool>(translated),"translates rotary motion plan");
     if(!translated) return;
     const auto* move=std::get_if<core::MoveAxesTo>(&translated.value().command);
@@ -163,7 +178,7 @@ void testRejectsControllerEquipmentAxisMismatch() {
             equipmentAxis(axisId("x"),core::AxisMotionType::Linear,
                 core::AxisCoordinateUnit::Micrometers,0,1'000'000)
         }));
-    const auto result=StageMotionCommandTranslator::translate(plan,missingAxis);
+    const auto result=StageMotionCommandTranslator::translate(plan,fixture.stage.specification(),missingAxis);
     check(!result&&result.error()==StageMotionTranslationError::UnknownEquipmentAxis,
         "rejects plans containing an axis absent from the installed equipment definition");
 }

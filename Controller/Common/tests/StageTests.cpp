@@ -32,6 +32,21 @@ NanometreRange nmRange(Nanometres min,Nanometres max) {
 RadianRange radRange(Radians min,Radians max) {
     return take(RadianRange::create(min,max));
 }
+core::StageHomeReferenceObservation homeReference(const StageMotionPlan& plan) {
+    std::vector<core::AxisPositionObservation> positions;
+    positions.reserve(plan.axesToHome.size());
+    for(const auto& id:plan.axesToHome) {
+        const auto unit=id.value().find("theta")!=std::string::npos
+            ? core::AxisCoordinateUnit::Radians
+            : core::AxisCoordinateUnit::Micrometers;
+        auto axisPosition=take(core::AxisPosition::create(id,0.0,unit));
+        positions.push_back(take(core::AxisPositionObservation::create(
+            std::move(axisPosition),0.0,core::StagePositionEvidence::PhysicalEndstop)));
+    }
+    return take(core::StageHomeReferenceObservation::create(std::move(positions)));
+}
+
+
 
 StageSpecification makeSpecification(
     StageConfigurationId& slides,StageConfigurationId& petri,StageSlotId& secondSlot) {
@@ -115,7 +130,7 @@ void testCorrelatedMotionPlansAndCurrentSlot() {
     check(home.action==StageMotionAction::Home&&home.axesToHome.size()==3,
         "home plan includes every active linear axis");
     check(!stage.home(),"does not create a second plan while one is pending");
-    check(static_cast<bool>(stage.recordCompletedMotion(home)),
+    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),
         "home state is recorded only after correlated completion");
 
     auto move=take(stage.moveTo({12'000'000,10'000'000},second));
@@ -140,7 +155,7 @@ void testFailedMotionInvalidatesPosition() {
     auto stage=take(Stage::create(std::move(spec),slides));
 
     auto home=take(stage.home());
-    check(static_cast<bool>(stage.recordCompletedMotion(home)),"initial home completes");
+    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),"initial home completes");
     auto move=take(stage.moveTo({10'000'000,10'000'000},second));
     check(static_cast<bool>(stage.recordFailedMotion(move)),
         "failed or indeterminate motion is reconciled explicitly");
@@ -157,7 +172,7 @@ void testRefreshPositionHomeAndRestoreWorkflow() {
     auto stage=take(Stage::create(std::move(spec),slides));
 
     auto home=take(stage.home());
-    check(static_cast<bool>(stage.recordCompletedMotion(home)),"initial home completes");
+    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),"initial home completes");
     auto xy=take(stage.moveTo({4'000'000,5'000'000},second));
     check(static_cast<bool>(stage.recordCompletedMotion(xy)),"slot XY movement completes");
 
@@ -172,7 +187,7 @@ void testRefreshPositionHomeAndRestoreWorkflow() {
           refresh.restorePosition.linear.y==25'000'000&&
           refresh.restorePosition.linear.z==12'000'000,
         "refresh saves the exact global position");
-    check(static_cast<bool>(stage.recordCompletedMotion(refresh.homePlan)),
+    check(static_cast<bool>(stage.recordCompletedHome(refresh.homePlan,homeReference(refresh.homePlan))),
         "refresh home completion is recorded");
     auto restore=take(stage.restorePositionAfterRefresh(refresh));
     check(restore.refreshRestoration&&restore.linearTargets.size()==3,
@@ -193,14 +208,14 @@ void testConfigurationActivationAndRotation() {
     auto spec=makeSpecification(slides,petri,second);
     auto stage=take(Stage::create(std::move(spec),slides));
     auto home=take(stage.home());
-    check(static_cast<bool>(stage.recordCompletedMotion(home)),"home slide configuration");
+    check(static_cast<bool>(stage.recordCompletedHome(home,homeReference(home))),"home slide configuration");
     check(static_cast<bool>(stage.activateConfiguration(petri)),
         "activates Petri configuration on same Stage");
     check(!stage.currentPosition().xyzKnown(),"different working axis set invalidates old evidence");
 
     auto petriHome=take(stage.home());
     check(petriHome.axesToHome.size()==4,"Petri config homes XYZ plus rotation");
-    check(static_cast<bool>(stage.recordCompletedMotion(petriHome)),"Petri home completes");
+    check(static_cast<bool>(stage.recordCompletedHome(petriHome,homeReference(petriHome))),"Petri home completes");
 
     StageAbsolutePosition target;
     target.linear={10'000'000,10'000'000,10'000'000};

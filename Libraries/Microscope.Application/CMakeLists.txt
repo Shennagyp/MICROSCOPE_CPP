@@ -39,6 +39,7 @@ add_library(microscope_application STATIC
     src/DualSlideCarrierSqliteStore.cpp
     src/SlideCornerCorrespondence.cpp
     src/StageSlotAssignments.cpp
+    src/StageSlotRegistration.cpp
     src/StageSlotAssignmentsSqliteStore.cpp
     src/SlideRegistrationWorkingSurfaceComparison.cpp
     src/StageWorkingSurfaceSqliteStore.cpp
@@ -123,6 +124,18 @@ if(BUILD_TESTING)
     add_test(
         NAME microscope_application_stage_slot_assignments_store_tests
         COMMAND microscope_application_stage_slot_assignments_store_tests)
+
+    add_executable(microscope_application_stage_slot_registration_tests
+        tests/StageSlotRegistrationTests.cpp)
+    target_link_libraries(microscope_application_stage_slot_registration_tests
+        PRIVATE Microscope::Application)
+    set_target_properties(microscope_application_stage_slot_registration_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS OFF)
+    add_test(
+        NAME microscope_application_stage_slot_registration_tests
+        COMMAND microscope_application_stage_slot_registration_tests)
 
     add_executable(microscope_application_stage_slot_assignments_tests
         tests/StageSlotAssignmentsTests.cpp)

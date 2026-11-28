@@ -221,6 +221,54 @@ int main() {
           planPort.homeCalls==1,
           "Controller Stage home plans reach the existing correlated Core motion dispatcher");
 
+    std::vector<core::AxisPositionObservation> homePositions;
+    for(const auto& axisId:homePlan.axesToHome) {
+        auto axisPosition=take(core::AxisPosition::create(
+            axisId,0.0,core::AxisCoordinateUnit::Micrometers));
+        homePositions.push_back(take(core::AxisPositionObservation::create(
+            std::move(axisPosition),0.0,core::StagePositionEvidence::PhysicalEndstop)));
+    }
+    const auto homeReference=take(
+        core::StageHomeReferenceObservation::create(std::move(homePositions)));
+    const auto homeCompletion=take(core::StageMotionActionCompletion::create(
+        core::StageMotionAction::HomeAxes,
+        take(core::StageAxisSet::create(homePlan.axesToHome))));
+    check(static_cast<bool>(liveStage.recordCompletedHome(
+        homePlan,homeCompletion,homeReference)),
+        "only correlated home completion plus physical reference evidence establishes global origin");
+
+    RuntimeFixture slotMoveFixture;
+    auto slotMoveContext=slotMoveFixture.prepare(
+        "controller-slot-operation","controller-slot-step","controller-slot-command");
+    RecordingStagePort slotMovePort;
+    const auto slotMovePlan=take(liveStage.moveTo(
+        controller::SlotRelativePosition{20'000'000,10'000'000},
+        id<core::StageSlotId>("slot-1")));
+    const auto slotDispatch=take(
+        application::motion::StageMotionPlanDispatcher::dispatch(
+            liveStage,slotMovePlan,installedStageSpecification(),slotMoveContext,
+            slotMovePort,*slotMoveFixture.runtime));
+    check(slotDispatch.planSequence==slotMovePlan.sequence&&
+          slotDispatch.dispatch.action==core::StageMotionAction::MoveAxesTo&&
+          slotMovePort.moveToCalls==1&&slotMovePort.lastMoveTargetCount==
+              std::optional<std::size_t>(2),
+          "slot-relative Stage plans dispatch coordinated XY targets through the existing motion port");
+    check(liveStage.currentPosition().x==0&&liveStage.currentPosition().y==0,
+        "adapter submission acceptance alone does not advance Stage position");
+
+    const auto moveCompletion=take(core::StageMotionActionCompletion::create(
+        core::StageMotionAction::MoveAxesTo,
+        take(core::StageAxisSet::create({
+            id<core::StageAxisId>("controller-x"),
+            id<core::StageAxisId>("controller-y")}))));
+    check(static_cast<bool>(liveStage.recordCompletedMotion(
+        slotMovePlan,moveCompletion)),
+        "correlated MoveAxesTo completion reconciles the Stage position");
+    check(liveStage.currentPosition().x==20'000'000&&
+          liveStage.currentPosition().y==10'000'000&&
+          liveStage.currentSlotId()==id<core::StageSlotId>("slot-1"),
+        "completed slot-relative motion updates global nanometre coordinates and derived slot identity");
+
     RuntimeFixture acceptedFixture;
     auto acceptedContext = acceptedFixture.prepare(
         "move-operation", "move-step", "move-command");

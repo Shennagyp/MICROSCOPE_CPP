@@ -1,5 +1,6 @@
 #pragma once
 
+#include "controller/MicroscopeInstance.h"
 #include "controller/stage/StageMotionCommandTranslator.h"
 #include "microscope/application/motion/StageMotionCommandDispatcher.h"
 
@@ -10,8 +11,14 @@
 
 namespace microscope::application::motion {
 
+enum class StageMotionPlanIdentityError {
+    MicroscopeIdentityMismatch,
+    StageDeviceIdentityMismatch
+};
+
 struct StageMotionPlanDispatchError final {
     std::variant<
+        StageMotionPlanIdentityError,
         controller::StageMotionTranslationError,
         StageMotionDispatchError> cause;
 };
@@ -32,12 +39,25 @@ public:
         StageMotionPlanDispatchReceipt,StageMotionPlanDispatchError>;
 
     [[nodiscard]] static Result dispatch(
-        controller::Stage& stage,
+        controller::MicroscopeInstance& microscope,
         const controller::StageMotionPlan& plan,
         const core::StageSpecification& installedStage,
         const core::StageMotionCommandContext& context,
         core::IStageMotionPort& port,
         Runtime& runtime) {
+        auto& stage=microscope.stage();
+        if(context.runtimeDevice().microscopeId!=microscope.id()) {
+            (void)stage.cancelUndispatchedPlan(plan);
+            return Result::failure(StageMotionPlanDispatchError{
+                StageMotionPlanIdentityError::MicroscopeIdentityMismatch});
+        }
+        if(context.runtimeDevice().deviceId.value()!=
+           stage.specification().componentId().value()) {
+            (void)stage.cancelUndispatchedPlan(plan);
+            return Result::failure(StageMotionPlanDispatchError{
+                StageMotionPlanIdentityError::StageDeviceIdentityMismatch});
+        }
+
         auto translated=controller::StageMotionCommandTranslator::translate(
             plan,stage,installedStage);
         if(!translated) {

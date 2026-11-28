@@ -12,7 +12,7 @@ namespace {
 using Error = StageSlotAssignmentsStoreError;
 using ErrorCode = StageSlotAssignmentsStoreErrorCode;
 
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;
 
 Error makeError(ErrorCode code,sqlite3* database,std::string detail={}) {
     return Error{code,database==nullptr?0:sqlite3_errcode(database),
@@ -145,6 +145,177 @@ const core::StageConfigurationSpecification* findConfiguration(
     return it==stage.configurations().end()?nullptr:&*it;
 }
 
+bool bindReal(sqlite3_stmt* statement,int index,double value) {
+    return std::isfinite(value)&&sqlite3_bind_double(statement,index,value)==SQLITE_OK;
+}
+
+const char* cornerName(navigation::StageSlotRegistrationCorner corner) {
+    switch(corner) {
+    case navigation::StageSlotRegistrationCorner::TopLeft:return "top-left";
+    case navigation::StageSlotRegistrationCorner::TopRight:return "top-right";
+    case navigation::StageSlotRegistrationCorner::BottomRight:return "bottom-right";
+    case navigation::StageSlotRegistrationCorner::BottomLeft:return "bottom-left";
+    }
+    return nullptr;
+}
+std::optional<navigation::StageSlotRegistrationCorner> parseCornerName(
+    const std::string& value) {
+    if(value=="top-left") return navigation::StageSlotRegistrationCorner::TopLeft;
+    if(value=="top-right") return navigation::StageSlotRegistrationCorner::TopRight;
+    if(value=="bottom-right") return navigation::StageSlotRegistrationCorner::BottomRight;
+    if(value=="bottom-left") return navigation::StageSlotRegistrationCorner::BottomLeft;
+    return std::nullopt;
+}
+
+const char* observationSourceName(core::ObservationSource source) {
+    switch(source) {
+    case core::ObservationSource::HardwareReadback:return "hardware-readback";
+    case core::ObservationSource::DeviceEvent:return "device-event";
+    case core::ObservationSource::SdkStatus:return "sdk-status";
+    case core::ObservationSource::OperatorConfirmation:return "operator-confirmation";
+    case core::ObservationSource::CalibratedEstimate:return "calibrated-estimate";
+    case core::ObservationSource::AdapterReport:return "adapter-report";
+    case core::ObservationSource::Unknown:return nullptr;
+    }
+    return nullptr;
+}
+std::optional<core::ObservationSource> parseObservationSourceName(
+    const std::string& value) {
+    if(value=="hardware-readback") return core::ObservationSource::HardwareReadback;
+    if(value=="device-event") return core::ObservationSource::DeviceEvent;
+    if(value=="sdk-status") return core::ObservationSource::SdkStatus;
+    if(value=="operator-confirmation") return core::ObservationSource::OperatorConfirmation;
+    if(value=="calibrated-estimate") return core::ObservationSource::CalibratedEstimate;
+    if(value=="adapter-report") return core::ObservationSource::AdapterReport;
+    return std::nullopt;
+}
+
+std::optional<navigation::StageSlotRegistration> readStageSlotRegistration(
+    sqlite3* database,const core::MicroscopeId& microscopeId,
+    std::uint64_t equipmentRevision,const core::EquipmentComponentId& stageComponentId,
+    const core::StageConfigurationId& configurationId,std::uint64_t assignmentRevision,
+    const core::StageSlotId& slotId,const core::SlideId& slideId,
+    std::uint64_t slideRevision,bool& valid) {
+    Statement metadata(database,
+        "SELECT calibration_revision_id,slide_x_extent_micrometers,"
+        "slide_y_extent_micrometers,accepted_maximum_fit_residual_nm "
+        "FROM stage_slot_assignment_registration "
+        "WHERE microscope_id=?1 AND equipment_revision=?2 AND stage_component_id=?3 "
+        "AND configuration_id=?4 AND revision=?5 AND stage_slot_id=?6");
+    if(!metadata.prepared()||
+       !bindText(metadata.get(),1,microscopeId.value())||
+       !bindRevision(metadata.get(),2,equipmentRevision)||
+       !bindText(metadata.get(),3,stageComponentId.value())||
+       !bindText(metadata.get(),4,configurationId.value())||
+       !bindRevision(metadata.get(),5,assignmentRevision)||
+       !bindText(metadata.get(),6,slotId.value())) {
+        valid=false;
+        return std::nullopt;
+    }
+    const int metadataResult=metadata.step();
+    if(metadataResult==SQLITE_DONE) return std::nullopt;
+    if(metadataResult!=SQLITE_ROW) {
+        valid=false;
+        return std::nullopt;
+    }
+
+    const auto* calibrationText=sqlite3_column_text(metadata.get(),0);
+    const int calibrationBytes=sqlite3_column_bytes(metadata.get(),0);
+    const double slideXMicrometres=sqlite3_column_double(metadata.get(),1);
+    const double slideYMicrometres=sqlite3_column_double(metadata.get(),2);
+    const double acceptedResidual=sqlite3_column_double(metadata.get(),3);
+    if(calibrationText==nullptr||calibrationBytes<=0||
+       !std::isfinite(slideXMicrometres)||!std::isfinite(slideYMicrometres)||
+       !std::isfinite(acceptedResidual)||acceptedResidual<0.0||
+       slideXMicrometres<=0.0||slideYMicrometres<=0.0||
+       metadata.step()!=SQLITE_DONE) {
+        valid=false;
+        return std::nullopt;
+    }
+    auto calibrationRevision=core::CalibrationRevisionId::create(std::string(
+        reinterpret_cast<const char*>(calibrationText),
+        static_cast<std::size_t>(calibrationBytes)));
+    auto geometry=core::SlideGeometry::create(slideXMicrometres,slideYMicrometres);
+    if(!calibrationRevision||!geometry) {
+        valid=false;
+        return std::nullopt;
+    }
+
+    Statement corners(database,
+        "SELECT corner,stage_x_nm,stage_y_nm,observation_source,uncertainty_nm "
+        "FROM stage_slot_assignment_registration_corner "
+        "WHERE microscope_id=?1 AND equipment_revision=?2 AND stage_component_id=?3 "
+        "AND configuration_id=?4 AND revision=?5 AND stage_slot_id=?6");
+    if(!corners.prepared()||
+       !bindText(corners.get(),1,microscopeId.value())||
+       !bindRevision(corners.get(),2,equipmentRevision)||
+       !bindText(corners.get(),3,stageComponentId.value())||
+       !bindText(corners.get(),4,configurationId.value())||
+       !bindRevision(corners.get(),5,assignmentRevision)||
+       !bindText(corners.get(),6,slotId.value())) {
+        valid=false;
+        return std::nullopt;
+    }
+    std::array<std::optional<navigation::StageSlotCornerMeasurement>,4> ordered;
+    int result=SQLITE_ROW;
+    while((result=corners.step())==SQLITE_ROW) {
+        const auto* cornerText=sqlite3_column_text(corners.get(),0);
+        const auto* sourceText=sqlite3_column_text(corners.get(),3);
+        const int cornerBytes=sqlite3_column_bytes(corners.get(),0);
+        const int sourceBytes=sqlite3_column_bytes(corners.get(),3);
+        const double x=sqlite3_column_double(corners.get(),1);
+        const double y=sqlite3_column_double(corners.get(),2);
+        const double uncertainty=sqlite3_column_double(corners.get(),4);
+        if(cornerText==nullptr||sourceText==nullptr||cornerBytes<=0||sourceBytes<=0||
+           !std::isfinite(x)||!std::isfinite(y)||!std::isfinite(uncertainty)||uncertainty<0.0) {
+            valid=false;
+            return std::nullopt;
+        }
+        const std::string cornerValue(reinterpret_cast<const char*>(cornerText),
+            static_cast<std::size_t>(cornerBytes));
+        const std::string sourceValue(reinterpret_cast<const char*>(sourceText),
+            static_cast<std::size_t>(sourceBytes));
+        const auto corner=parseCornerName(cornerValue);
+        const auto source=parseObservationSourceName(sourceValue);
+        if(!corner||!source) {
+            valid=false;
+            return std::nullopt;
+        }
+        const auto index=static_cast<std::size_t>(*corner);
+        if(index>=ordered.size()||ordered[index]) {
+            valid=false;
+            return std::nullopt;
+        }
+        auto measurement=navigation::StageSlotCornerMeasurement::create(
+            *corner,{x,y},*source,uncertainty);
+        if(!measurement) {
+            valid=false;
+            return std::nullopt;
+        }
+        ordered[index]=std::move(measurement).value();
+    }
+    if(result!=SQLITE_DONE) {
+        valid=false;
+        return std::nullopt;
+    }
+    for(const auto& measurement:ordered) {
+        if(!measurement) {
+            valid=false;
+            return std::nullopt;
+        }
+    }
+    std::array<navigation::StageSlotCornerMeasurement,4> measurements{
+        *ordered[0],*ordered[1],*ordered[2],*ordered[3]};
+    auto registration=navigation::StageSlotRegistration::create(
+        slotId,slideId,slideRevision,std::move(calibrationRevision).value(),
+        std::move(geometry).value(),std::move(measurements),acceptedResidual);
+    if(!registration) {
+        valid=false;
+        return std::nullopt;
+    }
+    return std::move(registration).value();
+}
+
 } // namespace
 
 StageSlotAssignmentsSqliteStore::StageSlotAssignmentsSqliteStore(sqlite3* database) noexcept
@@ -214,7 +385,8 @@ StageSlotAssignmentsSqliteStore::initializeSchema() {
     if(!readMetadata.prepared()||readMetadata.step()!=SQLITE_ROW)
         return core::Status<StageSlotAssignmentsStoreError>::failure(
             makeError(ErrorCode::SchemaMigrationFailed,database_));
-    if(sqlite3_column_int64(readMetadata.get(),0)!=kSchemaVersion||
+    const auto storedSchemaVersion=sqlite3_column_int64(readMetadata.get(),0);
+    if((storedSchemaVersion!=1&&storedSchemaVersion!=kSchemaVersion)||
        readMetadata.step()!=SQLITE_DONE)
         return core::Status<StageSlotAssignmentsStoreError>::failure(
             makeError(ErrorCode::UnsupportedSchemaVersion,database_));
@@ -320,6 +492,87 @@ StageSlotAssignmentsSqliteStore::initializeSchema() {
     if(!execute(database_,schema))
         return core::Status<StageSlotAssignmentsStoreError>::failure(
             makeError(ErrorCode::SchemaMigrationFailed,database_));
+
+    const char* registrationSchema=R"SQL(
+        CREATE TABLE IF NOT EXISTS stage_slot_assignment_registration (
+            microscope_id TEXT NOT NULL,
+            equipment_revision INTEGER NOT NULL,
+            stage_component_id TEXT NOT NULL,
+            configuration_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            stage_slot_id TEXT NOT NULL,
+            calibration_revision_id TEXT NOT NULL,
+            slide_x_extent_micrometers REAL NOT NULL CHECK(slide_x_extent_micrometers>0),
+            slide_y_extent_micrometers REAL NOT NULL CHECK(slide_y_extent_micrometers>0),
+            accepted_maximum_fit_residual_nm REAL NOT NULL
+                CHECK(accepted_maximum_fit_residual_nm>=0),
+            PRIMARY KEY(
+                microscope_id,equipment_revision,stage_component_id,
+                configuration_id,revision,stage_slot_id
+            ),
+            FOREIGN KEY(
+                microscope_id,equipment_revision,stage_component_id,
+                configuration_id,revision,stage_slot_id
+            ) REFERENCES stage_slot_assignment_item(
+                microscope_id,equipment_revision,stage_component_id,
+                configuration_id,revision,stage_slot_id
+            )
+        );
+
+        CREATE TABLE IF NOT EXISTS stage_slot_assignment_registration_corner (
+            microscope_id TEXT NOT NULL,
+            equipment_revision INTEGER NOT NULL,
+            stage_component_id TEXT NOT NULL,
+            configuration_id TEXT NOT NULL,
+            revision INTEGER NOT NULL,
+            stage_slot_id TEXT NOT NULL,
+            corner TEXT NOT NULL CHECK(corner IN (
+                'top-left','top-right','bottom-right','bottom-left'
+            )),
+            stage_x_nm REAL NOT NULL,
+            stage_y_nm REAL NOT NULL,
+            observation_source TEXT NOT NULL CHECK(observation_source IN (
+                'hardware-readback','device-event','sdk-status',
+                'operator-confirmation','calibrated-estimate','adapter-report'
+            )),
+            uncertainty_nm REAL NOT NULL CHECK(uncertainty_nm>=0),
+            PRIMARY KEY(
+                microscope_id,equipment_revision,stage_component_id,
+                configuration_id,revision,stage_slot_id,corner
+            ),
+            FOREIGN KEY(
+                microscope_id,equipment_revision,stage_component_id,
+                configuration_id,revision,stage_slot_id
+            ) REFERENCES stage_slot_assignment_registration(
+                microscope_id,equipment_revision,stage_component_id,
+                configuration_id,revision,stage_slot_id
+            )
+        );
+
+        CREATE TRIGGER IF NOT EXISTS stage_slot_assignment_registration_no_update
+        BEFORE UPDATE ON stage_slot_assignment_registration
+        BEGIN SELECT RAISE(ABORT,'StageSlot registrations are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS stage_slot_assignment_registration_no_delete
+        BEFORE DELETE ON stage_slot_assignment_registration
+        BEGIN SELECT RAISE(ABORT,'StageSlot registrations are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS stage_slot_assignment_registration_corner_no_update
+        BEFORE UPDATE ON stage_slot_assignment_registration_corner
+        BEGIN SELECT RAISE(ABORT,'StageSlot corner measurements are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS stage_slot_assignment_registration_corner_no_delete
+        BEFORE DELETE ON stage_slot_assignment_registration_corner
+        BEGIN SELECT RAISE(ABORT,'StageSlot corner measurements are immutable'); END;
+    )SQL";
+    if(!execute(database_,registrationSchema))
+        return core::Status<StageSlotAssignmentsStoreError>::failure(
+            makeError(ErrorCode::SchemaMigrationFailed,database_));
+
+    if(storedSchemaVersion==1) {
+        if(!execute(database_,
+            "UPDATE stage_slot_assignments_store_metadata SET schema_version=2 "
+            "WHERE singleton=1 AND schema_version=1"))
+            return core::Status<StageSlotAssignmentsStoreError>::failure(
+                makeError(ErrorCode::SchemaMigrationFailed,database_));
+    }
     return core::Status<StageSlotAssignmentsStoreError>::success();
 }
 
@@ -465,6 +718,64 @@ StageSlotAssignmentsSqliteStore::saveCurrentState(
            insertItem.step()!=SQLITE_DONE)
             return core::Status<StageSlotAssignmentsStoreError>::failure(
                 makeError(ErrorCode::SqliteOperationFailed,database_));
+
+        if(assignment.registration) {
+            const auto& registration=*assignment.registration;
+            Statement insertRegistration(database_,
+                "INSERT INTO stage_slot_assignment_registration("
+                "microscope_id,equipment_revision,stage_component_id,configuration_id,"
+                "revision,stage_slot_id,calibration_revision_id,"
+                "slide_x_extent_micrometers,slide_y_extent_micrometers,"
+                "accepted_maximum_fit_residual_nm"
+                ") VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)");
+            const auto& geometry=registration.slideGeometry();
+            if(!insertRegistration.prepared()||
+               !bindText(insertRegistration.get(),1,microscopeId.value())||
+               !bindRevision(insertRegistration.get(),2,equipmentRevision)||
+               !bindText(insertRegistration.get(),3,assignments.stageComponentId().value())||
+               !bindText(insertRegistration.get(),4,assignments.configurationId().value())||
+               !bindRevision(insertRegistration.get(),5,newRevision)||
+               !bindText(insertRegistration.get(),6,assignment.stageSlotId.value())||
+               !bindText(insertRegistration.get(),7,registration.calibrationRevision().value())||
+               !bindReal(insertRegistration.get(),8,geometry.xExtentMicrometers())||
+               !bindReal(insertRegistration.get(),9,geometry.yExtentMicrometers())||
+               !bindReal(insertRegistration.get(),10,
+                   registration.acceptedMaximumFitResidualNanometres())||
+               insertRegistration.step()!=SQLITE_DONE)
+                return core::Status<StageSlotAssignmentsStoreError>::failure(
+                    makeError(ErrorCode::SqliteOperationFailed,database_));
+
+            Statement insertCorner(database_,
+                "INSERT INTO stage_slot_assignment_registration_corner("
+                "microscope_id,equipment_revision,stage_component_id,configuration_id,"
+                "revision,stage_slot_id,corner,stage_x_nm,stage_y_nm,"
+                "observation_source,uncertainty_nm"
+                ") VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)");
+            if(!insertCorner.prepared())
+                return core::Status<StageSlotAssignmentsStoreError>::failure(
+                    makeError(ErrorCode::SqliteOperationFailed,database_));
+            for(const auto& measurement:registration.cornerMeasurements()) {
+                const char* corner=cornerName(measurement.corner());
+                const char* source=observationSourceName(measurement.source());
+                if(corner==nullptr||source==nullptr||
+                   !bindText(insertCorner.get(),1,microscopeId.value())||
+                   !bindRevision(insertCorner.get(),2,equipmentRevision)||
+                   !bindText(insertCorner.get(),3,assignments.stageComponentId().value())||
+                   !bindText(insertCorner.get(),4,assignments.configurationId().value())||
+                   !bindRevision(insertCorner.get(),5,newRevision)||
+                   !bindText(insertCorner.get(),6,assignment.stageSlotId.value())||
+                   !bindText(insertCorner.get(),7,corner)||
+                   !bindReal(insertCorner.get(),8,measurement.stagePosition().x)||
+                   !bindReal(insertCorner.get(),9,measurement.stagePosition().y)||
+                   !bindText(insertCorner.get(),10,source)||
+                   !bindReal(insertCorner.get(),11,measurement.uncertaintyNanometres())||
+                   insertCorner.step()!=SQLITE_DONE)
+                    return core::Status<StageSlotAssignmentsStoreError>::failure(
+                        makeError(ErrorCode::SqliteOperationFailed,database_));
+                sqlite3_reset(insertCorner.get());
+                sqlite3_clear_bindings(insertCorner.get());
+            }
+        }
     }
 
     if(actual==0) {
@@ -631,8 +942,19 @@ StageSlotAssignmentsSqliteStore::loadRevisionUnlocked(
                 StageSlotAssignmentsStoreError>::failure(
                     makeError(ErrorCode::InvalidPersistedRecord,database_,
                         "A StageSlot assignment row contains an invalid strong identifier."));
-        assignments.push_back({std::move(slotId).value(),std::move(slideId).value(),
-            slideRevision});
+        auto restoredSlotId=std::move(slotId).value();
+        auto restoredSlideId=std::move(slideId).value();
+        bool registrationValid=true;
+        auto registration=readStageSlotRegistration(database_,microscopeId,
+            equipmentDefinitionRevision,installedStage.componentId(),configurationId,
+            revision,restoredSlotId,restoredSlideId,slideRevision,registrationValid);
+        if(!registrationValid)
+            return core::Result<std::optional<PersistedStageSlotAssignments>,
+                StageSlotAssignmentsStoreError>::failure(
+                    makeError(ErrorCode::InvalidPersistedRecord,database_,
+                        "A persisted StageSlot four-corner registration is malformed."));
+        assignments.push_back({std::move(restoredSlotId),std::move(restoredSlideId),
+            slideRevision,std::move(registration)});
     }
     if(result!=SQLITE_DONE)
         return core::Result<std::optional<PersistedStageSlotAssignments>,

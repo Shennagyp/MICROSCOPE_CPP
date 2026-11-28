@@ -58,7 +58,6 @@ const WorkingRotationAxis* findWorkingRotation(const StageConfiguration& c,
         [&id](const WorkingRotationAxis& w){return w.axisId==id;});
     return i==c.workingRotationAxes().end()?nullptr:&*i;
 }
-StageOperationError error(StageModelError e) { return {e,std::nullopt}; }
 } // namespace
 
 NanometreRange::NanometreRange(Nanometres a,Nanometres b) noexcept:min_(a),max_(b){}
@@ -82,7 +81,7 @@ bool RadianRange::contains(Radians v)const noexcept{return finite(v)&&v>=min_&&v
 
 LinearAxis::LinearAxis(StageAxisId id,LinearAxisRole role,
     NanometreRange r,Nanometres inc,Nanometres a,Nanometres p)
-    :id_(std::move(id)),role_(role),mechanicalRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
+    :id_(std::move(id)),role_(role),mechanicalTravelRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
 core::Result<LinearAxis,StageModelError> LinearAxis::create(
     StageAxisId id,LinearAxisRole role,NanometreRange r,Nanometres inc,Nanometres a,Nanometres p){
     if(!validRole(role)||inc<=0||a<0||p<0||!r.contains(0))
@@ -92,48 +91,28 @@ core::Result<LinearAxis,StageModelError> LinearAxis::create(
 }
 const StageAxisId& LinearAxis::id()const noexcept{return id_;}
 LinearAxisRole LinearAxis::role()const noexcept{return role_;}
-const NanometreRange& LinearAxis::mechanicalTravelRange()const noexcept{return mechanicalRange_;}
+const NanometreRange& LinearAxis::mechanicalTravelRange()const noexcept{return mechanicalTravelRange_;}
 Nanometres LinearAxis::minimumIncrement()const noexcept{return minimumIncrement_;}
 Nanometres LinearAxis::accuracy()const noexcept{return accuracy_;}
 Nanometres LinearAxis::precision()const noexcept{return precision_;}
 
-core::Status<StageOperationError> LinearAxis::home(IStageDriver& driver) const {
-    const auto result = driver.homeLinearAxis(id_);
-    if (!result) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::DriverFailure, result.error()});
-    }
-    return core::Status<StageOperationError>::success();
+StageAxisId LinearAxis::homeCommand() const { return id_; }
+core::Result<LinearAxisTarget,StageModelError> LinearAxis::moveTo(Nanometres target) const {
+    if(!mechanicalTravelRange_.contains(target))
+        return core::Result<LinearAxisTarget,StageModelError>::failure(StageModelError::TargetOutsideWorkingRange);
+    return core::Result<LinearAxisTarget,StageModelError>::success({id_,target});
 }
-
-core::Status<StageOperationError> LinearAxis::moveTo(
-    IStageDriver& driver, Nanometres absolutePosition) const {
-    if (!mechanicalRange_.contains(absolutePosition)) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::TargetOutsideWorkingRange, std::nullopt});
-    }
-    const auto result = driver.moveLinearAxesTo({LinearAxisTarget{id_, absolutePosition}});
-    if (!result) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::DriverFailure, result.error()});
-    }
-    return core::Status<StageOperationError>::success();
-}
-
-core::Status<StageOperationError> LinearAxis::moveBy(
-    IStageDriver& driver, Nanometres currentPosition,
-    Nanometres displacement) const {
-    Nanometres target = 0;
-    if (!add(currentPosition, displacement, target)) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::CoordinateOverflow, std::nullopt});
-    }
-    return moveTo(driver, target);
+core::Result<LinearAxisTarget,StageModelError> LinearAxis::moveBy(
+    Nanometres current,Nanometres displacement) const {
+    Nanometres target=0;
+    if(!add(current,displacement,target))
+        return core::Result<LinearAxisTarget,StageModelError>::failure(StageModelError::CoordinateOverflow);
+    return moveTo(target);
 }
 
 RotationAxis::RotationAxis(StageAxisId id,RotationAxisGeometry g,
     RadianRange r,Radians inc,Radians a,Radians p)
-    :id_(std::move(id)),geometry_(g),mechanicalRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
+    :id_(std::move(id)),geometry_(g),mechanicalTravelRange_(r),minimumIncrement_(inc),accuracy_(a),precision_(p){}
 core::Result<RotationAxis,StageModelError> RotationAxis::create(
     StageAxisId id,RotationAxisGeometry g,RadianRange r,Radians inc,Radians a,Radians p){
     if(!validDirection(g.direction)||!finite(inc)||!finite(a)||!finite(p)||
@@ -144,43 +123,23 @@ core::Result<RotationAxis,StageModelError> RotationAxis::create(
 }
 const StageAxisId& RotationAxis::id()const noexcept{return id_;}
 const RotationAxisGeometry& RotationAxis::geometry()const noexcept{return geometry_;}
-const RadianRange& RotationAxis::mechanicalTravelRange()const noexcept{return mechanicalRange_;}
+const RadianRange& RotationAxis::mechanicalTravelRange()const noexcept{return mechanicalTravelRange_;}
 Radians RotationAxis::minimumIncrement()const noexcept{return minimumIncrement_;}
 Radians RotationAxis::accuracy()const noexcept{return accuracy_;}
 Radians RotationAxis::precision()const noexcept{return precision_;}
 
-core::Status<StageOperationError> RotationAxis::home(IStageDriver& driver) const {
-    const auto result = driver.homeRotationAxis(id_);
-    if (!result) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::DriverFailure, result.error()});
-    }
-    return core::Status<StageOperationError>::success();
+StageAxisId RotationAxis::homeCommand() const { return id_; }
+core::Result<RotationAxisTarget,StageModelError> RotationAxis::rotateTo(Radians target) const {
+    if(!mechanicalTravelRange_.contains(target))
+        return core::Result<RotationAxisTarget,StageModelError>::failure(StageModelError::TargetOutsideWorkingRange);
+    return core::Result<RotationAxisTarget,StageModelError>::success({id_,target});
 }
-
-core::Status<StageOperationError> RotationAxis::rotateTo(
-    IStageDriver& driver, Radians absoluteAngle) const {
-    if (!mechanicalRange_.contains(absoluteAngle)) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::TargetOutsideWorkingRange, std::nullopt});
-    }
-    const auto result = driver.moveRotationAxesTo({RotationAxisTarget{id_, absoluteAngle}});
-    if (!result) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::DriverFailure, result.error()});
-    }
-    return core::Status<StageOperationError>::success();
-}
-
-core::Status<StageOperationError> RotationAxis::rotateBy(
-    IStageDriver& driver, Radians currentAngle,
-    Radians angularDisplacement) const {
-    const Radians target = currentAngle + angularDisplacement;
-    if (!finite(target)) {
-        return core::Status<StageOperationError>::failure(
-            StageOperationError{StageModelError::RotationTargetMismatch, std::nullopt});
-    }
-    return rotateTo(driver, target);
+core::Result<RotationAxisTarget,StageModelError> RotationAxis::rotateBy(
+    Radians current,Radians displacement) const {
+    const Radians target=current+displacement;
+    if(!finite(target))
+        return core::Result<RotationAxisTarget,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+    return rotateTo(target);
 }
 
 StageSlot::StageSlot(StageSlotId id,StagePosition2D o,NanometreRange x,NanometreRange y)
@@ -201,7 +160,8 @@ const NanometreRange& StageSlot::yRange()const noexcept{return yRange_;}
 
 StageConfiguration::StageConfiguration(StageConfigurationId id,std::vector<WorkingLinearAxis> l,
     std::vector<WorkingRotationAxis> r,std::vector<StageSlot> s)
-    :id_(std::move(id)),linearAxes_(std::move(l)),rotationAxes_(std::move(r)),slots_(std::move(s)){}
+    :id_(std::move(id)),workingLinearAxes_(std::move(l)),
+     workingRotationAxes_(std::move(r)),slots_(std::move(s)){}
 core::Result<StageConfiguration,StageModelError> StageConfiguration::create(
     StageConfigurationId id,std::vector<WorkingLinearAxis> l,
     std::vector<WorkingRotationAxis> r,std::vector<StageSlot> s){
@@ -222,13 +182,13 @@ core::Result<StageConfiguration,StageModelError> StageConfiguration::create(
         StageConfiguration(std::move(id),std::move(l),std::move(r),std::move(s)));
 }
 const StageConfigurationId& StageConfiguration::id()const noexcept{return id_;}
-const std::vector<WorkingLinearAxis>& StageConfiguration::workingLinearAxes()const noexcept{return linearAxes_;}
-const std::vector<WorkingRotationAxis>& StageConfiguration::workingRotationAxes()const noexcept{return rotationAxes_;}
+const std::vector<WorkingLinearAxis>& StageConfiguration::workingLinearAxes()const noexcept{return workingLinearAxes_;}
+const std::vector<WorkingRotationAxis>& StageConfiguration::workingRotationAxes()const noexcept{return workingRotationAxes_;}
 const std::vector<StageSlot>& StageConfiguration::slots()const noexcept{return slots_;}
 
 StageSpecification::StageSpecification(EquipmentComponentId id,std::vector<LinearAxis> l,
     std::vector<RotationAxis> r,std::vector<StageConfiguration> c)
-    :id_(std::move(id)),linearAxes_(std::move(l)),rotationAxes_(std::move(r)),configurations_(std::move(c)){}
+    :componentId_(std::move(id)),linearAxes_(std::move(l)),rotationAxes_(std::move(r)),configurations_(std::move(c)){}
 core::Result<StageSpecification,StageModelError> StageSpecification::create(
     EquipmentComponentId id,std::vector<LinearAxis> l,
     std::vector<RotationAxis> r,std::vector<StageConfiguration> c){
@@ -276,9 +236,9 @@ core::Result<StageSpecification,StageModelError> StageSpecification::create(
     return core::Result<StageSpecification,StageModelError>::success(
         StageSpecification(std::move(id),std::move(l),std::move(r),std::move(c)));
 }
-const EquipmentComponentId& StageSpecification::componentId()const noexcept{return id_;}
-const std::vector<LinearAxis>& StageSpecification::linearAxes()const noexcept{return linearAxes_;}
-const std::vector<RotationAxis>& StageSpecification::rotationAxes()const noexcept{return rotationAxes_;}
+const EquipmentComponentId& StageSpecification::componentId()const noexcept{return componentId_;}
+const std::vector<LinearAxis>& StageSpecification::linearAxes()const noexcept{return workingLinearAxes_;}
+const std::vector<RotationAxis>& StageSpecification::rotationAxes()const noexcept{return workingRotationAxes_;}
 const std::vector<StageConfiguration>& StageSpecification::configurations()const noexcept{return configurations_;}
 const StageConfiguration* StageSpecification::configuration(const StageConfigurationId& id)const noexcept{
     const auto i=std::find_if(configurations_.begin(),configurations_.end(),[&](const auto& v){return v.id()==id;});
@@ -300,153 +260,330 @@ const RotationAxis* StageSpecification::rotationAxis(const StageAxisId& id)const
 bool StagePositionSnapshot::xyKnown()const noexcept{return x.has_value()&&y.has_value();}
 bool StagePositionSnapshot::xyzKnown()const noexcept{return x.has_value()&&y.has_value()&&z.has_value();}
 
-Stage::Stage(StageSpecification s,std::shared_ptr<IStageDriver> d,StageConfigurationId c)
-    :specification_(std::move(s)),driver_(std::move(d)),activeConfigurationId_(std::move(c)){}
-core::Result<Stage,StageModelError> Stage::create(StageSpecification s,
-    std::shared_ptr<IStageDriver> d,StageConfigurationId c){
-    if(!d)return core::Result<Stage,StageModelError>::failure(StageModelError::InvalidDriver);
-    if(!s.configuration(c))return core::Result<Stage,StageModelError>::failure(StageModelError::ConfigurationNotFound);
-    return core::Result<Stage,StageModelError>::success(Stage(std::move(s),std::move(d),std::move(c)));
+
+Stage::Stage(StageSpecification specification,StageConfigurationId active)
+    :specification_(std::move(specification)),activeConfigurationId_(std::move(active)){}
+
+core::Result<Stage,StageModelError> Stage::create(
+    StageSpecification specification,StageConfigurationId active) {
+    if(!specification.configuration(active))
+        return core::Result<Stage,StageModelError>::failure(StageModelError::ConfigurationNotFound);
+    return core::Result<Stage,StageModelError>::success(
+        Stage(std::move(specification),std::move(active)));
 }
-const WorkingLinearAxis* Stage::workingLinearAxis(LinearAxisRole role)const noexcept{
+const WorkingLinearAxis* Stage::workingLinearAxis(LinearAxisRole role) const noexcept {
     return findWorking(activeConfiguration(),specification_,role);
 }
-void Stage::invalidatePosition()noexcept{position_=StagePositionSnapshot{};}
-core::Status<StageOperationError> Stage::driverFailure(const StageDriverError& e){
-    return core::Status<StageOperationError>::failure({StageModelError::DriverFailure,e});
-}
-core::Status<StageOperationError> Stage::home(){
-    const auto& cfg=activeConfiguration();
-    for(const auto& working:cfg.workingLinearAxes()){
-        const auto* axis = specification_.linearAxis(working.axisId);
-        if(!axis){
-            invalidatePosition();
-            return core::Status<StageOperationError>::failure(error(StageModelError::UnknownWorkingAxis));
-        }
-        auto result = axis->home(*driver_);
-        if(!result){invalidatePosition();return core::Status<StageOperationError>::failure(result.error());}
+
+core::Result<StageMotionPlan,StageModelError> Stage::home() {
+    if(pendingSequence_)
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
+    StageMotionPlan plan;
+    plan.sequence=nextSequence_++;
+    plan.configurationId=activeConfigurationId_;
+    plan.action=StageMotionAction::Home;
+    for(const auto& working:activeConfiguration().workingLinearAxes()) {
+        const auto* axis=specification_.linearAxis(working.axisId);
+        if(!axis) return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::UnknownWorkingAxis);
+        plan.axesToHome.push_back(axis->homeCommand());
     }
-    for(const auto& working:cfg.workingRotationAxes()){
-        const auto* axis = specification_.rotationAxis(working.axisId);
-        if(!axis){
-            invalidatePosition();
-            return core::Status<StageOperationError>::failure(error(StageModelError::UnknownWorkingAxis));
-        }
-        auto result = axis->home(*driver_);
-        if(!result){invalidatePosition();return core::Status<StageOperationError>::failure(result.error());}
+    for(const auto& working:activeConfiguration().workingRotationAxes()) {
+        const auto* axis=specification_.rotationAxis(working.axisId);
+        if(!axis) return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::UnknownWorkingAxis);
+        plan.axesToHome.push_back(axis->homeCommand());
     }
-    position_=StagePositionSnapshot{};
-    position_.x=0;position_.y=0;position_.z=0;
-    for(const auto& a:cfg.workingRotationAxes())position_.rotations.push_back({a.axisId,0.0});
-    position_.evidence=StagePositionEvidence::HomingReference;
-    return core::Status<StageOperationError>::success();
+    pendingSequence_=plan.sequence;
+    return core::Result<StageMotionPlan,StageModelError>::success(std::move(plan));
 }
-core::Status<StageOperationError> Stage::refreshPosition(){
-    if(!position_.xyzKnown()||position_.rotations.size()!=activeConfiguration().workingRotationAxes().size())
-        return core::Status<StageOperationError>::failure(error(StageModelError::PositionUnknown));
+
+core::Result<StageRefreshPlan,StageModelError> Stage::refreshPosition() {
+    if(!position_.xyzKnown()||
+       position_.rotations.size()!=activeConfiguration().workingRotationAxes().size())
+        return core::Result<StageRefreshPlan,StageModelError>::failure(StageModelError::PositionUnknown);
     StageAbsolutePosition saved;
-    saved.linear={*position_.x,*position_.y,*position_.z};saved.rotations=position_.rotations;
-    auto h=home();if(!h)return h;
-    return moveTo(saved);
+    saved.linear={*position_.x,*position_.y,*position_.z};
+    saved.rotations=position_.rotations;
+    auto homePlan=home();
+    if(!homePlan)
+        return core::Result<StageRefreshPlan,StageModelError>::failure(homePlan.error());
+    return core::Result<StageRefreshPlan,StageModelError>::success(
+        StageRefreshPlan{std::move(homePlan).value(),std::move(saved),activeConfigurationId_});
 }
-core::Status<StageOperationError> Stage::moveTo(SlotRelativePosition p,const StageSlotId& id){
+
+core::Result<StageMotionPlan,StageModelError> Stage::createMovePlan(
+    std::vector<LinearAxisTarget> linearTargets,
+    std::vector<RotationAxisTarget> rotationTargets,bool restoration) {
+    if(pendingSequence_)
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
+    if(linearTargets.empty())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::StaleMotionPlan);
+    StageMotionPlan plan;
+    plan.sequence=nextSequence_++;
+    plan.configurationId=activeConfigurationId_;
+    plan.action=StageMotionAction::MoveTo;
+    plan.linearTargets=std::move(linearTargets);
+    plan.rotationTargets=std::move(rotationTargets);
+    plan.refreshRestoration=restoration;
+    pendingSequence_=plan.sequence;
+    return core::Result<StageMotionPlan,StageModelError>::success(std::move(plan));
+}
+
+core::Result<StageMotionPlan,StageModelError> Stage::restorePositionAfterRefresh(
+    const StageRefreshPlan& refresh) {
+    if(pendingSequence_||refresh.configurationId!=activeConfigurationId_||
+       refresh.homePlan.action!=StageMotionAction::Home||
+       !refresh.homePlan.configurationId||
+       *refresh.homePlan.configurationId!=activeConfigurationId_||
+       !lastCompletedSequence_||*lastCompletedSequence_!=refresh.homePlan.sequence||
+       position_.evidence!=StagePositionEvidence::HomingReference)
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RefreshNotReady);
+
+    std::vector<LinearAxisTarget> linear;
+    for(const auto role:{LinearAxisRole::X,LinearAxisRole::Y,LinearAxisRole::Z}) {
+        const auto* axis=specification_.linearAxis(role);
+        if(!axis) return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::UnknownWorkingAxis);
+        const Nanometres target=role==LinearAxisRole::X?refresh.restorePosition.linear.x:
+            role==LinearAxisRole::Y?refresh.restorePosition.linear.y:refresh.restorePosition.linear.z;
+        auto command=axis->moveTo(target);
+        if(!command) return core::Result<StageMotionPlan,StageModelError>::failure(command.error());
+        linear.push_back(std::move(command).value());
+    }
+
+    std::vector<RotationAxisTarget> rotations;
+    std::set<StageAxisId> supplied;
+    for(const auto& target:refresh.restorePosition.rotations) {
+        const auto* axis=specification_.rotationAxis(target.axisId);
+        if(!axis||!findWorkingRotation(activeConfiguration(),target.axisId)||
+           !supplied.insert(target.axisId).second)
+            return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+        auto command=axis->rotateTo(target.angle);
+        if(!command) return core::Result<StageMotionPlan,StageModelError>::failure(command.error());
+        rotations.push_back(std::move(command).value());
+    }
+    if(supplied.size()!=activeConfiguration().workingRotationAxes().size())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+    return createMovePlan(std::move(linear),std::move(rotations),true);
+}
+
+core::Result<StageMotionPlan,StageModelError> Stage::moveTo(
+    SlotRelativePosition position,const StageSlotId& slotId) {
     if(!position_.xyKnown())
-        return core::Status<StageOperationError>::failure(error(StageModelError::PositionUnknown));
-    const auto& cfg=activeConfiguration();
-    const auto s=std::find_if(cfg.slots().begin(),cfg.slots().end(),[&](const auto& v){return v.id()==id;});
-    if(s==cfg.slots().end()||!s->xRange().contains(p.x)||!s->yRange().contains(p.y))
-        return core::Status<StageOperationError>::failure(error(StageModelError::TargetOutsideSlot));
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::PositionUnknown);
+    if(pendingSequence_)
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
+
+    const auto& config=activeConfiguration();
+    const auto slot=std::find_if(config.slots().begin(),config.slots().end(),
+        [&slotId](const StageSlot& value){return value.id()==slotId;});
+    if(slot==config.slots().end()||!slot->xRange().contains(position.x)||
+       !slot->yRange().contains(position.y))
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::TargetOutsideSlot);
+
     Nanometres x=0,y=0;
-    if(!add(s->originInStageCoordinates().x,p.x,x)||!add(s->originInStageCoordinates().y,p.y,y))
-        return core::Status<StageOperationError>::failure(error(StageModelError::CoordinateOverflow));
-    const auto* wx=workingLinearAxis(LinearAxisRole::X);
-    const auto* wy=workingLinearAxis(LinearAxisRole::Y);
-    if(!wx||!wy||!wx->effectiveRange.contains(x)||!wy->effectiveRange.contains(y))
-        return core::Status<StageOperationError>::failure(error(StageModelError::TargetOutsideWorkingRange));
-    auto r=driver_->moveLinearAxesTo({{wx->axisId,x},{wy->axisId,y}});
-    if(!r){invalidatePosition();return driverFailure(r.error());}
-    position_.x=x;position_.y=y;position_.evidence=StagePositionEvidence::CommandDerived;
-    return core::Status<StageOperationError>::success();
+    if(!add(slot->originInStageCoordinates().x,position.x,x)||
+       !add(slot->originInStageCoordinates().y,position.y,y))
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::CoordinateOverflow);
+
+    const auto* xWorking=workingLinearAxis(LinearAxisRole::X);
+    const auto* yWorking=workingLinearAxis(LinearAxisRole::Y);
+    const auto* xAxis=specification_.linearAxis(LinearAxisRole::X);
+    const auto* yAxis=specification_.linearAxis(LinearAxisRole::Y);
+    if(!xWorking||!yWorking||!xAxis||!yAxis||
+       !xWorking->effectiveRange.contains(x)||!yWorking->effectiveRange.contains(y))
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::TargetOutsideWorkingRange);
+    auto xTarget=xAxis->moveTo(x),yTarget=yAxis->moveTo(y);
+    if(!xTarget) return core::Result<StageMotionPlan,StageModelError>::failure(xTarget.error());
+    if(!yTarget) return core::Result<StageMotionPlan,StageModelError>::failure(yTarget.error());
+    return createMovePlan({std::move(xTarget).value(),std::move(yTarget).value()},{});
 }
-core::Status<StageOperationError> Stage::moveTo(const StageAbsolutePosition& p){
-    const auto& cfg=activeConfiguration();
-    if(!position_.xyzKnown()||position_.rotations.size()!=cfg.workingRotationAxes().size())
-        return core::Status<StageOperationError>::failure(error(StageModelError::PositionUnknown));
-    const auto* x=workingLinearAxis(LinearAxisRole::X);
-    const auto* y=workingLinearAxis(LinearAxisRole::Y);
-    const auto* z=workingLinearAxis(LinearAxisRole::Z);
-    if(!x||!y||!z||!x->effectiveRange.contains(p.linear.x)||
-       !y->effectiveRange.contains(p.linear.y)||!z->effectiveRange.contains(p.linear.z))
-        return core::Status<StageOperationError>::failure(error(StageModelError::TargetOutsideWorkingRange));
-    if(p.rotations.size()!=cfg.workingRotationAxes().size())
-        return core::Status<StageOperationError>::failure(error(StageModelError::RotationTargetMismatch));
-    std::set<StageAxisId> ids;
-    for(const auto& t:p.rotations){
-        const auto* w=findWorkingRotation(cfg,t.axisId);
-        if(!w||!w->effectiveRange.contains(t.angle)||!ids.insert(t.axisId).second)
-            return core::Status<StageOperationError>::failure(error(StageModelError::RotationTargetMismatch));
+
+core::Result<StageMotionPlan,StageModelError> Stage::moveTo(
+    const StageAbsolutePosition& position) {
+    if(!position_.xyzKnown()||
+       position_.rotations.size()!=activeConfiguration().workingRotationAxes().size())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::PositionUnknown);
+    if(pendingSequence_)
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
+
+    std::vector<LinearAxisTarget> linear;
+    for(const auto role:{LinearAxisRole::X,LinearAxisRole::Y,LinearAxisRole::Z}) {
+        const auto* working=workingLinearAxis(role);
+        const auto* axis=specification_.linearAxis(role);
+        const Nanometres target=role==LinearAxisRole::X?position.linear.x:
+            role==LinearAxisRole::Y?position.linear.y:position.linear.z;
+        if(!working||!axis||!working->effectiveRange.contains(target))
+            return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::TargetOutsideWorkingRange);
+        auto command=axis->moveTo(target);
+        if(!command) return core::Result<StageMotionPlan,StageModelError>::failure(command.error());
+        linear.push_back(std::move(command).value());
     }
-    auto l=driver_->moveLinearAxesTo({{x->axisId,p.linear.x},{y->axisId,p.linear.y},{z->axisId,p.linear.z}});
-    if(!l){invalidatePosition();return driverFailure(l.error());}
-    if(!p.rotations.empty()){
-        auto r=driver_->moveRotationAxesTo(p.rotations);
-        if(!r){invalidatePosition();return driverFailure(r.error());}
+
+    if(position.rotations.size()!=activeConfiguration().workingRotationAxes().size())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+    std::set<StageAxisId> supplied;
+    std::vector<RotationAxisTarget> rotations;
+    for(const auto& target:position.rotations) {
+        const auto* working=findWorkingRotation(activeConfiguration(),target.axisId);
+        const auto* axis=specification_.rotationAxis(target.axisId);
+        if(!working||!axis||!working->effectiveRange.contains(target.angle)||
+           !supplied.insert(target.axisId).second)
+            return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+        auto command=axis->rotateTo(target.angle);
+        if(!command) return core::Result<StageMotionPlan,StageModelError>::failure(command.error());
+        rotations.push_back(std::move(command).value());
     }
-    position_.x=p.linear.x;position_.y=p.linear.y;position_.z=p.linear.z;
-    position_.rotations=p.rotations;position_.evidence=StagePositionEvidence::CommandDerived;
-    return core::Status<StageOperationError>::success();
+    if(supplied.size()!=activeConfiguration().workingRotationAxes().size())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+    return createMovePlan(std::move(linear),std::move(rotations));
 }
-core::Status<StageOperationError> Stage::moveBy(const StageDisplacement& d){
-    if(!position_.xyzKnown()||position_.rotations.size()!=activeConfiguration().workingRotationAxes().size())
-        return core::Status<StageOperationError>::failure(error(StageModelError::PositionUnknown));
-    StageAbsolutePosition p;
-    if(!add(*position_.x,d.linear.x,p.linear.x)||!add(*position_.y,d.linear.y,p.linear.y)||
-       !add(*position_.z,d.linear.z,p.linear.z))
-        return core::Status<StageOperationError>::failure(error(StageModelError::CoordinateOverflow));
-    if(d.rotations.size()!=position_.rotations.size())
-        return core::Status<StageOperationError>::failure(error(StageModelError::RotationTargetMismatch));
-    for(const auto& current:position_.rotations){
-        const auto delta=std::find_if(d.rotations.begin(),d.rotations.end(),
-            [&](const auto& v){return v.axisId==current.axisId;});
-        if(delta==d.rotations.end()||!finite(current.angle+delta->displacement))
-            return core::Status<StageOperationError>::failure(error(StageModelError::RotationTargetMismatch));
-        p.rotations.push_back({current.axisId,current.angle+delta->displacement});
+
+core::Result<StageMotionPlan,StageModelError> Stage::moveBy(
+    const StageDisplacement& displacement) {
+    if(!position_.xyzKnown()||
+       position_.rotations.size()!=activeConfiguration().workingRotationAxes().size())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::PositionUnknown);
+    StageAbsolutePosition target;
+    if(!add(*position_.x,displacement.linear.x,target.linear.x)||
+       !add(*position_.y,displacement.linear.y,target.linear.y)||
+       !add(*position_.z,displacement.linear.z,target.linear.z))
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::CoordinateOverflow);
+    if(displacement.rotations.size()!=position_.rotations.size())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+
+    std::set<StageAxisId> seen;
+    for(const auto& current:position_.rotations) {
+        const auto delta=std::find_if(displacement.rotations.begin(),displacement.rotations.end(),
+            [&current](const RotationAxisDisplacement& value){return value.axisId==current.axisId;});
+        const auto* axis=specification_.rotationAxis(current.axisId);
+        if(delta==displacement.rotations.end()||!seen.insert(delta->axisId).second||!axis)
+            return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RotationTargetMismatch);
+        auto next=axis->rotateBy(current.angle,delta->displacement);
+        if(!next) return core::Result<StageMotionPlan,StageModelError>::failure(next.error());
+        target.rotations.push_back(std::move(next).value());
     }
-    return moveTo(p);
+    return moveTo(target);
 }
-core::Status<StageOperationError> Stage::activateConfiguration(const StageConfigurationId& id){
+
+core::Status<StageModelError> Stage::validatePendingPlan(const StageMotionPlan& plan) const {
+    if(!pendingSequence_||*pendingSequence_!=plan.sequence||
+       !plan.configurationId||*plan.configurationId!=activeConfigurationId_)
+        return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+    return core::Status<StageModelError>::success();
+}
+
+core::Status<StageModelError> Stage::recordCompletedMotion(const StageMotionPlan& plan) {
+    auto valid=validatePendingPlan(plan);
+    if(!valid) return valid;
+
+    if(plan.action==StageMotionAction::Home) {
+        std::set<StageAxisId> requested(plan.axesToHome.begin(),plan.axesToHome.end());
+        std::set<StageAxisId> expected;
+        for(const auto& axis:activeConfiguration().workingLinearAxes()) expected.insert(axis.axisId);
+        for(const auto& axis:activeConfiguration().workingRotationAxes()) expected.insert(axis.axisId);
+        if(!plan.linearTargets.empty()||!plan.rotationTargets.empty()||plan.refreshRestoration||
+           requested.size()!=plan.axesToHome.size()||requested!=expected)
+            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+        position_=StagePositionSnapshot{};
+        position_.x=0;position_.y=0;position_.z=0;
+        for(const auto& working:activeConfiguration().workingRotationAxes())
+            position_.rotations.push_back({working.axisId,0.0});
+        position_.evidence=StagePositionEvidence::HomingReference;
+    } else {
+        if(!plan.axesToHome.empty()||plan.linearTargets.empty())
+            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+        std::set<StageAxisId> linearIds;
+        std::set<LinearAxisRole> linearRoles;
+        for(const auto& target:plan.linearTargets) {
+            const auto* axis=specification_.linearAxis(target.axisId);
+            const auto* working=findWorking(activeConfiguration(),target.axisId);
+            if(!axis||!working||!axis->mechanicalTravelRange().contains(target.position)||
+               !linearIds.insert(target.axisId).second||!linearRoles.insert(axis->role()).second||
+               (!plan.refreshRestoration&&!working->effectiveRange.contains(target.position)))
+                return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+            if(axis->role()==LinearAxisRole::X)position_.x=target.position;
+            if(axis->role()==LinearAxisRole::Y)position_.y=target.position;
+            if(axis->role()==LinearAxisRole::Z)position_.z=target.position;
+        }
+        if(linearRoles.size()!=2&&linearRoles.size()!=3)
+            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+        if(!linearRoles.count(LinearAxisRole::X)||!linearRoles.count(LinearAxisRole::Y)||
+           (linearRoles.size()==3&&!linearRoles.count(LinearAxisRole::Z)))
+            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+
+        std::set<StageAxisId> rotationIds;
+        for(const auto& target:plan.rotationTargets) {
+            const auto* axis=specification_.rotationAxis(target.axisId);
+            const auto* working=findWorkingRotation(activeConfiguration(),target.axisId);
+            if(!axis||!working||!axis->mechanicalTravelRange().contains(target.angle)||
+               !rotationIds.insert(target.axisId).second||
+               (!plan.refreshRestoration&&!working->effectiveRange.contains(target.angle)))
+                return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+            const auto existing=std::find_if(position_.rotations.begin(),position_.rotations.end(),
+                [&target](const RotationAxisTarget& value){return value.axisId==target.axisId;});
+            if(existing==position_.rotations.end())position_.rotations.push_back(target);
+            else existing->angle=target.angle;
+        }
+        if(plan.refreshRestoration&&
+           (linearRoles.size()!=3||rotationIds.size()!=activeConfiguration().workingRotationAxes().size()))
+            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+        if(!plan.refreshRestoration&&linearRoles.size()==3&&
+           rotationIds.size()!=activeConfiguration().workingRotationAxes().size())
+            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+        position_.evidence=StagePositionEvidence::CommandDerived;
+    }
+    lastCompletedSequence_=plan.sequence;
+    pendingSequence_.reset();
+    return core::Status<StageModelError>::success();
+}
+
+core::Status<StageModelError> Stage::recordFailedMotion(const StageMotionPlan& plan) {
+    auto valid=validatePendingPlan(plan);
+    if(!valid) return valid;
+    invalidatePosition();
+    pendingSequence_.reset();
+    lastCompletedSequence_=plan.sequence;
+    return core::Status<StageModelError>::success();
+}
+
+void Stage::invalidatePosition() noexcept { position_=StagePositionSnapshot{}; }
+
+core::Status<StageModelError> Stage::activateConfiguration(const StageConfigurationId& id) {
+    if(pendingSequence_)
+        return core::Status<StageModelError>::failure(StageModelError::MotionInProgress);
     const auto* next=specification_.configuration(id);
-    if(!next)return core::Status<StageOperationError>::failure(error(StageModelError::ConfigurationNotFound));
-    if(id==activeConfigurationId_)return core::Status<StageOperationError>::success();
+    if(!next) return core::Status<StageModelError>::failure(StageModelError::ConfigurationNotFound);
+    if(id==activeConfigurationId_) return core::Status<StageModelError>::success();
     const auto* old=specification_.configuration(activeConfigurationId_);
     bool same=old&&old->workingLinearAxes().size()==next->workingLinearAxes().size()&&
         old->workingRotationAxes().size()==next->workingRotationAxes().size();
-    if(same){
-        for(const auto& a:old->workingLinearAxes())
-            if(!findWorking(*next,a.axisId)){same=false;break;}
-        for(const auto& a:old->workingRotationAxes())
-            if(!findWorkingRotation(*next,a.axisId)){same=false;break;}
+    if(same) {
+        for(const auto& axis:old->workingLinearAxes())
+            if(!findWorking(*next,axis.axisId)){same=false;break;}
+        for(const auto& axis:old->workingRotationAxes())
+            if(!findWorkingRotation(*next,axis.axisId)){same=false;break;}
     }
     activeConfigurationId_=id;
-    if(!same)invalidatePosition();
-    return core::Status<StageOperationError>::success();
+    if(!same) invalidatePosition();
+    return core::Status<StageModelError>::success();
 }
-const StageSpecification& Stage::specification()const noexcept{return specification_;}
-const StageConfiguration& Stage::activeConfiguration()const noexcept{
+
+const StageSpecification& Stage::specification() const noexcept{return specification_;}
+const StageConfiguration& Stage::activeConfiguration() const noexcept {
     return *specification_.configuration(activeConfigurationId_);
 }
-const StagePositionSnapshot& Stage::currentPosition()const noexcept{return position_;}
-std::optional<StageSlotId> Stage::currentSlotId()const noexcept{
+const StagePositionSnapshot& Stage::currentPosition() const noexcept{return position_;}
+std::optional<StageSlotId> Stage::currentSlotId() const noexcept {
     if(!position_.xyKnown())return std::nullopt;
-    std::optional<StageSlotId> found;
-    for(const auto& s:activeConfiguration().slots()){
-        Nanometres x0=0,x1=0,y0=0,y1=0;
-        if(!bounds(s,x0,x1,y0,y1))return std::nullopt;
-        if(*position_.x>=x0&&*position_.x<=x1&&*position_.y>=y0&&*position_.y<=y1){
-            if(found)return std::nullopt;
-            found=s.id();
+    std::optional<StageSlotId> match;
+    for(const auto& slot:activeConfiguration().slots()) {
+        Nanometres minX=0,maxX=0,minY=0,maxY=0;
+        if(!bounds(slot,minX,maxX,minY,maxY))return std::nullopt;
+        if(*position_.x>=minX&&*position_.x<=maxX&&
+           *position_.y>=minY&&*position_.y<=maxY) {
+            if(match)return std::nullopt;
+            match=slot.id();
         }
     }
-    return found;
+    return match;
 }
 } // namespace microscope::controller

@@ -173,6 +173,159 @@ void testGenericConfigurationAndAxisCommandConstruction() {
         "unspecified accuracy, precision and measurement uncertainty remain absent");
 }
 
+void testRuntimeStageProjectsFromCanonicalEquipmentSpecification() {
+    const auto xId=axisId("equipment-stage-x");
+    const auto yId=axisId("equipment-stage-y");
+    const auto zId=axisId("equipment-stage-z");
+    const auto thetaId=axisId("equipment-stage-theta");
+
+    const auto linearAxis=[](core::StageAxisId id,core::StageLinearAxisRole role,
+        double maximumMicrometres,double nominalResolutionMicrometres,
+        std::optional<core::AxisAccuracySpecification> accuracy=std::nullopt,
+        std::optional<core::AxisRepeatabilitySpecification> repeatability=std::nullopt,
+        std::optional<core::AxisMeasurementUncertaintySpecification> uncertainty=std::nullopt) {
+        auto operating=take(core::AxisOperatingRange::create(
+            0.0,maximumMicrometres,core::AxisCoordinateUnit::Micrometers));
+        auto resolution=take(core::PositiveAxisResolution::create(nominalResolutionMicrometres));
+        return take(core::AxisSpecification::create(
+            std::move(id),core::AxisMotionType::Linear,
+            core::AxisCoordinateUnit::Micrometers,std::move(operating),resolution,
+            std::move(accuracy),std::move(repeatability),std::move(uncertainty),
+            core::AxisPositionFeedbackCapability::None,std::nullopt,role));
+    };
+    const auto angularAxis=[](core::StageAxisId id,double nominalResolutionDegrees) {
+        auto operating=take(core::AxisOperatingRange::create(
+            -180.0,180.0,core::AxisCoordinateUnit::Degrees));
+        auto resolution=take(core::PositiveAxisResolution::create(nominalResolutionDegrees));
+        auto geometry=core::StageRotationAxisGeometry{
+            {10'000,20'000,30'000},core::StageRotationAxisDirection::Z};
+        return take(core::AxisSpecification::create(
+            std::move(id),core::AxisMotionType::Rotary,
+            core::AxisCoordinateUnit::Degrees,std::move(operating),resolution,
+            std::nullopt,std::nullopt,std::nullopt,
+            core::AxisPositionFeedbackCapability::Encoder,
+            core::AxisMeasurementLocation::Axis,std::nullopt,geometry));
+    };
+
+    auto accuracy=take(core::AxisAccuracySpecification::create(
+        take(core::NonNegativeAxisAccuracy::create(2.0)),
+        "verified over full linear travel"));
+    auto repeatability=take(core::AxisRepeatabilitySpecification::create(
+        take(core::NonNegativeAxisRepeatability::create(0.5)),
+        core::AxisRepeatabilityMetric::MaximumDeviation,
+        "bidirectional ten-cycle test"));
+    auto uncertainty=take(core::AxisMeasurementUncertaintySpecification::create(
+        take(core::NonNegativeAxisUncertainty::create(0.2)),
+        "external scale uncertainty budget"));
+
+    std::vector<core::AxisSpecification> axes;
+    axes.push_back(linearAxis(xId,core::StageLinearAxisRole::X,900'000.0,0.1,
+        accuracy,repeatability,uncertainty));
+    axes.push_back(linearAxis(yId,core::StageLinearAxisRole::Y,300'000.0,0.1));
+    axes.push_back(linearAxis(zId,core::StageLinearAxisRole::Z,100'000.0,0.05));
+    axes.push_back(angularAxis(thetaId,0.01));
+
+    const auto slidesId=configId("equipment-slides");
+    const auto petriId=configId("equipment-petri");
+    const auto coreNmRange=[](Nanometres minimum,Nanometres maximum) {
+        return take(core::StageNanometreRange::create(minimum,maximum));
+    };
+    const auto coreRadRange=[](Radians minimum,Radians maximum) {
+        return take(core::StageRadianRange::create(minimum,maximum));
+    };
+    std::vector<core::StageSlotSpecification> slideSlots;
+    for(int index=0;index<10;++index) {
+        const auto name="equipment-slide-slot-"+std::to_string(index+1);
+        slideSlots.push_back(take(core::StageSlotSpecification::create(
+            slotId(name.c_str()),
+            {static_cast<Nanometres>(index)*80'000'000,10'000'000},
+            coreNmRange(0,75'000'000),coreNmRange(0,25'000'000))));
+    }
+    auto slideConfiguration=take(core::StageConfigurationSpecification::create(
+        slidesId,
+        {{xId,coreNmRange(0,900'000'000)},
+         {yId,coreNmRange(0,300'000'000)},
+         {zId,coreNmRange(8'000'000,80'000'000)}},
+        {},std::move(slideSlots)));
+    auto petriSlot=take(core::StageSlotSpecification::create(
+        slotId("equipment-petri-slot"),{0,0},
+        coreNmRange(0,150'000'000),coreNmRange(0,150'000'000)));
+    auto petriConfiguration=take(core::StageConfigurationSpecification::create(
+        petriId,
+        {{xId,coreNmRange(0,900'000'000)},
+         {yId,coreNmRange(0,300'000'000)},
+         {zId,coreNmRange(2'000'000,60'000'000)}},
+        {{thetaId,coreRadRange(-1.5707963267948966,1.5707963267948966)}},
+        {std::move(petriSlot)}));
+
+    auto equipment=take(core::StageSpecification::create(
+        componentId("canonical-equipment-stage"),std::move(axes),
+        {std::move(slideConfiguration),std::move(petriConfiguration)}));
+
+    auto runtime=take(Stage::fromEquipmentSpecification(equipment,slidesId));
+    check(runtime.specification().componentId()==equipment.componentId(),
+        "runtime Stage preserves the canonical equipment component identity");
+    check(runtime.specification().linearAxes().size()==3&&
+          runtime.specification().rotationAxes().size()==1,
+        "runtime Stage projects all installed physical linear and rotary axes");
+    check(runtime.specification().configurations().size()==2&&
+          runtime.activeConfiguration().slots().size()==10,
+        "runtime Stage derives the ten-slot active configuration from equipment");
+    const auto* x=runtime.specification().linearAxis(LinearAxisRole::X);
+    check(x&&x->mechanicalTravelRange().maximum()==900'000'000&&
+          x->minimumIncrement()==100,
+        "converts X mechanical travel and nominal resolution from micrometres to nanometres");
+    check(x&&x->accuracy()==std::optional<Nanometres>(2'000)&&
+          x->precision()==std::optional<Nanometres>(500)&&
+          x->measurementUncertainty()==std::optional<Nanometres>(200),
+        "projects accuracy, repeatability-derived precision and uncertainty without conflating them");
+    const auto* y=runtime.specification().linearAxis(LinearAxisRole::Y);
+    check(y&&!y->accuracy()&&!y->precision()&&!y->measurementUncertainty(),
+        "does not invent zero accuracy, precision or uncertainty when equipment has not specified them");
+    const auto* theta=runtime.specification().rotationAxis(thetaId);
+    check(theta&&theta->geometry().pointOnAxis.x==10'000&&
+          theta->geometry().pointOnAxis.y==20'000&&
+          theta->geometry().pointOnAxis.z==30'000,
+        "preserves the rotary axis line geometry from the equipment definition");
+    check(theta&&std::abs(theta->minimumIncrement()-0.00017453292519943296)<1e-15,
+        "converts angular nominal resolution from degrees to radians");
+
+    auto petriRuntime=take(Stage::fromEquipmentSpecification(equipment,petriId));
+    check(petriRuntime.activeConfiguration().slots().size()==1&&
+          petriRuntime.activeConfiguration().workingRotationAxes().size()==1&&
+          petriRuntime.activeConfiguration().workingLinearAxes()[2].effectiveRange.minimum()==2'000'000,
+        "projects the one-slot Petri configuration with its distinct Z and optional rotation settings");
+    check(!Stage::fromEquipmentSpecification(
+        equipment,configId("equipment-missing-configuration"))&&
+        Stage::fromEquipmentSpecification(
+            equipment,configId("equipment-missing-configuration")).error()==
+                StageModelError::MissingEquipmentConfiguration,
+        "rejects runtime construction for a configuration absent from installed equipment");
+
+    auto subNanometreAxes=equipment.axes();
+    std::vector<core::AxisSpecification> alteredAxes;
+    alteredAxes.reserve(subNanometreAxes.size());
+    for(const auto& axis:subNanometreAxes) {
+        if(axis.id()!=xId) {
+            alteredAxes.push_back(axis);
+            continue;
+        }
+        auto resolution=take(core::PositiveAxisResolution::create(0.0001));
+        alteredAxes.push_back(take(core::AxisSpecification::create(
+            axis.id(),axis.motionType(),axis.coordinateUnit(),axis.operatingRange(),
+            resolution,axis.accuracy(),axis.repeatability(),axis.measurementUncertainty(),
+            axis.positionFeedback(),axis.measurementLocation(),axis.linearRole(),
+            axis.rotationGeometry())));
+    }
+    auto subNanometreEquipment=take(core::StageSpecification::create(
+        equipment.componentId(),std::move(alteredAxes),equipment.configurations()));
+    const auto unrepresentable=Stage::fromEquipmentSpecification(
+        subNanometreEquipment,slidesId);
+    check(!unrepresentable&&
+          unrepresentable.error()==StageModelError::EquipmentCoordinateNotRepresentable,
+        "rejects a nominal linear increment below the runtime model's one-nanometre resolution");
+}
+
 void testHomeRequiresExactCompletionAndReferenceAxes() {
     StageConfigurationId slides=configId("slides");
     StageConfigurationId petri=configId("petri");
@@ -371,6 +524,7 @@ void testMicroscopeInstanceOwnsStage() {
 
 int main() {
     testGenericConfigurationAndAxisCommandConstruction();
+    testRuntimeStageProjectsFromCanonicalEquipmentSpecification();
     testHomeRequiresExactCompletionAndReferenceAxes();
     testCorrelatedMotionPlansAndCurrentSlot();
     testFailedMotionInvalidatesPosition();

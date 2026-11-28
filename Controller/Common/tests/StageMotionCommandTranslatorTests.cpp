@@ -73,6 +73,82 @@ core::AxisSpecification equipmentAxis(
         core::AxisPositionFeedbackCapability::None));
 }
 
+core::AxisSpecification equipmentAxisFromController(
+    const LinearAxis& axis) {
+    const auto& range=axis.mechanicalTravelRange();
+    auto operating=take(core::AxisOperatingRange::create(
+        static_cast<double>(range.minimum())/1'000.0,
+        static_cast<double>(range.maximum())/1'000.0,
+        core::AxisCoordinateUnit::Micrometers));
+    auto resolution=take(core::PositiveAxisResolution::create(0.1));
+    const auto role=axis.role()==LinearAxisRole::X?core::StageLinearAxisRole::X:
+        axis.role()==LinearAxisRole::Y?core::StageLinearAxisRole::Y:
+        core::StageLinearAxisRole::Z;
+    return take(core::AxisSpecification::create(
+        axis.id(),core::AxisMotionType::Linear,core::AxisCoordinateUnit::Micrometers,
+        std::move(operating),resolution,std::nullopt,std::nullopt,std::nullopt,
+        core::AxisPositionFeedbackCapability::None,std::nullopt,role));
+}
+core::AxisSpecification equipmentAxisFromController(
+    const RotationAxis& axis) {
+    constexpr double degreesPerRadian=57.2957795130823208768;
+    const auto& range=axis.mechanicalTravelRange();
+    auto operating=take(core::AxisOperatingRange::create(
+        range.minimum()*degreesPerRadian,range.maximum()*degreesPerRadian,
+        core::AxisCoordinateUnit::Degrees));
+    auto resolution=take(core::PositiveAxisResolution::create(0.01));
+    const auto direction=axis.geometry().direction==RotationAxisDirection::X
+        ?core::StageRotationAxisDirection::X
+        :axis.geometry().direction==RotationAxisDirection::Y
+            ?core::StageRotationAxisDirection::Y:core::StageRotationAxisDirection::Z;
+    const auto& point=axis.geometry().pointOnAxis;
+    return take(core::AxisSpecification::create(
+        axis.id(),core::AxisMotionType::Rotary,core::AxisCoordinateUnit::Degrees,
+        std::move(operating),resolution,std::nullopt,std::nullopt,std::nullopt,
+        core::AxisPositionFeedbackCapability::None,std::nullopt,std::nullopt,
+        core::StageRotationAxisGeometry{{point.x,point.y,point.z},direction}));
+}
+core::StageSpecification equipmentStageFromController(
+    const StageSpecification& source,bool changeFirstSlotWidth=false) {
+    std::vector<core::AxisSpecification> axes;
+    for(const auto& axis:source.linearAxes())
+        axes.push_back(equipmentAxisFromController(axis));
+    for(const auto& axis:source.rotationAxes())
+        axes.push_back(equipmentAxisFromController(axis));
+
+    std::vector<core::StageConfigurationSpecification> configurations;
+    for(const auto& config:source.configurations()) {
+        std::vector<core::StageWorkingLinearAxisSpecification> linear;
+        std::vector<core::StageWorkingRotationAxisSpecification> rotary;
+        std::vector<core::StageSlotSpecification> slots;
+        for(const auto& axis:config.workingLinearAxes()) {
+            linear.push_back({axis.axisId,take(core::StageNanometreRange::create(
+                axis.effectiveRange.minimum(),axis.effectiveRange.maximum()))});
+        }
+        for(const auto& axis:config.workingRotationAxes()) {
+            rotary.push_back({axis.axisId,take(core::StageRadianRange::create(
+                axis.effectiveRange.minimum(),axis.effectiveRange.maximum()))});
+        }
+        for(std::size_t index=0;index<config.slots().size();++index) {
+            const auto& slot=config.slots()[index];
+            auto xMaximum=slot.xRange().maximum();
+            if(changeFirstSlotWidth&&config.id()==configId("slides")&&index==0)
+                --xMaximum;
+            const auto& origin=slot.originInStageCoordinates();
+            slots.push_back(take(core::StageSlotSpecification::create(
+                slot.id(),{origin.x,origin.y},
+                take(core::StageNanometreRange::create(
+                    slot.xRange().minimum(),xMaximum)),
+                take(core::StageNanometreRange::create(
+                    slot.yRange().minimum(),slot.yRange().maximum())))));
+        }
+        configurations.push_back(take(core::StageConfigurationSpecification::create(
+            config.id(),std::move(linear),std::move(rotary),std::move(slots))));
+    }
+    return take(core::StageSpecification::create(
+        source.componentId(),std::move(axes),std::move(configurations)));
+}
+
 struct Fixture final {
     Stage stage;
     core::StageSpecification installedStage;
@@ -197,6 +273,25 @@ void testRejectsControllerEquipmentAxisMismatch() {
         "rejects plans containing an axis absent from the installed equipment definition");
 }
 
+void testCanonicalEquipmentConfigurationMustMatchRuntimeStage() {
+    auto fixture=makeFixture();
+    auto home=take(fixture.stage.home());
+    const auto equipment=equipmentStageFromController(fixture.stage.specification());
+    const auto accepted=StageMotionCommandTranslator::translate(
+        home,fixture.stage,equipment);
+    check(static_cast<bool>(accepted),
+        "accepts runtime Stage configuration projected from the same equipment definition");
+
+    const auto altered=equipmentStageFromController(fixture.stage.specification(),true);
+    const auto rejected=StageMotionCommandTranslator::translate(
+        home,fixture.stage,altered);
+    check(!rejected&&
+          rejected.error()==StageMotionTranslationError::EquipmentConfigurationMismatch,
+        "rejects a persisted equipment slot whose usable width differs from runtime geometry");
+    check(static_cast<bool>(fixture.stage.cancelUndispatchedPlan(home)),
+        "configuration mismatch leaves the pending Stage plan available for explicit cancellation");
+}
+
 void testRejectsMechanicalRangeMismatch() {
     auto fixture=makeFixture();
     auto home=take(fixture.stage.home());
@@ -241,6 +336,7 @@ int main() {
     testLinearNanometresConvertToInstalledEquipmentUnit();
     testRadiansConvertToInstalledDegrees();
     testRejectsControllerEquipmentAxisMismatch();
+    testCanonicalEquipmentConfigurationMustMatchRuntimeStage();
     testRejectsMechanicalRangeMismatch();
     testRejectsTamperedPlanBeforeEquipmentTranslation();
     if(failures) {

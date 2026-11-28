@@ -7,7 +7,11 @@ not define a second hardware-driver interface.
 ## Object ownership
 
 `MicroscopeInstance` owns one live `Stage` and an explicit runtime `DeviceId`
-binding for the physical Stage controller. The binding is distinct from the
+binding for the physical Stage controller. Construct that runtime Stage with
+`Stage::fromEquipmentSpecification(coreStage, activeConfigurationId)`: this is
+the one-way projection from persisted Core equipment into runtime mechanics,
+so axes, geometry, configuration ranges and StageSlots are not separately
+re-authored in Controller. The binding is distinct from the
 Stage's equipment `EquipmentComponentId`; the dispatcher checks the runtime
 microscope ID and the bound Stage device ID independently. The Stage owns its installed
 `LinearAxis` and `RotationAxis` objects, available `StageConfiguration`
@@ -23,7 +27,11 @@ other holders are all represented by the same N-slot model.
 All linear positions, travel ranges, slot dimensions, accuracy, precision,
 minimum increments and measurement uncertainty use integer nanometres.
 Minimum increment, accuracy, precision and measurement uncertainty are stored
-independently; unavailable measurement uncertainty is not replaced with zero.
+independently; unavailable measurements remain absent rather than becoming
+zero. The Core equipment axis's nominal resolution supplies the runtime
+minimum increment. Accuracy maps from the independent maximum absolute error;
+precision maps from the repeatability value (the original metric and test
+conditions remain in the canonical Core specification).
 Rotation uses radians. A rotation axis is
 specified by a point in global stage XYZ coordinates and a cardinal direction
 (X, Y, or Z). Rotary accuracy, precision, minimum increment and measurement

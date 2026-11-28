@@ -1,4 +1,5 @@
 #include "controller/stage/Stage.h"
+#include "controller/stage/StageMotionCommandTranslator.h"
 #include "controller/MicroscopeInstance.h"
 #include <cmath>
 #include <iostream>
@@ -263,6 +264,14 @@ void testRuntimeStageProjectsFromCanonicalEquipmentSpecification() {
         {std::move(slideConfiguration),std::move(petriConfiguration)}));
 
     auto runtime=take(Stage::fromEquipmentSpecification(equipment,slidesId));
+    auto equipmentHome=take(runtime.home());
+    const auto translatedHome=StageMotionCommandTranslator::translate(
+        equipmentHome,runtime,equipment);
+    check(translatedHome&&
+          std::holds_alternative<core::HomeAxes>(translatedHome.value().command),
+        "the projected runtime Stage translates directly against its source equipment definition");
+    check(static_cast<bool>(runtime.cancelUndispatchedPlan(equipmentHome)),
+        "a non-dispatched projection test plan is explicitly cancelled");
     check(runtime.specification().componentId()==equipment.componentId(),
         "runtime Stage preserves the canonical equipment component identity");
     check(runtime.specification().linearAxes().size()==3&&

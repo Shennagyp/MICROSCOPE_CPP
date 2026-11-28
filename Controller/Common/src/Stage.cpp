@@ -58,6 +58,24 @@ const WorkingRotationAxis* findWorkingRotation(const StageConfiguration& c,
         [&id](const WorkingRotationAxis& w){return w.axisId==id;});
     return i==c.workingRotationAxes().end()?nullptr:&*i;
 }
+bool samePlan(const StageMotionPlan& left,const StageMotionPlan& right) noexcept {
+    if(left.sequence!=right.sequence ||
+       left.configurationId!=right.configurationId ||
+       left.action!=right.action ||
+       left.axesToHome!=right.axesToHome ||
+       left.refreshRestoration!=right.refreshRestoration ||
+       left.linearTargets.size()!=right.linearTargets.size() ||
+       left.rotationTargets.size()!=right.rotationTargets.size()) return false;
+    for(std::size_t i=0;i<left.linearTargets.size();++i) {
+        if(left.linearTargets[i].axisId!=right.linearTargets[i].axisId ||
+           left.linearTargets[i].position!=right.linearTargets[i].position) return false;
+    }
+    for(std::size_t i=0;i<left.rotationTargets.size();++i) {
+        if(left.rotationTargets[i].axisId!=right.rotationTargets[i].axisId ||
+           left.rotationTargets[i].angle!=right.rotationTargets[i].angle) return false;
+    }
+    return true;
+}
 } // namespace
 
 NanometreRange::NanometreRange(Nanometres a,Nanometres b) noexcept:minimum_(a),maximum_(b){}
@@ -276,8 +294,10 @@ const WorkingLinearAxis* Stage::workingLinearAxis(LinearAxisRole role) const noe
 }
 
 core::Result<StageMotionPlan,StageModelError> Stage::home() {
-    if(pendingSequence_)
+    if(pendingPlan_)
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
+    if(nextSequence_==std::numeric_limits<std::uint64_t>::max())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionSequenceExhausted);
     StageMotionPlan plan;
     plan.sequence=nextSequence_++;
     plan.configurationId=activeConfigurationId_;
@@ -292,7 +312,7 @@ core::Result<StageMotionPlan,StageModelError> Stage::home() {
         if(!axis) return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::UnknownWorkingAxis);
         plan.axesToHome.push_back(axis->homeCommand());
     }
-    pendingSequence_=plan.sequence;
+    pendingPlan_=plan;
     return core::Result<StageMotionPlan,StageModelError>::success(std::move(plan));
 }
 
@@ -313,8 +333,10 @@ core::Result<StageRefreshPlan,StageModelError> Stage::refreshPosition() {
 core::Result<StageMotionPlan,StageModelError> Stage::createMovePlan(
     std::vector<LinearAxisTarget> linearTargets,
     std::vector<RotationAxisTarget> rotationTargets,bool restoration) {
-    if(pendingSequence_)
+    if(pendingPlan_)
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
+    if(nextSequence_==std::numeric_limits<std::uint64_t>::max())
+        return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionSequenceExhausted);
     if(linearTargets.empty())
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::StaleMotionPlan);
     StageMotionPlan plan;
@@ -324,17 +346,17 @@ core::Result<StageMotionPlan,StageModelError> Stage::createMovePlan(
     plan.linearTargets=std::move(linearTargets);
     plan.rotationTargets=std::move(rotationTargets);
     plan.refreshRestoration=restoration;
-    pendingSequence_=plan.sequence;
+    pendingPlan_=plan;
     return core::Result<StageMotionPlan,StageModelError>::success(std::move(plan));
 }
 
 core::Result<StageMotionPlan,StageModelError> Stage::restorePositionAfterRefresh(
     const StageRefreshPlan& refresh) {
-    if(pendingSequence_||refresh.configurationId!=activeConfigurationId_||
+    if(pendingPlan_||refresh.configurationId!=activeConfigurationId_||
        refresh.homePlan.action!=StageMotionAction::Home||
        !refresh.homePlan.configurationId||
        *refresh.homePlan.configurationId!=activeConfigurationId_||
-       !lastCompletedSequence_||*lastCompletedSequence_!=refresh.homePlan.sequence||
+       !lastCompletedPlan_||!samePlan(*lastCompletedPlan_,refresh.homePlan)||
        position_.evidence!=StagePositionEvidence::HomingReference)
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::RefreshNotReady);
 
@@ -369,7 +391,7 @@ core::Result<StageMotionPlan,StageModelError> Stage::moveTo(
     SlotRelativePosition position,const StageSlotId& slotId) {
     if(!position_.xyKnown())
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::PositionUnknown);
-    if(pendingSequence_)
+    if(pendingPlan_)
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
 
     const auto& config=activeConfiguration();
@@ -402,7 +424,7 @@ core::Result<StageMotionPlan,StageModelError> Stage::moveTo(
     if(!position_.xyzKnown()||
        position_.rotations.size()!=activeConfiguration().workingRotationAxes().size())
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::PositionUnknown);
-    if(pendingSequence_)
+    if(pendingPlan_)
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
 
     std::vector<LinearAxisTarget> linear;
@@ -465,7 +487,7 @@ core::Result<StageMotionPlan,StageModelError> Stage::moveBy(
 }
 
 core::Status<StageModelError> Stage::validatePendingPlan(const StageMotionPlan& plan) const {
-    if(!pendingSequence_||*pendingSequence_!=plan.sequence||
+    if(!pendingPlan_||!samePlan(*pendingPlan_,plan)||
        !plan.configurationId||*plan.configurationId!=activeConfigurationId_)
         return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
     return core::Status<StageModelError>::success();
@@ -474,65 +496,94 @@ core::Status<StageModelError> Stage::validatePendingPlan(const StageMotionPlan& 
 core::Status<StageModelError> Stage::recordCompletedMotion(const StageMotionPlan& plan) {
     auto valid=validatePendingPlan(plan);
     if(!valid) return valid;
+    if(plan.action==StageMotionAction::Home)
+        return core::Status<StageModelError>::failure(
+            StageModelError::HomeReferenceEvidenceRequired);
+    if(!plan.axesToHome.empty()||plan.linearTargets.empty())
+        return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
 
-    if(plan.action==StageMotionAction::Home) {
-        std::set<StageAxisId> requested(plan.axesToHome.begin(),plan.axesToHome.end());
-        std::set<StageAxisId> expected;
-        for(const auto& axis:activeConfiguration().workingLinearAxes()) expected.insert(axis.axisId);
-        for(const auto& axis:activeConfiguration().workingRotationAxes()) expected.insert(axis.axisId);
-        if(!plan.linearTargets.empty()||!plan.rotationTargets.empty()||plan.refreshRestoration||
-           requested.size()!=plan.axesToHome.size()||requested!=expected)
+    // Validate against a copy first. Invalid or tampered completion payloads
+    // must never partially mutate the authoritative position snapshot.
+    StagePositionSnapshot nextPosition=position_;
+    std::set<StageAxisId> linearIds;
+    std::set<LinearAxisRole> linearRoles;
+    for(const auto& target:plan.linearTargets) {
+        const auto* axis=specification_.linearAxis(target.axisId);
+        const auto* working=findWorking(activeConfiguration(),target.axisId);
+        if(!axis||!working||!axis->mechanicalTravelRange().contains(target.position)||
+           !linearIds.insert(target.axisId).second||
+           !linearRoles.insert(axis->role()).second||
+           (!plan.refreshRestoration&&!working->effectiveRange.contains(target.position)))
             return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-        position_=StagePositionSnapshot{};
-        position_.x=0;position_.y=0;position_.z=0;
-        for(const auto& working:activeConfiguration().workingRotationAxes())
-            position_.rotations.push_back({working.axisId,0.0});
-        position_.evidence=StagePositionEvidence::HomingReference;
-    } else {
-        if(!plan.axesToHome.empty()||plan.linearTargets.empty())
-            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-        std::set<StageAxisId> linearIds;
-        std::set<LinearAxisRole> linearRoles;
-        for(const auto& target:plan.linearTargets) {
-            const auto* axis=specification_.linearAxis(target.axisId);
-            const auto* working=findWorking(activeConfiguration(),target.axisId);
-            if(!axis||!working||!axis->mechanicalTravelRange().contains(target.position)||
-               !linearIds.insert(target.axisId).second||!linearRoles.insert(axis->role()).second||
-               (!plan.refreshRestoration&&!working->effectiveRange.contains(target.position)))
-                return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-            if(axis->role()==LinearAxisRole::X)position_.x=target.position;
-            if(axis->role()==LinearAxisRole::Y)position_.y=target.position;
-            if(axis->role()==LinearAxisRole::Z)position_.z=target.position;
-        }
-        if(linearRoles.size()!=2&&linearRoles.size()!=3)
-            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-        if(!linearRoles.count(LinearAxisRole::X)||!linearRoles.count(LinearAxisRole::Y)||
-           (linearRoles.size()==3&&!linearRoles.count(LinearAxisRole::Z)))
-            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-
-        std::set<StageAxisId> rotationIds;
-        for(const auto& target:plan.rotationTargets) {
-            const auto* axis=specification_.rotationAxis(target.axisId);
-            const auto* working=findWorkingRotation(activeConfiguration(),target.axisId);
-            if(!axis||!working||!axis->mechanicalTravelRange().contains(target.angle)||
-               !rotationIds.insert(target.axisId).second||
-               (!plan.refreshRestoration&&!working->effectiveRange.contains(target.angle)))
-                return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-            const auto existing=std::find_if(position_.rotations.begin(),position_.rotations.end(),
-                [&target](const RotationAxisTarget& value){return value.axisId==target.axisId;});
-            if(existing==position_.rotations.end())position_.rotations.push_back(target);
-            else existing->angle=target.angle;
-        }
-        if(plan.refreshRestoration&&
-           (linearRoles.size()!=3||rotationIds.size()!=activeConfiguration().workingRotationAxes().size()))
-            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-        if(!plan.refreshRestoration&&linearRoles.size()==3&&
-           rotationIds.size()!=activeConfiguration().workingRotationAxes().size())
-            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
-        position_.evidence=StagePositionEvidence::CommandDerived;
+        if(axis->role()==LinearAxisRole::X) nextPosition.x=target.position;
+        if(axis->role()==LinearAxisRole::Y) nextPosition.y=target.position;
+        if(axis->role()==LinearAxisRole::Z) nextPosition.z=target.position;
     }
-    lastCompletedSequence_=plan.sequence;
-    pendingSequence_.reset();
+
+    const bool isSlotXYMove=linearRoles.size()==2&&
+        linearRoles.count(LinearAxisRole::X)!=0&&linearRoles.count(LinearAxisRole::Y)!=0;
+    const bool isFullXYZMove=linearRoles.size()==3&&
+        linearRoles.count(LinearAxisRole::X)!=0&&linearRoles.count(LinearAxisRole::Y)!=0&&
+        linearRoles.count(LinearAxisRole::Z)!=0;
+    if((!isSlotXYMove&&!isFullXYZMove)||(plan.refreshRestoration&&!isFullXYZMove))
+        return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+
+    std::set<StageAxisId> rotationIds;
+    for(const auto& target:plan.rotationTargets) {
+        const auto* axis=specification_.rotationAxis(target.axisId);
+        const auto* working=findWorkingRotation(activeConfiguration(),target.axisId);
+        if(!axis||!working||!axis->mechanicalTravelRange().contains(target.angle)||
+           !rotationIds.insert(target.axisId).second||
+           (!plan.refreshRestoration&&!working->effectiveRange.contains(target.angle)))
+            return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+        const auto existing=std::find_if(nextPosition.rotations.begin(),nextPosition.rotations.end(),
+            [&target](const RotationAxisTarget& value){return value.axisId==target.axisId;});
+        if(existing==nextPosition.rotations.end()) nextPosition.rotations.push_back(target);
+        else existing->angle=target.angle;
+    }
+
+    const auto expectedRotations=activeConfiguration().workingRotationAxes().size();
+    if((isSlotXYMove&&!plan.rotationTargets.empty())||
+       (isFullXYZMove&&rotationIds.size()!=expectedRotations))
+        return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+
+    nextPosition.evidence=StagePositionEvidence::CommandDerived;
+    position_=std::move(nextPosition);
+    lastCompletedPlan_=plan;
+    pendingPlan_.reset();
+    return core::Status<StageModelError>::success();
+}
+
+core::Status<StageModelError> Stage::recordCompletedHome(
+    const StageMotionPlan& plan,
+    const core::StageHomeReferenceObservation& observation) {
+    auto valid=validatePendingPlan(plan);
+    if(!valid) return valid;
+    if(plan.action!=StageMotionAction::Home||!plan.linearTargets.empty()||
+       !plan.rotationTargets.empty()||plan.refreshRestoration)
+        return core::Status<StageModelError>::failure(StageModelError::StaleMotionPlan);
+
+    std::vector<StageAxisId> expected;
+    expected.reserve(activeConfiguration().workingLinearAxes().size()+
+        activeConfiguration().workingRotationAxes().size());
+    for(const auto& axis:activeConfiguration().workingLinearAxes()) expected.push_back(axis.axisId);
+    for(const auto& axis:activeConfiguration().workingRotationAxes()) expected.push_back(axis.axisId);
+    auto expectedSet=core::StageAxisSet::create(std::move(expected));
+    if(!expectedSet||!observation.matchesAxes(expectedSet.value()))
+        return core::Status<StageModelError>::failure(
+            StageModelError::InvalidHomeReferenceEvidence);
+
+    StagePositionSnapshot nextPosition;
+    nextPosition.x=0;
+    nextPosition.y=0;
+    nextPosition.z=0;
+    for(const auto& working:activeConfiguration().workingRotationAxes())
+        nextPosition.rotations.push_back({working.axisId,0.0});
+    nextPosition.evidence=StagePositionEvidence::HomingReference;
+
+    position_=std::move(nextPosition);
+    lastCompletedPlan_=plan;
+    pendingPlan_.reset();
     return core::Status<StageModelError>::success();
 }
 
@@ -540,15 +591,15 @@ core::Status<StageModelError> Stage::recordFailedMotion(const StageMotionPlan& p
     auto valid=validatePendingPlan(plan);
     if(!valid) return valid;
     invalidatePosition();
-    pendingSequence_.reset();
-    lastCompletedSequence_=plan.sequence;
+    pendingPlan_.reset();
+    lastCompletedPlan_=plan;
     return core::Status<StageModelError>::success();
 }
 
 void Stage::invalidatePosition() noexcept { position_=StagePositionSnapshot{}; }
 
 core::Status<StageModelError> Stage::activateConfiguration(const StageConfigurationId& id) {
-    if(pendingSequence_)
+    if(pendingPlan_)
         return core::Status<StageModelError>::failure(StageModelError::MotionInProgress);
     const auto* next=specification_.configuration(id);
     if(!next) return core::Status<StageModelError>::failure(StageModelError::ConfigurationNotFound);

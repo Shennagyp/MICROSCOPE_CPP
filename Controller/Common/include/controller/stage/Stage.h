@@ -1,5 +1,6 @@
 #pragma once
 #include "microscope/core/ids/Ids.h"
+#include "microscope/core/motion/StageMotionPort.h"
 #include "microscope/core/result/Result.h"
 #include <cstdint>
 #include <optional>
@@ -20,7 +21,8 @@ enum class StageModelError {
     EffectiveRangeOutsideMechanicalRange, SlotOutsideWorkingRange, OverlappingSlots,
     NoSlots, ConfigurationNotFound, PositionUnknown, TargetOutsideWorkingRange,
     TargetOutsideSlot, RotationTargetMismatch, CoordinateOverflow, MotionInProgress,
-    StaleMotionPlan, RefreshNotReady
+    StaleMotionPlan, RefreshNotReady, HomeReferenceEvidenceRequired,
+    InvalidHomeReferenceEvidence, MotionSequenceExhausted
 };
 
 class NanometreRange final {
@@ -210,7 +212,12 @@ public:
     core::Result<StageMotionPlan,StageModelError> moveTo(const StageAbsolutePosition&);
     core::Result<StageMotionPlan,StageModelError> moveBy(const StageDisplacement&);
 
+    // A MoveTo changes the estimate only after its exact completion is accepted.
+    // A home additionally requires the normalized machine-reference fact.
     core::Status<StageModelError> recordCompletedMotion(const StageMotionPlan&);
+    core::Status<StageModelError> recordCompletedHome(
+        const StageMotionPlan&,
+        const core::StageHomeReferenceObservation&);
     core::Status<StageModelError> recordFailedMotion(const StageMotionPlan&);
     void invalidatePosition() noexcept;
     core::Status<StageModelError> activateConfiguration(const StageConfigurationId&);
@@ -231,7 +238,7 @@ private:
     StageConfigurationId activeConfigurationId_;
     StagePositionSnapshot position_;
     std::uint64_t nextSequence_=1;
-    std::optional<std::uint64_t> pendingSequence_;
-    std::optional<std::uint64_t> lastCompletedSequence_;
+    std::optional<StageMotionPlan> pendingPlan_;
+    std::optional<StageMotionPlan> lastCompletedPlan_;
 };
 } // namespace microscope::controller

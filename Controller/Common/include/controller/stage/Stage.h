@@ -70,6 +70,8 @@ public:
     const StageAxisId& id() const noexcept;
     LinearAxisRole role() const noexcept;
     const NanometreRange& mechanicalTravelRange() const noexcept;
+    // Minimum commandable increment, accuracy, precision and measurement
+    // uncertainty are independent equipment properties, all in nanometres.
     Nanometres minimumIncrement() const noexcept;
     Nanometres accuracy() const noexcept;
     Nanometres precision() const noexcept;
@@ -104,6 +106,8 @@ public:
     const StageAxisId& id() const noexcept;
     const RotationAxisGeometry& geometry() const noexcept;
     const RadianRange& mechanicalTravelRange() const noexcept;
+    // Angular increment, accuracy, precision and measurement uncertainty
+    // are independent equipment properties, all in radians.
     Radians minimumIncrement() const noexcept;
     Radians accuracy() const noexcept;
     Radians precision() const noexcept;

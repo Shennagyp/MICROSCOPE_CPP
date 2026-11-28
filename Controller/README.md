@@ -18,7 +18,10 @@ other holders are all represented by the same N-slot model.
 ## Coordinates and mechanical properties
 
 All linear positions, travel ranges, slot dimensions, accuracy, precision,
-minimum increments and measurement uncertainty use integer nanometres. Rotation uses radians. A rotation axis is
+minimum increments and measurement uncertainty use integer nanometres.
+Minimum increment, accuracy, precision and measurement uncertainty are stored
+independently; unavailable measurement uncertainty is not replaced with zero.
+Rotation uses radians. A rotation axis is
 specified by a point in global stage XYZ coordinates and a cardinal direction
 (X, Y, or Z). Rotary accuracy, precision, minimum increment and measurement
 uncertainty use radians.
@@ -31,7 +34,7 @@ XY position; there is no separately mutable current-slot field.
 
 ## Motion and completion lifecycle
 
-The Stage and axis objects create immutable `StageMotionPlan` values. A plan
+The Stage and axis objects create typed `StageMotionPlan` values. A plan
 has a monotonically increasing sequence and the active configuration identity.
 Only one plan can be pending for a Stage at a time. The translator validates
 that the plan is exactly the live Stage's pending plan before generating Core
@@ -46,7 +49,8 @@ not treated as physical completion.
 After the runtime correlates the exact Core `StageMotionActionCompletion`,
 the host passes that fact to `Stage::recordCompletedMotion`. The Stage checks
 the action type and exact axis set before atomically applying command-derived
-position state. An uncertain or failed execution is sent to
+position state. That state is a command-derived estimate, not a measured
+position; subsequent Core position observations remain a separate feedback fact. An uncertain or failed execution is sent to
 `recordFailedMotion`, which invalidates position. A definite pre-submission
 or adapter rejection cancels the pending plan without changing known position.
 
@@ -67,7 +71,10 @@ itself establish a valid global coordinate origin.
 - `home()`: plan homing of every axis used by the active configuration.
 - `refreshPosition()`: capture the saved global position and produce a home
   plan; after the home action and reference observation are accepted,
-  `restorePositionAfterRefresh()` produces the return movement plan.
+  `restorePositionAfterRefresh()` produces the return movement plan. Refresh
+changes neither mechanical calibration nor slot geometry; it is a home-and-
+return position-reference operation. The separate `calibrate()` procedure is
+not implemented by this Stage command model yet.
 
 ## Equipment-unit boundary
 

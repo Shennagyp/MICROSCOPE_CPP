@@ -267,5 +267,7 @@ private:
     std::uint64_t nextSequence_=1;
     std::optional<StageMotionPlan> pendingPlan_;
     std::optional<StageMotionPlan> lastCompletedPlan_;
+    // Private authoritative copy prevents callers from redirecting refresh restoration.
+    std::optional<StageRefreshPlan> pendingRefresh_;
 };
 } // namespace microscope::controller

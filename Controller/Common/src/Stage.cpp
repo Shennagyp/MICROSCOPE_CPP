@@ -129,6 +129,22 @@ bool samePlan(const StageMotionPlan& left,const StageMotionPlan& right) noexcept
     }
     return true;
 }
+bool sameRefresh(const StageRefreshPlan& left,const StageRefreshPlan& right) noexcept {
+    if(left.configurationId!=right.configurationId||
+       !samePlan(left.homePlan,right.homePlan)||
+       left.restorePosition.linear.x!=right.restorePosition.linear.x||
+       left.restorePosition.linear.y!=right.restorePosition.linear.y||
+       left.restorePosition.linear.z!=right.restorePosition.linear.z||
+       left.restorePosition.rotations.size()!=right.restorePosition.rotations.size())
+        return false;
+    for(std::size_t i=0;i<left.restorePosition.rotations.size();++i) {
+        const auto& a=left.restorePosition.rotations[i];
+        const auto& b=right.restorePosition.rotations[i];
+        if(a.axisId!=b.axisId||a.angle!=b.angle) return false;
+    }
+    return true;
+}
+
 bool sameAxisSet(
     const core::StageAxisSet& actual,
     const std::vector<StageAxisId>& expected) {
@@ -554,6 +570,7 @@ const WorkingLinearAxis* Stage::workingLinearAxis(LinearAxisRole role) const noe
 core::Result<StageMotionPlan,StageModelError> Stage::home() {
     if(pendingPlan_)
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionInProgress);
+    pendingRefresh_.reset();
     if(nextSequence_==std::numeric_limits<std::uint64_t>::max())
         return core::Result<StageMotionPlan,StageModelError>::failure(StageModelError::MotionSequenceExhausted);
     StageMotionPlan plan;
@@ -584,8 +601,10 @@ core::Result<StageRefreshPlan,StageModelError> Stage::refreshPosition() {
     auto homePlan=home();
     if(!homePlan)
         return core::Result<StageRefreshPlan,StageModelError>::failure(homePlan.error());
-    return core::Result<StageRefreshPlan,StageModelError>::success(
-        StageRefreshPlan{std::move(homePlan).value(),std::move(saved),activeConfigurationId_});
+    StageRefreshPlan refresh{
+        std::move(homePlan).value(),std::move(saved),activeConfigurationId_};
+    pendingRefresh_=refresh;
+    return core::Result<StageRefreshPlan,StageModelError>::success(std::move(refresh));
 }
 
 core::Result<StageMotionPlan,StageModelError> Stage::createMovePlan(
@@ -604,13 +623,15 @@ core::Result<StageMotionPlan,StageModelError> Stage::createMovePlan(
     plan.linearTargets=std::move(linearTargets);
     plan.rotationTargets=std::move(rotationTargets);
     plan.refreshRestoration=restoration;
+    if(!restoration) pendingRefresh_.reset();
     pendingPlan_=plan;
     return core::Result<StageMotionPlan,StageModelError>::success(std::move(plan));
 }
 
 core::Result<StageMotionPlan,StageModelError> Stage::restorePositionAfterRefresh(
     const StageRefreshPlan& refresh) {
-    if(pendingPlan_||refresh.configurationId!=activeConfigurationId_||
+    if(pendingPlan_||!pendingRefresh_||!sameRefresh(*pendingRefresh_,refresh)||
+       refresh.configurationId!=activeConfigurationId_||
        refresh.homePlan.action!=StageMotionAction::Home||
        !refresh.homePlan.configurationId||
        *refresh.homePlan.configurationId!=activeConfigurationId_||
@@ -757,6 +778,7 @@ core::Status<StageModelError> Stage::validateForDispatch(const StageMotionPlan& 
 core::Status<StageModelError> Stage::cancelUndispatchedPlan(const StageMotionPlan& plan) {
     auto valid=validatePendingPlan(plan);
     if(!valid) return valid;
+    if(plan.action==StageMotionAction::Home) pendingRefresh_.reset();
     pendingPlan_.reset();
     return core::Status<StageModelError>::success();
 }
@@ -825,6 +847,7 @@ core::Status<StageModelError> Stage::recordCompletedMotion(
     nextPosition.evidence=StagePositionEvidence::CommandDerived;
     position_=std::move(nextPosition);
     lastCompletedPlan_=plan;
+    if(plan.refreshRestoration) pendingRefresh_.reset();
     pendingPlan_.reset();
     return core::Status<StageModelError>::success();
 }
@@ -888,6 +911,7 @@ core::Status<StageModelError> Stage::recordFailedMotion(const StageMotionPlan& p
     auto valid=validatePendingPlan(plan);
     if(!valid) return valid;
     invalidatePosition();
+    pendingRefresh_.reset();
     pendingPlan_.reset();
     lastCompletedPlan_=plan;
     return core::Status<StageModelError>::success();
@@ -927,6 +951,7 @@ core::Status<StageModelError> Stage::activateConfiguration(const StageConfigurat
         position_.rotations.end());
 
     activeConfigurationId_=id;
+    pendingRefresh_.reset();
     return core::Status<StageModelError>::success();
 }
 

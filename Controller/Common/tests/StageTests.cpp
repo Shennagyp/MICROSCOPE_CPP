@@ -463,7 +463,16 @@ void testRefreshPositionHomeAndRestoreWorkflow() {
         "refresh saves the exact global position");
     check(static_cast<bool>(stage.recordCompletedHome(refresh.homePlan,actionCompletion(refresh.homePlan),homeReference(refresh.homePlan))),
         "refresh home completion is recorded");
+
+    auto forgedRefresh=refresh;
+    forgedRefresh.restorePosition.linear.x+=1'000'000;
+    check(!stage.restorePositionAfterRefresh(forgedRefresh),
+        "rejects a caller-modified refresh snapshot instead of moving to an altered target");
+
     auto restore=take(stage.restorePositionAfterRefresh(refresh));
+    check(static_cast<bool>(stage.cancelUndispatchedPlan(restore)),
+        "an undispatched restoration plan can be cancelled without losing the saved refresh");
+    restore=take(stage.restorePositionAfterRefresh(refresh));
     check(restore.refreshRestoration&&restore.linearTargets.size()==3,
         "restore plan is a separate coordinated move");
     check(restore.linearTargets[0].position==104'000'000&&
@@ -474,6 +483,8 @@ void testRefreshPositionHomeAndRestoreWorkflow() {
         "restoration updates state only after completion");
     check(stage.currentPosition().x==104'000'000&&stage.currentPosition().y==25'000'000&&
           stage.currentPosition().z==12'000'000,"refresh ends at the saved position");
+    check(!stage.restorePositionAfterRefresh(refresh),
+        "a completed refresh cannot be replayed as a second restoration transaction");
 }
 
 void testConfigurationActivationAndRotation() {

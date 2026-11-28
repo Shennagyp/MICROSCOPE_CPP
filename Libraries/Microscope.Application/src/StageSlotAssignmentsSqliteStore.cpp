@@ -2,6 +2,7 @@
 
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 

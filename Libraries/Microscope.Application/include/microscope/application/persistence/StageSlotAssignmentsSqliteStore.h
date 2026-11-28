@@ -25,6 +25,7 @@ enum class StageSlotAssignmentsStoreErrorCode {
     RevisionConflict,
     SlideNotPersisted,
     SlideRevisionMismatch,
+    SlideGeometryMismatch,
     EquipmentBindingMismatch,
     InvalidPersistedRecord,
     SqliteOperationFailed
@@ -63,6 +64,7 @@ public:
     // set; subsequent writes append exactly one revision.
     [[nodiscard]] core::Status<StageSlotAssignmentsStoreError> saveCurrentState(
         const core::MicroscopeId& microscopeId,
+        const core::StageSpecification& installedStage,
         const navigation::StageSlotAssignments& assignments,
         const std::vector<core::Slide>& currentSlides,
         std::uint64_t expectedCurrentRevision);

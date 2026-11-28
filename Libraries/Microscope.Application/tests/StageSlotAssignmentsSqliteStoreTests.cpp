@@ -133,7 +133,7 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
             stageComponent,12,stageConfig,
             {{slot1,slideAId,1},{slot4,slideBId,1}}));
         check(assignmentsStore->saveCurrentState(
-            microscopeId,initial,{slideA1,slideB1},0).isSuccess(),
+            microscopeId,installedStage,initial,{slideA1,slideB1},0).isSuccess(),
             "creates assignment revision one using expected revision zero");
 
         auto loaded1=assignmentsStore->loadCurrentState(
@@ -157,7 +157,7 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
             stageComponent,12,stageConfig,
             {{slot1,slideAId,2},{slot4,slideBId,1}}));
         check(assignmentsStore->saveCurrentState(
-            microscopeId,updated,{slideA2,slideB1},1).isSuccess(),
+            microscopeId,installedStage,updated,{slideA2,slideB1},1).isSuccess(),
             "appends assignment revision two pinned to the new Slide revision");
 
         auto historical=assignmentsStore->loadRevision(
@@ -173,13 +173,13 @@ void testAppendOnlyNSlotAssignmentPersistenceAndSlideRevisionPinning() {
             "current assignment state resolves the latest immutable Slide revision");
 
         const auto staleSave=assignmentsStore->saveCurrentState(
-            microscopeId,initial,{slideA1,slideB1},2);
+            microscopeId,installedStage,initial,{slideA1,slideB1},2);
         check(!staleSave.isSuccess()&&
               staleSave.error().code==StageSlotAssignmentsStoreErrorCode::SlideRevisionMismatch,
             "rejects assignment writes that pin a Slide older than its persisted current revision");
 
         const auto conflictSave=assignmentsStore->saveCurrentState(
-            microscopeId,updated,{slideA2,slideB1},0);
+            microscopeId,installedStage,updated,{slideA2,slideB1},0);
         check(!conflictSave.isSuccess()&&
               conflictSave.error().code==StageSlotAssignmentsStoreErrorCode::RevisionConflict,
             "rejects stale optimistic assignment revision writers");

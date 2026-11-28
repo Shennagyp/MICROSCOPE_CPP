@@ -326,12 +326,22 @@ StageSlotAssignmentsSqliteStore::initializeSchema() {
 core::Status<StageSlotAssignmentsStoreError>
 StageSlotAssignmentsSqliteStore::saveCurrentState(
     const core::MicroscopeId& microscopeId,
+    const core::StageSpecification& installedStage,
     const navigation::StageSlotAssignments& assignments,
     const std::vector<core::Slide>& currentSlides,
     std::uint64_t expectedCurrentRevision) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     const auto equipmentRevision=assignments.equipmentDefinitionRevision();
+    if(installedStage.componentId()!=assignments.stageComponentId())
+        return core::Status<StageSlotAssignmentsStoreError>::failure(
+            makeError(ErrorCode::EquipmentBindingMismatch,database_,
+                "The StageSlot assignment snapshot belongs to a different installed Stage component."));
+    const auto* configuration=findConfiguration(installedStage,assignments.configurationId());
+    if(configuration==nullptr)
+        return core::Status<StageSlotAssignmentsStoreError>::failure(
+            makeError(ErrorCode::EquipmentBindingMismatch,database_,
+                "The StageSlot assignment configuration is absent from installed equipment."));
     if(equipmentRevision==0||
        equipmentRevision>static_cast<std::uint64_t>(
            std::numeric_limits<sqlite3_int64>::max())||
@@ -376,6 +386,28 @@ StageSlotAssignmentsSqliteStore::saveCurrentState(
             return core::Status<StageSlotAssignmentsStoreError>::failure(
                 makeError(ErrorCode::SlideRevisionMismatch,database_,
                     "The supplied Slide revision differs from the assignment's pinned revision."));
+
+        const auto slot=std::find_if(configuration->slots().begin(),configuration->slots().end(),
+            [&assignment](const core::StageSlotSpecification& item){
+                return item.id()==assignment.stageSlotId;
+            });
+        if(slot==configuration->slots().end())
+            return core::Status<StageSlotAssignmentsStoreError>::failure(
+                makeError(ErrorCode::EquipmentBindingMismatch,database_,
+                    "The assigned StageSlot is absent from the installed StageConfiguration."));
+        const long double availableX=static_cast<long double>(
+            slot->xRange().maximum()-slot->xRange().minimum());
+        const long double availableY=static_cast<long double>(
+            slot->yRange().maximum()-slot->yRange().minimum());
+        const long double requiredX=
+            static_cast<long double>(selected->geometry().xExtentMicrometers())*1'000.0L;
+        const long double requiredY=
+            static_cast<long double>(selected->geometry().yExtentMicrometers())*1'000.0L;
+        if(!std::isfinite(requiredX)||!std::isfinite(requiredY)||
+           requiredX>availableX||requiredY>availableY)
+            return core::Status<StageSlotAssignmentsStoreError>::failure(
+                makeError(ErrorCode::SlideGeometryMismatch,database_,
+                    "The Slide's physical X/Y extents exceed the assigned StageSlot's usable ranges."));
 
         std::optional<std::uint64_t> persistedCurrent;
         if(!readCurrentSlideRevision(database_,assignment.slideId,persistedCurrent))

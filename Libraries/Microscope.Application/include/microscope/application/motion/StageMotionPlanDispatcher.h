@@ -32,15 +32,16 @@ public:
         StageMotionPlanDispatchReceipt,StageMotionPlanDispatchError>;
 
     [[nodiscard]] static Result dispatch(
+        controller::Stage& stage,
         const controller::StageMotionPlan& plan,
-        const controller::StageSpecification& controllerStage,
         const core::StageSpecification& installedStage,
         const core::StageMotionCommandContext& context,
         core::IStageMotionPort& port,
         Runtime& runtime) {
         auto translated=controller::StageMotionCommandTranslator::translate(
-            plan,controllerStage,installedStage);
+            plan,stage,installedStage);
         if(!translated) {
+            (void)stage.cancelUndispatchedPlan(plan);
             return Result::failure(StageMotionPlanDispatchError{
                 translated.error()});
         }
@@ -52,20 +53,42 @@ public:
                     auto receipt=StageMotionCommandDispatcher::homeAxes(
                         context,command,port,runtime);
                     if(!receipt) {
+                        if(receipt.error().code==
+                            StageMotionDispatchErrorCode::RuntimeDispatchRejected) {
+                            (void)stage.cancelUndispatchedPlan(plan);
+                        } else {
+                            (void)stage.recordFailedMotion(plan);
+                        }
                         return Result::failure(StageMotionPlanDispatchError{
                             receipt.error()});
                     }
+                    auto dispatchReceipt=std::move(receipt).value();
+                    if(dispatchReceipt.submission.status()==
+                        core::StageMotionSubmissionStatus::Rejected) {
+                        (void)stage.cancelUndispatchedPlan(plan);
+                    }
                     return Result::success(StageMotionPlanDispatchReceipt{
-                        plan.sequence,std::move(receipt).value()});
+                        plan.sequence,std::move(dispatchReceipt)});
                 } else {
                     auto receipt=StageMotionCommandDispatcher::moveAxesTo(
                         context,command,port,runtime);
                     if(!receipt) {
+                        if(receipt.error().code==
+                            StageMotionDispatchErrorCode::RuntimeDispatchRejected) {
+                            (void)stage.cancelUndispatchedPlan(plan);
+                        } else {
+                            (void)stage.recordFailedMotion(plan);
+                        }
                         return Result::failure(StageMotionPlanDispatchError{
                             receipt.error()});
                     }
+                    auto dispatchReceipt=std::move(receipt).value();
+                    if(dispatchReceipt.submission.status()==
+                        core::StageMotionSubmissionStatus::Rejected) {
+                        (void)stage.cancelUndispatchedPlan(plan);
+                    }
                     return Result::success(StageMotionPlanDispatchReceipt{
-                        plan.sequence,std::move(receipt).value()});
+                        plan.sequence,std::move(dispatchReceipt)});
                 }
             },
             translated.value().command);

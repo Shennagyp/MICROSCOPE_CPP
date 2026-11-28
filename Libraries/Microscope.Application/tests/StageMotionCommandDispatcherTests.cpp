@@ -214,7 +214,7 @@ int main() {
     const auto homePlan=take(liveStage.home());
     const auto planReceipt=take(
         application::motion::StageMotionPlanDispatcher::dispatch(
-            homePlan,controllerStage,installedStage,planContext,
+            liveStage,homePlan,installedStage,planContext,
             planPort,*planFixture.runtime));
     check(planReceipt.planSequence==homePlan.sequence&&
           planReceipt.dispatch.action==core::StageMotionAction::HomeAxes&&
